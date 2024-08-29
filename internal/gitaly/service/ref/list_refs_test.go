@@ -217,6 +217,93 @@ func TestServer_ListRefs(t *testing.T) {
 				{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
 			},
 		},
+		{
+			desc: "pagination with limit exceeding refs count",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/tags/*")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					Limit: 100,
+				},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
+				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+				{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
+			},
+		},
+		{
+			desc: "pagination with limit smaller than refs count",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/tags/*")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					Limit: 2,
+				},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
+				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+			},
+		},
+		{
+			desc: "pagination with page token and no limit",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/tags/*")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					PageToken: "refs/tags/annotated-tag",
+				},
+			},
+			expectedGrpcError: codes.InvalidArgument,
+			expectedError:     "rpc error: code = InvalidArgument desc = invalid page token: sending lines: could not find page token",
+		},
+		{
+			desc: "pagination with page token and limit",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/tags/*")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					PageToken: "refs/tags/annotated-tag",
+					Limit:     2,
+				},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+				{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
+			},
+		},
+		{
+			desc: "pagination with page token and reversed sorting",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/tags/*")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					PageToken: "refs/tags/old-commit-tag",
+					Limit:     2,
+				},
+				SortBy: &gitalypb.ListRefsRequest_SortBy{
+					Direction: gitalypb.SortDirection_DESCENDING,
+					Key:       gitalypb.ListRefsRequest_SortBy_AUTHORDATE,
+				},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+				{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
+			},
+		},
+		{
+			desc: "pagination with invalid page token",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					PageToken: "refs/tags/missing_tag",
+				},
+			},
+			expectedGrpcError: codes.InvalidArgument,
+			expectedError:     "rpc error: code = InvalidArgument desc = invalid page token: sending lines: could not find page token",
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()

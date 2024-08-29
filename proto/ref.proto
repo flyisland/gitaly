@@ -549,6 +549,9 @@ message ListRefsRequest {
   // `PeeledTarget` returned for the reference is the ID of the target object. Note that this
   // will significantly slow down the request by a factor of 3 to 4.
   bool peel_tags = 6;
+  // pagination_params controls paging. Refer to PaginationParameter documentation for
+  // further info.
+  PaginationParameter pagination_params = 7;
 }
 
 // ListRefsResponse is a response for the ListRefs RPC. The RPC can return multiple responses
