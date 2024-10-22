@@ -367,9 +367,7 @@ func generateCreateRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 				RemoveRepository{},
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeApplyLogEntry: func(hookContext) {
-							panic(errSimulatedCrash)
-						},
+						BeforeApplyLogEntry: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},
@@ -410,9 +408,7 @@ func generateCreateRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 				RemoveRepository{},
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeStoreAppliedLSN: func(hookContext) {
-							panic(errSimulatedCrash)
-						},
+						BeforeStoreAppliedLSN: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},
@@ -887,9 +883,7 @@ func generateDeleteRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 			steps: steps{
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeApplyLogEntry: func(hookContext) {
-							panic(errSimulatedCrash)
-						},
+						BeforeApplyLogEntry: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},
@@ -930,9 +924,7 @@ func generateDeleteRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 			steps: steps{
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeStoreAppliedLSN: func(hookContext) {
-							panic(errSimulatedCrash)
-						},
+						BeforeStoreAppliedLSN: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},

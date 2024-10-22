@@ -41,6 +41,13 @@ import (
 // TransactionManager.Run execution.
 var errSimulatedCrash = errors.New("simulated crash")
 
+// simulateCrashHook returns a hook function that panics with errSimulatedCrash.
+var simulateCrashHook = func() func(hookContext) {
+	return func(hookContext) {
+		panic(errSimulatedCrash)
+	}
+}
+
 func manifestDirectoryEntry(expected *gitalypb.LogEntry) testhelper.DirectoryEntry {
 	return testhelper.DirectoryEntry{
 		Mode:    mode.File,
@@ -352,7 +359,7 @@ func TestTransactionManager(t *testing.T) {
 		"Housekeeping/RepackingConcurrent": generateHousekeepingRepackingConcurrentTests(t, ctx, setup),
 		"Housekeeping/CommitGraphs":        generateHousekeepingCommitGraphsTests(t, ctx, setup),
 		"Consumer":                         generateConsumerTests(t, setup),
-		"KeyValue":                         generateKeyValueTests(setup),
+		"KeyValue":                         generateKeyValueTests(t, setup),
 	}
 
 	for desc, tests := range subTests {
@@ -508,9 +515,7 @@ func generateCommonTests(t *testing.T, ctx context.Context, setup testTransactio
 			steps: steps{
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeApplyLogEntry: func(hookCtx hookContext) {
-							panic(errSimulatedCrash)
-						},
+						BeforeApplyLogEntry: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},
@@ -868,9 +873,7 @@ func generateCommonTests(t *testing.T, ctx context.Context, setup testTransactio
 				Prune{},
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeStoreAppliedLSN: func(hookContext) {
-							panic(errSimulatedCrash)
-						},
+						BeforeStoreAppliedLSN: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},
@@ -1440,13 +1443,11 @@ func generateCommonTests(t *testing.T, ctx context.Context, setup testTransactio
 			steps: steps{
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeReadAppliedLSN: func(hookContext) {
-							// Raise a panic when the manager is about to read the applied log
-							// index when initializing. In reality this would crash the server but
-							// in tests it serves as a way to abort the initialization in correct
-							// location.
-							panic(errSimulatedCrash)
-						},
+						// Raise a panic when the manager is about to read the applied log
+						// index when initializing. In reality this would crash the server but
+						// in tests it serves as a way to abort the initialization in correct
+						// location.
+						BeforeReadAppliedLSN: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},
