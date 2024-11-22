@@ -178,6 +178,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 				Partition:       tm,
 				logger:          logger,
 				migrations:      tc.migrations,
+				metrics:         NewMetrics(),
 				migrationStates: map[string]*migrationState{},
 			}
 
@@ -331,6 +332,7 @@ func TestMigrationManager_Concurrent(t *testing.T) {
 				cancelFn:        cancel,
 				Partition:       mockPartition,
 				logger:          testhelper.NewLogger(t),
+				metrics:         NewMetrics(),
 				migrations:      []migration{{id: 1, fn: noopFn}},
 				migrationStates: map[string]*migrationState{},
 			}
@@ -420,6 +422,7 @@ func TestMigrationManager_Context(t *testing.T) {
 			closeFn: func() {},
 		},
 		testhelper.NewLogger(t),
+		NewMetrics(),
 		[]migration{{id: 1, fn: func(ctx context.Context, tx storage.Transaction) error {
 			// Canceling the context of the request that started this migraiton
 			// should not lead to canceling the migration.

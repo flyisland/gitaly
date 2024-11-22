@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
@@ -34,6 +35,7 @@ type migrationManager struct {
 	ctx context.Context
 	// cancelFn provides the cancellation function for the context used within the migrationManager.
 	cancelFn context.CancelFunc
+	metrics  Metrics
 	// migrations defines all migration jobs that are expected to be performed on a repository
 	// before it can process incoming transactions.
 	migrations []migration
@@ -43,7 +45,7 @@ type migrationManager struct {
 }
 
 // newPartition creates a migration manager that wraps the provided partition.
-func newPartition(partition storagemgr.Partition, logger log.Logger, migrations []migration) storagemgr.Partition {
+func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, migrations []migration) storagemgr.Partition {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &migrationManager{
@@ -51,6 +53,7 @@ func newPartition(partition storagemgr.Partition, logger log.Logger, migrations 
 		cancelFn:        cancel,
 		Partition:       partition,
 		logger:          logger,
+		metrics:         metrics,
 		migrations:      migrations,
 		migrationStates: map[string]*migrationState{},
 	}
@@ -154,9 +157,19 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 	}()
 
 	for _, migration := range m.migrations {
+		timer := prometheus.NewTimer(m.metrics.latencyMetric.With(prometheus.Labels{
+			"migration_name": migration.name,
+		}))
+
 		if id >= migration.id {
 			continue
 		}
+
+		logger := m.logger.WithFields(log.Fields{
+			"migration_name": migration.name,
+			"migration_id":   migration.id,
+			"relative_path":  relativePath,
+		})
 
 		// A migration may have configuration allowing it to be disabled. As migrations are
 		// performed in order, if a disabled migration is encountered, the remaining migrations are
@@ -170,10 +183,7 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 			break
 		}
 
-		m.logger.WithFields(log.Fields{
-			"migration_id":  migration.id,
-			"relative_path": relativePath,
-		}).Info("running migration")
+		logger.Info("running migration")
 
 		if err := migration.run(m.ctx, txn, relativePath); err != nil {
 			return fmt.Errorf("run migration: %w", err)
@@ -184,6 +194,9 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 		if err := migration.recordID(txn, relativePath); err != nil {
 			return fmt.Errorf("setting migration key: %w", err)
 		}
+
+		duration := timer.ObserveDuration()
+		logger.WithField("duration", duration).Info("migration successful")
 	}
 
 	if err := txn.Commit(m.ctx); err != nil {

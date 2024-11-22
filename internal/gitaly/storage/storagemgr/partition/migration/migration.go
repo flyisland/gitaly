@@ -19,6 +19,8 @@ type migration struct {
 	// id is the unique identifier for a migration and used by the repository to record the last
 	// migration it performed. Subsequent migration jobs should always use increasing numbers.
 	id uint64
+	// name is a human-readable description for the migration to be used in logs/tracing.
+	name string
 	// fn is the function executed to modify the WAL entry during transaction commit.
 	fn func(context.Context, storage.Transaction) error
 	// isDisabled defines an optional check to prevent a migration from being executed.

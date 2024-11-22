@@ -13,11 +13,15 @@ var migrations []migration
 // migrationFactory defines a partition factory that wraps another partition factory.
 type migrationFactory struct {
 	factory storagemgr.PartitionFactory
+	metrics Metrics
 }
 
 // NewFactory returns a new Factory.
-func NewFactory(factory storagemgr.PartitionFactory) storagemgr.PartitionFactory {
-	return &migrationFactory{factory: factory}
+func NewFactory(factory storagemgr.PartitionFactory, metrics Metrics) storagemgr.PartitionFactory {
+	return &migrationFactory{
+		factory: factory,
+		metrics: metrics,
+	}
 }
 
 // New returns a new Partition instance.
@@ -31,5 +35,5 @@ func (f migrationFactory) New(
 	stagingDir string,
 ) storagemgr.Partition {
 	partition := f.factory.New(logger, partitionID, db, storageName, storagePath, absoluteStateDir, stagingDir)
-	return newPartition(partition, logger, migrations)
+	return newPartition(partition, logger, f.metrics, migrations)
 }
