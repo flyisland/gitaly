@@ -178,6 +178,12 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 		if err := migration.run(m.ctx, txn, relativePath); err != nil {
 			return fmt.Errorf("run migration: %w", err)
 		}
+
+		// If migration operations are successfully recorded, the last run migration ID is also recorded
+		// signifying it has been completed.
+		if err := migration.recordID(txn, relativePath); err != nil {
+			return fmt.Errorf("setting migration key: %w", err)
+		}
 	}
 
 	if err := txn.Commit(m.ctx); err != nil {

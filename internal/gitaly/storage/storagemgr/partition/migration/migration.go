@@ -35,12 +35,6 @@ func (m migration) run(ctx context.Context, txn storage.Transaction, relativePat
 		return fmt.Errorf("migrate repository: %w", err)
 	}
 
-	// If migration operations are successfully recorded, the last run migration ID is also recorded
-	// signifying it has been completed.
-	if err := m.recordID(txn, relativePath); err != nil {
-		return fmt.Errorf("setting migration key: %w", err)
-	}
-
 	return nil
 }
 

@@ -47,8 +47,7 @@ func TestMigration_Run(t *testing.T) {
 			},
 			relativePath: "foobar",
 			expectedKV: map[string][]byte{
-				"foo":      []byte("bar"),
-				"m/foobar": uint64ToBytes(1),
+				"foo": []byte("bar"),
 			},
 		},
 	} {

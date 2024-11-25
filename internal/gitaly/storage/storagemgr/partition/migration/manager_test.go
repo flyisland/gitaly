@@ -52,6 +52,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 		expectedState        *migrationState
 		expectedMigrationIDs map[uint64]struct{}
 		expectedErr          error
+		expectedLastID       uint64
 	}{
 		{
 			desc:                 "no migrations configured",
@@ -74,6 +75,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			noRepository:         false,
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{1: {}, 2: {}},
+			expectedLastID:       2,
 		},
 		{
 			desc:                 "no outstanding migrations",
@@ -81,6 +83,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			startingMigration:    &migration{id: 2},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: nil,
+			expectedLastID:       2,
 		},
 		{
 			desc:                 "single outstanding migration applied",
@@ -88,6 +91,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			startingMigration:    &migration{id: 1},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{2: {}},
+			expectedLastID:       2,
 		},
 		{
 			desc:                 "multiple outstanding migration applied",
@@ -95,6 +99,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			startingMigration:    &migration{id: 1},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{2: {}, 3: {}},
+			expectedLastID:       3,
 		},
 		{
 			desc:                 "disabled migration",
@@ -102,6 +107,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			startingMigration:    &migration{id: 0},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{1: {}},
+			expectedLastID:       1,
 		},
 		{
 			desc:              "error returned during migrations",
@@ -112,6 +118,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			},
 			expectedMigrationIDs: nil,
 			expectedErr:          migrationErr,
+			expectedLastID:       1,
 		},
 		{
 			desc:              "starting migration key invalid",
@@ -122,6 +129,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			},
 			expectedMigrationIDs: nil,
 			expectedErr:          errors.New("repository has invalid migration key: 4"),
+			expectedLastID:       4,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -225,6 +233,10 @@ func TestMigrationManager_Begin(t *testing.T) {
 				require.Nil(t, tc.expectedState)
 				require.Empty(t, mm.migrationStates)
 			}
+
+			id, err := mm.getLastMigrationID(ctx, repo.GetRelativePath())
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedLastID, id)
 
 			tm.Close()
 			require.NoError(t, tm.CloseSnapshots())
