@@ -1206,15 +1206,50 @@ func testSuccessfulUserCommitFilesRequest(t *testing.T, ctx context.Context) {
 				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("preexisting"))
 
+				unavailableOID, err := gittest.DefaultObjectHash.FromHex(strings.Repeat("1", gittest.DefaultObjectHash.EncodedLen()))
+				require.NoError(t, err)
+
+				return setupData{
+					repo:           repo,
+					repoPath:       repoPath,
+					branchName:     "preexisting",
+					expectedOldOID: unavailableOID,
+					expectedError: testhelper.WithInterceptedMetadata(
+						structerr.NewInvalidArgument("cannot resolve expected old object ID: reference not found"),
+						"old_object_id", unavailableOID,
+					),
+				}
+			},
+		},
+		{
+			desc: "existing repo and branch + zero expectedOldOID",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("preexisting"))
+
 				return setupData{
 					repo:           repo,
 					repoPath:       repoPath,
 					branchName:     "preexisting",
 					expectedOldOID: gittest.DefaultObjectHash.ZeroOID,
-					expectedError: testhelper.WithInterceptedMetadata(
-						structerr.NewInvalidArgument("cannot resolve expected old object ID: reference not found"),
-						"old_object_id", gittest.DefaultObjectHash.ZeroOID,
+					expectedError: testhelper.WithInterceptedMetadataItems(structerr.NewFailedPrecondition("reference update: reference already exists"),
+						structerr.MetadataItem{Key: "reference", Value: "refs/heads/preexisting"},
 					),
+				}
+			},
+		},
+		{
+			desc: "creating branch + zero expectedOldOID",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				return setupData{
+					repo:                  repo,
+					repoPath:              repoPath,
+					branchName:            "new-branch",
+					expectedOldOID:        gittest.DefaultObjectHash.ZeroOID,
+					expectedRepoCreated:   true,
+					expectedBranchCreated: true,
 				}
 			},
 		},

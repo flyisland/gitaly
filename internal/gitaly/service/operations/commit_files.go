@@ -716,9 +716,7 @@ func (s *Server) userCommitFiles(
 			return structerr.NewInvalidArgument("invalid expected old object ID: %w", err).WithMetadata("old_object_id", expectedOldOID)
 		}
 
-		oldRevision, err = s.localRepoFactory.Build(header.GetRepository()).ResolveRevision(
-			ctx, git.Revision(fmt.Sprintf("%s^{object}", oldRevision)),
-		)
+		oldRevision, err = resolveRevision(ctx, s.localRepoFactory.Build(header.GetRepository()), oldRevision)
 		if err != nil {
 			return structerr.NewInvalidArgument("cannot resolve expected old object ID: %w", err).
 				WithMetadata("old_object_id", expectedOldOID)

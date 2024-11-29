@@ -3,7 +3,6 @@ package operations
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
@@ -49,9 +48,7 @@ func (s *Server) UserRebaseToRef(ctx context.Context, request *gitalypb.UserReba
 			return nil, structerr.NewInvalidArgument("invalid expected old object ID: %w", err).WithMetadata("old_object_id", expectedOldOID)
 		}
 
-		oldTargetOID, err = quarantineRepo.ResolveRevision(
-			ctx, git.Revision(fmt.Sprintf("%s^{object}", oldTargetOID)),
-		)
+		oldTargetOID, err = resolveRevision(ctx, quarantineRepo, oldTargetOID)
 		if err != nil {
 			return nil, structerr.NewInvalidArgument("cannot resolve expected old object ID: %w", err).
 				WithMetadata("old_object_id", expectedOldOID)

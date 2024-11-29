@@ -3,7 +3,10 @@ package operations
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -38,4 +41,21 @@ func validateCherryPickOrRevertRequest(ctx context.Context, locator storage.Loca
 	}
 
 	return nil
+}
+
+// resolveRevision is a helper function to call ResolveRevision on the repo if the existing commit is not equal to the ZeroOID.
+func resolveRevision(ctx context.Context, repo *localrepo.Repo, commit git.ObjectID) (git.ObjectID, error) {
+	objectHash, err := repo.ObjectHash(ctx)
+	if err != nil {
+		return commit, err
+	}
+
+	if commit == objectHash.ZeroOID {
+		return commit, nil
+	}
+
+	return repo.ResolveRevision(
+		ctx,
+		git.Revision(fmt.Sprintf("%s^{object}", commit)),
+	)
 }

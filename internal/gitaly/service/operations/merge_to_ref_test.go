@@ -100,12 +100,23 @@ func testUserMergeToRefSuccessful(t *testing.T, ctx context.Context) {
 			sourceSha: sourceSha,
 			message:   mergeCommitMessage,
 		},
+		{
+			desc:           "empty target ref + zero expected_object_id",
+			user:           gittest.TestUser,
+			branch:         []byte(branch),
+			emptyRef:       true,
+			sourceSha:      sourceSha,
+			targetRef:      emptyTargetRef,
+			message:        mergeCommitMessage,
+			expectedOldOid: gittest.DefaultObjectHash.ZeroOID.String(),
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.desc, func(t *testing.T) {
-			// reset target ref
+			// reset target refs
 			gittest.WriteRef(t, cfg, repoPath, git.ReferenceName(existingTargetRef), existingTargetRefOid)
+			gittest.WriteRef(t, cfg, repoPath, git.ReferenceName(emptyTargetRef), gittest.DefaultObjectHash.ZeroOID)
 
 			request := &gitalypb.UserMergeToRefRequest{
 				Repository:     repoProto,
@@ -338,6 +349,9 @@ func testUserMergeToRefFailure(t *testing.T, ctx context.Context) {
 	).String()
 	validTargetRef := []byte("refs/merge-requests/x/merge")
 
+	unavailableOID, err := gittest.DefaultObjectHash.FromHex(strings.Repeat("1", gittest.DefaultObjectHash.EncodedLen()))
+	require.NoError(t, err)
+
 	testCases := []struct {
 		desc           string
 		user           *gitalypb.User
@@ -418,6 +432,28 @@ func testUserMergeToRefFailure(t *testing.T, ctx context.Context) {
 			code:           codes.FailedPrecondition,
 			message:        []byte("some merge commit message"),
 			expectedOldOid: validSourceSha, // arbitrary value that differs from current target ref OID
+		},
+		{
+			desc:           "non-existing expected_object_id",
+			repo:           repoProto,
+			user:           gittest.TestUser,
+			branch:         []byte(validBranchName),
+			sourceSha:      validSourceSha,
+			targetRef:      validTargetRef,
+			code:           codes.InvalidArgument, // reference not found
+			message:        []byte("some merge commit message"),
+			expectedOldOid: unavailableOID.String(),
+		},
+		{
+			desc:           "non-existing branch + zero expected_object_id",
+			repo:           repoProto,
+			user:           gittest.TestUser,
+			branch:         []byte("non-existing"),
+			sourceSha:      validSourceSha,
+			targetRef:      validTargetRef,
+			code:           codes.InvalidArgument, // reference not found
+			message:        []byte("some merge commit message"),
+			expectedOldOid: gittest.DefaultObjectHash.ZeroOID.String(),
 		},
 	}
 
