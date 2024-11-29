@@ -279,7 +279,7 @@ message UserDeleteBranchRequest {
   // updated meanwhile to point to a different object ID.
   //
   // If unset, the target branch will be deleted regardless of its current
-  // state. If set, it must either contain a valid, full object ID. Otherwise, this
+  // state. If set, it must contain a valid, full object ID. Otherwise, this
   // RPC will return an error.
   string expected_old_oid = 4;
 }
@@ -322,7 +322,7 @@ message UserDeleteTagRequest {
   // updated meanwhile to point to a different object ID.
   //
   // If unset, the target tag will be deleted regardless of its current
-  // state. If set, it must either contain a valid, full object ID. Otherwise,
+  // state. If set, it must contain a valid, full object ID. Otherwise,
   // this RPC will return an error.
   string expected_old_oid = 4;
 }

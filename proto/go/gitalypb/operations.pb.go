@@ -478,7 +478,7 @@ type UserDeleteBranchRequest struct {
 	// updated meanwhile to point to a different object ID.
 	//
 	// If unset, the target branch will be deleted regardless of its current
-	// state. If set, it must either contain a valid, full object ID. Otherwise, this
+	// state. If set, it must contain a valid, full object ID. Otherwise, this
 	// RPC will return an error.
 	ExpectedOldOid string `protobuf:"bytes,4,opt,name=expected_old_oid,json=expectedOldOid,proto3" json:"expected_old_oid,omitempty"`
 	unknownFields  protoimpl.UnknownFields
@@ -700,7 +700,7 @@ type UserDeleteTagRequest struct {
 	// updated meanwhile to point to a different object ID.
 	//
 	// If unset, the target tag will be deleted regardless of its current
-	// state. If set, it must either contain a valid, full object ID. Otherwise,
+	// state. If set, it must contain a valid, full object ID. Otherwise,
 	// this RPC will return an error.
 	ExpectedOldOid string `protobuf:"bytes,4,opt,name=expected_old_oid,json=expectedOldOid,proto3" json:"expected_old_oid,omitempty"`
 	unknownFields  protoimpl.UnknownFields
