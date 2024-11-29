@@ -42,8 +42,8 @@ type migrationManager struct {
 	migrationStates map[string]*migrationState
 }
 
-// NewPartition creates a migration manager that wraps the provided partition.
-func NewPartition(partition storagemgr.Partition, logger log.Logger) storagemgr.Partition {
+// newPartition creates a migration manager that wraps the provided partition.
+func newPartition(partition storagemgr.Partition, logger log.Logger, migrations []migration) storagemgr.Partition {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &migrationManager{

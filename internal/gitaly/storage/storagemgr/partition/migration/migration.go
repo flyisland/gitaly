@@ -9,12 +9,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 )
 
-var (
-	// migrations is a list of configured migrations that must be performed on repositories.
-	migrations []migration
-	// errInvalidMigration is returned if a migration being run is improperly configured.
-	errInvalidMigration = errors.New("invalid migration")
-)
+// errInvalidMigration is returned if a migration being run is improperly configured.
+var errInvalidMigration = errors.New("invalid migration")
 
 const migrationKeyPrefix = "m/"
 

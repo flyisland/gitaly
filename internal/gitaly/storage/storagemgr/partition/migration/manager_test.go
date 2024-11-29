@@ -386,7 +386,9 @@ func TestMigrationManager_Context(t *testing.T) {
 
 	requestCtx, requestCancel := context.WithCancel(ctx)
 
-	mm := NewPartition(
+	var mm *migrationManager
+	called := false
+	mm = newPartition(
 		mockPartition{
 			beginFn: func(context.Context, storage.BeginOptions) (storage.Transaction, error) {
 				return mockTransaction{
@@ -406,20 +408,18 @@ func TestMigrationManager_Context(t *testing.T) {
 			closeFn: func() {},
 		},
 		testhelper.NewLogger(t),
+		[]migration{{id: 1, fn: func(ctx context.Context, tx storage.Transaction) error {
+			// Canceling the context of the request that started this migraiton
+			// should not lead to canceling the migration.
+			requestCancel()
+			require.NoError(t, ctx.Err())
+
+			mm.Close()
+			require.Equal(t, context.Canceled, ctx.Err())
+			called = true
+			return nil
+		}}},
 	).(*migrationManager)
-
-	called := false
-	mm.migrations = []migration{{id: 1, fn: func(ctx context.Context, tx storage.Transaction) error {
-		// Canceling the context of the request that started this migraiton
-		// should not lead to canceling the migration.
-		requestCancel()
-		require.NoError(t, ctx.Err())
-
-		mm.Close()
-		require.Equal(t, context.Canceled, ctx.Err())
-		called = true
-		return nil
-	}}}
 
 	repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 		SkipCreationViaService: true,
