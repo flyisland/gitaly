@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -294,16 +293,11 @@ func TestCreateFork_fsck(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	forkedRepoPath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, forkedRepo))
-
 	// Verify that the broken tree is indeed in the fork and that it is reported as broken by
 	// git-fsck(1).
-	var stderr bytes.Buffer
-	fsckCmd := gittest.NewCommand(t, cfg, "-C", forkedRepoPath, "fsck")
-	fsckCmd.Stderr = &stderr
-
-	require.EqualError(t, fsckCmd.Run(), "exit status 4")
-	require.Equal(t, fmt.Sprintf("error in tree %s: duplicateEntries: contains duplicate file entries\n", treeID), stderr.String())
+	resp, err := client.Fsck(ctx, &gitalypb.FsckRequest{Repository: forkedRepo})
+	require.NoError(t, err)
+	require.Equal(t, fmt.Sprintf("error in tree %s: duplicateEntries: contains duplicate file entries\n", treeID), string(resp.GetError()))
 }
 
 func TestCreateFork_targetExists(t *testing.T) {

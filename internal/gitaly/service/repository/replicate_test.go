@@ -375,13 +375,15 @@ func TestReplicateRepository(t *testing.T) {
 					gittest.WithTree(treeID),
 				)
 
+				repoClient := gitalypb.NewRepositoryServiceClient(gittest.DialService(t, ctx, cfg))
+
 				// Verify that the broken tree is indeed in the source repository and that it is
 				// reported as broken by git-fsck(1).
-				var stderr bytes.Buffer
-				fsckCmd := gittest.NewCommand(t, cfg, "-C", sourcePath, "fsck")
-				fsckCmd.Stderr = &stderr
-				require.Error(t, fsckCmd.Run())
-				require.Equal(t, fmt.Sprintf("error in tree %s: duplicateEntries: contains duplicate file entries\n", treeID), stderr.String())
+				resp, err := repoClient.Fsck(ctx, &gitalypb.FsckRequest{
+					Repository: source,
+				})
+				require.NoError(t, err)
+				require.Equal(t, fmt.Sprintf("error in tree %s: duplicateEntries: contains duplicate file entries\n", treeID), string(resp.GetError()))
 
 				return setupData{
 					source:          source,
