@@ -1784,6 +1784,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 						"refs/heads/branch-1": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
 				},
+				AssertManager{},
 				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
 					assertCommittedEntries(t, tm, []*expectedCommittedEntry{}, tm.committedEntries)
 				}),
@@ -1792,6 +1793,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					RelativePaths:       []string{setup.RelativePath},
 					ExpectedSnapshotLSN: 1,
 				},
+				AssertManager{},
 				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
 					assertCommittedEntries(t, tm, []*expectedCommittedEntry{
 						{
@@ -1806,6 +1808,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 						"refs/heads/main": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
 				},
+				AssertManager{},
 				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
 					assertCommittedEntries(t, tm, []*expectedCommittedEntry{}, tm.committedEntries)
 				}),
@@ -1905,6 +1908,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 						"refs/heads/branch-1": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
 				},
+				AssertManager{},
 				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
 					assertCommittedEntries(t, tm, []*expectedCommittedEntry{
 						{
@@ -1922,6 +1926,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					RelativePaths:       []string{setup.RelativePath},
 					ExpectedSnapshotLSN: 2,
 				},
+				AssertManager{},
 				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
 					assertCommittedEntries(t, tm, []*expectedCommittedEntry{
 						{
@@ -1941,6 +1946,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 						"refs/heads/branch-2": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
 				},
+				AssertManager{},
 				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
 					assertCommittedEntries(t, tm, []*expectedCommittedEntry{
 						{
