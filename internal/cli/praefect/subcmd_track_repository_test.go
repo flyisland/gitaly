@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
@@ -26,17 +27,17 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 
-	g1Cfg := testcfg.Build(t, testcfg.WithStorages("gitaly-1"))
-	g2Cfg := testcfg.Build(t, testcfg.WithStorages("gitaly-2"))
-	testcfg.BuildGitalyHooks(t, g2Cfg)
-	testcfg.BuildGitalySSH(t, g2Cfg)
+	gitalyOneCfg := testcfg.Build(t, testcfg.WithStorages("gitaly-1"))
+	gitalyTwoCfg := testcfg.Build(t, testcfg.WithStorages("gitaly-2"))
+	testcfg.BuildGitalyHooks(t, gitalyTwoCfg)
+	testcfg.BuildGitalySSH(t, gitalyTwoCfg)
 
-	g1Srv := testserver.StartGitalyServer(t, g1Cfg, setup.RegisterAll, testserver.WithDisablePraefect())
-	g2Srv := testserver.StartGitalyServer(t, g2Cfg, setup.RegisterAll, testserver.WithDisablePraefect())
-	defer g2Srv.Shutdown()
-	defer g1Srv.Shutdown()
+	gitalyOneSrv := testserver.StartGitalyServer(t, gitalyOneCfg, setup.RegisterAll, testserver.WithDisablePraefect())
+	gitalyTwoSrv := testserver.StartGitalyServer(t, gitalyTwoCfg, setup.RegisterAll, testserver.WithDisablePraefect())
+	defer gitalyTwoSrv.Shutdown()
+	defer gitalyOneSrv.Shutdown()
 
-	g1Addr := g1Srv.Address()
+	gitalyOneAddr := gitalyOneSrv.Address()
 
 	db := testdb.New(t)
 	dbConf := testdb.GetConfig(t, db.Name)
@@ -49,8 +50,8 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 			{
 				Name: virtualStorageName,
 				Nodes: []*config.Node{
-					{Storage: g1Cfg.Storages[0].Name, Address: g1Addr},
-					{Storage: g2Cfg.Storages[0].Name, Address: g2Srv.Address()},
+					{Storage: gitalyOneCfg.Storages[0].Name, Address: gitalyOneAddr},
+					{Storage: gitalyTwoCfg.Storages[0].Name, Address: gitalyTwoSrv.Address()},
 				},
 				DefaultReplicationFactor: 2,
 			},
@@ -63,31 +64,44 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 	}
 	confPath := writeConfigToFile(t, conf)
 
-	gitalyCC, err := client.Dial(ctx, g1Addr)
+	gitalyOneConn, err := client.Dial(ctx, gitalyOneAddr)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, gitalyCC.Close()) }()
+	defer testhelper.MustClose(t, gitalyOneConn)
 
-	gitaly1RepositoryClient := gitalypb.NewRepositoryServiceClient(gitalyCC)
+	gitalyTwoConn, err := client.Dial(ctx, gitalyTwoSrv.Address())
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, gitalyTwoConn)
 
-	createRepoThroughGitaly1 := func(relativePath string) error {
-		_, err := gitaly1RepositoryClient.CreateRepository(
+	gitalyOneRepositoryClient := gitalypb.NewRepositoryServiceClient(gitalyOneConn)
+
+	createRepoThroughGitalyOne := func(relativePath string) error {
+		_, err := gitalyOneRepositoryClient.CreateRepository(
 			ctx,
 			&gitalypb.CreateRepositoryRequest{
 				Repository: &gitalypb.Repository{
-					StorageName:  g1Cfg.Storages[0].Name,
+					StorageName:  gitalyOneCfg.Storages[0].Name,
 					RelativePath: relativePath,
 				},
 			})
 		return err
 	}
 
-	authoritativeStorage := g1Cfg.Storages[0].Name
+	authoritativeStorage := gitalyOneCfg.Storages[0].Name
 	repoDS := datastore.NewPostgresRepositoryStore(db, conf.StorageNames())
 
 	relativePathAlreadyExist := "path/to/test/repo_2"
-	require.NoError(t, createRepoThroughGitaly1(relativePathAlreadyExist))
-	require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, relativePathAlreadyExist))
-	require.NoDirExists(t, filepath.Join(g2Cfg.Storages[0].Path, relativePathAlreadyExist))
+	require.NoError(t, createRepoThroughGitalyOne(relativePathAlreadyExist))
+
+	require.True(t, gittest.RepositoryExists(t, ctx, gitalyOneConn, &gitalypb.Repository{
+		StorageName:  gitalyOneCfg.Storages[0].Name,
+		RelativePath: relativePathAlreadyExist,
+	}))
+
+	require.False(t, gittest.RepositoryExists(t, ctx, gitalyTwoConn, &gitalypb.Repository{
+		StorageName:  gitalyTwoCfg.Storages[0].Name,
+		RelativePath: relativePathAlreadyExist,
+	}))
+
 	idRelativePathAlreadyExist, err := repoDS.ReserveRepositoryID(ctx, virtualStorageName, relativePathAlreadyExist)
 	require.NoError(t, err)
 	require.NoError(t, repoDS.CreateRepository(
@@ -96,7 +110,7 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 		virtualStorageName,
 		relativePathAlreadyExist,
 		relativePathAlreadyExist,
-		g1Cfg.Storages[0].Name,
+		gitalyOneCfg.Storages[0].Name,
 		nil,
 		nil,
 		true,
@@ -237,9 +251,15 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 
 				// create the repo on Gitaly without Praefect knowing
 				if !tc.repositoryExists {
-					require.NoError(t, createRepoThroughGitaly1(tc.replicaPath))
-					require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, tc.replicaPath))
-					require.NoDirExists(t, filepath.Join(g2Cfg.Storages[0].Path, tc.replicaPath))
+					require.NoError(t, createRepoThroughGitalyOne(tc.replicaPath))
+
+					response := gittest.RepositoryExists(t, ctx, gitalyOneConn, &gitalypb.Repository{
+						StorageName:  gitalyOneCfg.Storages[0].Name,
+						RelativePath: tc.replicaPath,
+					})
+					require.True(t, response)
+
+					require.NoDirExists(t, filepath.Join(gitalyTwoCfg.Storages[0].Path, tc.replicaPath))
 				}
 
 				args := []string{
@@ -266,9 +286,9 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 					require.Len(t, assignments, 1)
 				} else {
 					require.Len(t, assignments, 2)
-					assert.Contains(t, assignments, g2Cfg.Storages[0].Name)
+					assert.Contains(t, assignments, gitalyTwoCfg.Storages[0].Name)
 				}
-				assert.Contains(t, assignments, g1Cfg.Storages[0].Name)
+				assert.Contains(t, assignments, gitalyOneCfg.Storages[0].Name)
 
 				exists, err = repoDS.RepositoryExists(ctx, virtualStorageName, tc.relativePath)
 				require.NoError(t, err)
@@ -279,7 +299,7 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 
 				if !tc.replicateImmediately {
 					queue := datastore.NewPostgresReplicationEventQueue(db)
-					events, err := queue.Dequeue(ctx, virtualStorageName, g2Cfg.Storages[0].Name, 1)
+					events, err := queue.Dequeue(ctx, virtualStorageName, gitalyTwoCfg.Storages[0].Name, 1)
 					require.NoError(t, err)
 					assert.Len(t, events, 1)
 					assert.Equal(t, tc.relativePath, events[0].Job.RelativePath)
@@ -291,11 +311,17 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 	t.Run("replication event exists", func(t *testing.T) {
 		relativePath := "path/to/test/repo_3"
 
-		require.NoError(t, createRepoThroughGitaly1(relativePath))
-		require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, relativePath))
-		require.NoDirExists(t, filepath.Join(g2Cfg.Storages[0].Path, relativePath))
+		require.NoError(t, createRepoThroughGitalyOne(relativePath))
 
-		_, _, err := runApp([]string{
+		response := gittest.RepositoryExists(t, ctx, gitalyOneConn, &gitalypb.Repository{
+			StorageName:  gitalyOneCfg.Storages[0].Name,
+			RelativePath: relativePath,
+		})
+		require.True(t, response)
+
+		require.NoDirExists(t, filepath.Join(gitalyTwoCfg.Storages[0].Path, relativePath))
+
+		_, stderr, err := runApp([]string{
 			"-config", confPath,
 			trackRepositoryCmdName,
 			"-virtual-storage", virtualStorageName,
@@ -304,6 +330,8 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 			"-authoritative-storage", authoritativeStorage,
 		})
 		require.NoError(t, err)
+		require.Empty(t, stderr)
+
 		// running the command twice means we try creating the replication event
 		// again, which should log the duplicate but not break the flow.
 		stdout, stderr, err := runApp([]string{

@@ -20,18 +20,22 @@ func TestRemoveRepository(t *testing.T) {
 	cfg, client := setupRepositoryService(t)
 	ctx := testhelper.Context(t)
 
-	repo, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+	repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 		RelativePath: gittest.NewRepositoryName(t),
 	})
 
-	require.DirExists(t, repoPath)
+	createResponse, err := client.RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{Repository: repo})
+	require.NoError(t, err)
+	require.True(t, createResponse.GetExists())
 
-	_, err := client.RemoveRepository(ctx, &gitalypb.RemoveRepositoryRequest{
+	_, err = client.RemoveRepository(ctx, &gitalypb.RemoveRepositoryRequest{
 		Repository: repo,
 	})
 	require.NoError(t, err)
 
-	require.NoDirExists(t, repoPath)
+	resp, err := client.RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{Repository: repo})
+	require.NoError(t, err)
+	require.False(t, resp.GetExists())
 }
 
 func TestRemoveRepository_doesNotExist(t *testing.T) {

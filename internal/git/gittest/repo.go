@@ -93,7 +93,8 @@ type CreateRepositoryConfig struct {
 	ObjectFormat string
 }
 
-func dialService(tb testing.TB, ctx context.Context, cfg config.Cfg) *grpc.ClientConn {
+// DialService dials the Gitaly service and returns a client connection.
+func DialService(tb testing.TB, ctx context.Context, cfg config.Cfg) *grpc.ClientConn {
 	tb.Helper()
 
 	dialOptions := []grpc.DialOption{client.UnaryInterceptor(), client.StreamInterceptor()}
@@ -115,6 +116,7 @@ func dialService(tb testing.TB, ctx context.Context, cfg config.Cfg) *grpc.Clien
 
 	conn, err := client.Dial(ctx, addr, client.WithGrpcOptions(dialOptions))
 	require.NoError(tb, err)
+	tb.Cleanup(func() { testhelper.MustClose(tb, conn) })
 	return conn
 }
 
@@ -154,8 +156,7 @@ func CreateRepository(tb testing.TB, ctx context.Context, cfg config.Cfg, config
 	if !opts.SkipCreationViaService {
 		conn := opts.ClientConn
 		if conn == nil {
-			conn = dialService(tb, ctx, cfg)
-			tb.Cleanup(func() { testhelper.MustClose(tb, conn) })
+			conn = DialService(tb, ctx, cfg)
 		}
 		client := gitalypb.NewRepositoryServiceClient(conn)
 
@@ -243,8 +244,7 @@ func GetReplicaPath(tb testing.TB, ctx context.Context, cfg config.Cfg, repo sto
 
 	conn := opt.ClientConn
 	if conn == nil {
-		conn = dialService(tb, ctx, cfg)
-		defer conn.Close()
+		conn = DialService(tb, ctx, cfg)
 	}
 
 	return getReplicaPath(tb, ctx, conn, repo)
@@ -350,4 +350,12 @@ func RepositoryPath(tb testing.TB, ctx context.Context, pather RepositoryPather,
 	path, err := pather.Path(ctx)
 	require.NoError(tb, err)
 	return filepath.Join(append([]string{path}, components...)...)
+}
+
+// RepositoryExists checks if the repository exists using the RepositoryService.
+func RepositoryExists(tb testing.TB, ctx context.Context, conn *grpc.ClientConn, repo *gitalypb.Repository) bool {
+	client := gitalypb.NewRepositoryServiceClient(conn)
+	respExists, err := client.RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{Repository: repo})
+	require.NoError(tb, err)
+	return respExists.GetExists()
 }

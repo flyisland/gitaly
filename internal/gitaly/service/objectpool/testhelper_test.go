@@ -22,7 +22,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestMain(m *testing.M) {
@@ -52,11 +51,7 @@ func setupWithConfig(t *testing.T, ctx context.Context, cfg config.Cfg, opts ...
 
 	locator := config.NewLocator(cfg)
 	cfg.SocketPath = runObjectPoolServer(t, cfg, locator, testhelper.SharedLogger(t), opts...)
-
-	conn, err := grpc.Dial(cfg.SocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	require.NoError(t, err)
-	t.Cleanup(func() { testhelper.MustClose(t, conn) })
-
+	conn := gittest.DialService(t, ctx, cfg)
 	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
 	return cfg, repo, repoPath, locator, clientWithConn{ObjectPoolServiceClient: gitalypb.NewObjectPoolServiceClient(conn), conn: conn}

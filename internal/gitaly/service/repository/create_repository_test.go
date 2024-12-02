@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -58,6 +57,9 @@ func TestCreateRepository_successful(t *testing.T) {
 		Repository: repo,
 	})
 	require.NoError(t, err)
+
+	conn := gittest.DialService(t, ctx, cfg)
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, repo))
 
 	repoDir := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, repo))
 
@@ -183,11 +185,14 @@ func TestCreateRepository_withObjectFormat(t *testing.T) {
 				return
 			}
 
-			repo := localrepo.NewTestRepo(t, cfg, repoProto)
+			resp, err := client.ObjectFormat(ctx, &gitalypb.ObjectFormatRequest{
+				Repository: repoProto,
+			})
+			require.NoError(t, err)
 
 			// If the repository was created we can check whether the object format of
 			// the created repository matches our expectations.
-			objectHash, err := repo.ObjectHash(ctx)
+			objectHash, err := git.ObjectHashByProto(resp.GetFormat())
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedObjectHash.Format, objectHash.Format)
 		})

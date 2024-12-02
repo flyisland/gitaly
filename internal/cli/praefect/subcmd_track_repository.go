@@ -314,24 +314,7 @@ func (req *trackRepositoryRequest) trackRepository(
 	return repositoryID, nil
 }
 
-func repositoryExists(ctx context.Context, repo *gitalypb.Repository, addr, token string) (bool, error) {
-	conn, err := subCmdDial(ctx, addr, token, defaultDialTimeout)
-	if err != nil {
-		return false, fmt.Errorf("error dialing: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	ctx = metadata.AppendToOutgoingContext(ctx, "client_name", trackRepositoryCmdName)
-	repositoryClient := gitalypb.NewRepositoryServiceClient(conn)
-	res, err := repositoryClient.RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{Repository: repo})
-	if err != nil {
-		return false, err
-	}
-
-	return res.GetExists(), nil
-}
-
-func (req *trackRepositoryRequest) authoritativeRepositoryExists(ctx context.Context, cfg config.Config, logger log.Logger, w io.Writer, nodeName string) (bool, error) {
+func (req *trackRepositoryRequest) authoritativeRepositoryExists(ctx context.Context, cfg config.Config, logger log.Logger, w io.Writer, nodeName string) (_ bool, returnedErr error) {
 	for _, vs := range cfg.VirtualStorages {
 		if vs.Name != req.VirtualStorage {
 			continue
@@ -345,11 +328,21 @@ func (req *trackRepositoryRequest) authoritativeRepositoryExists(ctx context.Con
 					"node_address": node.Address,
 				}).Debug("check if repository exists on Gitaly node")
 
-				repo := &gitalypb.Repository{
-					StorageName:  node.Storage,
-					RelativePath: req.ReplicaPath,
+				conn, err := subCmdDial(ctx, node.Address, node.Token, defaultDialTimeout)
+				if err != nil {
+					return false, fmt.Errorf("error dialing: %w", err)
 				}
-				exists, err := repositoryExists(ctx, repo, node.Address, node.Token)
+				defer func() {
+					err = conn.Close()
+					if err != nil {
+						returnedErr = errors.Join(returnedErr, fmt.Errorf("closing connection %w", err))
+					}
+				}()
+
+				ctx = metadata.AppendToOutgoingContext(ctx, "client_name", trackRepositoryCmdName)
+				repositoryClient := gitalypb.NewRepositoryServiceClient(conn)
+
+				exists, err := repositoryExists(ctx, repositoryClient, node.Storage, req.ReplicaPath)
 				if err != nil {
 					fmt.Fprintf(w, "checking if repository exists %q, %q\n", node.Storage, req.ReplicaPath)
 					return false, nil
@@ -360,4 +353,18 @@ func (req *trackRepositoryRequest) authoritativeRepositoryExists(ctx context.Con
 		return false, fmt.Errorf("node %q not found", req.AuthoritativeStorage)
 	}
 	return false, fmt.Errorf("virtual storage %q not found", req.VirtualStorage)
+}
+
+func repositoryExists(ctx context.Context, client gitalypb.RepositoryServiceClient, storageName, relativePath string) (bool, error) {
+	response, err := client.RepositoryExists(
+		ctx,
+		&gitalypb.RepositoryExistsRequest{
+			Repository: &gitalypb.Repository{
+				StorageName:  storageName,
+				RelativePath: relativePath,
+			},
+		},
+	)
+
+	return response.GetExists(), err
 }

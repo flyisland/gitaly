@@ -29,6 +29,7 @@ func TestRestoreSubcommand(t *testing.T) {
 	testcfg.BuildGitalyHooks(t, cfg)
 
 	cfg.SocketPath = testserver.RunGitalyServer(t, cfg, setup.RegisterAll)
+	conn := gittest.DialService(t, ctx, cfg)
 
 	// This is an example of a "dangling" repository (one that was created after a backup was taken) that should be
 	// removed after the backup is restored.
@@ -38,7 +39,7 @@ func TestRestoreSubcommand(t *testing.T) {
 	gittest.WriteCommit(t, cfg, existRepoPath, gittest.WithBranch(git.DefaultBranch))
 
 	// This pool is also dangling but should not be removed after the backup is restored.
-	_, poolRepoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+	poolRepo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 		RelativePath: gittest.NewObjectPoolName(t),
 	})
 
@@ -105,13 +106,13 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 	cmd.Reader = &stdin
 	cmd.Writer = io.Discard
 
-	require.DirExists(t, existRepoPath)
-	require.DirExists(t, poolRepoPath)
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
 
 	require.NoError(t, cmd.RunContext(ctx, args))
 
-	require.NoDirExists(t, existRepoPath)
-	require.DirExists(t, poolRepoPath)
+	require.False(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
 
 	// Ensure the repos were restored correctly.
 	for _, repo := range repos {
@@ -140,6 +141,7 @@ func TestRestoreSubcommand_serverSide(t *testing.T) {
 		testserver.WithBackupSink(backupSink),
 		testserver.WithBackupLocator(backupLocator),
 	)
+	conn := gittest.DialService(t, ctx, cfg)
 
 	existingRepo, existRepoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 		RelativePath: "existing_repo",
@@ -147,7 +149,7 @@ func TestRestoreSubcommand_serverSide(t *testing.T) {
 	gittest.WriteCommit(t, cfg, existRepoPath, gittest.WithBranch(git.DefaultBranch))
 
 	// This pool is dangling but should not be removed after the backup is restored.
-	_, poolRepoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+	poolRepo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 		RelativePath: gittest.NewObjectPoolName(t),
 	})
 
@@ -211,13 +213,13 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 	cmd.Reader = &stdin
 	cmd.Writer = io.Discard
 
-	require.DirExists(t, existRepoPath)
-	require.DirExists(t, poolRepoPath)
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
 
 	require.NoError(t, cmd.RunContext(ctx, args))
 
-	require.NoDirExists(t, existRepoPath)
-	require.DirExists(t, poolRepoPath)
+	require.False(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
 
 	for _, repo := range repos {
 		repoPath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, repo))
