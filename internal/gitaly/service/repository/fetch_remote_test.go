@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,7 +18,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -1187,6 +1185,7 @@ func TestFetchRemote(t *testing.T) {
 			t.Parallel()
 
 			cfg, client := setupRepositoryService(t)
+			refClient := gitalypb.NewRefServiceClient(gittest.DialService(t, ctx, cfg))
 			setupData := tc.setup(t, cfg)
 
 			for _, run := range setupData.runs {
@@ -1194,17 +1193,23 @@ func TestFetchRemote(t *testing.T) {
 				testhelper.RequireGrpcError(t, run.expectedErr, err)
 				testhelper.ProtoEqual(t, run.expectedResponse, response)
 
-				var refs map[string]git.ObjectID
-				refLines := text.ChompBytes(gittest.Exec(t, cfg, "-C", setupData.repoPath, "for-each-ref", `--format=%(refname) %(objectname)`))
-				if refLines != "" {
-					refs = make(map[string]git.ObjectID)
-					for _, line := range strings.Split(refLines, "\n") {
-						refname, objectID, found := strings.Cut(line, " ")
-						require.True(t, found, "shouldn't have issues parsing the refs")
-						refs[refname] = git.ObjectID(objectID)
+				existFetchedRepo, _ := client.RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
+					Repository: setupData.request.GetRepository(),
+				})
+
+				if existFetchedRepo.GetExists() {
+					var refs map[string]git.ObjectID
+					refResponse := gittest.GetReferencesAPI(t, ctx, refClient, setupData.request.GetRepository(), [][]byte{[]byte("refs/")})
+
+					for _, ref := range refResponse {
+						if refs == nil {
+							refs = make(map[string]git.ObjectID)
+						}
+						refs[ref.Name.String()] = git.ObjectID(ref.Target)
 					}
+
+					require.Equal(t, run.expectedRefs, refs)
 				}
-				require.Equal(t, run.expectedRefs, refs)
 			}
 		})
 	}

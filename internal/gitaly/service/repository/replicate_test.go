@@ -426,8 +426,12 @@ func TestReplicateRepository(t *testing.T) {
 			sourcePath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, setup.source))
 			targetPath := filepath.Join(cfg.Storages[1].Path, gittest.GetReplicaPath(t, ctx, cfg, setup.target))
 
-			// Verify target repository connectivity.
-			gittest.Exec(t, cfg, "-C", targetPath, "rev-list", "--objects", "--all")
+			refClient := gitalypb.NewRefServiceClient(gittest.DialService(t, ctx, cfg))
+
+			// Compare refs from both repositories
+			sourceRefs := gittest.GetReferencesAPI(t, ctx, refClient, setup.source, [][]byte{[]byte("refs/"), []byte("HEAD")})
+			targetRefs := gittest.GetReferencesAPI(t, ctx, refClient, setup.target, [][]byte{[]byte("refs/"), []byte("HEAD")})
+			require.Equal(t, sourceRefs, targetRefs, "refs including HEAD should match")
 
 			// Verify Git config matches.
 			require.Equal(t,
@@ -453,12 +457,6 @@ func TestReplicateRepository(t *testing.T) {
 				return nil
 			}))
 			require.ElementsMatch(t, setup.expectedCustomHooks, targetHooks)
-
-			// Verify refs replicated.
-			require.Equal(t,
-				gittest.Exec(t, cfg, "-C", sourcePath, "show-ref", "--head"),
-				gittest.Exec(t, cfg, "-C", targetPath, "show-ref", "--head"),
-			)
 
 			// Verify objects replicated.
 			for _, oid := range setup.expectedObjects {

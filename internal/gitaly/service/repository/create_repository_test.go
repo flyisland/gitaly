@@ -14,7 +14,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -86,6 +85,7 @@ func TestCreateRepository_withDefaultBranch(t *testing.T) {
 
 	cfg, client := setupRepositoryService(t)
 	ctx := testhelper.Context(t)
+	refClient := gitalypb.NewRefServiceClient(gittest.DialService(t, ctx, cfg))
 
 	for _, tc := range []struct {
 		desc              string
@@ -119,12 +119,13 @@ func TestCreateRepository_withDefaultBranch(t *testing.T) {
 				require.Contains(t, err.Error(), tc.expectedErrString)
 			} else {
 				require.NoError(t, err)
-				repoPath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, repo))
-				symRef := text.ChompBytes(gittest.Exec(
-					t,
-					cfg,
-					"-C", repoPath,
-					"symbolic-ref", "HEAD"))
+
+				resp, err := refClient.FindDefaultBranchName(ctx, &gitalypb.FindDefaultBranchNameRequest{
+					Repository: repo,
+					HeadOnly:   true,
+				})
+				require.NoError(t, err)
+				symRef := string(resp.GetName())
 				require.Equal(t, tc.expected, symRef)
 			}
 		})
