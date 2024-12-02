@@ -19,6 +19,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/transactiontest"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -91,6 +92,9 @@ type CreateRepositoryConfig struct {
 	SkipCreationViaService bool
 	// ObjectFormat overrides the object format used by the repository.
 	ObjectFormat string
+	// SkipSnapshotInvalidation skips the use of ForceSnapshotInvalidation workaround and instead
+	// uses ForceWALSync.
+	SkipSnapshotInvalidation bool
 }
 
 // DialService dials the Gitaly service and returns a client connection.
@@ -160,6 +164,7 @@ func CreateRepository(tb testing.TB, ctx context.Context, cfg config.Cfg, config
 		}
 		client := gitalypb.NewRepositoryServiceClient(conn)
 
+		var objectHash git.ObjectHash
 		if opts.Seed != "" {
 			_, err := client.CreateRepositoryFromURL(ctx, &gitalypb.CreateRepositoryFromURLRequest{
 				Repository: repository,
@@ -172,15 +177,30 @@ func CreateRepository(tb testing.TB, ctx context.Context, cfg config.Cfg, config
 			if objectFormat == "" {
 				objectFormat = DefaultObjectHash.Format
 			}
-
-			objectHash, err := git.ObjectHashByFormat(objectFormat)
+			var err error
+			objectHash, err = git.ObjectHashByFormat(objectFormat)
 			require.NoError(tb, err)
 
-			_, err = client.CreateRepository(ctx, &gitalypb.CreateRepositoryRequest{
+			_, createRepositoryErr := client.CreateRepository(ctx, &gitalypb.CreateRepositoryRequest{
 				Repository:   repository,
 				ObjectFormat: objectHash.ProtoFormat,
 			})
-			require.NoError(tb, err)
+			require.NoError(tb, createRepositoryErr)
+		}
+
+		if cfg.SocketPath != testcfg.UnconfiguredSocketPath && testhelper.IsWALEnabled() {
+			if opts.SkipSnapshotInvalidation {
+				// To ensure the repository is fully written on the disk before we perform any operations on it.
+				transactiontest.ForceWALSync(tb, ctx, conn, repository)
+			} else {
+				// ForceSnapshotInvalidation ensures that any subsequent read requests gets a fresh snapshot.
+				// If a read request were used instead, the snapshot would be cached, and follow-up read requests
+				// would use an outdated snapshot. This is particularly problematic when raw Git operations, such as
+				// the ones present in gittest.WriteCommit, modify the repository state in the meantime. This is a
+				// temporary fix which would be removed once we introduce a RPC alternative of WriteCommit.
+				revision := objectHash.ZeroOID.String()
+				transactiontest.ForceSnapshotInvalidation(tb, ctx, revision, conn, repository)
+			}
 		}
 
 		tb.Cleanup(func() {

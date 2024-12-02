@@ -192,7 +192,7 @@ func TestPostReceivePack_successful(t *testing.T) {
 
 	var transactionID storage.TransactionID
 	if testhelper.IsWALEnabled() {
-		transactionID = 2
+		transactionID = 3
 	}
 
 	require.Equal(t, gitcmd.HooksPayload{
