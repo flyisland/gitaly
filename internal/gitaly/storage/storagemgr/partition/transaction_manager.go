@@ -984,10 +984,6 @@ type TransactionManager struct {
 
 	// appliedLSN holds the LSN of the last log entry applied to the partition.
 	appliedLSN storage.LSN
-	// awaitingTransactions contains transactions waiting for their log entry to be applied to
-	// the partition. It's keyed by the LSN the transaction is waiting to be applied and the
-	// value is the resultChannel that is waiting the result.
-	awaitingTransactions map[storage.LSN]resultChannel
 	// committedEntries keeps some latest appended log entries around. Some types of transactions, such as
 	// housekeeping, operate on snapshot repository. There is a gap between transaction doing its work and the time
 	// when it is committed. They need to verify if concurrent operations can cause conflict. These log entries are
@@ -1030,30 +1026,29 @@ func NewTransactionManager(
 	cleanupWorkers.SetLimit(25)
 
 	return &TransactionManager{
-		ctx:                  ctx,
-		close:                cancel,
-		logger:               logger,
-		closing:              ctx.Done(),
-		closed:               make(chan struct{}),
-		commandFactory:       cmdFactory,
-		repositoryFactory:    repositoryFactory,
-		storageName:          storageName,
-		storagePath:          storagePath,
-		partitionID:          ptnID,
-		db:                   db,
-		logManager:           log.NewManager(storageName, ptnID, stagingDir, stateDir, consumer),
-		admissionQueue:       make(chan *Transaction),
-		completedQueue:       make(chan struct{}, 1),
-		initialized:          make(chan struct{}),
-		snapshotLocks:        make(map[storage.LSN]*snapshotLock),
-		conflictMgr:          conflict.NewManager(),
-		fsHistory:            fshistory.New(),
-		stagingDirectory:     stagingDir,
-		cleanupWorkers:       cleanupWorkers,
-		cleanupWorkerFailed:  make(chan struct{}),
-		awaitingTransactions: make(map[storage.LSN]resultChannel),
-		committedEntries:     list.New(),
-		metrics:              metrics,
+		ctx:                 ctx,
+		close:               cancel,
+		logger:              logger,
+		closing:             ctx.Done(),
+		closed:              make(chan struct{}),
+		commandFactory:      cmdFactory,
+		repositoryFactory:   repositoryFactory,
+		storageName:         storageName,
+		storagePath:         storagePath,
+		partitionID:         ptnID,
+		db:                  db,
+		logManager:          log.NewManager(storageName, ptnID, stagingDir, stateDir, consumer),
+		admissionQueue:      make(chan *Transaction),
+		completedQueue:      make(chan struct{}, 1),
+		initialized:         make(chan struct{}),
+		snapshotLocks:       make(map[storage.LSN]*snapshotLock),
+		conflictMgr:         conflict.NewManager(),
+		fsHistory:           fshistory.New(),
+		stagingDirectory:    stagingDir,
+		cleanupWorkers:      cleanupWorkers,
+		cleanupWorkerFailed: make(chan struct{}),
+		committedEntries:    list.New(),
+		metrics:             metrics,
 
 		testHooks: testHooks{
 			beforeInitialization:  func() {},
@@ -2059,7 +2054,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.processTransaction", nil)
 	defer span.Finish()
 
-	if err := func() (commitErr error) {
+	transaction.result <- func() (commitErr error) {
 		var zeroOID git.ObjectID
 		if transaction.repositoryTarget() {
 			repositoryExists, err := mgr.doesRepositoryExist(ctx, transaction.relativePath)
@@ -2161,12 +2156,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		mgr.mutex.Unlock()
 
 		return nil
-	}(); err != nil {
-		transaction.result <- err
-		return nil
-	}
-
-	mgr.awaitingTransactions[mgr.logManager.AppendedLSN()] = transaction.result
+	}()
 
 	return nil
 }
@@ -3050,13 +3040,6 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 		return fmt.Errorf("set applied LSN: %w", err)
 	}
 	mgr.snapshotManager.SetLSN(lsn)
-
-	// There is no awaiter for a transaction if the transaction manager is recovering
-	// transactions from the log after starting up.
-	if resultChan, ok := mgr.awaitingTransactions[lsn]; ok {
-		resultChan <- nil
-		delete(mgr.awaitingTransactions, lsn)
-	}
 
 	// Notify the transactions waiting for this log entry to be applied prior to take their
 	// snapshot.

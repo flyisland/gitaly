@@ -483,7 +483,6 @@ func generateDefaultBranchTests(t *testing.T, setup testTransactionSetup) []tran
 					DefaultBranchUpdate: &DefaultBranchUpdate{
 						Reference: "refs/heads/branch2",
 					},
-					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,

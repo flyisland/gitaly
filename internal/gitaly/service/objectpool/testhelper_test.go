@@ -21,6 +21,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/transactiontest"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 )
@@ -84,6 +85,9 @@ func createObjectPool(
 	txManager := transaction.NewManager(cfg, logger, nil)
 	catfileCache := catfile.NewCache(cfg)
 	tb.Cleanup(catfileCache.Stop)
+	// Make sure that the object pool is created as it will be validated locally in FromProto.
+	conn := gittest.DialService(tb, ctx, cfg)
+	transactiontest.ForceWALSync(tb, ctx, conn, poolProto.GetRepository())
 
 	pool, err := objectpool.FromProto(
 		ctx,

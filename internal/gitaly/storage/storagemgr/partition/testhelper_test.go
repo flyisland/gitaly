@@ -1438,8 +1438,8 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			step(t, ctx, transactionManager)
 		case AssertMetrics:
 			reg := prometheus.NewPedanticRegistry()
-			err := reg.Register(transactionManager.metrics.housekeeping)
-			require.NoError(t, err)
+			registerErr := reg.Register(transactionManager.metrics.housekeeping)
+			require.NoError(t, registerErr)
 			promMetrics, err := reg.Gather()
 			require.NoError(t, err)
 
