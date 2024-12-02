@@ -50,8 +50,8 @@ func TestDisconnectGitAlternates(t *testing.T) {
 
 	// Check that the object can still be found, even though objects/info/alternates is gone.
 	// This is the purpose of DisconnectGitAlternates.
-	require.NoFileExists(t, altPath)
-	gittest.RequireObjectExists(t, cfg, repoPath, commitID)
+	commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
+	gittest.RequireObjectExistsAPI(t, ctx, commitClient, repoProto, commitID)
 }
 
 func TestDisconnectGitAlternatesNoAlternates(t *testing.T) {

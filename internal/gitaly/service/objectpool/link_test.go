@@ -145,6 +145,10 @@ func TestLink(t *testing.T) {
 				return
 			}
 
+			// verify that the commit is present in the pool
+			commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
+			gittest.RequireObjectExistsAPI(t, ctx, commitClient, repo, poolCommitID)
+
 			commit, err := localRepo.ReadCommit(ctx, git.Revision(poolCommitID))
 			require.NoError(t, err)
 			require.NotNil(t, commit)
