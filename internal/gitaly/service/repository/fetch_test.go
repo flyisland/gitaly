@@ -39,10 +39,12 @@ func TestFetchSourceBranch(t *testing.T) {
 			desc: "success",
 			setup: func(t *testing.T) setupData {
 				cfg, client := setupRepositoryService(t)
+				commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
 
 				sourceRepo, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg)
 				commitID := gittest.WriteCommit(t, cfg, sourceRepoPath, gittest.WithBranch("master"))
-				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
 
 				return setupData{
 					cfg:    cfg,
@@ -54,8 +56,8 @@ func TestFetchSourceBranch(t *testing.T) {
 						TargetRef:        []byte("refs/tmp/fetch-source-branch-test"),
 					},
 					verify: func() {
-						actualCommitID := gittest.ResolveRevision(t, cfg, repoPath, "refs/tmp/fetch-source-branch-test^{commit}")
-						require.Equal(t, commitID, actualCommitID)
+						actualCommit := gittest.ResolveRevisionAPI(t, ctx, commitClient, repo, "refs/tmp/fetch-source-branch-test^{commit}")
+						require.Equal(t, commitID, actualCommit)
 					},
 				}
 			},
@@ -65,7 +67,7 @@ func TestFetchSourceBranch(t *testing.T) {
 			desc: "success with expected_target_old_oid",
 			setup: func(t *testing.T) setupData {
 				cfg, client := setupRepositoryService(t)
-
+				commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
 				sourceRepo, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg)
 				sourceCommit := gittest.WriteCommit(t, cfg, sourceRepoPath, gittest.WithBranch(git.DefaultBranch))
 
@@ -84,8 +86,8 @@ func TestFetchSourceBranch(t *testing.T) {
 						ExpectedTargetOldOid: secondCommit.String(),
 					},
 					verify: func() {
-						actualCommitID := gittest.ResolveRevision(t, cfg, repoPath, git.DefaultRef.String()+"^{commit}")
-						require.Equal(t, sourceCommit, actualCommitID)
+						actualCommit := gittest.ResolveRevisionAPI(t, ctx, commitClient, repo, git.DefaultRef.String()+"^{commit}")
+						require.Equal(t, sourceCommit, actualCommit)
 					},
 				}
 			},
@@ -98,6 +100,7 @@ func TestFetchSourceBranch(t *testing.T) {
 
 				sourceRepo, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg)
 				commitID := gittest.WriteCommit(t, cfg, sourceRepoPath, gittest.WithBranch("master"))
+				commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
 
 				return setupData{
 					cfg:    cfg,
@@ -109,8 +112,8 @@ func TestFetchSourceBranch(t *testing.T) {
 						TargetRef:        []byte("refs/tmp/fetch-source-branch-test"),
 					},
 					verify: func() {
-						actualCommitID := gittest.ResolveRevision(t, cfg, sourceRepoPath, "refs/tmp/fetch-source-branch-test^{commit}")
-						require.Equal(t, commitID, actualCommitID)
+						actualCommit := gittest.ResolveRevisionAPI(t, ctx, commitClient, sourceRepo, "refs/tmp/fetch-source-branch-test^{commit}")
+						require.Equal(t, commitID, actualCommit)
 					},
 				}
 			},

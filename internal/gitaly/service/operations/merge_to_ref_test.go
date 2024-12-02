@@ -32,6 +32,7 @@ func testUserMergeToRefSuccessful(t *testing.T, ctx context.Context) {
 	t.Parallel()
 
 	ctx, cfg, client := setupOperationsService(t, ctx)
+	commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
 
 	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
 	repo := localrepo.NewTestRepo(t, cfg, repoProto)
@@ -127,8 +128,7 @@ func testUserMergeToRefSuccessful(t *testing.T, ctx context.Context) {
 			resp, err := client.UserMergeToRef(ctx, request)
 			require.NoError(t, err)
 
-			commit, err := repo.ReadCommit(ctx, git.Revision(testCase.targetRef))
-			require.NoError(t, err, "look up git commit after call has finished")
+			commit := gittest.GetCommitObjectAPI(t, ctx, commitClient, repoProto, string(testCase.targetRef))
 
 			// Asserts commit parent SHAs
 			require.Equal(t, []string{branchSha, testCase.sourceSha}, commit.GetParentIds(), "merge commit parents must be the sha before HEAD and source sha")
@@ -250,9 +250,9 @@ func testUserMergeToRefStableMergeID(t *testing.T, ctx context.Context) {
 	t.Parallel()
 
 	ctx, cfg, client := setupOperationsService(t, ctx)
+	commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
 
 	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
-	repo := localrepo.NewTestRepo(t, cfg, repoProto)
 
 	common := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
 		gittest.TreeEntry{Path: "a", Mode: "100644", Content: "1\n2\n3\n4\n5\n6\n7\n8\n"},
@@ -279,8 +279,8 @@ func testUserMergeToRefStableMergeID(t *testing.T, ctx context.Context) {
 		"sha256": "0af69a0b9550e3943892537d429a385cdc3d3ab309833744c7478a60055882e3",
 	}), response.GetCommitId())
 
-	commit, err := repo.ReadCommit(ctx, git.Revision("refs/merge-requests/x/written"))
-	require.NoError(t, err, "look up git commit after call has finished")
+	commit := gittest.GetCommitObjectAPI(t, ctx, commitClient, repoProto, "refs/merge-requests/x/written")
+
 	testhelper.ProtoEqual(t, &gitalypb.GitCommit{
 		Subject:  []byte("Merge message"),
 		Body:     []byte("Merge message"),

@@ -1379,8 +1379,9 @@ func TestFetchRemote_pooledRepository(t *testing.T) {
 
 			gitCmdFactory := gittest.NewCommandFactory(t, cfg)
 
-			client, swocketPath := runRepositoryService(t, cfg, testserver.WithGitCommandFactory(gitCmdFactory))
-			cfg.SocketPath = swocketPath
+			client, socketPath := runRepositoryService(t, cfg, testserver.WithGitCommandFactory(gitCmdFactory))
+			cfg.SocketPath = socketPath
+			commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
 
 			// Create a repository that emulates an object pool. This object contains a
 			// single reference with an object that is neither in the pool member nor in
@@ -1400,7 +1401,8 @@ func TestFetchRemote_pooledRepository(t *testing.T) {
 			// And then finally create a third repository that emulates the remote side
 			// we're fetching from. We need to create at least one reference so that Git
 			// would actually try to fetch objects.
-			_, remoteRepoPath := gittest.CreateRepository(t, ctx, cfg)
+			remoteRepoProto, remoteRepoPath := gittest.CreateRepository(t, ctx, cfg)
+
 			gittest.WriteCommit(t, cfg, remoteRepoPath,
 				gittest.WithBranch("remote"),
 				gittest.WithTreeEntries(gittest.TreeEntry{Path: "remote", Mode: "100644", Content: "remote contents"}),
@@ -1430,10 +1432,11 @@ func TestFetchRemote_pooledRepository(t *testing.T) {
 
 			// This should result in the "remote" branch having been fetched into the
 			// pooled repository.
-			require.Equal(t,
-				gittest.ResolveRevision(t, cfg, pooledRepoPath, "refs/heads/remote"),
-				gittest.ResolveRevision(t, cfg, remoteRepoPath, "refs/heads/remote"),
-			)
+			remoteObject := gittest.ResolveRevisionAPI(t, ctx, commitClient, remoteRepoProto, "refs/heads/remote")
+
+			pooledObject := gittest.ResolveRevisionAPI(t, ctx, commitClient, pooledRepoProto, "refs/heads/remote")
+
+			require.Equal(t, pooledObject, remoteObject)
 
 			// Verify whether alternate refs have been announced as part of the
 			// reference negotiation phase.

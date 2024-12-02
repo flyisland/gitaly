@@ -70,7 +70,8 @@ func TestPruneUnreachableObjects(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify we can still read the commit.
-		gittest.Exec(t, cfg, "-C", repoPath, "rev-parse", "--verify", commitID.String()+"^{commit}")
+		commit := gittest.ResolveRevisionAPI(t, ctx, commitClient, repo, commitID.String()+"^{commit}")
+		require.Equal(t, commitID, commit)
 	})
 
 	t.Run("repository with recent unreachable objects", func(t *testing.T) {
@@ -106,15 +107,16 @@ func TestPruneUnreachableObjects(t *testing.T) {
 		commitID := gittest.WriteCommit(t, cfg, repoPath)
 		setObjectTime(t, repoPath, commitID, time.Now().Add(-31*time.Minute))
 
+		beforePruningObjectID := gittest.ResolveRevisionAPI(t, ctx, commitClient, repo, commitID.String()+"^{commit}")
+		require.Equal(t, commitID, beforePruningObjectID)
+
 		_, err := client.PruneUnreachableObjects(ctx, &gitalypb.PruneUnreachableObjectsRequest{
 			Repository: repo,
 		})
 		require.NoError(t, err)
 
-		cmd := gittest.NewCommand(t, cfg, "-C", repoPath, "rev-parse", "--verify", commitID.String()+"^{commit}")
-		output, err := cmd.CombinedOutput()
-		require.Error(t, err)
-		require.Equal(t, "fatal: Needed a single revision\n", string(output))
+		afterPruningObjectID := gittest.ResolveRevisionAPI(t, ctx, commitClient, repo, commitID.String()+"^{commit}")
+		require.Equal(t, git.ObjectID(""), afterPruningObjectID)
 	})
 
 	t.Run("repository with mixed objects", func(t *testing.T) {
@@ -135,7 +137,8 @@ func TestPruneUnreachableObjects(t *testing.T) {
 		require.NoError(t, err)
 
 		// The reachable old recent commit should still exist.
-		gittest.Exec(t, cfg, "-C", repoPath, "rev-parse", "--verify", reachableOldCommit.String()+"^{commit}")
+		reachableOldCommitObject := gittest.ResolveRevisionAPI(t, ctx, commitClient, repo, reachableOldCommit.String()+"^{commit}")
+		require.Equal(t, reachableOldCommit, reachableOldCommitObject)
 
 		if testhelper.WithOrWithoutWAL(true, false) {
 			// With transactions, all unreachable objects are deleted in a pruning run. Transactions
@@ -149,10 +152,8 @@ func TestPruneUnreachableObjects(t *testing.T) {
 		}
 
 		// But the unreachable old commit should have been pruned.
-		cmd := gittest.NewCommand(t, cfg, "-C", repoPath, "rev-parse", "--verify", unreachableOldCommit.String()+"^{commit}")
-		output, err := cmd.CombinedOutput()
-		require.Error(t, err)
-		require.Equal(t, "fatal: Needed a single revision\n", string(output))
+		unreachableOldCommitObject := gittest.ResolveRevisionAPI(t, ctx, commitClient, repo, unreachableOldCommit.String()+"^{commit}")
+		require.Equal(t, git.ObjectID(""), unreachableOldCommitObject)
 	})
 
 	t.Run("repository with commit-graph", func(t *testing.T) {
@@ -177,6 +178,9 @@ func TestPruneUnreachableObjects(t *testing.T) {
 			Repository: repo,
 		})
 		require.NoError(t, err)
+
+		unreachableCommit := gittest.ResolveRevisionAPI(t, ctx, commitClient, repo, unreachableCommitID.String()+"^{commit}")
+		require.Equal(t, git.ObjectID(""), unreachableCommit)
 
 		// The commit-graph chain should have been rewritten by PruneUnreachableObjects so
 		// that it doesn't refer to the pruned commit anymore.

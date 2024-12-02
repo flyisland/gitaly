@@ -1,6 +1,7 @@
 package gittest
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,6 +10,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
 // WriteRef writes a reference into the repository pointing to the given object ID.
@@ -58,4 +60,22 @@ func GetSymbolicRef(tb testing.TB, cfg config.Cfg, repoPath string, refname git.
 	require.NoError(tb, err)
 
 	return symref
+}
+
+// GetCommitObjectAPI returns the commit object for a given revision using the CommitService.
+func GetCommitObjectAPI(tb testing.TB, ctx context.Context, commitClient gitalypb.CommitServiceClient, repo *gitalypb.Repository, revision string) *gitalypb.GitCommit {
+	tb.Helper()
+	resp, err := commitClient.FindCommit(ctx, &gitalypb.FindCommitRequest{
+		Repository: repo,
+		Revision:   []byte(revision),
+	})
+	require.NoError(tb, err)
+	return resp.GetCommit()
+}
+
+// ResolveRevisionAPI resolves the revision to an object ID using the CommitService.
+func ResolveRevisionAPI(tb testing.TB, ctx context.Context, commitClient gitalypb.CommitServiceClient, repo *gitalypb.Repository, revision string) git.ObjectID {
+	tb.Helper()
+	commit := GetCommitObjectAPI(tb, ctx, commitClient, repo, revision)
+	return git.ObjectID(commit.GetId())
 }
