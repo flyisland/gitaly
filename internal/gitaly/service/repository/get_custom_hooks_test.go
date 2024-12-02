@@ -3,16 +3,17 @@ package repository
 import (
 	"archive/tar"
 	"context"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/repoutil"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -59,17 +60,43 @@ func TestGetCustomHooks_successful(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := testhelper.Context(t)
 			cfg, client := setupRepositoryService(t)
-			repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+			repo, _ := gittest.CreateRepository(t, ctx, cfg)
 
 			customHookFiles := []string{
 				"custom_hooks/pre-commit.sample",
 				"custom_hooks/prepare-commit-msg.sample",
 				"custom_hooks/pre-push.sample",
 			}
-			require.NoError(t, os.Mkdir(filepath.Join(repoPath, "custom_hooks"), mode.Directory), "Could not create custom_hooks dir")
+
+			// Convert the string paths to testFile structs for the archive
+			var hookFiles []testFile
 			for _, fileName := range customHookFiles {
-				require.NoError(t, os.WriteFile(filepath.Join(repoPath, fileName), []byte("Some hooks"), mode.Executable), fmt.Sprintf("Could not create %s", fileName))
+				hookFiles = append(hookFiles, testFile{
+					name:    strings.TrimPrefix(fileName, "custom_hooks/"),
+					content: "Some hooks",
+					mode:    mode.Executable,
+				})
 			}
+
+			archivePath := mustCreateCustomHooksArchive(t, ctx, hookFiles, repoutil.CustomHooksDir)
+			archiveFile, err := os.Open(archivePath)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, archiveFile)
+
+			stream, err := client.SetCustomHooks(ctx)
+			require.NoError(t, err)
+
+			writer := streamio.NewWriter(func(p []byte) error {
+				return stream.Send(&gitalypb.SetCustomHooksRequest{
+					Repository: repo,
+					Data:       p,
+				})
+			})
+
+			_, err = io.Copy(writer, archiveFile)
+			require.NoError(t, err)
+			_, err = stream.CloseAndRecv()
+			require.NoError(t, err)
 
 			reader := tc.streamReader(t, ctx, repo, client)
 			expected := testhelper.DirectoryState{
