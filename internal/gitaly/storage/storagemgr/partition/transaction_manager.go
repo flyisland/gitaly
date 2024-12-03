@@ -1146,6 +1146,10 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 		transaction.manifest.RepositoryDeletion = &gitalypb.LogEntry_RepositoryDeletion{}
 	}
 
+	if err := transaction.stageKeyValueOperations(); err != nil {
+		return fmt.Errorf("stage key-value operations: %w", err)
+	}
+
 	if err := safe.NewSyncer().SyncRecursive(ctx, transaction.walFilesPath()); err != nil {
 		return fmt.Errorf("synchronizing WAL directory: %w", err)
 	}
@@ -1178,6 +1182,31 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 	case <-mgr.closed:
 		return storage.ErrTransactionProcessingStopped
 	}
+}
+
+// stageKeyValueOperations records the key-value operations performed into the WAL entry.
+func (txn *Transaction) stageKeyValueOperations() error {
+	for key := range txn.recordingReadWriter.WriteSet() {
+		key := []byte(key)
+		item, err := txn.db.Get(key)
+		if err != nil {
+			if errors.Is(err, badger.ErrKeyNotFound) {
+				txn.walEntry.DeleteKey(key)
+				continue
+			}
+
+			return fmt.Errorf("get: %w", err)
+		}
+
+		value, err := item.ValueCopy(nil)
+		if err != nil {
+			return fmt.Errorf("value copy: %w", err)
+		}
+
+		txn.walEntry.SetKey(key, value)
+	}
+
+	return nil
 }
 
 func (txn *Transaction) referenceUpdatesToProto() []*gitalypb.LogEntry_ReferenceTransaction {
@@ -2275,26 +2304,6 @@ func (mgr *TransactionManager) verifyKeyValueOperations(ctx context.Context, tx 
 		}); err != nil {
 			return fmt.Errorf("walking committed entries: %w", err)
 		}
-	}
-
-	for key := range tx.recordingReadWriter.WriteSet() {
-		key := []byte(key)
-		item, err := tx.db.Get(key)
-		if err != nil {
-			if errors.Is(err, badger.ErrKeyNotFound) {
-				tx.walEntry.DeleteKey(key)
-				continue
-			}
-
-			return fmt.Errorf("get: %w", err)
-		}
-
-		value, err := item.ValueCopy(nil)
-		if err != nil {
-			return fmt.Errorf("value copy: %w", err)
-		}
-
-		tx.walEntry.SetKey(key, value)
 	}
 
 	return nil
