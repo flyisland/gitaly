@@ -236,12 +236,6 @@ type Transaction struct {
 	// recordingReadWriter is a ReadWriter operating on db that also records operations performed. This
 	// is used to record the operations performed so they can be conflict checked and write-ahead logged.
 	recordingReadWriter keyvalue.RecordingReadWriter
-	// stagingRepository is a repository that is used to stage the transaction. If there are quarantined
-	// objects, it has the quarantine applied so the objects are available for verification and packing.
-	// Generally the staging repository is the actual repository instance. If the repository doesn't exist
-	// yet, the staging repository is a temporary repository that is deleted once the transaction has been
-	// finished.
-	stagingRepository *localrepo.Repo
 	// stagingSnapshot is the snapshot used for staging the transaction, and where the staging repository
 	// exists.
 	stagingSnapshot snapshot.FileSystem
@@ -1280,11 +1274,11 @@ func (mgr *TransactionManager) stageRepositoryCreation(ctx context.Context, tran
 
 // setupStagingRepository sets up a snapshot that is used for verifying and staging changes. It contains up to
 // date state of the partition. It does not have the quarantine configured.
-func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, transaction *Transaction) error {
+func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, transaction *Transaction) (*localrepo.Repo, error) {
 	defer trace.StartRegion(ctx, "setupStagingRepository").End()
 
 	if !transaction.repositoryTarget() {
-		return nil
+		return nil, nil
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.setupStagingRepository", nil)
@@ -1293,7 +1287,7 @@ func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, trans
 	var err error
 	transaction.stagingSnapshot, err = mgr.snapshotManager.GetSnapshot(ctx, []string{transaction.relativePath}, true)
 	if err != nil {
-		return fmt.Errorf("new snapshot: %w", err)
+		return nil, fmt.Errorf("new snapshot: %w", err)
 	}
 
 	// If this is a creation, the repository does not yet exist in the storage. Create a temporary repository
@@ -1305,13 +1299,11 @@ func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, trans
 		// transaction is logged, the staging repository is removed, and the actual repository will be
 		// created when the log entry is applied.
 		if err := mgr.createRepository(ctx, mgr.getAbsolutePath(transaction.stagingSnapshot.RelativePath(transaction.relativePath)), transaction.repositoryCreation.objectHash.ProtoFormat); err != nil {
-			return fmt.Errorf("create staging repository: %w", err)
+			return nil, fmt.Errorf("create staging repository: %w", err)
 		}
 	}
 
-	transaction.stagingRepository = mgr.repositoryFactory.Build(transaction.stagingSnapshot.RelativePath(transaction.relativePath))
-
-	return nil
+	return mgr.repositoryFactory.Build(transaction.stagingSnapshot.RelativePath(transaction.relativePath)), nil
 }
 
 // packPrefixRegexp matches the output of `git index-pack` where it
@@ -2106,7 +2098,8 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			return storage.ErrRepositoryNotFound
 		}
 
-		if err := mgr.setupStagingRepository(ctx, transaction); err != nil {
+		stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
+		if err != nil {
 			return fmt.Errorf("setup staging snapshot: %w", err)
 		}
 
@@ -2114,18 +2107,18 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		// objects are the reference tips set in the transaction and the objects the transaction's packfile
 		// is based on. If an object dependency is missing, the transaction is aborted as applying it would
 		// result in repository corruption.
-		if err := mgr.verifyObjectsExist(ctx, transaction.stagingRepository, transaction.objectDependencies); err != nil {
+		if err := mgr.verifyObjectsExist(ctx, stagingRepository, transaction.objectDependencies); err != nil {
 			return fmt.Errorf("verify object dependencies: %w", err)
 		}
 
 		if transaction.repositoryCreation == nil && transaction.runHousekeeping == nil {
-			if err := mgr.verifyReferences(ctx, transaction); err != nil {
+			if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
 				return fmt.Errorf("verify references: %w", err)
 			}
 		}
 
 		if transaction.runHousekeeping != nil {
-			housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction)
+			housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
 			if err != nil {
 				return fmt.Errorf("verifying pack refs: %w", err)
 			}
@@ -2134,7 +2127,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 
 		var zeroOID git.ObjectID
 		if transaction.repositoryTarget() {
-			objectHash, err := transaction.stagingRepository.ObjectHash(ctx)
+			objectHash, err := stagingRepository.ObjectHash(ctx)
 			if err != nil {
 				return fmt.Errorf("object hash: %w", err)
 			}
@@ -2444,7 +2437,7 @@ func packFilePath(walFiles string) string {
 // verifyReferences verifies that the references in the transaction apply on top of the already accepted
 // reference changes. The old tips in the transaction are verified against the current actual tips.
 // It returns the write-ahead log entry for the reference transactions successfully verified.
-func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction *Transaction) error {
+func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) error {
 	defer trace.StartRegion(ctx, "verifyReferences").End()
 
 	if len(transaction.referenceUpdates) == 0 {
@@ -2460,7 +2453,7 @@ func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction
 	// Apply quarantine to the staging repository in order to ensure the new objects are available when we
 	// are verifying references. Without it we'd encounter errors about missing objects as the new objects
 	// are not in the repository.
-	stagingRepositoryWithQuarantine, err := transaction.stagingRepository.Quarantine(ctx, transaction.quarantineDirectory)
+	stagingRepositoryWithQuarantine, err := stagingRepository.Quarantine(ctx, transaction.quarantineDirectory)
 	if err != nil {
 		return fmt.Errorf("quarantine: %w", err)
 	}
@@ -2593,7 +2586,7 @@ func (mgr *TransactionManager) verifyReferencesWithGitForReftables(
 // verifyHousekeeping verifies if all included housekeeping tasks can be performed. Although it's feasible for multiple
 // housekeeping tasks running at the same time, it's not guaranteed they are conflict-free. So, we need to ensure there
 // is no other concurrent housekeeping task. Each sub-task also needs specific verification.
-func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transaction *Transaction) (*gitalypb.LogEntry_Housekeeping, error) {
+func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping, error) {
 	defer trace.StartRegion(ctx, "verifyHousekeeping").End()
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.verifyHousekeeping", nil)
@@ -2636,7 +2629,7 @@ func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transacti
 		return nil, fmt.Errorf("walking committed entries: %w", err)
 	}
 
-	packRefsEntry, err := mgr.verifyPackRefs(ctx, transaction)
+	packRefsEntry, err := mgr.verifyPackRefs(ctx, transaction, stagingRepository)
 	if err != nil {
 		return nil, fmt.Errorf("verifying pack refs: %w", err)
 	}
@@ -2656,7 +2649,7 @@ func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transacti
 // We merge the tables.list generated by our compaction with the existing
 // repositories tables.list. Because there could have been new tables after
 // we performed compaction.
-func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
+func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
 	tables := transaction.runHousekeeping.packRefs.reftablesAfter
 	if len(tables) < 1 {
 		return nil, nil
@@ -2666,7 +2659,7 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) 
 	// repository. However, concurrent writes might have occurred which wrote new tables to the
 	// staging repository. We shouldn't loose that data. So we merge the compacted tables.list
 	// with the newer tables from the staging repositories tables.list.
-	repoPath := mgr.getAbsolutePath(transaction.stagingRepository.GetRelativePath())
+	repoPath := mgr.getAbsolutePath(stagingRepository.GetRelativePath())
 	newTableList, err := git.ReadReftablesList(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading tables.list: %w", err)
@@ -2724,8 +2717,8 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) 
 //
 // In theory, if there is any reference deletion, it can be removed from the packed-refs file. However, it requires
 // parsing and regenerating the packed-refs file. So, let's settle down with a conflict error at this point.
-func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transaction *Transaction) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
-	objectHash, err := transaction.stagingRepository.ObjectHash(ctx)
+func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
+	objectHash, err := stagingRepository.ObjectHash(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("object hash: %w", err)
 	}
@@ -2806,7 +2799,7 @@ func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transact
 
 // verifyPackRefs verifies if the git-pack-refs(1) can be applied without any conflicts.
 // It calls the reference backend specific function to handle the core logic.
-func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *Transaction) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
+func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
 	if transaction.runHousekeeping.packRefs == nil {
 		return nil, nil
 	}
@@ -2817,20 +2810,20 @@ func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("pack-refs", "verify")
 	defer finishTimer()
 
-	refBackend, err := transaction.stagingRepository.ReferenceBackend(ctx)
+	refBackend, err := stagingRepository.ReferenceBackend(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("reference backend: %w", err)
 	}
 
 	if refBackend == git.ReferenceBackendReftables {
-		packRefs, err := mgr.verifyPackRefsReftable(transaction)
+		packRefs, err := mgr.verifyPackRefsReftable(transaction, stagingRepository)
 		if err != nil {
 			return nil, fmt.Errorf("reftable backend: %w", err)
 		}
 		return packRefs, nil
 	}
 
-	packRefs, err := mgr.verifyPackRefsFiles(ctx, transaction)
+	packRefs, err := mgr.verifyPackRefsFiles(ctx, transaction, stagingRepository)
 	if err != nil {
 		return nil, fmt.Errorf("files backend: %w", err)
 	}
