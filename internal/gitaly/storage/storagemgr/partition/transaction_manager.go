@@ -2118,6 +2118,20 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			return fmt.Errorf("verify object dependencies: %w", err)
 		}
 
+		if transaction.repositoryCreation == nil && transaction.runHousekeeping == nil {
+			if err := mgr.verifyReferences(ctx, transaction); err != nil {
+				return fmt.Errorf("verify references: %w", err)
+			}
+		}
+
+		if transaction.runHousekeeping != nil {
+			housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction)
+			if err != nil {
+				return fmt.Errorf("verifying pack refs: %w", err)
+			}
+			transaction.manifest.Housekeeping = housekeepingEntry
+		}
+
 		var zeroOID git.ObjectID
 		if transaction.repositoryTarget() {
 			objectHash, err := transaction.stagingRepository.ObjectHash(ctx)
@@ -2141,20 +2155,6 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		mgr.mutex.Unlock()
 		if err != nil {
 			return fmt.Errorf("prepare: %w", err)
-		}
-
-		if transaction.repositoryCreation == nil && transaction.runHousekeeping == nil {
-			if err := mgr.verifyReferences(ctx, transaction); err != nil {
-				return fmt.Errorf("verify references: %w", err)
-			}
-		}
-
-		if transaction.runHousekeeping != nil {
-			housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction)
-			if err != nil {
-				return fmt.Errorf("verifying pack refs: %w", err)
-			}
-			transaction.manifest.Housekeeping = housekeepingEntry
 		}
 
 		if err := mgr.verifyKeyValueOperations(ctx, transaction); err != nil {
