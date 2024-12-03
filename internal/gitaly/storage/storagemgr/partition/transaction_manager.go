@@ -60,9 +60,6 @@ var (
 	errCommittedEntryGone = errors.New("in-used committed entry is gone")
 	// errNotDirectory is returned when the repository's path doesn't point to a directory
 	errNotDirectory = errors.New("repository's path didn't point to a directory")
-	// errRelativePathNotSet is returned when a transaction is begun without providing a relative path
-	// of the target repository.
-	errRelativePathNotSet = errors.New("relative path not set")
 	// errConflictRepositoryDeletion is returned when an operation conflicts with repository deletion in another
 	// transaction.
 	errConflictRepositoryDeletion = errors.New("detected an update conflicting with repository deletion")
@@ -1234,10 +1231,6 @@ func (txn *Transaction) referenceUpdatesToProto() []*gitalypb.LogEntry_Reference
 // stageRepositoryCreation determines the repository's state following a creation. It reads the repository's
 // complete state and stages it into the transaction for committing.
 func (mgr *TransactionManager) stageRepositoryCreation(ctx context.Context, transaction *Transaction) error {
-	if !transaction.repositoryTarget() {
-		return errRelativePathNotSet
-	}
-
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.stageRepositoryCreation", nil)
 	defer span.Finish()
 
@@ -1276,10 +1269,6 @@ func (mgr *TransactionManager) stageRepositoryCreation(ctx context.Context, tran
 // date state of the partition. It does not have the quarantine configured.
 func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, transaction *Transaction) (*localrepo.Repo, error) {
 	defer trace.StartRegion(ctx, "setupStagingRepository").End()
-
-	if !transaction.repositoryTarget() {
-		return nil, nil
-	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.setupStagingRepository", nil)
 	defer span.Finish()
@@ -1722,9 +1711,6 @@ func (mgr *TransactionManager) prepareRepacking(ctx context.Context, transaction
 	if transaction.runHousekeeping.repack == nil {
 		return nil
 	}
-	if !transaction.repositoryTarget() {
-		return errRelativePathNotSet
-	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareRepacking", nil)
 	defer span.Finish()
@@ -1897,9 +1883,6 @@ func (mgr *TransactionManager) prepareCommitGraphs(ctx context.Context, transact
 
 	if transaction.runHousekeeping.writeCommitGraphs == nil {
 		return nil
-	}
-	if !transaction.repositoryTarget() {
-		return errRelativePathNotSet
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareCommitGraphs", nil)
@@ -2087,44 +2070,44 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 	defer span.Finish()
 
 	if err := func() (commitErr error) {
-		repositoryExists, err := mgr.doesRepositoryExist(ctx, transaction.relativePath)
-		if err != nil {
-			return fmt.Errorf("does repository exist: %w", err)
-		}
-
-		if transaction.repositoryCreation != nil && repositoryExists {
-			return ErrRepositoryAlreadyExists
-		} else if transaction.repositoryCreation == nil && !repositoryExists {
-			return storage.ErrRepositoryNotFound
-		}
-
-		stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
-		if err != nil {
-			return fmt.Errorf("setup staging snapshot: %w", err)
-		}
-
-		// Verify that all objects this transaction depends on are present in the repository. The dependency
-		// objects are the reference tips set in the transaction and the objects the transaction's packfile
-		// is based on. If an object dependency is missing, the transaction is aborted as applying it would
-		// result in repository corruption.
-		if err := mgr.verifyObjectsExist(ctx, stagingRepository, transaction.objectDependencies); err != nil {
-			return fmt.Errorf("verify object dependencies: %w", err)
-		}
-
-		if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
-			return fmt.Errorf("verify references: %w", err)
-		}
-
-		if transaction.runHousekeeping != nil {
-			housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
-			if err != nil {
-				return fmt.Errorf("verifying pack refs: %w", err)
-			}
-			transaction.manifest.Housekeeping = housekeepingEntry
-		}
-
 		var zeroOID git.ObjectID
 		if transaction.repositoryTarget() {
+			repositoryExists, err := mgr.doesRepositoryExist(ctx, transaction.relativePath)
+			if err != nil {
+				return fmt.Errorf("does repository exist: %w", err)
+			}
+
+			if transaction.repositoryCreation != nil && repositoryExists {
+				return ErrRepositoryAlreadyExists
+			} else if transaction.repositoryCreation == nil && !repositoryExists {
+				return storage.ErrRepositoryNotFound
+			}
+
+			stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
+			if err != nil {
+				return fmt.Errorf("setup staging snapshot: %w", err)
+			}
+
+			// Verify that all objects this transaction depends on are present in the repository. The dependency
+			// objects are the reference tips set in the transaction and the objects the transaction's packfile
+			// is based on. If an object dependency is missing, the transaction is aborted as applying it would
+			// result in repository corruption.
+			if err := mgr.verifyObjectsExist(ctx, stagingRepository, transaction.objectDependencies); err != nil {
+				return fmt.Errorf("verify object dependencies: %w", err)
+			}
+
+			if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
+				return fmt.Errorf("verify references: %w", err)
+			}
+
+			if transaction.runHousekeeping != nil {
+				housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
+				if err != nil {
+					return fmt.Errorf("verifying pack refs: %w", err)
+				}
+				transaction.manifest.Housekeeping = housekeepingEntry
+			}
+
 			objectHash, err := stagingRepository.ObjectHash(ctx)
 			if err != nil {
 				return fmt.Errorf("object hash: %w", err)
@@ -2440,9 +2423,6 @@ func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction
 
 	if len(transaction.referenceUpdates) == 0 {
 		return nil
-	}
-	if !transaction.repositoryTarget() {
-		return errRelativePathNotSet
 	}
 
 	span, _ := tracing.StartSpanIfHasParent(ctx, "transaction.verifyReferences", nil)
