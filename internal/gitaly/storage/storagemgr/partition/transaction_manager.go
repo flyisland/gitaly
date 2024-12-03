@@ -2111,10 +2111,8 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			return fmt.Errorf("verify object dependencies: %w", err)
 		}
 
-		if transaction.repositoryCreation == nil && transaction.runHousekeeping == nil {
-			if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
-				return fmt.Errorf("verify references: %w", err)
-			}
+		if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
+			return fmt.Errorf("verify references: %w", err)
 		}
 
 		if transaction.runHousekeeping != nil {
