@@ -35,5 +35,5 @@ func (f migrationFactory) New(
 	stagingDir string,
 ) storagemgr.Partition {
 	partition := f.factory.New(logger, partitionID, db, storageName, storagePath, absoluteStateDir, stagingDir)
-	return newPartition(partition, logger, f.metrics, migrations)
+	return newCombinedMigrationPartition(partition, logger, f.metrics)
 }

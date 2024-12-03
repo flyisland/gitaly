@@ -454,6 +454,7 @@ type mockPartition struct {
 	storagemgr.Partition
 	beginFn func(context.Context, storage.BeginOptions) (storage.Transaction, error)
 	closeFn func()
+	runFn   func() error
 }
 
 func (m mockPartition) Begin(ctx context.Context, opts storage.BeginOptions) (storage.Transaction, error) {
@@ -462,4 +463,8 @@ func (m mockPartition) Begin(ctx context.Context, opts storage.BeginOptions) (st
 
 func (m mockPartition) Close() {
 	m.closeFn()
+}
+
+func (m mockPartition) Run() error {
+	return m.runFn()
 }
