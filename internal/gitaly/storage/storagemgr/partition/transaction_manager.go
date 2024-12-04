@@ -1279,19 +1279,6 @@ func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, trans
 		return nil, fmt.Errorf("new snapshot: %w", err)
 	}
 
-	// If this is a creation, the repository does not yet exist in the storage. Create a temporary repository
-	// we can use to stage the updates.
-	if transaction.repositoryCreation != nil {
-		// The reference updates in the transaction are normally verified against the actual repository.
-		// If the repository doesn't exist yet, the reference updates are verified against an empty
-		// repository to ensure they'll apply when the log entry creates the repository. After the
-		// transaction is logged, the staging repository is removed, and the actual repository will be
-		// created when the log entry is applied.
-		if err := mgr.createRepository(ctx, mgr.getAbsolutePath(transaction.stagingSnapshot.RelativePath(transaction.relativePath)), transaction.repositoryCreation.objectHash.ProtoFormat); err != nil {
-			return nil, fmt.Errorf("create staging repository: %w", err)
-		}
-	}
-
 	return mgr.repositoryFactory.Build(transaction.stagingSnapshot.RelativePath(transaction.relativePath)), nil
 }
 
@@ -3060,34 +3047,6 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 	// Notify the transactions waiting for this log entry to be applied prior to take their
 	// snapshot.
 	close(mgr.snapshotLocks[lsn].applied)
-
-	return nil
-}
-
-// createRepository creates a repository at the given path with the given object format.
-func (mgr *TransactionManager) createRepository(ctx context.Context, repositoryPath string, objectFormat gitalypb.ObjectFormat) error {
-	objectHash, err := git.ObjectHashByProto(objectFormat)
-	if err != nil {
-		return fmt.Errorf("object hash by proto: %w", err)
-	}
-
-	stderr := &bytes.Buffer{}
-	cmd, err := mgr.commandFactory.NewWithoutRepo(ctx, gitcmd.Command{
-		Name: "init",
-		Flags: []gitcmd.Option{
-			gitcmd.Flag{Name: "--bare"},
-			gitcmd.Flag{Name: "--quiet"},
-			gitcmd.Flag{Name: "--object-format=" + objectHash.Format},
-		},
-		Args: []string{repositoryPath},
-	}, gitcmd.WithStderr(stderr))
-	if err != nil {
-		return fmt.Errorf("spawn git init: %w", err)
-	}
-
-	if err := cmd.Wait(); err != nil {
-		return structerr.New("wait git init: %w", err).WithMetadata("stderr", stderr.String())
-	}
 
 	return nil
 }
