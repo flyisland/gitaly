@@ -2088,21 +2088,28 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 					return fmt.Errorf("verify object dependencies: %w", err)
 				}
 
-				stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
+				refBackend, err := targetRepository.ReferenceBackend(ctx)
 				if err != nil {
-					return fmt.Errorf("setup staging snapshot: %w", err)
+					return fmt.Errorf("reference backend: %w", err)
 				}
 
-				if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
-					return fmt.Errorf("verify references: %w", err)
-				}
-
-				if transaction.runHousekeeping != nil {
-					housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
+				if refBackend == git.ReferenceBackendReftables || transaction.runHousekeeping != nil {
+					stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
 					if err != nil {
-						return fmt.Errorf("verifying pack refs: %w", err)
+						return fmt.Errorf("setup staging snapshot: %w", err)
 					}
-					transaction.manifest.Housekeeping = housekeepingEntry
+
+					if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
+						return fmt.Errorf("verify references: %w", err)
+					}
+
+					if transaction.runHousekeeping != nil {
+						housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
+						if err != nil {
+							return fmt.Errorf("verifying pack refs: %w", err)
+						}
+						transaction.manifest.Housekeeping = housekeepingEntry
+					}
 				}
 			}
 		}
