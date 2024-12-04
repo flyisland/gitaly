@@ -1141,8 +1141,8 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 		return fmt.Errorf("stage key-value operations: %w", err)
 	}
 
-	if err := safe.NewSyncer().SyncRecursive(ctx, transaction.walFilesPath()); err != nil {
-		return fmt.Errorf("synchronizing WAL directory: %w", err)
+	if err := transaction.flushLogEntry(ctx); err != nil {
+		return fmt.Errorf("flush log entry: %w", err)
 	}
 
 	if err := func() error {
@@ -2110,6 +2110,18 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 						}
 						transaction.manifest.Housekeeping = housekeepingEntry
 					}
+
+					// The transaction has already written the manifest to the disk as a read-only file
+					// before queuing for commit. Remove the old file so we can replace it below.
+					if err := os.Remove(manifestPath(transaction.walEntry.Directory())); err != nil {
+						return fmt.Errorf("remove outdated manifest")
+					}
+
+					// Operations working on the staging snapshot add more files into the log entry,
+					// and modify the manifest. Flush it to the disk to persist the new changes.
+					if err := transaction.flushLogEntry(ctx); err != nil {
+						return fmt.Errorf("flush log entry: %w", err)
+					}
 				}
 			}
 		}
@@ -2137,8 +2149,6 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		if err != nil {
 			return fmt.Errorf("verify file system operations: %w", err)
 		}
-
-		transaction.manifest.Operations = transaction.walEntry.Operations()
 
 		if err := mgr.appendLogEntry(ctx, transaction.objectDependencies, transaction.manifest, transaction.walFilesPath()); err != nil {
 			return fmt.Errorf("append log entry: %w", err)
@@ -2950,18 +2960,18 @@ func (mgr *TransactionManager) applyReferenceTransaction(ctx context.Context, ch
 	return nil
 }
 
-// appendLogEntry appends a log etnry of a transaction to the write-ahead log. After the log entry is appended to WAL,
-// the corresponding snapshot lock and in-memory reference for the latest appended LSN is created.
-func (mgr *TransactionManager) appendLogEntry(ctx context.Context, objectDependencies map[git.ObjectID]struct{}, logEntry *gitalypb.LogEntry, logEntryPath string) error {
-	defer trace.StartRegion(ctx, "appendLogEntry").End()
+// flushLogEntry writes the log entry's manifest to the disk, and fsyncs the entire
+// log entry.
+func (txn *Transaction) flushLogEntry(ctx context.Context) error {
+	txn.manifest.Operations = txn.walEntry.Operations()
 
-	manifestBytes, err := proto.Marshal(logEntry)
+	manifestBytes, err := proto.Marshal(txn.manifest)
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
 
 	// Finalize the log entry by writing the MANIFEST file into the log entry's directory.
-	manifestPath := manifestPath(logEntryPath)
+	manifestPath := manifestPath(txn.walEntry.Directory())
 	if err := os.WriteFile(manifestPath, manifestBytes, mode.File); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
@@ -2977,9 +2987,17 @@ func (mgr *TransactionManager) appendLogEntry(ctx context.Context, objectDepende
 	// See https://gitlab.com/gitlab-org/gitaly/-/issues/5892 for more details. Once the issue is
 	// addressed, we could stage the transaction entirely before queuing it for commit, and thus not
 	// need to sync here.
-	if err := safe.NewSyncer().SyncRecursive(ctx, logEntryPath); err != nil {
+	if err := safe.NewSyncer().SyncRecursive(ctx, txn.walEntry.Directory()); err != nil {
 		return fmt.Errorf("synchronizing WAL directory: %w", err)
 	}
+
+	return nil
+}
+
+// appendLogEntry appends a log entry of a transaction to the write-ahead log. After the log entry is appended to WAL,
+// the corresponding snapshot lock and in-memory reference for the latest appended LSN is created.
+func (mgr *TransactionManager) appendLogEntry(ctx context.Context, objectDependencies map[git.ObjectID]struct{}, logEntry *gitalypb.LogEntry, logEntryPath string) error {
+	defer trace.StartRegion(ctx, "appendLogEntry").End()
 
 	// Pre-setup an snapshot lock entry for the assumed appended LSN location.
 	mgr.mutex.Lock()
