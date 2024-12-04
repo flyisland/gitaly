@@ -2083,17 +2083,19 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 				return storage.ErrRepositoryNotFound
 			}
 
-			stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
-			if err != nil {
-				return fmt.Errorf("setup staging snapshot: %w", err)
-			}
+			targetRepository := mgr.repositoryFactory.Build(transaction.relativePath)
 
 			// Verify that all objects this transaction depends on are present in the repository. The dependency
 			// objects are the reference tips set in the transaction and the objects the transaction's packfile
 			// is based on. If an object dependency is missing, the transaction is aborted as applying it would
 			// result in repository corruption.
-			if err := mgr.verifyObjectsExist(ctx, stagingRepository, transaction.objectDependencies); err != nil {
+			if err := mgr.verifyObjectsExist(ctx, targetRepository, transaction.objectDependencies); err != nil {
 				return fmt.Errorf("verify object dependencies: %w", err)
+			}
+
+			stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
+			if err != nil {
+				return fmt.Errorf("setup staging snapshot: %w", err)
 			}
 
 			if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
