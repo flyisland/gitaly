@@ -2086,6 +2086,13 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			if repositoryExists {
 				targetRepository := mgr.repositoryFactory.Build(transaction.relativePath)
 
+				objectHash, err := targetRepository.ObjectHash(ctx)
+				if err != nil {
+					return fmt.Errorf("object hash: %w", err)
+				}
+
+				zeroOID = objectHash.ZeroOID
+
 				// Verify that all objects this transaction depends on are present in the repository. The dependency
 				// objects are the reference tips set in the transaction and the objects the transaction's packfile
 				// is based on. If an object dependency is missing, the transaction is aborted as applying it would
@@ -2110,13 +2117,6 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 					}
 					transaction.manifest.Housekeeping = housekeepingEntry
 				}
-
-				objectHash, err := stagingRepository.ObjectHash(ctx)
-				if err != nil {
-					return fmt.Errorf("object hash: %w", err)
-				}
-
-				zeroOID = objectHash.ZeroOID
 			}
 		}
 
