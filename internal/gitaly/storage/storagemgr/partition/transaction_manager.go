@@ -2083,39 +2083,41 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 				return storage.ErrRepositoryNotFound
 			}
 
-			targetRepository := mgr.repositoryFactory.Build(transaction.relativePath)
+			if repositoryExists {
+				targetRepository := mgr.repositoryFactory.Build(transaction.relativePath)
 
-			// Verify that all objects this transaction depends on are present in the repository. The dependency
-			// objects are the reference tips set in the transaction and the objects the transaction's packfile
-			// is based on. If an object dependency is missing, the transaction is aborted as applying it would
-			// result in repository corruption.
-			if err := mgr.verifyObjectsExist(ctx, targetRepository, transaction.objectDependencies); err != nil {
-				return fmt.Errorf("verify object dependencies: %w", err)
-			}
-
-			stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
-			if err != nil {
-				return fmt.Errorf("setup staging snapshot: %w", err)
-			}
-
-			if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
-				return fmt.Errorf("verify references: %w", err)
-			}
-
-			if transaction.runHousekeeping != nil {
-				housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
-				if err != nil {
-					return fmt.Errorf("verifying pack refs: %w", err)
+				// Verify that all objects this transaction depends on are present in the repository. The dependency
+				// objects are the reference tips set in the transaction and the objects the transaction's packfile
+				// is based on. If an object dependency is missing, the transaction is aborted as applying it would
+				// result in repository corruption.
+				if err := mgr.verifyObjectsExist(ctx, targetRepository, transaction.objectDependencies); err != nil {
+					return fmt.Errorf("verify object dependencies: %w", err)
 				}
-				transaction.manifest.Housekeeping = housekeepingEntry
-			}
 
-			objectHash, err := stagingRepository.ObjectHash(ctx)
-			if err != nil {
-				return fmt.Errorf("object hash: %w", err)
-			}
+				stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
+				if err != nil {
+					return fmt.Errorf("setup staging snapshot: %w", err)
+				}
 
-			zeroOID = objectHash.ZeroOID
+				if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
+					return fmt.Errorf("verify references: %w", err)
+				}
+
+				if transaction.runHousekeeping != nil {
+					housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
+					if err != nil {
+						return fmt.Errorf("verifying pack refs: %w", err)
+					}
+					transaction.manifest.Housekeeping = housekeepingEntry
+				}
+
+				objectHash, err := stagingRepository.ObjectHash(ctx)
+				if err != nil {
+					return fmt.Errorf("object hash: %w", err)
+				}
+
+				zeroOID = objectHash.ZeroOID
+			}
 		}
 
 		// Prepare the transaction to conflict check it. We'll commit it later if we
