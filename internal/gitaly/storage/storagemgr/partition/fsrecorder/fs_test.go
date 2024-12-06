@@ -1,14 +1,10 @@
 package fsrecorder
 
 import (
-	"io/fs"
-	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 )
 
 type recordingWALBuilder struct {
@@ -66,86 +62,6 @@ func TestFS(t *testing.T) {
 			require.Equal(t, &recordingWALBuilder{}, f.wal)
 		})
 	}
-
-	t.Run("Mkdir", func(t *testing.T) {
-		testPathValidation(t, func(f FS, path string) error { return f.Mkdir(path) })
-
-		t.Run("fails if parent does not exist", func(t *testing.T) {
-			f := NewFS(t.TempDir(), &recordingWALBuilder{})
-
-			require.ErrorIs(t, f.Mkdir("non-existent/target"), fs.ErrNotExist)
-			require.Equal(t, &recordingWALBuilder{}, f.wal)
-		})
-
-		t.Run("fails if target exists", func(t *testing.T) {
-			f := NewFS(t.TempDir(), &recordingWALBuilder{})
-
-			require.NoError(t, os.Mkdir(filepath.Join(f.root, "target"), mode.Directory))
-
-			require.ErrorIs(t, f.Mkdir("target"), fs.ErrExist)
-			require.Equal(t, &recordingWALBuilder{}, f.wal)
-		})
-
-		t.Run("successfully creates directories", func(t *testing.T) {
-			f := NewFS(t.TempDir(), &recordingWALBuilder{})
-
-			require.NoError(t, f.Mkdir("parent"))
-			require.NoError(t, f.Mkdir("parent/child"))
-			require.Equal(t,
-				&recordingWALBuilder{operations: []any{
-					createDirectory{path: "parent"},
-					createDirectory{path: "parent/child"},
-				}},
-				f.wal,
-			)
-		})
-	})
-
-	t.Run("MkdirAll", func(t *testing.T) {
-		testPathValidation(t, func(f FS, path string) error { return f.MkdirAll(path) })
-
-		t.Run("target under a file", func(t *testing.T) {
-			f := NewFS(t.TempDir(), &recordingWALBuilder{})
-
-			require.NoError(t, os.WriteFile(filepath.Join(f.root, "file"), nil, mode.File))
-
-			require.ErrorIs(t, f.MkdirAll("file/target"), syscall.ENOTDIR)
-			require.Equal(t, &recordingWALBuilder{}, f.wal)
-		})
-
-		t.Run("target is a file", func(t *testing.T) {
-			f := NewFS(t.TempDir(), &recordingWALBuilder{})
-
-			require.NoError(t, os.WriteFile(filepath.Join(f.root, "file"), nil, mode.File))
-
-			require.Equal(t, newTargetIsFileError("file"), f.MkdirAll("file"))
-			require.Equal(t, &recordingWALBuilder{}, f.wal)
-		})
-
-		t.Run("target exists", func(t *testing.T) {
-			f := NewFS(t.TempDir(), &recordingWALBuilder{})
-
-			require.NoError(t, os.MkdirAll(filepath.Join(f.root, "parent/target"), mode.Directory))
-
-			require.NoError(t, f.MkdirAll("parent/target"))
-			require.Equal(t, &recordingWALBuilder{}, f.wal)
-		})
-
-		t.Run("successfully creates missing directories", func(t *testing.T) {
-			f := NewFS(t.TempDir(), &recordingWALBuilder{})
-
-			require.NoError(t, os.MkdirAll(filepath.Join(f.root, "parent"), mode.Directory))
-
-			require.NoError(t, f.MkdirAll("parent/child/target"))
-			require.Equal(t,
-				&recordingWALBuilder{operations: []any{
-					createDirectory{path: "parent/child"},
-					createDirectory{path: "parent/child/target"},
-				}},
-				f.wal,
-			)
-		})
-	})
 
 	t.Run("RecordRead", func(t *testing.T) {
 		testPathValidation(t, func(f FS, path string) error { return f.RecordRead(path) })

@@ -26,6 +26,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	housekeepingcfg "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/objectpool"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/packfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
@@ -825,9 +826,9 @@ type DefaultBranchUpdate struct {
 
 // alternateUpdate models an update to the repository's alternates file.
 type alternateUpdate struct {
-	// content is the content to write in the 'objects/info/alternates' file. If empty, the file
-	// is removed instead.
-	content string
+	// RelativePath is the relative path of the object pool to be linked to the target
+	// repository as an alternate.
+	RelativePath string
 }
 
 // Commit calls Commit on a transaction.
@@ -1166,30 +1167,24 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 				)
 
 				if step.UpdateAlternate != nil {
-					transaction.MarkAlternateUpdated()
+					require.NoError(t, objectpool.Disconnect(
+						storage.ContextWithTransaction(ctx, transaction),
+						transaction.FS(),
+						rewrittenRepo,
+						logger,
+						nil,
+					))
 
-					repoPath, err := rewrittenRepo.Path(ctx)
-					require.NoError(t, err)
-
-					alternatesFilePath := stats.AlternatesFilePath(repoPath)
-
-					// Ignore not exists errors as there are test cases testing removing alternate
-					// when one is not set. Additionally, if the alternate was updated, we want to
-					// remove the file first and write a new file as all files in the storage are
-					// read-only.
-					if err := os.Remove(alternatesFilePath); !errors.Is(err, fs.ErrNotExist) {
-						require.NoError(t, err)
-					}
-
-					if step.UpdateAlternate.content != "" {
-						require.NoError(t, os.WriteFile(stats.AlternatesFilePath(repoPath), []byte(step.UpdateAlternate.content), fs.ModePerm))
-
-						alternates, err := stats.ReadAlternatesFile(repoPath)
-						require.NoError(t, err)
-
-						for _, alternate := range alternates {
-							require.DirExists(t, filepath.Join(repoPath, "objects", alternate), "alternate must be pointed to a repository: %q", alternate)
-						}
+					if step.UpdateAlternate.RelativePath != "" {
+						require.NoError(t, objectpool.Link(
+							storage.ContextWithTransaction(ctx, transaction),
+							setup.RepositoryFactory.Build(transaction.RewriteRepository(&gitalypb.Repository{
+								StorageName:  setup.Config.Storages[0].Name,
+								RelativePath: step.UpdateAlternate.RelativePath,
+							})),
+							rewrittenRepo,
+							nil,
+						))
 					}
 				}
 
@@ -1392,25 +1387,20 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 						require.NoError(t, err)
 
 						alternatesPath := stats.AlternatesFilePath(repoPath)
-						require.NoError(t, os.WriteFile(alternatesPath, []byte(step.Alternate), fs.ModePerm))
+
+						alternatesContent, err := filepath.Rel(
+							filepath.Join(transaction.FS().Root(), transaction.relativePath, "objects"),
+							filepath.Join(transaction.FS().Root(), step.Alternate, "objects"),
+						)
+						require.NoError(t, err)
+
+						require.NoError(t, os.WriteFile(alternatesPath, []byte(alternatesContent), fs.ModePerm))
 					}
 
 					return nil
 				},
 				repoutil.WithObjectHash(setup.ObjectHash),
 			))
-
-			if step.Alternate != "" {
-				repoPath, err := setup.RepositoryFactory.Build(rewrittenRepository).Path(ctx)
-				require.NoError(t, err)
-
-				alternates, err := stats.ReadAlternatesFile(repoPath)
-				require.NoError(t, err)
-
-				for _, alternate := range alternates {
-					require.DirExists(t, filepath.Join(repoPath, "objects", alternate), "alternate must be pointed to a repository: %q", alternate)
-				}
-			}
 		case RunPackRefs:
 			require.Contains(t, openTransactions, step.TransactionID, "test error: pack-refs housekeeping task aborted on committed before beginning it")
 

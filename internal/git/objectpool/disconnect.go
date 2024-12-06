@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,7 +15,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -33,7 +33,7 @@ import (
 // until after the connectivity check completes. If Gitaly crashes before the backup is restored,
 // the repository may be in a broken state until an administrator intervenes and restores the backed
 // up copy of objects/info/alternates.
-func Disconnect(ctx context.Context, repo *localrepo.Repo, logger log.Logger, txManager transaction.Manager) error {
+func Disconnect(ctx context.Context, f storage.FS, repo *localrepo.Repo, logger log.Logger, txManager transaction.Manager) error {
 	repoPath, err := repo.Path(ctx)
 	if err != nil {
 		return err
@@ -86,16 +86,24 @@ func Disconnect(ctx context.Context, repo *localrepo.Repo, logger log.Logger, tx
 		return err
 	}
 
-	for _, path := range objectFiles {
-		source := filepath.Join(altObjectDir, path)
-		target := filepath.Join(repoPath, "objects", path)
+	repositoryRelativePath, err := filepath.Rel(f.Root(), repoPath)
+	if err != nil {
+		return fmt.Errorf("repository relative path: %w", err)
+	}
 
-		if err := os.MkdirAll(filepath.Dir(target), mode.Directory); err != nil {
+	for _, path := range objectFiles {
+		sourceRelativePath, err := filepath.Rel(f.Root(), filepath.Join(altObjectDir, path))
+		if err != nil {
+			return fmt.Errorf("source relative path: %w", err)
+		}
+		targetRelativePath := filepath.Join(repositoryRelativePath, "objects", path)
+
+		if err := storage.MkdirAll(f, filepath.Dir(targetRelativePath)); err != nil {
 			return err
 		}
 
-		if err := os.Link(source, target); err != nil {
-			if os.IsExist(err) {
+		if err := storage.Link(f, sourceRelativePath, targetRelativePath); err != nil {
+			if errors.Is(err, fs.ErrExist) {
 				continue
 			}
 
@@ -251,7 +259,14 @@ func removeAlternatesIfOk(ctx context.Context, repo *localrepo.Repo, altFile, ba
 	}
 
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		tx.MarkAlternateUpdated()
+		infoAlternatesRelativePath, err := filepath.Rel(tx.FS().Root(), altFile)
+		if err != nil {
+			return fmt.Errorf("rel info/alternates: %w", err)
+		}
+
+		if err := tx.FS().RecordRemoval(infoAlternatesRelativePath); err != nil {
+			return fmt.Errorf("record info/alternates removal: %w", err)
+		}
 	}
 
 	// The repository should only be disconnected from its object pool if validation is successful.

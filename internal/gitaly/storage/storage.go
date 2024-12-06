@@ -110,9 +110,6 @@ type Transaction interface {
 	IncludeObject(git.ObjectID)
 	// DeleteRepository deletes the repository when the transaction is committed.
 	DeleteRepository()
-	// MarkAlternateUpdated marks that the 'objects/info/alternates' file has been updated or removed.
-	// This is necessary for changes to be committed.
-	MarkAlternateUpdated()
 	// PackRefs runs reference repacking housekeeping when the transaction commits. If this
 	// is called, the transaction is limited to running only other housekeeping tasks. No other
 	// updates are allowed.

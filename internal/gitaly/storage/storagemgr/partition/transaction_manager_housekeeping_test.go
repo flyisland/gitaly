@@ -1096,7 +1096,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 				},
 				CreateRepository{
 					TransactionID: 2,
-					Alternate:     "../../pool/objects",
+					Alternate:     "pool",
 				},
 				Commit{
 					TransactionID: 2,
@@ -1659,7 +1659,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 				},
 				CreateRepository{
 					TransactionID: 2,
-					Alternate:     "../../pool/objects",
+					Alternate:     "pool",
 				},
 				Commit{
 					TransactionID: 2,
@@ -4877,7 +4877,7 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				},
 				CreateRepository{
 					TransactionID: 2,
-					Alternate:     "../../pool/objects",
+					Alternate:     "pool",
 				},
 				Commit{
 					TransactionID: 2,
@@ -5098,7 +5098,7 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				},
 				CreateRepository{
 					TransactionID: 2,
-					Alternate:     "../../pool/objects",
+					Alternate:     "pool",
 				},
 				Commit{
 					TransactionID: 2,
@@ -5267,7 +5267,7 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				},
 				CreateRepository{
 					TransactionID: 2,
-					Alternate:     "../../pool/objects",
+					Alternate:     "pool",
 				},
 				Commit{
 					TransactionID: 2,
@@ -5493,7 +5493,7 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				},
 				CreateRepository{
 					TransactionID: 2,
-					Alternate:     "../../pool/objects",
+					Alternate:     "pool",
 				},
 				Commit{
 					TransactionID: 2,

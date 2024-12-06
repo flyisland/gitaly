@@ -2,8 +2,10 @@ package objectpool
 
 import (
 	"context"
+	"fmt"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/objectpool"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -22,7 +24,17 @@ func (s *server) DisconnectGitAlternates(ctx context.Context, req *gitalypb.Disc
 
 	repo := s.localrepo(repository)
 
-	if err := objectpool.Disconnect(ctx, repo, s.logger, s.txManager); err != nil {
+	storageRoot, err := s.locator.GetStorageByName(ctx, repo.GetStorageName())
+	if err != nil {
+		return nil, fmt.Errorf("storage by name: %w", err)
+	}
+
+	f := storage.NewNoopFS(storageRoot)
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		f = tx.FS()
+	}
+
+	if err := objectpool.Disconnect(ctx, f, repo, s.logger, s.txManager); err != nil {
 		return nil, structerr.NewInternal("%w", err)
 	}
 

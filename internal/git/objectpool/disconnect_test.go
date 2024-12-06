@@ -21,6 +21,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
@@ -319,7 +320,7 @@ func TestDisconnect(t *testing.T) {
 				ctx = testhelper.MergeOutgoingMetadata(ctx, testcfg.GitalyServersMetadataFromCfg(t, cfg))
 			}
 
-			disconnectErr := Disconnect(ctx, setup.repository, logger, setup.txManager)
+			disconnectErr := Disconnect(ctx, storage.NewNoopFS(cfg.Storages[0].Path), setup.repository, logger, setup.txManager)
 
 			altInfoAfter, err := stats.AlternatesInfoForRepository(repoPath)
 			require.NoError(t, err)

@@ -31,7 +31,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/gitstorage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict"
@@ -64,9 +63,6 @@ var (
 	// errRelativePathNotSet is returned when a transaction is begun without providing a relative path
 	// of the target repository.
 	errRelativePathNotSet = errors.New("relative path not set")
-	// errAlternateAlreadyLinked is returned when attempting to set an alternate on a repository that
-	// already has one.
-	errAlternateAlreadyLinked = errors.New("repository already has an alternate")
 	// errConflictRepositoryDeletion is returned when an operation conflicts with repository deletion in another
 	// transaction.
 	errConflictRepositoryDeletion = errors.New("detected an update conflicting with repository deletion")
@@ -261,7 +257,6 @@ type Transaction struct {
 	deleteRepository       bool
 	includedObjects        map[git.ObjectID]struct{}
 	runHousekeeping        *runHousekeeping
-	alternateUpdated       bool
 
 	// objectDependencies are the object IDs this transaction depends on in
 	// the repository. The dependencies are used to guard against invalid packs
@@ -520,7 +515,7 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 					//
 					// If the repository is at the root of the storage, there's no parent directories to create.
 					if parentDir := filepath.Dir(txn.relativePath); parentDir != "." {
-						if err := txn.fs.MkdirAll(parentDir); err != nil {
+						if err := storage.MkdirAll(txn.fs, parentDir); err != nil {
 							return nil, fmt.Errorf("create parent directories: %w", err)
 						}
 					}
@@ -851,12 +846,6 @@ func (txn *Transaction) FS() storage.FS {
 	return txn.fs
 }
 
-// MarkAlternateUpdated hints to the transaction manager that  'objects/info/alternates' file has been updated or
-// removed. The file's modification will then be included in the transaction.
-func (txn *Transaction) MarkAlternateUpdated() {
-	txn.alternateUpdated = true
-}
-
 // walFilesPath returns the path to the directory where this transaction is staging the files that will
 // be logged alongside the transaction's log entry.
 func (txn *Transaction) walFilesPath() string {
@@ -1118,25 +1107,6 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 			return fmt.Errorf("preparing housekeeping: %w", err)
 		}
 
-		if transaction.alternateUpdated {
-			stagedAlternatesRelativePath := stats.AlternatesFilePath(transaction.relativePath)
-			stagedAlternatesAbsolutePath := mgr.getAbsolutePath(transaction.snapshot.RelativePath(stagedAlternatesRelativePath))
-			if _, err := os.Stat(stagedAlternatesAbsolutePath); err != nil {
-				if !errors.Is(err, fs.ErrNotExist) {
-					return fmt.Errorf("check alternates existence: %w", err)
-				}
-
-				// Alternates file did not exist, nothing to stage. This was an unlink operation.
-			} else {
-				if err := transaction.walEntry.CreateFile(
-					stagedAlternatesAbsolutePath,
-					stagedAlternatesRelativePath,
-				); err != nil && !errors.Is(err, fs.ErrNotExist) {
-					return fmt.Errorf("record alternates update: %w", err)
-				}
-			}
-		}
-
 		// If there were objects packed that should be committed, record the packfile's creation.
 		if transaction.packPrefix != "" {
 			packDir := filepath.Join(transaction.relativePath, "objects", "pack")
@@ -1276,22 +1246,12 @@ func (mgr *TransactionManager) stageRepositoryCreation(ctx context.Context, tran
 
 	transaction.referenceUpdates = []git.ReferenceUpdates{referenceUpdates}
 
-	if _, err := gitstorage.ReadAlternatesFile(mgr.getAbsolutePath(transaction.snapshotRepository.GetRelativePath())); err != nil {
-		if !errors.Is(err, gitstorage.ErrNoAlternate) {
-			return fmt.Errorf("read alternates file: %w", err)
-		}
-
-		// Repository had no alternate.
-	} else {
-		transaction.MarkAlternateUpdated()
-	}
-
 	return nil
 }
 
 // setupStagingRepository sets up a snapshot that is used for verifying and staging changes. It contains up to
 // date state of the partition. It does not have the quarantine configured.
-func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, transaction *Transaction, alternateRelativePath string) error {
+func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, transaction *Transaction) error {
 	defer trace.StartRegion(ctx, "setupStagingRepository").End()
 
 	if !transaction.repositoryTarget() {
@@ -1301,13 +1261,8 @@ func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, trans
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.setupStagingRepository", nil)
 	defer span.Finish()
 
-	relativePaths := []string{transaction.relativePath}
-	if alternateRelativePath != "" {
-		relativePaths = append(relativePaths, alternateRelativePath)
-	}
-
 	var err error
-	transaction.stagingSnapshot, err = mgr.snapshotManager.GetSnapshot(ctx, relativePaths, true)
+	transaction.stagingSnapshot, err = mgr.snapshotManager.GetSnapshot(ctx, []string{transaction.relativePath}, true)
 	if err != nil {
 		return fmt.Errorf("new snapshot: %w", err)
 	}
@@ -1322,24 +1277,6 @@ func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, trans
 		// created when the log entry is applied.
 		if err := mgr.createRepository(ctx, mgr.getAbsolutePath(transaction.stagingSnapshot.RelativePath(transaction.relativePath)), transaction.repositoryCreation.objectHash.ProtoFormat); err != nil {
 			return fmt.Errorf("create staging repository: %w", err)
-		}
-	}
-
-	if alternateRelativePath != "" {
-		alternatesContent, err := filepath.Rel(
-			filepath.Join(transaction.relativePath, "objects"),
-			filepath.Join(alternateRelativePath, "objects"),
-		)
-		if err != nil {
-			return fmt.Errorf("rel: %w", err)
-		}
-
-		if err := os.WriteFile(
-			stats.AlternatesFilePath(mgr.getAbsolutePath(transaction.stagingSnapshot.RelativePath(transaction.relativePath))),
-			[]byte(alternatesContent),
-			mode.File,
-		); err != nil {
-			return fmt.Errorf("insert modified alternate file: %w", err)
 		}
 	}
 
@@ -2140,12 +2077,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			return storage.ErrRepositoryNotFound
 		}
 
-		alternateRelativePath, err := mgr.verifyAlternateUpdate(ctx, transaction)
-		if err != nil {
-			return fmt.Errorf("verify alternate update: %w", err)
-		}
-
-		if err := mgr.setupStagingRepository(ctx, transaction, alternateRelativePath); err != nil {
+		if err := mgr.setupStagingRepository(ctx, transaction); err != nil {
 			return fmt.Errorf("setup staging snapshot: %w", err)
 		}
 
@@ -2498,86 +2430,6 @@ func manifestPath(logEntryPath string) string {
 // packFilePath returns a log entry's pack file's absolute path in the wal files directory.
 func packFilePath(walFiles string) string {
 	return filepath.Join(walFiles, "transaction.pack")
-}
-
-// verifyAlternateUpdate verifies the staged alternate update.
-func (mgr *TransactionManager) verifyAlternateUpdate(ctx context.Context, transaction *Transaction) (string, error) {
-	defer trace.StartRegion(ctx, "verifyAlternateUpdate").End()
-
-	if !transaction.alternateUpdated {
-		return "", nil
-	}
-	if !transaction.repositoryTarget() {
-		return "", errRelativePathNotSet
-	}
-
-	span, _ := tracing.StartSpanIfHasParent(ctx, "transaction.verifyAlternateUpdate", nil)
-	defer span.Finish()
-
-	repositoryPath := mgr.getAbsolutePath(transaction.relativePath)
-	existingAlternate, err := gitstorage.ReadAlternatesFile(repositoryPath)
-	if err != nil && !errors.Is(err, gitstorage.ErrNoAlternate) {
-		return "", fmt.Errorf("read existing alternates file: %w", err)
-	}
-
-	snapshotRepoPath, err := transaction.snapshotRepository.Path(ctx)
-	if err != nil {
-		return "", fmt.Errorf("snapshot repo path: %w", err)
-	}
-
-	stagedAlternate, err := gitstorage.ReadAlternatesFile(snapshotRepoPath)
-	if err != nil && !errors.Is(err, gitstorage.ErrNoAlternate) {
-		return "", fmt.Errorf("read staged alternates file: %w", err)
-	}
-
-	if stagedAlternate == "" {
-		if existingAlternate == "" {
-			// Transaction attempted to remove an alternate from the repository
-			// even if it didn't have one.
-			return "", gitstorage.ErrNoAlternate
-		}
-
-		if err := storage.RecordAlternateUnlink(transaction.FS(), mgr.storagePath, transaction.relativePath, existingAlternate); err != nil {
-			return "", fmt.Errorf("record alternate unlink: %w", err)
-		}
-
-		return "", nil
-	}
-
-	if existingAlternate != "" {
-		return "", errAlternateAlreadyLinked
-	}
-
-	alternateObjectsDir, err := storage.ValidateRelativePath(
-		mgr.storagePath,
-		filepath.Join(transaction.relativePath, "objects", stagedAlternate),
-	)
-	if err != nil {
-		return "", fmt.Errorf("validate relative path: %w", err)
-	}
-
-	alternateRelativePath := filepath.Dir(alternateObjectsDir)
-	if alternateRelativePath == transaction.relativePath {
-		return "", storage.ErrAlternatePointsToSelf
-	}
-
-	// Check that the alternate repository exists. This works as a basic conflict check
-	// to prevent linking a repository that was deleted concurrently.
-	alternateRepositoryPath := mgr.getAbsolutePath(alternateRelativePath)
-	if err := storage.ValidateGitDirectory(alternateRepositoryPath); err != nil {
-		return "", fmt.Errorf("validate git directory: %w", err)
-	}
-
-	if _, err := gitstorage.ReadAlternatesFile(alternateRepositoryPath); !errors.Is(err, gitstorage.ErrNoAlternate) {
-		if err == nil {
-			// We don't support chaining alternates like repo-1 > repo-2 > repo-3.
-			return "", storage.ErrAlternateHasAlternate
-		}
-
-		return "", fmt.Errorf("read alternates file: %w", err)
-	}
-
-	return alternateRelativePath, nil
 }
 
 // verifyReferences verifies that the references in the transaction apply on top of the already accepted
