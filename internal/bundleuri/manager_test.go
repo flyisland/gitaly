@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -17,7 +18,11 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 	t.Parallel()
 
 	cfg := testcfg.Build(t)
-	ctx := testhelper.Context(t)
+	ctx := featureflag.ContextWithFeatureFlag(
+		testhelper.Context(t),
+		featureflag.BundleGeneration,
+		true,
+	)
 
 	for _, tc := range []struct {
 		desc             string

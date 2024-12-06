@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
@@ -102,9 +103,12 @@ func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *
 		g.wg.Add(1)
 		go func() {
 			defer g.wg.Done()
-			if err := g.generate(g.ctx, repo); err != nil {
-				g.logger.WithError(err).Error("failed to generate bundle")
+			if featureflag.BundleGeneration.IsEnabled(ctx) {
+				if err := g.generate(g.ctx, repo); err != nil {
+					g.logger.WithError(err).Error("failed to generate bundle")
+				}
 			}
+			g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).Info("bundle generation")
 		}()
 	}
 
