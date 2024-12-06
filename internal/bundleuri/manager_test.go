@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
@@ -97,6 +98,7 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 			}
 
 			if tc.expectFileExist {
+				require.Equal(t, 1, testutil.CollectAndCount(manager, "gitaly_bundle_generation_seconds"))
 				require.FileExists(t, filepath.Join(sinkDir, sink.relativePath(repo, "default")))
 				return
 			}
