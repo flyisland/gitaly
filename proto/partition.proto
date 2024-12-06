@@ -60,3 +60,11 @@ message ListPartitionsResponse {
   // documentation for further info.
   PaginationCursor pagination_cursor = 2;
 }
+
+// KVPair represents single key-value pair.
+message KVPair {
+  // key is the key of the key-value pair.
+  bytes key = 1;
+  // value is the value of the key-value pair.
+  bytes value = 2;
+}

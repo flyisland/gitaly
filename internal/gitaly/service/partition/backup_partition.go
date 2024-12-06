@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,9 +13,13 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/protobuf/encoding/protodelim"
 )
+
+const kvStateFileName = "kv-state"
 
 // BackupPartition creates a backup of entire partition streamed directly to object-storage.
 func (s *server) BackupPartition(ctx context.Context, in *gitalypb.BackupPartitionRequest) (_ *gitalypb.BackupPartitionResponse, returnErr error) {
@@ -22,18 +27,12 @@ func (s *server) BackupPartition(ctx context.Context, in *gitalypb.BackupPartiti
 		return nil, structerr.NewFailedPrecondition("backup partition: server-side backups are not configured")
 	}
 
-	var root string
-	var lsn string
-	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		root = tx.FS().Root()
-		lsn = tx.SnapshotLSN().String()
-	}
-	if root == "" {
+	tx := storage.ExtractTransaction(ctx)
+	if tx == nil {
 		return nil, structerr.NewInternal("backup partition: transaction not initialized")
 	}
 
-	backupRelativePath := filepath.Join("partition-backups", in.GetStorageName(), in.GetPartitionId(), lsn+".tar")
-
+	backupRelativePath := filepath.Join("partition-backups", in.GetStorageName(), in.GetPartitionId(), tx.SnapshotLSN().String()+".tar")
 	exists, err := s.backupSink.Exists(ctx, backupRelativePath)
 	if err != nil {
 		return nil, fmt.Errorf("backup exists: %w", err)
@@ -61,7 +60,42 @@ func (s *server) BackupPartition(ctx context.Context, in *gitalypb.BackupPartiti
 		}
 	}()
 
-	if err := archive.WriteTarball(writeCtx, s.logger, w, root, "."); err != nil {
+	kvFile, err := os.CreateTemp("", kvStateFileName)
+	if err != nil {
+		return nil, fmt.Errorf("create temp file for KV entries: %w", err)
+	}
+	defer func() {
+		if err := kvFile.Close(); err != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("close temp KV file: %w", err))
+		}
+	}()
+
+	if err := os.Remove(kvFile.Name()); err != nil {
+		returnErr = errors.Join(returnErr, fmt.Errorf("remove temp KV file: %w", err))
+	}
+
+	kvIter := tx.KV().NewIterator(keyvalue.IteratorOptions{})
+	defer kvIter.Close()
+	for kvIter.Rewind(); kvIter.Valid(); kvIter.Next() {
+		item := kvIter.Item()
+
+		if err := item.Value(func(v []byte) error {
+			if _, err := protodelim.MarshalTo(kvFile, &gitalypb.KVPair{Key: item.Key(), Value: v}); err != nil {
+				return fmt.Errorf("write KV entry to temp file: %w", err)
+			}
+
+			return nil
+		}); err != nil {
+			return nil, fmt.Errorf("get KV value: %w", err)
+		}
+	}
+
+	// Rewind the temp file to the beginning before reading from it.
+	if _, err := kvFile.Seek(0, 0); err != nil {
+		return nil, fmt.Errorf("rewind KV entries file: %w", err)
+	}
+
+	if err := writeTarball(tx.FS().Root(), kvFile, w); err != nil {
 		return nil, fmt.Errorf("write tarball: %w", err)
 	}
 
@@ -71,6 +105,24 @@ func (s *server) BackupPartition(ctx context.Context, in *gitalypb.BackupPartiti
 	}
 
 	return &gitalypb.BackupPartitionResponse{}, nil
+}
+
+func writeTarball(partitionRoot string, kvFile *os.File, w io.Writer) error {
+	builder := archive.NewTarBuilder(partitionRoot, w)
+
+	if err := builder.VirtualFileWithContents(kvStateFileName, kvFile); err != nil {
+		return fmt.Errorf("tar builder: virtual file: %w", err)
+	}
+
+	if err := builder.RecursiveDir(".", "fs", true); err != nil {
+		return fmt.Errorf("tar builder: recursive dir: %w", err)
+	}
+
+	if err := builder.Close(); err != nil {
+		return fmt.Errorf("tar builder: close: %w", err)
+	}
+
+	return nil
 }
 
 // BackupEntry represents a single backup in the manifest

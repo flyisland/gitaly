@@ -1,12 +1,14 @@
 package partition_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,6 +23,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/protobuf/encoding/protodelim"
 )
 
 func TestBackupPartition(t *testing.T) {
@@ -130,9 +133,23 @@ func TestBackupPartition(t *testing.T) {
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, tar)
 
+			expectedKV := new(bytes.Buffer)
+			expectedEntries := []*gitalypb.KVPair{
+				{Key: []byte(fmt.Sprintf("m/%s", repo.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
+				{Key: []byte(fmt.Sprintf("r/%s", repo.GetRelativePath())), Value: nil},
+			}
+			for _, entry := range expectedEntries {
+				_, err = protodelim.MarshalTo(
+					expectedKV,
+					entry,
+				)
+				require.NoError(t, err)
+			}
+
 			testhelper.ContainsTarState(t, tar, testhelper.DirectoryState{
-				".":                    {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
-				repo.GetRelativePath(): {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
+				"fs": {Mode: archive.DirectoryMode},
+				filepath.Join("fs", repo.GetRelativePath()): {Mode: archive.DirectoryMode},
+				"kv-state": {Mode: archive.TarFileMode, Content: expectedKV.Bytes()},
 			})
 
 			manifestPath := filepath.Join(backupRoot, "partition-manifests", data.storageName, data.partitionID) + ".json"
@@ -181,10 +198,30 @@ func TestBackupPartition(t *testing.T) {
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, tar2)
 
+			expectedEntries = []*gitalypb.KVPair{
+				{Key: []byte(fmt.Sprintf("m/%s", repo.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
+				{Key: []byte(fmt.Sprintf("m/%s", forkRepository.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
+				{Key: []byte(fmt.Sprintf("r/%s", repo.GetRelativePath()))},
+				{Key: []byte(fmt.Sprintf("r/%s", forkRepository.GetRelativePath())), Value: nil},
+			}
+			// We need to sort the entries before comparing because badger iterator also returns the keys in lexicographically sorted order.
+			sort.Slice(expectedEntries, func(i, j int) bool {
+				return bytes.Compare(expectedEntries[i].GetKey(), expectedEntries[j].GetKey()) < 0
+			})
+			expectedKV.Reset()
+			for _, entry := range expectedEntries {
+				_, err = protodelim.MarshalTo(
+					expectedKV,
+					entry,
+				)
+				require.NoError(t, err)
+			}
+
 			testhelper.ContainsTarState(t, tar2, testhelper.DirectoryState{
-				".":                              {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
-				repo.GetRelativePath():           {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
-				forkRepository.GetRelativePath(): {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
+				"fs": {Mode: archive.DirectoryMode},
+				filepath.Join("fs", repo.GetRelativePath()):           {Mode: archive.DirectoryMode},
+				filepath.Join("fs", forkRepository.GetRelativePath()): {Mode: archive.DirectoryMode},
+				"kv-state": {Mode: archive.TarFileMode, Content: expectedKV.Bytes()},
 			})
 
 			manifestFile, err = os.Open(manifestPath)

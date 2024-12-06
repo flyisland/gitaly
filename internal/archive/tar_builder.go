@@ -26,6 +26,9 @@ const TarFileMode = permission.OwnerRead | permission.OwnerWrite |
 // expanded to all.
 const ExecuteMode = permission.OwnerExecute | permission.GroupExecute | permission.OthersExecute
 
+// DirectoryMode is the mode used for directories in tar archives
+const DirectoryMode = TarFileMode | ExecuteMode | fs.ModeDir
+
 // TarBuilder writes a .tar archive to an io.Writer. The contents of the archive
 // are determined by successive calls to `File` and `RecursiveDir`.
 //
@@ -109,30 +112,6 @@ func (t *TarBuilder) entry(fi os.FileInfo, filename string, r io.Reader) error {
 	return nil
 }
 
-func (t *TarBuilder) walk(path string, fi os.FileInfo, err error) error {
-	// Stop completely if an error is encountered walking the directory
-	if err != nil {
-		return err
-	}
-
-	// This condition strongly suggests an application bug
-	rel, err := filepath.Rel(t.basePath, path)
-	if err != nil {
-		return err
-	}
-
-	if fi.Mode().IsDir() {
-		return t.entry(fi, rel, nil)
-	}
-
-	// Ignore symlinks and special files in directories
-	if !t.allowSymlinks && !fi.Mode().IsRegular() {
-		return nil
-	}
-
-	return t.file(fi, rel, true)
-}
-
 // File writes a single regular file to the archive. It is an error if the file
 // exists, but is not a regular file - including symlinks.
 //
@@ -155,15 +134,15 @@ func (t *TarBuilder) File(rel string, mustExist bool) error {
 		return t.setErr(err)
 	}
 
-	return t.file(fi, rel, mustExist)
+	return t.file(fi, rel, rel, mustExist)
 }
 
-func (t *TarBuilder) file(fi fs.FileInfo, rel string, mustExist bool) error {
+func (t *TarBuilder) file(fi fs.FileInfo, fsPath, tarPath string, mustExist bool) error {
 	if t.allowSymlinks && fi.Mode()&fs.ModeSymlink != 0 {
-		return t.setErr(t.entry(fi, rel, nil))
+		return t.setErr(t.entry(fi, tarPath, nil))
 	}
 
-	filename := t.join(rel)
+	filename := t.join(fsPath)
 
 	// O_NOFOLLOW causes an error to be returned if the file is a symlink
 	file, err := os.OpenFile(filename, os.O_RDONLY|unix.O_NOFOLLOW, 0)
@@ -179,7 +158,7 @@ func (t *TarBuilder) file(fi fs.FileInfo, rel string, mustExist bool) error {
 
 	defer file.Close()
 
-	return t.setErr(t.entry(fi, rel, file))
+	return t.setErr(t.entry(fi, tarPath, file))
 }
 
 // RecursiveDir adds a complete directory to the archive, including all
@@ -191,7 +170,7 @@ func (t *TarBuilder) file(fi fs.FileInfo, rel string, mustExist bool) error {
 //
 // If patterns is non-empty, only those matching files and directories will be
 // included. Otherwise, all are included.
-func (t *TarBuilder) RecursiveDir(rel string, mustExist bool, patterns ...*regexp.Regexp) error {
+func (t *TarBuilder) RecursiveDir(rel, targetDir string, mustExist bool, patterns ...*regexp.Regexp) error {
 	if t.err != nil {
 		return t.err
 	}
@@ -206,9 +185,32 @@ func (t *TarBuilder) RecursiveDir(rel string, mustExist bool, patterns ...*regex
 		return t.setErr(err)
 	}
 
-	walker := t.walk
+	walker := func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		rel, err := filepath.Rel(t.basePath, path)
+		if err != nil {
+			return err
+		}
+
+		tarPath := filepath.Join(targetDir, rel)
+
+		if fi.IsDir() {
+			return t.entry(fi, tarPath, nil)
+		}
+
+		// Ignore symlinks and special files in directories
+		if !t.allowSymlinks && !fi.Mode().IsRegular() {
+			return nil
+		}
+
+		return t.file(fi, rel, tarPath, true)
+	}
+
 	if len(patterns) > 0 {
-		walker = NewMatchWalker(patterns, t.walk).Walk
+		walker = NewMatchWalker(patterns, walker).Walk
 	}
 
 	// Walk the root and its children, recursively
@@ -233,7 +235,7 @@ func (t *TarBuilder) VirtualFileWithContents(relPath string, contents *os.File) 
 // RecursiveDirIfExist is a helper for RecursiveDir that sets `mustExist` to
 // false.
 func (t *TarBuilder) RecursiveDirIfExist(rel string, patterns ...*regexp.Regexp) error {
-	return t.RecursiveDir(rel, false, patterns...)
+	return t.RecursiveDir(rel, "", false, patterns...)
 }
 
 // Close finalizes the archive and releases any underlying resources. It should

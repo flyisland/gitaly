@@ -25,7 +25,7 @@ func WriteTarball(ctx context.Context, logger log.Logger, writer io.Writer, path
 	builder.allowSymlinks = true
 
 	for _, member := range members {
-		_ = builder.RecursiveDir(member, true)
+		_ = builder.RecursiveDir(member, "", true)
 	}
 
 	if err := builder.Close(); err != nil {

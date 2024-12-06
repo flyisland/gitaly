@@ -3,7 +3,6 @@ package gitalybackup
 import (
 	"context"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -116,8 +115,8 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 			defer testhelper.MustClose(t, tar)
 
 			testhelper.ContainsTarState(t, tar, testhelper.DirectoryState{
-				".":                    {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
-				repo.GetRelativePath(): {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
+				"fs": {Mode: archive.DirectoryMode},
+				filepath.Join("fs", repo.GetRelativePath()): {Mode: archive.DirectoryMode},
 			})
 		})
 	}
