@@ -79,7 +79,7 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 
 			manager := NewGenerationManager(sink, logger, tc.concurrencyLimit, tc.threshold, NewInProgressTracker())
 
-			err = manager.GenerateIfAboveThreshold(repo, func() error {
+			err = manager.GenerateIfAboveThreshold(ctx, repo, func() error {
 				manager.wg.Wait()
 				return nil
 			})
@@ -119,7 +119,7 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 		bundlePath := sink.relativePath(repo, defaultBundle)
 		manager.bundleGenerationInProgress[bundlePath] = struct{}{}
 
-		err = manager.GenerateIfAboveThreshold(repo, func() error {
+		err = manager.GenerateIfAboveThreshold(ctx, repo, func() error {
 			manager.wg.Wait()
 			return nil
 		})
@@ -147,7 +147,7 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 		manager.bundleGenerationInProgress["other path"] = struct{}{}
 		manager.bundleGenerationInProgress["another path"] = struct{}{}
 
-		err = manager.GenerateIfAboveThreshold(repo, func() error {
+		err = manager.GenerateIfAboveThreshold(ctx, repo, func() error {
 			manager.wg.Wait()
 			return nil
 		})

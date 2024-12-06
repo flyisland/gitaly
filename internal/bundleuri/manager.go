@@ -93,7 +93,7 @@ func (g *GenerationManager) generate(ctx context.Context, repo *localrepo.Repo) 
 // has incremented an "in progress" counter. When there are multiple concurrent
 // calls making the counter for the given repository reach the threshold, a
 // background goroutine to generate a bundle is started.
-func (g *GenerationManager) GenerateIfAboveThreshold(repo *localrepo.Repo, f func() error) error {
+func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *localrepo.Repo, f func() error) error {
 	repoPath := repo.GetRelativePath()
 	g.inProgressTracker.IncrementInProgress(repoPath)
 	defer g.inProgressTracker.DecrementInProgress(repoPath)
