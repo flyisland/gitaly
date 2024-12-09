@@ -20,6 +20,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -310,6 +311,8 @@ func TestPrereceive_gitlab(t *testing.T) {
 		SkipCreationViaService: true,
 	})
 
+	ctx = metadata.AppendToIncomingContext(ctx, metadata.ClientContextMetadataKey, "foobar")
+
 	payload, err := gitcmd.NewHooksPayload(
 		ctx,
 		cfg,
@@ -419,6 +422,7 @@ func TestPrereceive_gitlab(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			gitlabAPI := prereceiveAPIMock{
 				allowed: func(ctx context.Context, params gitlab.AllowedParams) (bool, string, error) {
+					require.Equal(t, []byte("foobar"), params.ClientContext)
 					return tc.allowed(t, ctx, params)
 				},
 				prereceive: func(ctx context.Context, glRepo string) (bool, error) {
