@@ -2853,15 +2853,10 @@ func (mgr *TransactionManager) verifyRepacking(ctx context.Context, transaction 
 
 	// Setup a working repository of the destination repository and all changes of current transactions. All
 	// concurrent changes must land in that repository already.
-	snapshot, err := mgr.snapshotManager.GetSnapshot(ctx, []string{transaction.relativePath}, true)
+	stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
 	if err != nil {
 		return fmt.Errorf("setting up new snapshot for verifying repacking: %w", err)
 	}
-	defer func() {
-		if err := snapshot.Close(); err != nil {
-			returnedErr = errors.Join(returnedErr, fmt.Errorf("close snapshot: %w", err))
-		}
-	}()
 
 	// To verify the housekeeping transaction, we apply the operations it staged to a snapshot of the target
 	// repository's current state. We then check whether the resulting state is valid.
@@ -2873,7 +2868,7 @@ func (mgr *TransactionManager) verifyRepacking(ctx context.Context, transaction 
 			ctx,
 			// We're not committing the changes in to the snapshot, so no need to fsync anything.
 			func(context.Context, string) error { return nil },
-			snapshot.Root(),
+			transaction.stagingSnapshot.Root(),
 			transaction.walEntry.Directory(),
 			transaction.walEntry.Operations(),
 			dbTX,
@@ -2895,7 +2890,7 @@ func (mgr *TransactionManager) verifyRepacking(ctx context.Context, transaction 
 		return fmt.Errorf("walking committed entries: %w", err)
 	}
 
-	if err := mgr.verifyObjectsExist(ctx, mgr.repositoryFactory.Build(snapshot.RelativePath(transaction.relativePath)), objectDependencies); err != nil {
+	if err := mgr.verifyObjectsExist(ctx, stagingRepository, objectDependencies); err != nil {
 		var errInvalidObject localrepo.InvalidObjectError
 		if errors.As(err, &errInvalidObject) {
 			return errRepackConflictPrunedObject
