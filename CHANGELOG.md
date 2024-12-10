@@ -51,6 +51,10 @@ No changes.
 
 - [protobuf: Mark SSHUploadPack RPC as deprecated](gitlab-org/gitaly@b4e224d975fb33e1fa91efe3e61d92b426a37560) ([merge request](gitlab-org/gitaly!7324))
 
+## 17.4.6 (2024-12-10)
+
+No changes.
+
 ## 17.4.5 (2024-11-26)
 
 No changes.
