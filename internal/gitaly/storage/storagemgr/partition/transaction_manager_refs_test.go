@@ -8,6 +8,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	housekeepingcfg "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/fshistory"
@@ -214,10 +215,16 @@ func generateModifyReferencesTests(t *testing.T, setup testTransactionSetup) []t
 					ReferenceUpdates: git.ReferenceUpdates{
 						"refs/heads/parent/child": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
-					ExpectedError: refdb.ParentReferenceExistsError{
-						ExistingReference: "refs/heads/parent",
-						TargetReference:   "refs/heads/parent/child",
-					},
+					ExpectedError: gittest.FilesOrReftables[error](
+						refdb.ParentReferenceExistsError{
+							ExistingReference: "refs/heads/parent",
+							TargetReference:   "refs/heads/parent/child",
+						},
+						updateref.FileDirectoryConflictError{
+							ConflictingReferenceName: "refs/heads/parent/child",
+							ExistingReferenceName:    "refs/heads/parent",
+						},
+					),
 				},
 			},
 			expectedState: StateAssertion{

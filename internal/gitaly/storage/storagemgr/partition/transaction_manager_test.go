@@ -2259,8 +2259,11 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					logEntryPath := filepath.Join(t.TempDir(), "log_entry")
 					require.NoError(t, os.Mkdir(logEntryPath, mode.Directory))
 					require.NoError(t, os.WriteFile(filepath.Join(logEntryPath, "1"), []byte(setup.Commits.First.OID+"\n"), mode.File))
-					err := tm.appendLogEntry(ctx, map[git.ObjectID]struct{}{setup.Commits.First.OID: {}}, refChangeLogEntry(setup, "refs/heads/branch-3", setup.Commits.First.OID), logEntryPath)
+					expectedManifest := manifestDirectoryEntry(refChangeLogEntry(setup, "refs/heads/branch-3", setup.Commits.First.OID))
+					manifestBytes, err := proto.Marshal(expectedManifest.Content.(proto.Message))
 					require.NoError(t, err)
+					require.NoError(t, os.WriteFile(manifestPath(logEntryPath), manifestBytes, mode.File))
+					require.NoError(t, tm.appendLogEntry(ctx, map[git.ObjectID]struct{}{setup.Commits.First.OID: {}}, nil, logEntryPath))
 
 					RequireDatabase(t, ctx, tm.db, DatabaseState{
 						string(keyAppliedLSN): storage.LSN(3).ToProto(),
@@ -2270,7 +2273,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 						"/":                           {Mode: mode.Directory},
 						"/wal":                        {Mode: mode.Directory},
 						"/wal/0000000000004":          {Mode: mode.Directory},
-						"/wal/0000000000004/MANIFEST": manifestDirectoryEntry(refChangeLogEntry(setup, "refs/heads/branch-3", setup.Commits.First.OID)),
+						"/wal/0000000000004/MANIFEST": expectedManifest,
 						"/wal/0000000000004/1":        {Mode: mode.File, Content: []byte(setup.Commits.First.OID + "\n")},
 					})
 				}),

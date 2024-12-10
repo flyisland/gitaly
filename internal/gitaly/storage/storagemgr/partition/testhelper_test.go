@@ -1556,10 +1556,9 @@ func checkManagerError(t *testing.T, ctx context.Context, managerErrChannel chan
 	t.Helper()
 
 	testTransaction := &Transaction{
-		referenceUpdates: []git.ReferenceUpdates{{"sentinel": {}}},
-		result:           make(chan error, 1),
-		finish:           func(bool) error { return nil },
-		manifest:         &gitalypb.LogEntry{},
+		relativePath: "sentinel-non-existent",
+		result:       make(chan error, 1),
+		finish:       func(bool) error { return nil },
 	}
 
 	var (
