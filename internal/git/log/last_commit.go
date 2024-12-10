@@ -3,6 +3,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
@@ -11,6 +12,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
+
+var badRevisionRegex = regexp.MustCompile(`^fatal: bad revision '.*'\n$`)
 
 // LastCommitForPath returns the last commit which modified path.
 func LastCommitForPath(
@@ -21,19 +24,27 @@ func LastCommitForPath(
 	path string,
 	options *gitalypb.GlobalOptions,
 ) (*catfile.Commit, error) {
-	var stdout strings.Builder
+	var stdout, stderrBuilder strings.Builder
 	cmd, err := repo.Exec(ctx, gitcmd.Command{
 		Name:        "log",
 		Flags:       []gitcmd.Option{gitcmd.Flag{Name: "--format=%H"}, gitcmd.Flag{Name: "--max-count=1"}},
 		Args:        []string{revision.String()},
 		PostSepArgs: []string{path},
-	}, append(gitcmd.ConvertGlobalOptions(options), gitcmd.WithStdout(&stdout))...)
+	}, append(gitcmd.ConvertGlobalOptions(options), gitcmd.WithStdout(&stdout), gitcmd.WithStderr(&stderrBuilder))...)
 	if err != nil {
 		return nil, err
 	}
 
 	if err := cmd.Wait(); err != nil {
-		return nil, fmt.Errorf("logging last commit for path: %w", err)
+		// NOTE: this should probably reuse parts of what is done here:
+		// https://gitlab.com/gitlab-org/gitaly/-/blob/935c88d1737e9c58da7e13a9b913fdfc7faedc49/internal/gitaly/service/commit/find_commits.go#L429
+		stderr := stderrBuilder.String()
+		switch {
+		case badRevisionRegex.MatchString(stderr):
+			return nil, catfile.NotFoundError{Revision: fmt.Sprintf("%s:%s", revision, path)}
+		default:
+			return nil, fmt.Errorf("logging last commit for path: %w", err)
+		}
 	}
 
 	if stdout.Len() == 0 {
