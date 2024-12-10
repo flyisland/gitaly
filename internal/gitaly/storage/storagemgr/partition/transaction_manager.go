@@ -2575,9 +2575,6 @@ func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transacti
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("total", "verify")
 	defer finishTimer()
 
-	mgr.mutex.Lock()
-	defer mgr.mutex.Unlock()
-
 	// Check for any concurrent housekeeping between this transaction's snapshot LSN and the latest appended LSN.
 	if err := mgr.walkCommittedEntries(transaction, func(entry *gitalypb.LogEntry, objectDependencies map[git.ObjectID]struct{}) error {
 		if entry.GetHousekeeping() != nil {
@@ -3149,6 +3146,9 @@ func (mgr *TransactionManager) updateCommittedEntry(snapshotLSN storage.LSN) *co
 // walkCommittedEntries walks all committed entries after input transaction's snapshot LSN. It loads the content of the
 // entry from disk and triggers the callback with entry content.
 func (mgr *TransactionManager) walkCommittedEntries(transaction *Transaction, callback func(*gitalypb.LogEntry, map[git.ObjectID]struct{}) error) error {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
+
 	for elm := mgr.committedEntries.Front(); elm != nil; elm = elm.Next() {
 		committed := elm.Value.(*committedEntry)
 		if committed.lsn <= transaction.snapshotLSN {
