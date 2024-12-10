@@ -171,6 +171,17 @@ func TestLastCommitForPath(t *testing.T) {
 			},
 		},
 		{
+			desc: "not existing revision",
+			request: &gitalypb.LastCommitForPathRequest{
+				Repository: repoProto,
+				Revision:   []byte("refs/heads/does-not-exist"),
+				Path:       []byte("does-not-exist"),
+			},
+			expectedResponse: &gitalypb.LastCommitForPathResponse{
+				Commit: nil,
+			},
+		},
+		{
 			desc: "glob with literal pathspec",
 			request: &gitalypb.LastCommitForPathRequest{
 				Repository:      repoProto,
