@@ -1273,6 +1273,10 @@ func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, trans
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.setupStagingRepository", nil)
 	defer span.Finish()
 
+	if transaction.stagingSnapshot != nil {
+		return nil, errors.New("staging snapshot already setup")
+	}
+
 	var err error
 	transaction.stagingSnapshot, err = mgr.snapshotManager.GetSnapshot(ctx, []string{transaction.relativePath}, true)
 	if err != nil {
@@ -2094,17 +2098,14 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 				}
 
 				if refBackend == git.ReferenceBackendReftables || transaction.runHousekeeping != nil {
-					stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
-					if err != nil {
-						return fmt.Errorf("setup staging snapshot: %w", err)
-					}
-
-					if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
-						return fmt.Errorf("verify references: %w", err)
+					if refBackend == git.ReferenceBackendReftables {
+						if err := mgr.verifyReferences(ctx, transaction); err != nil {
+							return fmt.Errorf("verify references: %w", err)
+						}
 					}
 
 					if transaction.runHousekeeping != nil {
-						housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
+						housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction)
 						if err != nil {
 							return fmt.Errorf("verifying pack refs: %w", err)
 						}
@@ -2426,7 +2427,7 @@ func packFilePath(walFiles string) string {
 // verifyReferences verifies that the references in the transaction apply on top of the already accepted
 // reference changes. The old tips in the transaction are verified against the current actual tips.
 // It returns the write-ahead log entry for the reference transactions successfully verified.
-func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) error {
+func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction *Transaction) error {
 	defer trace.StartRegion(ctx, "verifyReferences").End()
 
 	if len(transaction.referenceUpdates) == 0 {
@@ -2436,23 +2437,17 @@ func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction
 	span, _ := tracing.StartSpanIfHasParent(ctx, "transaction.verifyReferences", nil)
 	defer span.Finish()
 
+	stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
+	if err != nil {
+		return fmt.Errorf("setup staging snapshot: %w", err)
+	}
+
 	// Apply quarantine to the staging repository in order to ensure the new objects are available when we
 	// are verifying references. Without it we'd encounter errors about missing objects as the new objects
 	// are not in the repository.
 	stagingRepositoryWithQuarantine, err := stagingRepository.Quarantine(ctx, transaction.quarantineDirectory)
 	if err != nil {
 		return fmt.Errorf("quarantine: %w", err)
-	}
-
-	// For the reftable backend, we also need to capture HEAD updates here.
-	// So obtain the reference backend to do the specific checks.
-	refBackend, err := stagingRepositoryWithQuarantine.ReferenceBackend(ctx)
-	if err != nil {
-		return fmt.Errorf("reference backend: %w", err)
-	}
-
-	if refBackend != git.ReferenceBackendReftables {
-		return nil
 	}
 
 	if err := mgr.verifyReferencesWithGitForReftables(ctx, transaction.manifest.GetReferenceTransactions(), transaction, stagingRepositoryWithQuarantine); err != nil {
@@ -2572,7 +2567,7 @@ func (mgr *TransactionManager) verifyReferencesWithGitForReftables(
 // verifyHousekeeping verifies if all included housekeeping tasks can be performed. Although it's feasible for multiple
 // housekeeping tasks running at the same time, it's not guaranteed they are conflict-free. So, we need to ensure there
 // is no other concurrent housekeeping task. Each sub-task also needs specific verification.
-func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping, error) {
+func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transaction *Transaction) (*gitalypb.LogEntry_Housekeeping, error) {
 	defer trace.StartRegion(ctx, "verifyHousekeeping").End()
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.verifyHousekeeping", nil)
@@ -2615,7 +2610,7 @@ func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transacti
 		return nil, fmt.Errorf("walking committed entries: %w", err)
 	}
 
-	packRefsEntry, err := mgr.verifyPackRefs(ctx, transaction, stagingRepository)
+	packRefsEntry, err := mgr.verifyPackRefs(ctx, transaction)
 	if err != nil {
 		return nil, fmt.Errorf("verifying pack refs: %w", err)
 	}
@@ -2785,7 +2780,7 @@ func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transact
 
 // verifyPackRefs verifies if the git-pack-refs(1) can be applied without any conflicts.
 // It calls the reference backend specific function to handle the core logic.
-func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
+func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *Transaction) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
 	if transaction.runHousekeeping.packRefs == nil {
 		return nil, nil
 	}
@@ -2795,6 +2790,11 @@ func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("pack-refs", "verify")
 	defer finishTimer()
+
+	stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
+	if err != nil {
+		return nil, fmt.Errorf("setup staging snapshot: %w", err)
+	}
 
 	refBackend, err := stagingRepository.ReferenceBackend(ctx)
 	if err != nil {
