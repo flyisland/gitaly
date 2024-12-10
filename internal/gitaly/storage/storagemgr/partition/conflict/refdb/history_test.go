@@ -127,13 +127,11 @@ func TestTree(t *testing.T) {
 			"HEAD": {NewTarget: "refs/heads/new-default-1"},
 		}))
 
-		require.Equal(t, UnexpectedOldValueError{
-			TargetReference: "HEAD",
-			ExpectedValue:   "refs/heads/main",
-			ActualValue:     "refs/heads/new-default-1",
-		}, tx.ApplyUpdates(git.ReferenceUpdates{
-			"HEAD": {OldTarget: "refs/heads/main", NewTarget: "refs/heads/new-default-2"},
-		}))
+		require.Equal(t,
+			NewUnexpectedOldValueError("HEAD", "refs/heads/main", "refs/heads/new-default-1"),
+			tx.ApplyUpdates(git.ReferenceUpdates{
+				"HEAD": {OldTarget: "refs/heads/main", NewTarget: "refs/heads/new-default-2"},
+			}))
 	})
 
 	t.Run("parent references exist", func(t *testing.T) {
@@ -144,12 +142,11 @@ func TestTree(t *testing.T) {
 			"refs/heads/main": {NewOID: "oid-1"},
 		}))
 
-		require.Equal(t, ParentReferenceExistsError{
-			ExistingReference: "refs/heads/main",
-			TargetReference:   "refs/heads/main/child",
-		}, tx.ApplyUpdates(git.ReferenceUpdates{
-			"refs/heads/main/child": {NewOID: "oid-1"},
-		}))
+		require.Equal(t,
+			NewParentReferenceExistsError("refs/heads/main", "refs/heads/main/child"),
+			tx.ApplyUpdates(git.ReferenceUpdates{
+				"refs/heads/main/child": {NewOID: "oid-1"},
+			}))
 	})
 
 	t.Run("child references exist", func(t *testing.T) {
@@ -160,11 +157,11 @@ func TestTree(t *testing.T) {
 			"refs/heads/main/child": {NewOID: "oid-1"},
 		}))
 
-		require.Equal(t, ChildReferencesExistError{
-			TargetReference: "refs/heads/main",
-		}, tx.ApplyUpdates(git.ReferenceUpdates{
-			"refs/heads/main": {NewOID: "oid-1"},
-		}))
+		require.Equal(t,
+			NewChildReferencesExistError("refs/heads/main"),
+			tx.ApplyUpdates(git.ReferenceUpdates{
+				"refs/heads/main": {NewOID: "oid-1"},
+			}))
 	})
 
 	t.Run("resolved directory-file conflict in history", func(t *testing.T) {
@@ -273,13 +270,11 @@ func TestTree(t *testing.T) {
 		// should not be removed even if we created a reference above it at
 		// `refs/heads/main` and subsequently deleted `refs/heads/main` again.
 		tx = history.Begin()
-		require.Equal(t, UnexpectedOldValueError{
-			TargetReference: "refs/heads/main/child",
-			ExpectedValue:   "oid-1",
-			ActualValue:     zeroOID.String(),
-		}, tx.ApplyUpdates(git.ReferenceUpdates{
-			"refs/heads/main/child": {OldOID: "oid-1", NewOID: "oid-2"},
-		}))
+		require.Equal(t,
+			NewUnexpectedOldValueError("refs/heads/main/child", "oid-1", zeroOID.String()),
+			tx.ApplyUpdates(git.ReferenceUpdates{
+				"refs/heads/main/child": {OldOID: "oid-1", NewOID: "oid-2"},
+			}))
 
 		require.Equal(t,
 			&History{
@@ -380,13 +375,11 @@ func TestTree(t *testing.T) {
 			"refs/heads/main": {NewOID: "oid-1"},
 		}))
 
-		require.Equal(t, UnexpectedOldValueError{
-			TargetReference: "refs/heads/main",
-			ExpectedValue:   "oid-2",
-			ActualValue:     "oid-1",
-		}, tx.ApplyUpdates(git.ReferenceUpdates{
-			"refs/heads/main": {OldOID: "oid-2", NewOID: "oid-3"},
-		}))
+		require.Equal(t,
+			NewUnexpectedOldValueError("refs/heads/main", "oid-2", "oid-1"),
+			tx.ApplyUpdates(git.ReferenceUpdates{
+				"refs/heads/main": {OldOID: "oid-2", NewOID: "oid-3"},
+			}))
 	})
 
 	t.Run("reference deletion", func(t *testing.T) {
