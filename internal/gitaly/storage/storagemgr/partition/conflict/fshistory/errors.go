@@ -13,15 +13,6 @@ type ReadWriteConflictError struct {
 	WriteLSN storage.LSN
 }
 
-// ErrorMetadata returns the metadata associated with this error for logging.
-func (err ReadWriteConflictError) ErrorMetadata() []structerr.MetadataItem {
-	return []structerr.MetadataItem{
-		{Key: "path", Value: err.Path},
-		{Key: "read_lsn", Value: err.ReadLSN},
-		{Key: "write_lsn", Value: err.WriteLSN},
-	}
-}
-
 // Error returns the error message.
 func (ReadWriteConflictError) Error() string {
 	return "path was modified after read"
@@ -29,17 +20,16 @@ func (ReadWriteConflictError) Error() string {
 
 // NewReadWriteConflictError returns an error detailing a conflicting read.
 func NewReadWriteConflictError(path string, readLSN, writeLSN storage.LSN) error {
-	return ReadWriteConflictError{Path: path, ReadLSN: readLSN, WriteLSN: writeLSN}
+	return structerr.NewAborted("%w", ReadWriteConflictError{Path: path, ReadLSN: readLSN, WriteLSN: writeLSN}).WithMetadataItems(
+		structerr.MetadataItem{Key: "path", Value: path},
+		structerr.MetadataItem{Key: "read_lsn", Value: readLSN},
+		structerr.MetadataItem{Key: "write_lsn", Value: writeLSN},
+	)
 }
 
 // NotFoundError is returned when a given path is not found.
 type NotFoundError struct {
 	Path string
-}
-
-// ErrorMetadata returns the metadata associated with this error for logging.
-func (err NotFoundError) ErrorMetadata() []structerr.MetadataItem {
-	return []structerr.MetadataItem{{Key: "path", Value: err.Path}}
 }
 
 // Error returns the error message.
@@ -48,7 +38,7 @@ func (NotFoundError) Error() string {
 }
 
 func newNotFoundError(path string) error {
-	return NotFoundError{Path: path}
+	return structerr.NewAborted("%w", NotFoundError{Path: path}).WithMetadata("path", path)
 }
 
 // NotDirectoryError is returned when an element in a walked
@@ -57,18 +47,13 @@ type NotDirectoryError struct {
 	Path string
 }
 
-// ErrorMetadata returns the metadata associated with this error for logging.
-func (err NotDirectoryError) ErrorMetadata() []structerr.MetadataItem {
-	return []structerr.MetadataItem{{Key: "path", Value: err.Path}}
-}
-
 // Error returns the error message.
 func (NotDirectoryError) Error() string {
 	return "not a directory"
 }
 
 func newNotDirectoryError(path string) error {
-	return NotDirectoryError{Path: path}
+	return structerr.NewAborted("%w", NotDirectoryError{Path: path}).WithMetadata("path", path)
 }
 
 // DirectoryNotEmptyError is returned when attempting to remove a
@@ -77,18 +62,13 @@ type DirectoryNotEmptyError struct {
 	Path string
 }
 
-// ErrorMetadata returns the metadata associated with this error for logging.
-func (err DirectoryNotEmptyError) ErrorMetadata() []structerr.MetadataItem {
-	return []structerr.MetadataItem{{Key: "path", Value: err.Path}}
-}
-
 // Error returns the error message.
 func (DirectoryNotEmptyError) Error() string {
 	return "directory not empty"
 }
 
 func newDirectoryNotEmptyError(path string) error {
-	return DirectoryNotEmptyError{Path: path}
+	return structerr.NewAborted("%w", DirectoryNotEmptyError{Path: path}).WithMetadata("path", path)
 }
 
 // AlreadyExistsError is returned when attempting when a file
@@ -97,16 +77,11 @@ type AlreadyExistsError struct {
 	Path string
 }
 
-// ErrorMetadata returns the metadata associated with this error for logging.
-func (err AlreadyExistsError) ErrorMetadata() []structerr.MetadataItem {
-	return []structerr.MetadataItem{{Key: "path", Value: err.Path}}
-}
-
 // Error returns the error message.
 func (AlreadyExistsError) Error() string {
 	return "already exists"
 }
 
 func newAlreadyExistsError(path string) error {
-	return AlreadyExistsError{Path: path}
+	return structerr.NewAborted("%w", AlreadyExistsError{Path: path}).WithMetadata("path", path)
 }
