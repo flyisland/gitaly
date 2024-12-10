@@ -341,6 +341,202 @@ filename path
 				}
 			},
 		},
+		{
+			desc: "blame with valid IgnoreRevisionsBlob",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				commitA := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "a\n"},
+				))
+				commitB := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "b\n"},
+				), gittest.WithParents(commitA))
+
+				commitC := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "   b\n"},
+				), gittest.WithParents(commitB))
+
+				commitD := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "   b\n"},
+					gittest.TreeEntry{Path: ".git-blame-ignore-revs", Mode: "100644", Content: commitC.String()},
+				), gittest.WithParents(commitC))
+
+				return setupData{
+					request: &gitalypb.RawBlameRequest{
+						Repository:          repo,
+						Revision:            []byte(commitD),
+						Path:                []byte("path"),
+						IgnoreRevisionsBlob: []byte(fmt.Sprintf("%s:.git-blame-ignore-revs", commitD.String())),
+					},
+					expectedData: fmt.Sprintf(`%s 1 1 1
+author Scrooge McDuck
+author-mail <scrooge@mcduck.com>
+author-time 1572776879
+author-tz +0100
+committer Scrooge McDuck
+committer-mail <scrooge@mcduck.com>
+committer-time 1572776879
+committer-tz +0100
+summary message
+previous %s path
+filename path
+	   b
+`, commitB, commitA),
+				}
+			},
+		},
+		{
+			desc: "blame with IgnoreRevisionsBlob containing multiple revisions",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				commitA := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "a\nb"},
+				))
+				commitB := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "a\nb\nc"},
+				), gittest.WithParents(commitA))
+
+				commitC := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "a\n   b\nc"},
+				), gittest.WithParents(commitB))
+
+				commitD := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "a\n   b\n   c"},
+				), gittest.WithParents(commitC))
+
+				commitE := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "a\n   b\n   c"},
+					gittest.TreeEntry{Path: ".git-blame-ignore-revs", Mode: "100644", Content: strings.Join([]string{commitC.String(), commitD.String()}, "\n")},
+				), gittest.WithParents(commitD))
+
+				return setupData{
+					request: &gitalypb.RawBlameRequest{
+						Repository:          repo,
+						Revision:            []byte(commitE),
+						Path:                []byte("path"),
+						IgnoreRevisionsBlob: []byte(fmt.Sprintf("%s:.git-blame-ignore-revs", commitE.String())),
+					},
+					expectedData: fmt.Sprintf(`%s 1 1 1
+author Scrooge McDuck
+author-mail <scrooge@mcduck.com>
+author-time 1572776879
+author-tz +0100
+committer Scrooge McDuck
+committer-mail <scrooge@mcduck.com>
+committer-time 1572776879
+committer-tz +0100
+summary message
+boundary
+filename path
+	a
+%s 2 2 2
+author Scrooge McDuck
+author-mail <scrooge@mcduck.com>
+author-time 1572776879
+author-tz +0100
+committer Scrooge McDuck
+committer-mail <scrooge@mcduck.com>
+committer-time 1572776879
+committer-tz +0100
+summary message
+previous %s path
+filename path
+	   b
+%s 3 3
+	   c
+`, commitA, commitB, commitA, commitB),
+				}
+			},
+		},
+		{
+			desc: "blame with IgnoreRevisionsBlob not resolvable",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+				commit := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "a\n"},
+				))
+				return setupData{
+					request: &gitalypb.RawBlameRequest{
+						Repository:          repo,
+						Revision:            []byte(commit),
+						Path:                []byte("path"),
+						IgnoreRevisionsBlob: []byte("non-existent"),
+					},
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewNotFound("cannot resolve ignore-revs blob").
+							WithDetail(&gitalypb.RawBlameError{
+								Error: &gitalypb.RawBlameError_ResolveIgnoreRevs{
+									ResolveIgnoreRevs: &gitalypb.RawBlameError_ResolveIgnoreRevsError{
+										IgnoreRevisionsBlob: []byte("non-existent"),
+									},
+								},
+							}),
+					),
+				}
+			},
+		},
+
+		{
+			desc: "blame with IgnoreRevisionsBlob in incorrect format",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+				commit := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "path", Mode: "100644", Content: "a\nb"},
+				))
+				return setupData{
+					request: &gitalypb.RawBlameRequest{
+						Repository:          repo,
+						Revision:            []byte(commit),
+						Path:                []byte("path"),
+						IgnoreRevisionsBlob: []byte(fmt.Sprintf("%s:path", commit.String())),
+					},
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewNotFound("invalid object name").
+							WithDetail(&gitalypb.RawBlameError{
+								Error: &gitalypb.RawBlameError_InvalidIgnoreRevsFormat{
+									InvalidIgnoreRevsFormat: &gitalypb.RawBlameError_InvalidIgnoreRevsFormatError{
+										Content: []byte("a\n"),
+									},
+								},
+							}),
+					),
+				}
+			},
+		},
+		{
+			desc: "blame with IgnoreRevisionsBlob resolving to non-blob",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+				blob := gittest.WriteBlob(t, cfg, repoPath, []byte("a"))
+				subtree := gittest.WriteTree(t, cfg, repoPath, []gittest.TreeEntry{
+					{Path: "blob", Mode: "100644", OID: blob},
+				})
+				tree := gittest.WriteTree(t, cfg, repoPath, []gittest.TreeEntry{
+					{Path: "dir", Mode: "040000", OID: subtree},
+				})
+				commit := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTree(tree))
+				return setupData{
+					request: &gitalypb.RawBlameRequest{
+						Repository:          repo,
+						Revision:            []byte(commit),
+						Path:                []byte("dir"),
+						IgnoreRevisionsBlob: []byte(fmt.Sprintf("%s:dir", commit.String())),
+					},
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewInvalidArgument("ignore revision is not a blob").
+							WithDetail(&gitalypb.RawBlameError{
+								Error: &gitalypb.RawBlameError_ResolveIgnoreRevs{
+									ResolveIgnoreRevs: &gitalypb.RawBlameError_ResolveIgnoreRevsError{
+										IgnoreRevisionsBlob: []byte(fmt.Sprintf("%s:dir", commit.String())),
+									},
+								},
+							}),
+					),
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()

@@ -2,14 +2,18 @@ package commit
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -21,7 +25,7 @@ var (
 	blameLineCountErrorRegexp = regexp.MustCompile("^fatal: file .* has only (\\d+) lines?\n$")
 )
 
-func (s *server) RawBlame(in *gitalypb.RawBlameRequest, stream gitalypb.CommitService_RawBlameServer) error {
+func (s *server) RawBlame(in *gitalypb.RawBlameRequest, stream gitalypb.CommitService_RawBlameServer) (returnErr error) {
 	ctx := stream.Context()
 	if err := validateRawBlameRequest(ctx, s.locator, in); err != nil {
 		return structerr.NewInvalidArgument("%w", err)
@@ -36,11 +40,25 @@ func (s *server) RawBlame(in *gitalypb.RawBlameRequest, stream gitalypb.CommitSe
 		flags = append(flags, gitcmd.ValueFlag{Name: "-L", Value: blameRange})
 	}
 
+	repo := s.localrepo(in.GetRepository())
+
+	if in.GetIgnoreRevisionsBlob() != nil {
+		ignoreRevsFile, cleanup, err := s.createTemporaryIgnoreRevsFile(ctx, repo, string(in.GetIgnoreRevisionsBlob()))
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := cleanup(); err != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("ignore-revs file cleanup %w", err))
+			}
+		}()
+
+		flags = append(flags, gitcmd.Option(gitcmd.ValueFlag{Name: "--ignore-revs-file", Value: ignoreRevsFile}))
+	}
+
 	sw := streamio.NewWriter(func(p []byte) error {
 		return stream.Send(&gitalypb.RawBlameResponse{Data: p})
 	})
-
-	repo := s.localrepo(in.GetRepository())
 
 	var stderr strings.Builder
 	cmd, err := repo.Exec(ctx, gitcmd.Command{
@@ -64,6 +82,18 @@ func (s *server) RawBlame(in *gitalypb.RawBlameRequest, stream gitalypb.CommitSe
 					Error: &gitalypb.RawBlameError_PathNotFound{
 						PathNotFound: &gitalypb.PathNotFoundError{
 							Path: in.GetPath(),
+						},
+					},
+				})
+		}
+
+		invalidObjectName, isInvalidObject := strings.CutPrefix(errorMessage, "fatal: invalid object name: ")
+		if isInvalidObject {
+			return structerr.NewNotFound("invalid object name").
+				WithDetail(&gitalypb.RawBlameError{
+					Error: &gitalypb.RawBlameError_InvalidIgnoreRevsFormat{
+						InvalidIgnoreRevsFormat: &gitalypb.RawBlameError_InvalidIgnoreRevsFormatError{
+							Content: []byte(invalidObjectName),
 						},
 					},
 				})
@@ -117,4 +147,58 @@ func validateRawBlameRequest(ctx context.Context, locator storage.Locator, in *g
 	}
 
 	return nil
+}
+
+func (s *server) createTemporaryIgnoreRevsFile(ctx context.Context, repo *localrepo.Repo, revision string) (string, func() error, error) {
+	objectReader, cancel, err := s.catfileCache.ObjectReader(ctx, repo)
+	if err != nil {
+		return "", nil, err
+	}
+	defer cancel()
+
+	blobObj, err := objectReader.Object(ctx, git.Revision(revision))
+	if err != nil {
+		if errors.As(err, &catfile.NotFoundError{}) {
+			return "", nil, structerr.NewNotFound("cannot resolve ignore-revs blob").
+				WithDetail(&gitalypb.RawBlameError{
+					Error: &gitalypb.RawBlameError_ResolveIgnoreRevs{
+						ResolveIgnoreRevs: &gitalypb.RawBlameError_ResolveIgnoreRevsError{
+							IgnoreRevisionsBlob: []byte(revision),
+						},
+					},
+				})
+		}
+		return "", nil, err
+	}
+
+	if !blobObj.IsBlob() {
+		return "", nil, structerr.NewInvalidArgument("ignore revision is not a blob").
+			WithDetail(&gitalypb.RawBlameError{
+				Error: &gitalypb.RawBlameError_ResolveIgnoreRevs{
+					ResolveIgnoreRevs: &gitalypb.RawBlameError_ResolveIgnoreRevsError{
+						IgnoreRevisionsBlob: []byte(revision),
+					},
+				},
+			})
+	}
+
+	tmpFile, err := os.CreateTemp("", "ignore-revs-file-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("creating temp file: %w", err)
+	}
+
+	filename := tmpFile.Name()
+
+	cleanup := func() error {
+		closeErr := tmpFile.Close()
+		removeErr := os.Remove(filename)
+		return errors.Join(closeErr, removeErr)
+	}
+
+	_, err = blobObj.WriteTo(tmpFile)
+	if err != nil {
+		return "", nil, errors.Join(cleanup(), fmt.Errorf("copying blob: %w", err))
+	}
+
+	return filename, cleanup, nil
 }
