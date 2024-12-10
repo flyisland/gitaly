@@ -8,6 +8,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
@@ -31,6 +32,7 @@ func TestHooksPayload(t *testing.T) {
 
 	t.Run("envvar has proper name", func(t *testing.T) {
 		env, err := gitcmd.NewHooksPayload(
+			ctx,
 			cfg,
 			repo,
 			gittest.DefaultObjectHash,
@@ -46,6 +48,7 @@ func TestHooksPayload(t *testing.T) {
 
 	t.Run("roundtrip succeeds", func(t *testing.T) {
 		env, err := gitcmd.NewHooksPayload(
+			metadata.AppendToIncomingContext(ctx, metadata.ClientContextMetadataKey, "foobar"),
 			cfg,
 			repo,
 			gittest.DefaultObjectHash,
@@ -79,12 +82,14 @@ func TestHooksPayload(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			TransactionID: 1,
+			TransactionID:       1,
+			GitalyClientContext: []byte("foobar"),
 		}, payload)
 	})
 
 	t.Run("roundtrip with transaction succeeds", func(t *testing.T) {
 		env, err := gitcmd.NewHooksPayload(
+			ctx,
 			cfg,
 			repo,
 			gittest.DefaultObjectHash,
@@ -122,6 +127,7 @@ func TestHooksPayload(t *testing.T) {
 
 	t.Run("receive hooks payload", func(t *testing.T) {
 		env, err := gitcmd.NewHooksPayload(
+			ctx,
 			cfg,
 			repo,
 			gittest.DefaultObjectHash,

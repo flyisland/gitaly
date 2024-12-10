@@ -52,6 +52,7 @@ func TestPrereceive_customHooks(t *testing.T) {
 	}
 
 	payload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -64,6 +65,7 @@ func TestPrereceive_customHooks(t *testing.T) {
 	require.NoError(t, err)
 
 	primaryPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -78,6 +80,7 @@ func TestPrereceive_customHooks(t *testing.T) {
 	require.NoError(t, err)
 
 	secondaryPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -242,6 +245,7 @@ func TestPrereceive_quarantine(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("quarantined: %v", isQuarantined), func(t *testing.T) {
 			env, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,
@@ -307,6 +311,7 @@ func TestPrereceive_gitlab(t *testing.T) {
 	})
 
 	payload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,

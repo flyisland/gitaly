@@ -154,6 +154,7 @@ func (cc *cmdCfg) configureHooks(
 	}
 
 	payload, err := NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		objectHash,

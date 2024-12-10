@@ -76,6 +76,7 @@ func envForHooks(tb testing.TB, ctx context.Context, cfg config.Cfg, repo *gital
 	tb.Helper()
 
 	payload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -465,6 +466,7 @@ func TestHooksPostReceiveFailed(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 
 			hooksPayload, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,
@@ -548,6 +550,7 @@ func TestHooksProcReceive(t *testing.T) {
 			defer cleanup()
 
 			hooksPayload, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,
@@ -699,6 +702,7 @@ func TestRequestedHooks(t *testing.T) {
 				testcfg.BuildGitalySSH(t, cfg)
 
 				payload, err := gitcmd.NewHooksPayload(
+					ctx,
 					cfg,
 					&gitalypb.Repository{},
 					gittest.DefaultObjectHash,
@@ -737,6 +741,7 @@ func TestRequestedHooks(t *testing.T) {
 				testcfg.BuildGitalySSH(t, cfg)
 
 				payload, err := gitcmd.NewHooksPayload(
+					ctx,
 					cfg,
 					&gitalypb.Repository{},
 					gittest.DefaultObjectHash,

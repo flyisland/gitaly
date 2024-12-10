@@ -112,6 +112,7 @@ func TestUpdaterWithHooks_UpdateReference(t *testing.T) {
 		require.Len(t, env, 1)
 
 		expectedPayload := gitcmd.NewHooksPayload(
+			ctx,
 			cfg,
 			repo,
 			gittest.DefaultObjectHash,

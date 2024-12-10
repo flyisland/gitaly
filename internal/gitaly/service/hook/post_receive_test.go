@@ -111,6 +111,7 @@ func TestHooksMissingStdin(t *testing.T) {
 			defer conn.Close()
 
 			hooksPayload, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,
@@ -250,6 +251,7 @@ To create a merge request for okay, visit:
 			require.NoError(t, err)
 
 			hooksPayload, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,
