@@ -161,7 +161,12 @@ func TestMigrationManager_Begin(t *testing.T) {
 
 			factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil)
 			tm := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
+
+			ctx, cancel := context.WithCancel(ctx)
+
 			mm := migrationManager{
+				ctx:             ctx,
+				cancelFn:        cancel,
 				Partition:       tm,
 				logger:          logger,
 				migrations:      tc.migrations,
@@ -304,10 +309,14 @@ func TestMigrationManager_Concurrent(t *testing.T) {
 				return tc.expectedErr
 			})
 
+			ctx, cancel := context.WithCancel(ctx)
+
 			// In this test, the configured migrations are never executed because the repository
 			// does not exist in the snapshot. The migration is configured only to trigger the
 			// migration manager to block concurrent transactions.
 			mm := migrationManager{
+				ctx:             ctx,
+				cancelFn:        cancel,
 				Partition:       mockPartition,
 				logger:          testhelper.NewLogger(t),
 				migrations:      []migration{{id: 1, fn: noopFn}},
@@ -370,11 +379,72 @@ func TestMigrationManager_Concurrent(t *testing.T) {
 	}
 }
 
+func TestMigrationManager_Context(t *testing.T) {
+	t.Parallel()
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	requestCtx, requestCancel := context.WithCancel(ctx)
+
+	mm := NewPartition(
+		mockPartition{
+			beginFn: func(context.Context, storage.BeginOptions) (storage.Transaction, error) {
+				return mockTransaction{
+					kvFn: func() keyvalue.ReadWriter {
+						return &mockReadWriter{
+							getFn: func(key []byte) (keyvalue.Item, error) {
+								return &mockItem{
+									valueFn: func(fn func(value []byte) error) error {
+										return fn(uint64ToBytes(0))
+									},
+								}, nil
+							},
+						}
+					},
+				}, nil
+			},
+			closeFn: func() {},
+		},
+		testhelper.NewLogger(t),
+	).(*migrationManager)
+
+	called := false
+	mm.migrations = []migration{{id: 1, fn: func(ctx context.Context, tx storage.Transaction) error {
+		// Canceling the context of the request that started this migraiton
+		// should not lead to canceling the migration.
+		requestCancel()
+		require.NoError(t, ctx.Err())
+
+		mm.Close()
+		require.Equal(t, context.Canceled, ctx.Err())
+		called = true
+		return nil
+	}}}
+
+	repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+	relativePath := repo.GetRelativePath()
+
+	_, err := mm.Begin(requestCtx, storage.BeginOptions{
+		Write:         true,
+		RelativePaths: []string{relativePath},
+	})
+
+	require.NoError(t, err)
+	require.True(t, called)
+}
+
 type mockPartition struct {
 	storagemgr.Partition
 	beginFn func(context.Context, storage.BeginOptions) (storage.Transaction, error)
+	closeFn func()
 }
 
 func (m mockPartition) Begin(ctx context.Context, opts storage.BeginOptions) (storage.Transaction, error) {
 	return m.beginFn(ctx, opts)
+}
+
+func (m mockPartition) Close() {
+	m.closeFn()
 }
