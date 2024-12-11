@@ -2,6 +2,7 @@ package refdb
 
 import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 )
 
 // ChildReferencesExistError is raised when attempting to create a reference
@@ -16,6 +17,13 @@ type ChildReferencesExistError struct {
 // Error returns the error message.
 func (ChildReferencesExistError) Error() string {
 	return "child references exist"
+}
+
+// NewChildReferencesExistError returns a new ChildReferencesExistError.
+func NewChildReferencesExistError(targetReference git.ReferenceName) error {
+	return structerr.NewAborted("%w", ChildReferencesExistError{
+		TargetReference: targetReference,
+	}).WithMetadata("target_reference", targetReference)
 }
 
 // ParentReferenceExistsError is raised when attempting to create a reference
@@ -34,6 +42,17 @@ func (ParentReferenceExistsError) Error() string {
 	return "parent reference exists"
 }
 
+// NewParentReferenceExistsError returns a new ParentReferenceExistsError.
+func NewParentReferenceExistsError(existingReference, targetReference git.ReferenceName) error {
+	return structerr.NewAborted("%w", ParentReferenceExistsError{
+		ExistingReference: existingReference,
+		TargetReference:   targetReference,
+	}).WithMetadataItems(
+		structerr.MetadataItem{Key: "existing_reference", Value: existingReference},
+		structerr.MetadataItem{Key: "target_reference", Value: targetReference},
+	)
+}
+
 // UnexpectedOldValueError is returned when the reference's old value does not match
 // the expected.
 type UnexpectedOldValueError struct {
@@ -49,4 +68,17 @@ type UnexpectedOldValueError struct {
 // Error returns the error message.
 func (err UnexpectedOldValueError) Error() string {
 	return "unexpected old value"
+}
+
+// NewUnexpectedOldValueError returns a new UnexpectedOldValueError.
+func NewUnexpectedOldValueError(targetReference git.ReferenceName, expectedValue, actualValue string) error {
+	return structerr.NewAborted("%w", UnexpectedOldValueError{
+		TargetReference: targetReference,
+		ExpectedValue:   expectedValue,
+		ActualValue:     actualValue,
+	}).WithMetadataItems(
+		structerr.MetadataItem{Key: "target_reference", Value: targetReference},
+		structerr.MetadataItem{Key: "expected_value", Value: expectedValue},
+		structerr.MetadataItem{Key: "actual_value", Value: actualValue},
+	)
 }

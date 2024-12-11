@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -1273,6 +1272,10 @@ func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, trans
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.setupStagingRepository", nil)
 	defer span.Finish()
 
+	if transaction.stagingSnapshot != nil {
+		return nil, errors.New("staging snapshot already setup")
+	}
+
 	var err error
 	transaction.stagingSnapshot, err = mgr.snapshotManager.GetSnapshot(ctx, []string{transaction.relativePath}, true)
 	if err != nil {
@@ -2094,17 +2097,14 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 				}
 
 				if refBackend == git.ReferenceBackendReftables || transaction.runHousekeeping != nil {
-					stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
-					if err != nil {
-						return fmt.Errorf("setup staging snapshot: %w", err)
-					}
-
-					if err := mgr.verifyReferences(ctx, transaction, stagingRepository); err != nil {
-						return fmt.Errorf("verify references: %w", err)
+					if refBackend == git.ReferenceBackendReftables {
+						if err := mgr.verifyReferences(ctx, transaction); err != nil {
+							return fmt.Errorf("verify references: %w", err)
+						}
 					}
 
 					if transaction.runHousekeeping != nil {
-						housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, stagingRepository)
+						housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, refBackend, objectHash.ZeroOID)
 						if err != nil {
 							return fmt.Errorf("verifying pack refs: %w", err)
 						}
@@ -2426,7 +2426,7 @@ func packFilePath(walFiles string) string {
 // verifyReferences verifies that the references in the transaction apply on top of the already accepted
 // reference changes. The old tips in the transaction are verified against the current actual tips.
 // It returns the write-ahead log entry for the reference transactions successfully verified.
-func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) error {
+func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction *Transaction) error {
 	defer trace.StartRegion(ctx, "verifyReferences").End()
 
 	if len(transaction.referenceUpdates) == 0 {
@@ -2436,23 +2436,17 @@ func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction
 	span, _ := tracing.StartSpanIfHasParent(ctx, "transaction.verifyReferences", nil)
 	defer span.Finish()
 
+	stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
+	if err != nil {
+		return fmt.Errorf("setup staging snapshot: %w", err)
+	}
+
 	// Apply quarantine to the staging repository in order to ensure the new objects are available when we
 	// are verifying references. Without it we'd encounter errors about missing objects as the new objects
 	// are not in the repository.
 	stagingRepositoryWithQuarantine, err := stagingRepository.Quarantine(ctx, transaction.quarantineDirectory)
 	if err != nil {
 		return fmt.Errorf("quarantine: %w", err)
-	}
-
-	// For the reftable backend, we also need to capture HEAD updates here.
-	// So obtain the reference backend to do the specific checks.
-	refBackend, err := stagingRepositoryWithQuarantine.ReferenceBackend(ctx)
-	if err != nil {
-		return fmt.Errorf("reference backend: %w", err)
-	}
-
-	if refBackend != git.ReferenceBackendReftables {
-		return nil
 	}
 
 	if err := mgr.verifyReferencesWithGitForReftables(ctx, transaction.manifest.GetReferenceTransactions(), transaction, stagingRepositoryWithQuarantine); err != nil {
@@ -2572,7 +2566,7 @@ func (mgr *TransactionManager) verifyReferencesWithGitForReftables(
 // verifyHousekeeping verifies if all included housekeeping tasks can be performed. Although it's feasible for multiple
 // housekeeping tasks running at the same time, it's not guaranteed they are conflict-free. So, we need to ensure there
 // is no other concurrent housekeeping task. Each sub-task also needs specific verification.
-func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping, error) {
+func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transaction *Transaction, refBackend git.ReferenceBackend, zeroOID git.ObjectID) (*gitalypb.LogEntry_Housekeeping, error) {
 	defer trace.StartRegion(ctx, "verifyHousekeeping").End()
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.verifyHousekeeping", nil)
@@ -2580,9 +2574,6 @@ func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transacti
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("total", "verify")
 	defer finishTimer()
-
-	mgr.mutex.Lock()
-	defer mgr.mutex.Unlock()
 
 	// Check for any concurrent housekeeping between this transaction's snapshot LSN and the latest appended LSN.
 	if err := mgr.walkCommittedEntries(transaction, func(entry *gitalypb.LogEntry, objectDependencies map[git.ObjectID]struct{}) error {
@@ -2615,7 +2606,7 @@ func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transacti
 		return nil, fmt.Errorf("walking committed entries: %w", err)
 	}
 
-	packRefsEntry, err := mgr.verifyPackRefs(ctx, transaction, stagingRepository)
+	packRefsEntry, err := mgr.verifyPackRefs(ctx, transaction, refBackend, zeroOID)
 	if err != nil {
 		return nil, fmt.Errorf("verifying pack refs: %w", err)
 	}
@@ -2635,17 +2626,17 @@ func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transacti
 // We merge the tables.list generated by our compaction with the existing
 // repositories tables.list. Because there could have been new tables after
 // we performed compaction.
-func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
+func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
 	tables := transaction.runHousekeeping.packRefs.reftablesAfter
 	if len(tables) < 1 {
 		return nil, nil
 	}
 
-	// The tables.list from the snapshot repository should be identical to that of the staging
-	// repository. However, concurrent writes might have occurred which wrote new tables to the
-	// staging repository. We shouldn't loose that data. So we merge the compacted tables.list
-	// with the newer tables from the staging repositories tables.list.
-	repoPath := mgr.getAbsolutePath(stagingRepository.GetRelativePath())
+	// The tables.list from the target repository should be identical to that of the staging
+	// repository before the compaction. However, concurrent writes might have occurred which
+	// wrote new tables to the target repository. We shouldn't loose that data. So we merge
+	// the compacted tables.list with the newer tables from the target repository's tables.list.
+	repoPath := mgr.getAbsolutePath(transaction.relativePath)
 	newTableList, err := git.ReadReftablesList(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading tables.list: %w", err)
@@ -2703,11 +2694,7 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction, 
 //
 // In theory, if there is any reference deletion, it can be removed from the packed-refs file. However, it requires
 // parsing and regenerating the packed-refs file. So, let's settle down with a conflict error at this point.
-func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
-	objectHash, err := stagingRepository.ObjectHash(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("object hash: %w", err)
-	}
+func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transaction *Transaction, zeroOID git.ObjectID) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
 	packRefs := transaction.runHousekeeping.packRefs
 
 	// Check for any concurrent ref deletion between this transaction's snapshot LSN to the end.
@@ -2720,7 +2707,7 @@ func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transact
 					continue
 				}
 
-				if objectHash.IsZeroOID(git.ObjectID(change.GetNewOid())) {
+				if git.ObjectID(change.GetNewOid()) == zeroOID {
 					// Oops, there is a reference deletion. Bail out.
 					return errPackRefsConflictRefDeletion
 				}
@@ -2744,35 +2731,47 @@ func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transact
 
 	directoriesToKeep := map[string]struct{}{
 		// Valid git directory needs to have a 'refs' directory, so we can't remove it.
-		"refs": {},
+		filepath.Join(transaction.relativePath, "refs"): {},
 		// Git keeps these top-level directories. We keep them as well to reduce
 		// conflicting operations on them.
-		"refs/heads": {}, "refs/tags": {},
+		filepath.Join(transaction.relativePath, "refs", "heads"): {},
+		filepath.Join(transaction.relativePath, "refs", "tags"):  {},
 	}
 
 	// Walk down the deleted references from the leaves towards the root. We'll log the deletion
-	// of loose references as we walk towards the root, and remove any directories along the path
-	// that became empty as a result of removing the references.
+	// of loose references as we walk towards the root, and the removal of directories along the
+	// path that became empty as a result of removing the references. As we're operating on the real
+	// repository here, we can't actually perform deletions in it. We instead keep track of the
+	// files and directories we've deleted in-memory to ensure we only delete empty directories.
+	deletedPaths := make(map[string]struct{}, len(packRefs.PrunedRefs))
 	if err := prunedRefs.WalkPostOrder(func(path string, isDir bool) error {
-		if _, ok := directoriesToKeep[path]; ok {
+		relativePath := filepath.Join(transaction.relativePath, path)
+		if _, ok := directoriesToKeep[relativePath]; ok {
 			return nil
 		}
 
-		relativePath := filepath.Join(transaction.relativePath, path)
-
-		if err := os.Remove(filepath.Join(
-			transaction.stagingSnapshot.Root(),
-			relativePath,
-		)); err != nil {
-			if errors.Is(err, syscall.ENOTEMPTY) {
-				// This directory was not empty because someone concurrently wrote
-				// a reference into it. Keep it in place.
-				return nil
+		if isDir {
+			// If this is a directory, we need to ensure it is actually empty before removing
+			// it. Check if we find any directory entries we haven't yet deleted.
+			entries, err := os.ReadDir(mgr.getAbsolutePath(relativePath))
+			if err != nil {
+				return fmt.Errorf("read dir: %w", err)
 			}
 
-			return fmt.Errorf("remove loose reference: %w", err)
+			for _, entry := range entries {
+				if _, ok := deletedPaths[filepath.Join(relativePath, entry.Name())]; ok {
+					// This path was already deleted. Don't consider it to exist.
+					continue
+				}
+
+				// This directory was not empty because someone concurrently wrote
+				// a reference into it. Keep it in place.
+				directoriesToKeep[relativePath] = struct{}{}
+				return nil
+			}
 		}
 
+		deletedPaths[relativePath] = struct{}{}
 		transaction.walEntry.RemoveDirectoryEntry(relativePath)
 
 		return nil
@@ -2785,7 +2784,7 @@ func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transact
 
 // verifyPackRefs verifies if the git-pack-refs(1) can be applied without any conflicts.
 // It calls the reference backend specific function to handle the core logic.
-func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *Transaction, stagingRepository *localrepo.Repo) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
+func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *Transaction, refBackend git.ReferenceBackend, zeroOID git.ObjectID) (*gitalypb.LogEntry_Housekeeping_PackRefs, error) {
 	if transaction.runHousekeeping.packRefs == nil {
 		return nil, nil
 	}
@@ -2796,20 +2795,15 @@ func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("pack-refs", "verify")
 	defer finishTimer()
 
-	refBackend, err := stagingRepository.ReferenceBackend(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("reference backend: %w", err)
-	}
-
 	if refBackend == git.ReferenceBackendReftables {
-		packRefs, err := mgr.verifyPackRefsReftable(transaction, stagingRepository)
+		packRefs, err := mgr.verifyPackRefsReftable(transaction)
 		if err != nil {
 			return nil, fmt.Errorf("reftable backend: %w", err)
 		}
 		return packRefs, nil
 	}
 
-	packRefs, err := mgr.verifyPackRefsFiles(ctx, transaction, stagingRepository)
+	packRefs, err := mgr.verifyPackRefsFiles(ctx, transaction, zeroOID)
 	if err != nil {
 		return nil, fmt.Errorf("files backend: %w", err)
 	}
@@ -2856,15 +2850,10 @@ func (mgr *TransactionManager) verifyRepacking(ctx context.Context, transaction 
 
 	// Setup a working repository of the destination repository and all changes of current transactions. All
 	// concurrent changes must land in that repository already.
-	snapshot, err := mgr.snapshotManager.GetSnapshot(ctx, []string{transaction.relativePath}, true)
+	stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
 	if err != nil {
 		return fmt.Errorf("setting up new snapshot for verifying repacking: %w", err)
 	}
-	defer func() {
-		if err := snapshot.Close(); err != nil {
-			returnedErr = errors.Join(returnedErr, fmt.Errorf("close snapshot: %w", err))
-		}
-	}()
 
 	// To verify the housekeeping transaction, we apply the operations it staged to a snapshot of the target
 	// repository's current state. We then check whether the resulting state is valid.
@@ -2876,7 +2865,7 @@ func (mgr *TransactionManager) verifyRepacking(ctx context.Context, transaction 
 			ctx,
 			// We're not committing the changes in to the snapshot, so no need to fsync anything.
 			func(context.Context, string) error { return nil },
-			snapshot.Root(),
+			transaction.stagingSnapshot.Root(),
 			transaction.walEntry.Directory(),
 			transaction.walEntry.Operations(),
 			dbTX,
@@ -2898,7 +2887,7 @@ func (mgr *TransactionManager) verifyRepacking(ctx context.Context, transaction 
 		return fmt.Errorf("walking committed entries: %w", err)
 	}
 
-	if err := mgr.verifyObjectsExist(ctx, mgr.repositoryFactory.Build(snapshot.RelativePath(transaction.relativePath)), objectDependencies); err != nil {
+	if err := mgr.verifyObjectsExist(ctx, stagingRepository, objectDependencies); err != nil {
 		var errInvalidObject localrepo.InvalidObjectError
 		if errors.As(err, &errInvalidObject) {
 			return errRepackConflictPrunedObject
@@ -3157,6 +3146,9 @@ func (mgr *TransactionManager) updateCommittedEntry(snapshotLSN storage.LSN) *co
 // walkCommittedEntries walks all committed entries after input transaction's snapshot LSN. It loads the content of the
 // entry from disk and triggers the callback with entry content.
 func (mgr *TransactionManager) walkCommittedEntries(transaction *Transaction, callback func(*gitalypb.LogEntry, map[git.ObjectID]struct{}) error) error {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
+
 	for elm := mgr.committedEntries.Front(); elm != nil; elm = elm.Next() {
 		committed := elm.Value.(*committedEntry)
 		if committed.lsn <= transaction.snapshotLSN {

@@ -111,10 +111,7 @@ func (n *node) applyUpdate(zeroOID git.ObjectID, ref git.ReferenceName, update g
 			// reftable format would support storing both `refs/heads/main` and
 			// `refs/heads/main/child` but prevents this for consistency with the files
 			// backend.
-			return ParentReferenceExistsError{
-				ExistingReference: git.ReferenceName(currentRef),
-				TargetReference:   ref,
-			}
+			return NewParentReferenceExistsError(git.ReferenceName(currentRef), ref)
 		}
 
 		parentNodes = append(parentNodes, node)
@@ -138,9 +135,7 @@ func (n *node) applyUpdate(zeroOID git.ObjectID, ref git.ReferenceName, update g
 	//
 	// reftables follow suit to maintain consistency with the files backend.
 	if node.childReferences > 0 {
-		return ChildReferencesExistError{
-			TargetReference: ref,
-		}
+		return NewChildReferencesExistError(ref)
 	}
 
 	// Check whether the reference's old value matches the expected.
@@ -150,11 +145,7 @@ func (n *node) applyUpdate(zeroOID git.ObjectID, ref git.ReferenceName, update g
 	// verified the update in the snapshot before staging this update. The check there
 	// is still valid since no one has modified this reference concurrently.
 	if node.isModified() && node.target != expectedOldValue {
-		return UnexpectedOldValueError{
-			TargetReference: ref,
-			ExpectedValue:   expectedOldValue,
-			ActualValue:     node.target,
-		}
+		return NewUnexpectedOldValueError(ref, expectedOldValue, node.target)
 	}
 
 	isCreation := !node.isReference(zeroOID) && newValue != zeroOID.String()
