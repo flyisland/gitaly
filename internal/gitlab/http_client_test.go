@@ -20,10 +20,11 @@ import (
 )
 
 type postReceiveRequest struct {
-	GLRepository string   `json:"gl_repository,omitempty"`
-	Identifier   string   `json:"identifier,omitempty"`
-	Changes      string   `json:"changes,omitempty"`
-	PushOptions  []string `json:"push_options,omitempty"`
+	GLRepository  string   `json:"gl_repository,omitempty"`
+	Identifier    string   `json:"identifier,omitempty"`
+	Changes       string   `json:"changes,omitempty"`
+	PushOptions   []string `json:"push_options,omitempty"`
+	ClientContext []byte   `json:"gitaly_client_context_bin,omitempty"`
 }
 
 // TestAllowedVerifyParams uses client cert fixtures to test TLS connections. To
@@ -293,6 +294,7 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
 				require.Equal(t, repo.GetRelativePath(), reqBody.RelativePath)
 				require.Equal(t, pushOptions, reqBody.PushOptions)
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -306,6 +308,10 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 		{
 			desc: "not allowed",
 			allowedHandler: func(w http.ResponseWriter, r *http.Request) {
+				var reqBody allowedRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				_, err := w.Write([]byte(`{"status": false, "message": "this change is not allowed"}`))
@@ -317,6 +323,10 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 		{
 			desc: "bad content type in response",
 			allowedHandler: func(w http.ResponseWriter, r *http.Request) {
+				var reqBody allowedRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
+
 				w.Header().Set("Content-Type", "bad mime type")
 				w.WriteHeader(http.StatusOK)
 			},
@@ -326,6 +336,10 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 		{
 			desc: "internal server error",
 			allowedHandler: func(w http.ResponseWriter, r *http.Request) {
+				var reqBody allowedRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				_, err := w.Write([]byte(`{"status": true}`))
@@ -337,6 +351,10 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 		{
 			desc: "bad response",
 			allowedHandler: func(w http.ResponseWriter, r *http.Request) {
+				var reqBody allowedRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				_, err := w.Write([]byte(`this is not json`))
@@ -348,6 +366,10 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 		{
 			desc: "status multiple choice",
 			allowedHandler: func(w http.ResponseWriter, r *http.Request) {
+				var reqBody allowedRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusMultipleChoices)
 				_, err := w.Write([]byte(`{"status": true}`))
@@ -359,6 +381,10 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 		{
 			desc: "status unauthorized with message",
 			allowedHandler: func(w http.ResponseWriter, r *http.Request) {
+				var reqBody allowedRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 				_, err := w.Write([]byte(`{"message": "you're not allowed here'"}`))
@@ -370,6 +396,10 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 		{
 			desc: "status unauthorized",
 			allowedHandler: func(w http.ResponseWriter, r *http.Request) {
+				var reqBody allowedRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 			},
@@ -379,6 +409,10 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 		{
 			desc: "status not found",
 			allowedHandler: func(w http.ResponseWriter, r *http.Request) {
+				var reqBody allowedRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+				require.Equal(t, []byte("foobar"), reqBody.ClientContext)
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusNotFound)
 				_, err := w.Write([]byte(`{"message": "not found"}`))
@@ -417,6 +451,7 @@ func TestAccess_allowedResponseHandling(t *testing.T) {
 				GLID:                          "key-123",
 				GLProtocol:                    "http",
 				Changes:                       "a\nb\nc\nd",
+				ClientContext:                 []byte("foobar"),
 				PushOptions:                   pushOptions,
 			})
 			require.Equal(t, tc.allowed, allowed)
@@ -613,7 +648,8 @@ func TestAccess_postReceive(t *testing.T) {
 			repositoryID := "project-123"
 			identifier := "key-123"
 			changes := "000 000 refs/heads/master"
-			success, _, err := c.PostReceive(ctx, repositoryID, identifier, changes, tc.pushOptions...)
+			clientCtx := []byte("foobar")
+			success, _, err := c.PostReceive(ctx, repositoryID, identifier, changes, clientCtx, tc.pushOptions...)
 			require.Equal(t, tc.success, success)
 			if err != nil {
 				require.Contains(t, err.Error(), tc.errMsg)
@@ -622,6 +658,7 @@ func TestAccess_postReceive(t *testing.T) {
 				require.Equal(t, identifier, receivedRequest.Identifier)
 				require.Equal(t, changes, receivedRequest.Changes)
 				require.Equal(t, tc.pushOptions, receivedRequest.PushOptions)
+				require.Equal(t, clientCtx, receivedRequest.ClientContext)
 			}
 
 			require.Equal(t, [][]string{{"post-receive"}}, mockHistogramVec.LabelsCalled())

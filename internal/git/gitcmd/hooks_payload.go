@@ -1,6 +1,7 @@
 package gitcmd
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -94,6 +96,9 @@ type HooksPayload struct {
 	// TransactionID identifies the storage transaction this hooks call runs in. It's
 	// used to access the transaction in the hook manager.
 	TransactionID storage.TransactionID `json:"transaction_id,omitempty"`
+
+	// GitalyClientContext contains the context passed through the RPCs.
+	GitalyClientContext []byte `json:"gitaly_client_context,omitempty"`
 }
 
 // UserDetails contains all information which is required for hooks
@@ -122,6 +127,7 @@ type jsonHooksPayload struct {
 // NewHooksPayload creates a new hooks payload which can then be encoded and
 // passed to Git hooks.
 func NewHooksPayload(
+	ctx context.Context,
 	cfg config.Cfg,
 	repo storage.Repository,
 	objectHash git.ObjectHash,
@@ -137,6 +143,12 @@ func NewHooksPayload(
 			Flag:    flag,
 			Enabled: enabled,
 		})
+	}
+
+	// Extract context blob from gRPC metadata
+	var clientContext []byte
+	if ctxValue := metadata.GetValue(ctx, metadata.ClientContextMetadataKey); ctxValue != "" {
+		clientContext = []byte(ctxValue)
 	}
 
 	return HooksPayload{
@@ -157,6 +169,7 @@ func NewHooksPayload(
 		RequestedHooks:        requestedHooks,
 		FeatureFlagsWithValue: flags,
 		TransactionID:         transactionID,
+		GitalyClientContext:   clientContext,
 	}
 }
 

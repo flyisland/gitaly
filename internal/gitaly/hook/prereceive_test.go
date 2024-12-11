@@ -20,6 +20,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -52,6 +53,7 @@ func TestPrereceive_customHooks(t *testing.T) {
 	}
 
 	payload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -64,6 +66,7 @@ func TestPrereceive_customHooks(t *testing.T) {
 	require.NoError(t, err)
 
 	primaryPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -78,6 +81,7 @@ func TestPrereceive_customHooks(t *testing.T) {
 	require.NoError(t, err)
 
 	secondaryPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -242,6 +246,7 @@ func TestPrereceive_quarantine(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("quarantined: %v", isQuarantined), func(t *testing.T) {
 			env, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,
@@ -292,7 +297,7 @@ func (m *prereceiveAPIMock) Check(ctx context.Context) (*gitlab.CheckInfo, error
 	return nil, errors.New("unexpected call")
 }
 
-func (m *prereceiveAPIMock) PostReceive(context.Context, string, string, string, ...string) (bool, []gitlab.PostReceiveMessage, error) {
+func (m *prereceiveAPIMock) PostReceive(context.Context, string, string, string, []byte, ...string) (bool, []gitlab.PostReceiveMessage, error) {
 	return true, nil, errors.New("unexpected call")
 }
 
@@ -306,7 +311,10 @@ func TestPrereceive_gitlab(t *testing.T) {
 		SkipCreationViaService: true,
 	})
 
+	ctx = metadata.AppendToIncomingContext(ctx, metadata.ClientContextMetadataKey, "foobar")
+
 	payload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -414,6 +422,7 @@ func TestPrereceive_gitlab(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			gitlabAPI := prereceiveAPIMock{
 				allowed: func(ctx context.Context, params gitlab.AllowedParams) (bool, string, error) {
+					require.Equal(t, []byte("foobar"), params.ClientContext)
 					return tc.allowed(t, ctx, params)
 				},
 				prereceive: func(ctx context.Context, glRepo string) (bool, error) {

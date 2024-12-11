@@ -43,6 +43,7 @@ func TestUpdate_CustomHooks(t *testing.T) {
 	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
 	hooksPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,

@@ -34,6 +34,7 @@ func TestProcReceiveRegistry(t *testing.T) {
 
 	newHandler := func(id storage.TransactionID) (ProcReceiveHandler, <-chan error) {
 		payload, err := gitcmd.NewHooksPayload(
+			ctx,
 			cfg,
 			repo,
 			gittest.DefaultObjectHash,

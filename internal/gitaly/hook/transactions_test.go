@@ -41,6 +41,7 @@ func TestHookManager_stopCalled(t *testing.T) {
 	), NewTransactionRegistry(storagemgr.NewTransactionRegistry()), NewProcReceiveRegistry(), nil)
 
 	hooksPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -147,6 +148,7 @@ func TestHookManager_contextCancellationCancelsVote(t *testing.T) {
 	), NewTransactionRegistry(storagemgr.NewTransactionRegistry()), NewProcReceiveRegistry(), nil)
 
 	hooksPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,

@@ -25,3 +25,15 @@ func TestOutgoingToIncoming(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, storage.ServerInfo{Address: "b", Token: "c"}, info)
 }
+
+func TestAppendToIncomingContext(t *testing.T) {
+	ctx := testhelper.Context(t)
+	ctx = AppendToIncomingContext(ctx, "test-key", "test-value")
+	newCtx := AppendToIncomingContext(ctx, "test-new-key", "test-new-value")
+
+	require.Equal(t, "test-value", GetValue(ctx, "test-key"))
+	require.Equal(t, "", GetValue(ctx, "test-new-key")) // new key should not be present in the old context
+
+	require.Equal(t, "test-value", GetValue(newCtx, "test-key"))
+	require.Equal(t, "test-new-value", GetValue(newCtx, "test-new-key"))
+}

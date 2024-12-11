@@ -319,6 +319,7 @@ ref:refs/heads/main ref:refs/heads/branch-1 HEAD
 				transactionID = 0
 			}
 			hooksPayload, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,

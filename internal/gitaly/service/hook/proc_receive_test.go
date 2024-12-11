@@ -35,6 +35,7 @@ func TestProcReceiveHook(t *testing.T) {
 		steps []func(bytes.Buffer) *gitalypb.ProcReceiveHookResponse,
 	) {
 		hooksPayload, err := gitcmd.NewHooksPayload(
+			ctx,
 			cfg,
 			repo,
 			gittest.DefaultObjectHash,

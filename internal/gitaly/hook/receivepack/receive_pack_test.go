@@ -428,6 +428,7 @@ func TestRegisterProcReceiveHook(t *testing.T) {
 			require.NoError(t, err)
 
 			env, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				data.repoProto,
 				gittest.DefaultObjectHash,

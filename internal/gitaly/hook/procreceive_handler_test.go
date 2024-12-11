@@ -34,6 +34,7 @@ func TestProcReceiveHandler(t *testing.T) {
 	}
 
 	payload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,

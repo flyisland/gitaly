@@ -20,7 +20,7 @@ var (
 	}
 	// MockPostReceive is a callback for the MockCLient's `PostReceive()` function which always
 	// allows a change.
-	MockPostReceive = func(context.Context, string, string, string, ...string) (bool, []PostReceiveMessage, error) {
+	MockPostReceive = func(context.Context, string, string, string, []byte, ...string) (bool, []PostReceiveMessage, error) {
 		return true, nil, nil
 	}
 )
@@ -30,7 +30,7 @@ type MockClient struct {
 	tb          testing.TB
 	allowed     func(context.Context, AllowedParams) (bool, string, error)
 	preReceive  func(context.Context, string) (bool, error)
-	postReceive func(context.Context, string, string, string, ...string) (bool, []PostReceiveMessage, error)
+	postReceive func(context.Context, string, string, string, []byte, ...string) (bool, []PostReceiveMessage, error)
 }
 
 // NewMockClient returns a new mock client for the internal GitLab API.
@@ -38,7 +38,7 @@ func NewMockClient(
 	tb testing.TB,
 	allowed func(context.Context, AllowedParams) (bool, string, error),
 	preReceive func(context.Context, string) (bool, error),
-	postReceive func(context.Context, string, string, string, ...string) (bool, []PostReceiveMessage, error),
+	postReceive func(context.Context, string, string, string, []byte, ...string) (bool, []PostReceiveMessage, error),
 ) Client {
 	return &MockClient{
 		tb:          tb,
@@ -71,7 +71,7 @@ func (m *MockClient) PreReceive(ctx context.Context, glRepository string) (bool,
 }
 
 // PostReceive does nothing and always returns true.
-func (m *MockClient) PostReceive(ctx context.Context, glRepository, glID, changes string, gitPushOptions ...string) (bool, []PostReceiveMessage, error) {
+func (m *MockClient) PostReceive(ctx context.Context, glRepository, glID, changes string, clientCtx []byte, gitPushOptions ...string) (bool, []PostReceiveMessage, error) {
 	require.NotNil(m.tb, m.postReceive, "postReceive called but not set")
-	return m.postReceive(ctx, glRepository, glID, changes, gitPushOptions...)
+	return m.postReceive(ctx, glRepository, glID, changes, clientCtx, gitPushOptions...)
 }

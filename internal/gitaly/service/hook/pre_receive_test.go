@@ -149,6 +149,7 @@ func TestPreReceiveHook_GitlabAPIAccess(t *testing.T) {
 	defer conn.Close()
 
 	hooksPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -286,6 +287,7 @@ func TestPreReceive_APIErrors(t *testing.T) {
 			defer conn.Close()
 
 			hooksPayload, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,
@@ -361,6 +363,7 @@ exit %d
 	defer conn.Close()
 
 	hooksPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -513,6 +516,7 @@ func TestPreReceiveHook_Primary(t *testing.T) {
 			defer conn.Close()
 
 			hooksPayload, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				testRepo,
 				gittest.DefaultObjectHash,

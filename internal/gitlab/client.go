@@ -24,6 +24,8 @@ type AllowedParams struct {
 	Changes string
 	// PushOptions is a list of the specified push options.
 	PushOptions []string
+	// ClientContext contains the context passed through the RPCs.
+	ClientContext []byte
 }
 
 // PostReceiveMessage encapsulates a message from the /post_receive endpoint that gets printed to stdout
@@ -55,5 +57,5 @@ type Client interface {
 	// PreReceive queries the gitlab internal api /pre_receive to increase the reference counter
 	PreReceive(ctx context.Context, glRepository string) (bool, error)
 	// PostReceive queries the gitlab internal api /post_receive to decrease the reference counter
-	PostReceive(ctx context.Context, glRepository, glID, changes string, pushOptions ...string) (bool, []PostReceiveMessage, error)
+	PostReceive(ctx context.Context, glRepository, glID, changes string, clientContext []byte, pushOptions ...string) (bool, []PostReceiveMessage, error)
 }

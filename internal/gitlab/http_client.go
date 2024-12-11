@@ -112,17 +112,18 @@ func (c *HTTPClient) Collect(metrics chan<- prometheus.Metric) {
 
 // allowedRequest is a request for the internal gitlab api /allowed endpoint
 type allowedRequest struct {
-	Action       string   `json:"action,omitempty"`
-	GLRepository string   `json:"gl_repository,omitempty"`
-	Project      string   `json:"project,omitempty"`
-	Changes      string   `json:"changes,omitempty"`
-	Protocol     string   `json:"protocol,omitempty"`
-	RelativePath string   `json:"relative_path,omitempty"`
-	Env          string   `json:"env,omitempty"`
-	Username     string   `json:"username,omitempty"`
-	KeyID        string   `json:"key_id,omitempty"`
-	UserID       string   `json:"user_id,omitempty"`
-	PushOptions  []string `json:"push_options,omitempty"`
+	Action        string   `json:"action,omitempty"`
+	GLRepository  string   `json:"gl_repository,omitempty"`
+	Project       string   `json:"project,omitempty"`
+	Changes       string   `json:"changes,omitempty"`
+	Protocol      string   `json:"protocol,omitempty"`
+	RelativePath  string   `json:"relative_path,omitempty"`
+	Env           string   `json:"env,omitempty"`
+	Username      string   `json:"username,omitempty"`
+	KeyID         string   `json:"key_id,omitempty"`
+	UserID        string   `json:"user_id,omitempty"`
+	PushOptions   []string `json:"push_options,omitempty"`
+	ClientContext []byte   `json:"gitaly_client_context_bin,omitempty"`
 }
 
 func (a *allowedRequest) parseAndSetGLID(glID string) error {
@@ -164,14 +165,15 @@ func (c *HTTPClient) Allowed(ctx context.Context, params AllowedParams) (bool, s
 	}
 
 	req := allowedRequest{
-		Action:       "git-receive-pack",
-		GLRepository: params.GLRepository,
-		Changes:      params.Changes,
-		Protocol:     params.GLProtocol,
-		Project:      strings.Replace(params.RepoPath, "'", "", -1),
-		RelativePath: params.RelativePath,
-		Env:          gitObjDirVars,
-		PushOptions:  params.PushOptions,
+		Action:        "git-receive-pack",
+		GLRepository:  params.GLRepository,
+		Changes:       params.Changes,
+		Protocol:      params.GLProtocol,
+		Project:       strings.Replace(params.RepoPath, "'", "", -1),
+		RelativePath:  params.RelativePath,
+		Env:           gitObjDirVars,
+		PushOptions:   params.PushOptions,
+		ClientContext: params.ClientContext,
 	}
 
 	if err := req.parseAndSetGLID(params.GLID); err != nil {
@@ -253,10 +255,10 @@ type postReceiveResponse struct {
 }
 
 // PostReceive decreases the reference counter for a push for a given gl_repository through the gitlab internal API /post_receive endpoint
-func (c *HTTPClient) PostReceive(ctx context.Context, glRepository, glID, changes string, pushOptions ...string) (bool, []PostReceiveMessage, error) {
+func (c *HTTPClient) PostReceive(ctx context.Context, glRepository, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []PostReceiveMessage, error) {
 	defer prometheus.NewTimer(c.latencyMetric.WithLabelValues("post-receive")).ObserveDuration()
 
-	resp, err := c.Post(ctx, "/post_receive", map[string]interface{}{"gl_repository": glRepository, "identifier": glID, "changes": changes, "push_options": pushOptions})
+	resp, err := c.Post(ctx, "/post_receive", map[string]interface{}{"gl_repository": glRepository, "identifier": glID, "changes": changes, "gitaly_client_context_bin": clientCtx, "push_options": pushOptions})
 	if err != nil {
 		return false, nil, fmt.Errorf("http post to gitlab api /post_receive endpoint: %w", err)
 	}

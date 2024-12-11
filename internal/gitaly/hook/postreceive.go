@@ -205,6 +205,7 @@ func (m *GitLabHookManager) postReceiveHook(ctx context.Context, payload gitcmd.
 		ctx, repo.GetGlRepository(),
 		payload.UserDetails.UserID,
 		string(stdin),
+		payload.GitalyClientContext,
 		pushOptions...,
 	)
 	if err != nil {

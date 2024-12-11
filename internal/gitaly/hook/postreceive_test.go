@@ -21,6 +21,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
@@ -93,6 +94,7 @@ func TestPostReceive_customHook(t *testing.T) {
 	}
 
 	payload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -105,6 +107,7 @@ func TestPostReceive_customHook(t *testing.T) {
 	require.NoError(t, err)
 
 	primaryPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -119,6 +122,7 @@ func TestPostReceive_customHook(t *testing.T) {
 	require.NoError(t, err)
 
 	secondaryPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -254,7 +258,7 @@ func TestPostReceive_customHook(t *testing.T) {
 }
 
 type postreceiveAPIMock struct {
-	postreceive func(context.Context, string, string, string, ...string) (bool, []gitlab.PostReceiveMessage, error)
+	postreceive func(context.Context, string, string, string, []byte, ...string) (bool, []gitlab.PostReceiveMessage, error)
 }
 
 func (m *postreceiveAPIMock) Allowed(ctx context.Context, params gitlab.AllowedParams) (bool, string, error) {
@@ -269,8 +273,8 @@ func (m *postreceiveAPIMock) Check(ctx context.Context) (*gitlab.CheckInfo, erro
 	return nil, errors.New("unexpected call")
 }
 
-func (m *postreceiveAPIMock) PostReceive(ctx context.Context, glRepository, glID, changes string, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
-	return m.postreceive(ctx, glRepository, glID, changes, pushOptions...)
+func (m *postreceiveAPIMock) PostReceive(ctx context.Context, glRepository, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
+	return m.postreceive(ctx, glRepository, glID, changes, clientCtx, pushOptions...)
 }
 
 func TestPostReceive_gitlab(t *testing.T) {
@@ -283,7 +287,10 @@ func TestPostReceive_gitlab(t *testing.T) {
 		SkipCreationViaService: true,
 	})
 
+	ctx = metadata.AppendToIncomingContext(ctx, metadata.ClientContextMetadataKey, "foobar")
+
 	payload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		repo,
 		gittest.DefaultObjectHash,
@@ -302,7 +309,7 @@ func TestPostReceive_gitlab(t *testing.T) {
 		env            []string
 		pushOptions    []string
 		changes        string
-		postreceive    func(*testing.T, context.Context, string, string, string, ...string) (bool, []gitlab.PostReceiveMessage, error)
+		postreceive    func(*testing.T, context.Context, string, string, string, []byte, ...string) (bool, []gitlab.PostReceiveMessage, error)
 		expectHookCall bool
 		expectedErr    error
 		expectedStdout string
@@ -312,7 +319,7 @@ func TestPostReceive_gitlab(t *testing.T) {
 			desc:    "allowed change",
 			env:     standardEnv,
 			changes: "changes\n",
-			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
+			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
 				require.Equal(t, repo.GetGlRepository(), glRepo)
 				require.Equal(t, "1234", glID)
 				require.Equal(t, "changes\n", changes)
@@ -329,7 +336,7 @@ func TestPostReceive_gitlab(t *testing.T) {
 				"mr.create",
 			},
 			changes: "changes\n",
-			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
+			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
 				require.Equal(t, []string{
 					"mr.merge_when_pipeline_succeeds",
 					"mr.create",
@@ -342,7 +349,7 @@ func TestPostReceive_gitlab(t *testing.T) {
 			desc:    "access denied without message",
 			env:     standardEnv,
 			changes: "changes\n",
-			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
+			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
 				return false, nil, nil
 			},
 			expectedErr: errors.New(""),
@@ -351,7 +358,7 @@ func TestPostReceive_gitlab(t *testing.T) {
 			desc:    "access denied with message",
 			env:     standardEnv,
 			changes: "changes\n",
-			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
+			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
 				return false, []gitlab.PostReceiveMessage{
 					{
 						Message: "access denied",
@@ -366,7 +373,7 @@ func TestPostReceive_gitlab(t *testing.T) {
 			desc:    "access check returns error",
 			env:     standardEnv,
 			changes: "changes\n",
-			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
+			postreceive: func(t *testing.T, ctx context.Context, glRepo, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
 				return false, nil, errors.New("failure")
 			},
 			expectedErr: fmt.Errorf("GitLab: %w", fmt.Errorf("failure")),
@@ -376,8 +383,9 @@ func TestPostReceive_gitlab(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			gitlabAPI := postreceiveAPIMock{
-				postreceive: func(ctx context.Context, glRepo, glID, changes string, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
-					return tc.postreceive(t, ctx, glRepo, glID, changes, pushOptions...)
+				postreceive: func(ctx context.Context, glRepo, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []gitlab.PostReceiveMessage, error) {
+					require.Equal(t, []byte("foobar"), clientCtx)
+					return tc.postreceive(t, ctx, glRepo, glID, changes, clientCtx, pushOptions...)
 				},
 			}
 
@@ -441,6 +449,7 @@ func TestPostReceive_quarantine(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("quarantined: %v", isQuarantined), func(t *testing.T) {
 			env, err := gitcmd.NewHooksPayload(
+				ctx,
 				cfg,
 				repo,
 				gittest.DefaultObjectHash,

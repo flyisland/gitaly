@@ -269,6 +269,7 @@ func setupHooksPayloadEnv(ctx context.Context, cfg config.Cfg, req gitcmd.Receiv
 	}
 
 	hooksPayload, err := gitcmd.NewHooksPayload(
+		ctx,
 		cfg,
 		req.GetRepository(),
 		objectHash,
