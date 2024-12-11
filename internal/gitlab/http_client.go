@@ -255,10 +255,10 @@ type postReceiveResponse struct {
 }
 
 // PostReceive decreases the reference counter for a push for a given gl_repository through the gitlab internal API /post_receive endpoint
-func (c *HTTPClient) PostReceive(ctx context.Context, glRepository, glID, changes string, pushOptions ...string) (bool, []PostReceiveMessage, error) {
+func (c *HTTPClient) PostReceive(ctx context.Context, glRepository, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []PostReceiveMessage, error) {
 	defer prometheus.NewTimer(c.latencyMetric.WithLabelValues("post-receive")).ObserveDuration()
 
-	resp, err := c.Post(ctx, "/post_receive", map[string]interface{}{"gl_repository": glRepository, "identifier": glID, "changes": changes, "push_options": pushOptions})
+	resp, err := c.Post(ctx, "/post_receive", map[string]interface{}{"gl_repository": glRepository, "identifier": glID, "changes": changes, "gitaly_client_context_bin": clientCtx, "push_options": pushOptions})
 	if err != nil {
 		return false, nil, fmt.Errorf("http post to gitlab api /post_receive endpoint: %w", err)
 	}

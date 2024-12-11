@@ -297,7 +297,7 @@ func (m *prereceiveAPIMock) Check(ctx context.Context) (*gitlab.CheckInfo, error
 	return nil, errors.New("unexpected call")
 }
 
-func (m *prereceiveAPIMock) PostReceive(context.Context, string, string, string, ...string) (bool, []gitlab.PostReceiveMessage, error) {
+func (m *prereceiveAPIMock) PostReceive(context.Context, string, string, string, []byte, ...string) (bool, []gitlab.PostReceiveMessage, error) {
 	return true, nil, errors.New("unexpected call")
 }
 

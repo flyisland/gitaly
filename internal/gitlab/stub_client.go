@@ -28,6 +28,6 @@ func (c stubClient) PreReceive(context.Context, string) (bool, error) {
 }
 
 // PostReceive is a no-op and returns as if it was successful.
-func (c stubClient) PostReceive(ctx context.Context, glRepository, glID, changes string, pushOptions ...string) (bool, []PostReceiveMessage, error) {
+func (c stubClient) PostReceive(ctx context.Context, glRepository, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []PostReceiveMessage, error) {
 	return true, nil, nil
 }

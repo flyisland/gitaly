@@ -20,10 +20,11 @@ import (
 )
 
 type postReceiveRequest struct {
-	GLRepository string   `json:"gl_repository,omitempty"`
-	Identifier   string   `json:"identifier,omitempty"`
-	Changes      string   `json:"changes,omitempty"`
-	PushOptions  []string `json:"push_options,omitempty"`
+	GLRepository  string   `json:"gl_repository,omitempty"`
+	Identifier    string   `json:"identifier,omitempty"`
+	Changes       string   `json:"changes,omitempty"`
+	PushOptions   []string `json:"push_options,omitempty"`
+	ClientContext []byte   `json:"gitaly_client_context_bin,omitempty"`
 }
 
 // TestAllowedVerifyParams uses client cert fixtures to test TLS connections. To
@@ -647,7 +648,8 @@ func TestAccess_postReceive(t *testing.T) {
 			repositoryID := "project-123"
 			identifier := "key-123"
 			changes := "000 000 refs/heads/master"
-			success, _, err := c.PostReceive(ctx, repositoryID, identifier, changes, tc.pushOptions...)
+			clientCtx := []byte("foobar")
+			success, _, err := c.PostReceive(ctx, repositoryID, identifier, changes, clientCtx, tc.pushOptions...)
 			require.Equal(t, tc.success, success)
 			if err != nil {
 				require.Contains(t, err.Error(), tc.errMsg)
@@ -656,6 +658,7 @@ func TestAccess_postReceive(t *testing.T) {
 				require.Equal(t, identifier, receivedRequest.Identifier)
 				require.Equal(t, changes, receivedRequest.Changes)
 				require.Equal(t, tc.pushOptions, receivedRequest.PushOptions)
+				require.Equal(t, clientCtx, receivedRequest.ClientContext)
 			}
 
 			require.Equal(t, [][]string{{"post-receive"}}, mockHistogramVec.LabelsCalled())
