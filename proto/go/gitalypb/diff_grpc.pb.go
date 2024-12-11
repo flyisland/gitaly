@@ -62,6 +62,9 @@ type DiffServiceClient interface {
 	// a patch with some parameters like line numbers ignored. The patch ID can thus be used to compare
 	// whether diffs make the same change. Please refer to git-patch-id(1) for further information.
 	// If the difference between old and new change is empty then this RPC returns an error.
+	// VerbatimPatchID feature flag can be switched on to enable --verbatim mode to not strip whitespace changes
+	// before generating a patch ID. Whitespace changes can affect the underlying functionality of the code
+	// depending on the language used so it's preferable to default to that option.
 	GetPatchID(ctx context.Context, in *GetPatchIDRequest, opts ...grpc.CallOption) (*GetPatchIDResponse, error)
 	// RawRangeDiff outputs the raw range diff data for a given range specification.
 	RawRangeDiff(ctx context.Context, in *RawRangeDiffRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RawRangeDiffResponse], error)
@@ -292,6 +295,9 @@ type DiffServiceServer interface {
 	// a patch with some parameters like line numbers ignored. The patch ID can thus be used to compare
 	// whether diffs make the same change. Please refer to git-patch-id(1) for further information.
 	// If the difference between old and new change is empty then this RPC returns an error.
+	// VerbatimPatchID feature flag can be switched on to enable --verbatim mode to not strip whitespace changes
+	// before generating a patch ID. Whitespace changes can affect the underlying functionality of the code
+	// depending on the language used so it's preferable to default to that option.
 	GetPatchID(context.Context, *GetPatchIDRequest) (*GetPatchIDResponse, error)
 	// RawRangeDiff outputs the raw range diff data for a given range specification.
 	RawRangeDiff(*RawRangeDiffRequest, grpc.ServerStreamingServer[RawRangeDiffResponse]) error
