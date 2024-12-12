@@ -100,6 +100,16 @@ func (repo *Repo) FetchRemote(ctx context.Context, remoteName string, opts Fetch
 			// by default, so we need to ask it not to do that.
 			Key: "advice.fetchShowForcedUpdates", Value: "false",
 		}),
+		gitcmd.WithConfig(gitcmd.ConfigPair{
+			// The patch series https://lore.kernel.org/git/20240910203835.2288291-1-bence@ferdinandy.com/
+			// introduces new behaviour that automatically sets the local HEAD to the remote's HEAD during
+			// a fetch. This happens when the mirror refspec is used to fetch into a bare repository, which
+			// we use in operations like `FetchBundle`.
+			//
+			// Setting the remote's `followremotehead` config to "never" will disable the new behaviour. We
+			// do this temporarily until we're sure the new behaviour doesn't have any consequences.
+			Key: fmt.Sprintf("remote.%s.followremotehead", remoteName), Value: "never",
+		}),
 	}
 	if opts.DisableTransactions {
 		commandOptions = append(commandOptions, gitcmd.WithDisabledHooks())
