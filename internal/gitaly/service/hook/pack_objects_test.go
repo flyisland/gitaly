@@ -20,6 +20,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	hookPkg "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook"
@@ -35,6 +36,18 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func hooksPayloadEnvForRepository(tb testing.TB, ctx context.Context, cfg config.Cfg, repo *gitalypb.Repository) []string {
+	tb.Helper()
+
+	objectHash, err := localrepo.NewTestRepo(tb, cfg, repo).ObjectHash(ctx)
+	require.NoError(tb, err)
+
+	hooksPayloadEnv, err := gitcmd.NewHooksPayload(ctx, cfg, repo, objectHash, nil, nil, gitcmd.PackObjectsHook, nil, 0).Env()
+	require.NoError(tb, err)
+
+	return []string{hooksPayloadEnv}
+}
 
 func runTestsWithRuntimeDir(t *testing.T, testFunc func(*testing.T, string)) {
 	t.Helper()
@@ -105,8 +118,9 @@ func testServerPackObjectsHookSeparateContextWithRuntimeDir(t *testing.T, runtim
 	))
 
 	req := &gitalypb.PackObjectsHookWithSidechannelRequest{
-		Repository: repo,
-		Args:       []string{"pack-objects", "--revs", "--thin", "--stdout", "--progress", "--delta-base-offset"},
+		Repository:           repo,
+		Args:                 []string{"pack-objects", "--revs", "--thin", "--stdout", "--progress", "--delta-base-offset"},
+		EnvironmentVariables: hooksPayloadEnvForRepository(t, ctx, cfg, repo),
 	}
 	stdin := commitID.String() + "\n--not\n\n"
 
@@ -420,6 +434,8 @@ func testServerPackObjectsHookUsesCache(t *testing.T, runtimeDir string) {
 				client, conn := newHooksClient(t, cfg.SocketPath)
 				defer conn.Close()
 
+				request.EnvironmentVariables = hooksPayloadEnvForRepository(t, ctx, cfg, request.GetRepository())
+
 				_, err = client.PackObjectsHookWithSidechannel(ctx, request)
 				require.NoError(t, err)
 				require.NoError(t, wt.Wait())
@@ -552,8 +568,9 @@ func testServerPackObjectsHookWithSidechannelWithRuntimeDir(t *testing.T, runtim
 			defer conn.Close()
 
 			_, err = client.PackObjectsHookWithSidechannel(ctx, &gitalypb.PackObjectsHookWithSidechannelRequest{
-				Repository: setup.repo,
-				Args:       setup.args,
+				Repository:           setup.repo,
+				Args:                 setup.args,
+				EnvironmentVariables: hooksPayloadEnvForRepository(t, ctx, cfg, setup.repo),
 			})
 			require.NoError(t, err)
 
@@ -675,8 +692,9 @@ func testServerPackObjectsHookWithSidechannelCanceledWithRuntimeDir(t *testing.T
 	defer conn.Close()
 
 	_, err = client.PackObjectsHookWithSidechannel(ctx, &gitalypb.PackObjectsHookWithSidechannelRequest{
-		Repository: repo,
-		Args:       []string{"pack-objects", "--revs", "--thin", "--stdout", "--progress", "--delta-base-offset"},
+		Repository:           repo,
+		Args:                 []string{"pack-objects", "--revs", "--thin", "--stdout", "--progress", "--delta-base-offset"},
+		EnvironmentVariables: hooksPayloadEnvForRepository(t, ctx, cfg, repo),
 	})
 	testhelper.RequireGrpcCode(t, err, codes.Canceled)
 
@@ -732,16 +750,18 @@ func TestPackObjects_concurrencyLimit(t *testing.T) {
 
 					return [2]*gitalypb.PackObjectsHookWithSidechannelRequest{
 						{
-							GlId:       "user-123",
-							RemoteIp:   "1.2.3.4",
-							Repository: repoA,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "1.2.3.4",
+							Repository:           repoA,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnvForRepository(t, ctx, cfg, repoA),
 						},
 						{
-							GlId:       "user-456",
-							RemoteIp:   "1.2.3.5",
-							Repository: repoB,
-							Args:       args,
+							GlId:                 "user-456",
+							RemoteIp:             "1.2.3.5",
+							Repository:           repoB,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnvForRepository(t, ctx, cfg, repoB),
 						},
 					}
 				},
@@ -751,19 +771,22 @@ func TestPackObjects_concurrencyLimit(t *testing.T) {
 				desc: "normal IP address",
 				setup: func(t *testing.T, cfg config.Cfg) [2]*gitalypb.PackObjectsHookWithSidechannelRequest {
 					repo, _ := gittest.CreateRepository(t, ctx, cfg)
+					hooksPayloadEnv := hooksPayloadEnvForRepository(t, ctx, cfg, repo)
 
 					return [2]*gitalypb.PackObjectsHookWithSidechannelRequest{
 						{
-							GlId:       "user-123",
-							RemoteIp:   "1.2.3.4",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "1.2.3.4",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 						{
-							GlId:       "user-123",
-							RemoteIp:   "1.2.3.4",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "1.2.3.4",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 					}
 				},
@@ -773,19 +796,22 @@ func TestPackObjects_concurrencyLimit(t *testing.T) {
 				desc: "IP addresses including source port",
 				setup: func(t *testing.T, cfg config.Cfg) [2]*gitalypb.PackObjectsHookWithSidechannelRequest {
 					repo, _ := gittest.CreateRepository(t, ctx, cfg)
+					hooksPayloadEnv := hooksPayloadEnvForRepository(t, ctx, cfg, repo)
 
 					return [2]*gitalypb.PackObjectsHookWithSidechannelRequest{
 						{
-							GlId:       "user-123",
-							RemoteIp:   "1.2.3.4:47293",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "1.2.3.4:47293",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 						{
-							GlId:       "user-123",
-							RemoteIp:   "1.2.3.4:51010",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "1.2.3.4:51010",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 					}
 				},
@@ -795,19 +821,22 @@ func TestPackObjects_concurrencyLimit(t *testing.T) {
 				desc: "IPv4 loopback addresses",
 				setup: func(t *testing.T, cfg config.Cfg) [2]*gitalypb.PackObjectsHookWithSidechannelRequest {
 					repo, _ := gittest.CreateRepository(t, ctx, cfg)
+					hooksPayloadEnv := hooksPayloadEnvForRepository(t, ctx, cfg, repo)
 
 					return [2]*gitalypb.PackObjectsHookWithSidechannelRequest{
 						{
-							GlId:       "user-123",
-							RemoteIp:   "127.0.0.1",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "127.0.0.1",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 						{
-							GlId:       "user-123",
-							RemoteIp:   "127.0.0.1",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "127.0.0.1",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 					}
 				},
@@ -817,19 +846,22 @@ func TestPackObjects_concurrencyLimit(t *testing.T) {
 				desc: "IPv6 loopback addresses",
 				setup: func(t *testing.T, cfg config.Cfg) [2]*gitalypb.PackObjectsHookWithSidechannelRequest {
 					repo, _ := gittest.CreateRepository(t, ctx, cfg)
+					hooksPayloadEnv := hooksPayloadEnvForRepository(t, ctx, cfg, repo)
 
 					return [2]*gitalypb.PackObjectsHookWithSidechannelRequest{
 						{
-							GlId:       "user-123",
-							RemoteIp:   net.IPv6loopback.String(),
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             net.IPv6loopback.String(),
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 						{
-							GlId:       "user-123",
-							RemoteIp:   net.IPv6loopback.String(),
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             net.IPv6loopback.String(),
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 					}
 				},
@@ -839,19 +871,22 @@ func TestPackObjects_concurrencyLimit(t *testing.T) {
 				desc: "invalid IP addresses",
 				setup: func(t *testing.T, cfg config.Cfg) [2]*gitalypb.PackObjectsHookWithSidechannelRequest {
 					repo, _ := gittest.CreateRepository(t, ctx, cfg)
+					hooksPayloadEnv := hooksPayloadEnvForRepository(t, ctx, cfg, repo)
 
 					return [2]*gitalypb.PackObjectsHookWithSidechannelRequest{
 						{
-							GlId:       "user-123",
-							RemoteIp:   "hello-world",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "hello-world",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 						{
-							GlId:       "user-123",
-							RemoteIp:   "hello-world",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "hello-world",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 					}
 				},
@@ -861,19 +896,22 @@ func TestPackObjects_concurrencyLimit(t *testing.T) {
 				desc: "empty IP addresses",
 				setup: func(t *testing.T, cfg config.Cfg) [2]*gitalypb.PackObjectsHookWithSidechannelRequest {
 					repo, _ := gittest.CreateRepository(t, ctx, cfg)
+					hooksPayloadEnv := hooksPayloadEnvForRepository(t, ctx, cfg, repo)
 
 					return [2]*gitalypb.PackObjectsHookWithSidechannelRequest{
 						{
-							GlId:       "user-123",
-							RemoteIp:   "",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 						{
-							GlId:       "user-123",
-							RemoteIp:   "",
-							Repository: repo,
-							Args:       args,
+							GlId:                 "user-123",
+							RemoteIp:             "",
+							Repository:           repo,
+							Args:                 args,
+							EnvironmentVariables: hooksPayloadEnv,
 						},
 					}
 				},
