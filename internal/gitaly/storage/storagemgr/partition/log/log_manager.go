@@ -179,8 +179,8 @@ func (mgr *Manager) AcknowledgeConsumerPosition(lsn storage.LSN) {
 	}
 }
 
-// NotifyQueue returns a notify channel so that caller can poll new changes.
-func (mgr *Manager) NotifyQueue() <-chan struct{} {
+// GetNotificationQueue returns a notify channel so that caller can poll new changes.
+func (mgr *Manager) GetNotificationQueue() <-chan struct{} {
 	return mgr.notifyQueue
 }
 

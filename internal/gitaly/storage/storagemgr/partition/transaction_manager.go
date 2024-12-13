@@ -869,9 +869,9 @@ type committedEntry struct {
 	objectDependencies map[git.ObjectID]struct{}
 }
 
-// GetLogManager provides controlled access to underlying log management system for log consumption purpose. It
+// GetLogReader provides controlled access to underlying log management system for log consumption purpose. It
 // allows the consumers to access to on-disk location of a LSN and acknowledge consumed position.
-func (mgr *TransactionManager) GetLogManager() storage.LogManager {
+func (mgr *TransactionManager) GetLogReader() storage.LogReader {
 	return mgr.logManager
 }
 
@@ -945,7 +945,7 @@ type TransactionManager struct {
 	// db is the handle to the key-value store used for storing the write-ahead log related state.
 	db keyvalue.Transactioner
 	// logManager manages the underlying Write-Ahead Log entries.
-	logManager *log.Manager
+	logManager storage.LogManager
 	// admissionQueue is where the incoming writes are waiting to be admitted to the transaction
 	// manager.
 	admissionQueue chan *Transaction
@@ -2042,7 +2042,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		return errors.New("cleanup worker failed")
 	case <-mgr.completedQueue:
 		return nil
-	case <-mgr.logManager.NotifyQueue():
+	case <-mgr.logManager.GetNotificationQueue():
 		return nil
 	case <-ctx.Done():
 	}

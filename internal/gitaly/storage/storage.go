@@ -164,14 +164,44 @@ type LogConsumer interface {
 	NotifyNewEntries(storageName string, partitionID PartitionID, lowWaterMark, highWaterMark LSN)
 }
 
-// LogManager is the interface used on the consumer side of the integration. The consumer
-// has the ability to acknowledge transactions as having been processed with AcknowledgeConsumerPosition.
-type LogManager interface {
+// LogReader consumes and acknowledges entries from the Write-Ahead Log.
+type LogReader interface {
+	// GetEntryPath returns the path of the log entry's root directory.
+	GetEntryPath(lsn LSN) string
+
+	// The following functions allows other components acknowledge their positions. The log manager uses those
+	// positions to prune entries. Those interfaces are not great. We have a plan to refator them in:
+	// https://gitlab.com/gitlab-org/gitaly/-/issues/6528
+
 	// AcknowledgeConsumerPosition acknowledges log entries up and including lsn as successfully processed
 	// for the specified LogConsumer.
 	AcknowledgeConsumerPosition(lsn LSN)
-	// GetEntryPath returns the path of the log entry's root directory.
-	GetEntryPath(lsn LSN) string
+	// AcknowledgeAppliedPosition acknowledges the position of latest applied log entry.
+	AcknowledgeAppliedPosition(lsn LSN)
+}
+
+// LogManager is the interface used to manage the underlying Write-Ahead Log entries.
+type LogManager interface {
+	LogReader
+
+	// Initialize sets up the initial state of the LogManager, preparing it to manage log entries.
+	// It ensures the environment is ready, and previous states are resumed correctly.
+	Initialize(ctx context.Context, appliedLSN LSN) error
+
+	// AppendLogEntry appends an entry to the WAL. logEntryPath specifies the directory of the log entry. It returns
+	// the Log Sequence Number (LSN) of the appended log entry.
+	AppendLogEntry(ctx context.Context, logEntryPath string) (LSN, error)
+
+	// PruneLogEntries removes log entries that are no longer needed, based on retention policies. This is a leaky
+	// abstraction. The log manager should be fully responsible for the life cycle of log entries. We'll remove
+	// external access to log entry pruning in https://gitlab.com/gitlab-org/gitaly/-/issues/6529.
+	PruneLogEntries(ctx context.Context) error
+
+	// AppendedLSN returns the LSN of the latest appended log entry.
+	AppendedLSN() LSN
+
+	// GetNotificationQueue returns a channel that is used to notify external components of changes.
+	GetNotificationQueue() <-chan struct{}
 }
 
 // Partition is responsible for a single partition of data.
@@ -180,9 +210,9 @@ type Partition interface {
 	Begin(context.Context, BeginOptions) (Transaction, error)
 	// Close closes the partition handle to signal the caller is done using it.
 	Close()
-	// GetLogManager provides controlled access to underlying log management system for log consumption purpose. It
-	// allows the consumers to access to on-disk location of a LSN and acknowledge consumed position.
-	GetLogManager() LogManager
+	// GetLogReader provides controlled access to underlying log management system for log consumption purpose.
+	// It allows the consumers to access to on-disk location of a LSN and acknowledge consumed position.
+	GetLogReader() LogReader
 }
 
 // TransactionOptions are used to pass transaction options into Begin.
