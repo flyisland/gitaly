@@ -179,11 +179,6 @@ func (mgr *Manager) AcknowledgeConsumerPosition(lsn storage.LSN) {
 	}
 }
 
-// StateDirectory returns the state directory under the management of this manager.
-func (mgr *Manager) StateDirectory() string {
-	return mgr.stateDirectory
-}
-
 // NotifyQueue returns a notify channel so that caller can poll new changes.
 func (mgr *Manager) NotifyQueue() <-chan struct{} {
 	return mgr.notifyQueue
