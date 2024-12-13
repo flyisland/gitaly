@@ -25,10 +25,10 @@ type hookContext struct {
 // installHooks takes the hooks in the test setup and configures them in the TransactionManager.
 func installHooks(mgr *TransactionManager, inflightTransactions *sync.WaitGroup, hooks testTransactionHooks) {
 	for destination, source := range map[*func()]hookFunc{
-		&mgr.testHooks.beforeInitialization:            hooks.BeforeReadAppliedLSN,
-		&mgr.testHooks.beforeApplyLogEntry:             hooks.BeforeApplyLogEntry,
-		&mgr.testHooks.beforeStoreAppliedLSN:           hooks.BeforeStoreAppliedLSN,
-		&mgr.logManager.TestHooks.BeforeAppendLogEntry: hooks.BeforeAppendLogEntry,
+		&mgr.testHooks.beforeInitialization:  hooks.BeforeReadAppliedLSN,
+		&mgr.testHooks.beforeApplyLogEntry:   hooks.BeforeApplyLogEntry,
+		&mgr.testHooks.beforeStoreAppliedLSN: hooks.BeforeStoreAppliedLSN,
+		&mgr.testHooks.beforeAppendLogEntry:  hooks.BeforeAppendLogEntry,
 		&mgr.testHooks.beforeRunExiting: func(hookContext) {
 			if hooks.WaitForTransactionsWhenClosing {
 				inflightTransactions.Wait()

@@ -1001,6 +1001,7 @@ type TransactionManager struct {
 
 type testHooks struct {
 	beforeInitialization  func()
+	beforeAppendLogEntry  func()
 	beforeApplyLogEntry   func()
 	beforeStoreAppliedLSN func()
 	beforeRunExiting      func()
@@ -1052,6 +1053,7 @@ func NewTransactionManager(
 
 		testHooks: testHooks{
 			beforeInitialization:  func() {},
+			beforeAppendLogEntry:  func() {},
 			beforeApplyLogEntry:   func() {},
 			beforeStoreAppliedLSN: func() {},
 			beforeRunExiting:      func() {},
@@ -2145,6 +2147,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			return fmt.Errorf("verify file system operations: %w", err)
 		}
 
+		mgr.testHooks.beforeAppendLogEntry()
 		if err := mgr.appendLogEntry(ctx, transaction.objectDependencies, transaction.manifest, transaction.walFilesPath()); err != nil {
 			return fmt.Errorf("append log entry: %w", err)
 		}

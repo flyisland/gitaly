@@ -54,10 +54,6 @@ func (p *position) setPosition(pos storage.LSN) {
 	p.lsn.Store(pos)
 }
 
-type testLogHooks struct {
-	BeforeAppendLogEntry func()
-}
-
 // Manager is responsible for managing the Write-Ahead Log (WAL) entries on disk. It maintains the in-memory state
 // and indexing system that reflect the functional state of the WAL. The Manager ensures safe and consistent
 // proposals, applications, and prunings of log entries, acting as the interface for transactional log operations. It
@@ -96,10 +92,6 @@ type Manager struct {
 
 	// notifyQueue is a queue notifying when there is a new change.
 	notifyQueue chan struct{}
-
-	// TestHooks are used in the tests to trigger logic at certain points in the execution.
-	// They are used to synchronize more complex test scenarios. Not used in production.
-	TestHooks testLogHooks
 }
 
 // NewManager returns an instance of Manager.
@@ -118,9 +110,6 @@ func NewManager(storageName string, partitionID storage.PartitionID, stagingDire
 		consumer:       consumer,
 		positions:      positions,
 		notifyQueue:    make(chan struct{}, 1),
-		TestHooks: testLogHooks{
-			BeforeAppendLogEntry: func() {},
-		},
 	}
 }
 
@@ -209,7 +198,6 @@ func (mgr *Manager) AppendLogEntry(ctx context.Context, logEntryPath string) (st
 	defer mgr.mutex.Unlock()
 
 	nextLSN := mgr.appendedLSN + 1
-	mgr.TestHooks.BeforeAppendLogEntry()
 
 	// Move the log entry from the staging directory into its place in the log.
 	destinationPath := mgr.GetEntryPath(nextLSN)
