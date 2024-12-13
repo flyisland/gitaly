@@ -4,9 +4,20 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+)
+
+var bundleGenerationLatency = prometheus.NewHistogram(
+	prometheus.HistogramOpts{
+		Namespace: "gitaly",
+		Name:      "bundle_generation_seconds",
+		Buckets:   []float64{1, 30, 60, 5 * 60, 30 * 60, 60 * 60, 2 * 3600, 5 * 3600, 12 * 3600, 24 * 3600},
+	},
 )
 
 // GenerationManager manages bundle generation. It handles requests to
@@ -24,6 +35,7 @@ type GenerationManager struct {
 	threshold                  uint
 	logger                     log.Logger
 	wg                         sync.WaitGroup
+	metrics                    []prometheus.Collector
 }
 
 // NewGenerationManager creates a new GenerationManager
@@ -44,6 +56,19 @@ func NewGenerationManager(
 		bundleGenerationInProgress: make(map[string]struct{}),
 		inProgressTracker:          inProgressTracker,
 		logger:                     logger,
+		metrics:                    []prometheus.Collector{bundleGenerationLatency},
+	}
+}
+
+// Describe is used to describe Prometheus metrics.
+func (g *GenerationManager) Describe(descs chan<- *prometheus.Desc) {
+	prometheus.DescribeByCollect(g, descs)
+}
+
+// Collect is used to collect Prometheus metrics.
+func (g *GenerationManager) Collect(metrics chan<- prometheus.Metric) {
+	for _, metric := range g.metrics {
+		metric.Collect(metrics)
 	}
 }
 
@@ -93,7 +118,7 @@ func (g *GenerationManager) generate(ctx context.Context, repo *localrepo.Repo) 
 // has incremented an "in progress" counter. When there are multiple concurrent
 // calls making the counter for the given repository reach the threshold, a
 // background goroutine to generate a bundle is started.
-func (g *GenerationManager) GenerateIfAboveThreshold(repo *localrepo.Repo, f func() error) error {
+func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *localrepo.Repo, f func() error) error {
 	repoPath := repo.GetRelativePath()
 	g.inProgressTracker.IncrementInProgress(repoPath)
 	defer g.inProgressTracker.DecrementInProgress(repoPath)
@@ -102,9 +127,17 @@ func (g *GenerationManager) GenerateIfAboveThreshold(repo *localrepo.Repo, f fun
 		g.wg.Add(1)
 		go func() {
 			defer g.wg.Done()
-			if err := g.generate(g.ctx, repo); err != nil {
-				g.logger.WithError(err).Error("failed to generate bundle")
+			if featureflag.BundleGeneration.IsEnabled(ctx) {
+				start := time.Now()
+				if err := g.generate(g.ctx, repo); err != nil {
+					g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).
+						WithError(err).
+						Error("failed to generate bundle")
+					return
+				}
+				bundleGenerationLatency.Observe(time.Since(start).Seconds())
 			}
+			g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).Info("bundle generation")
 		}()
 	}
 
