@@ -755,16 +755,6 @@ func TestUploadPack_packObjectsHook(t *testing.T) {
 
 	// We expect two calls to the pack-objects cache as we run two clones.
 	require.Len(t, packObjectsCacheKeys, 2)
-	if testhelper.IsWALEnabled() {
-		// This is a bug. The cache key used with transactions is the rewritten relative
-		// path that contains the the snapshot prefix. Expected behavior is that the
-		// cache key does not change even if the clones happen in different snapshots.
-		//
-		// Issue: https://gitlab.com/gitlab-org/gitaly/-/issues/6547
-		require.NotEqual(t, packObjectsCacheKeys[0], packObjectsCacheKeys[1])
-		return
-	}
-
 	// The pack-objects cache should be called with the same key as the clones
 	// target the same repository.
 	require.Equal(t, packObjectsCacheKeys[0], packObjectsCacheKeys[1])
