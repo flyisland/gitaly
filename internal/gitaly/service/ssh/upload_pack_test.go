@@ -23,9 +23,11 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/streamcache"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -691,47 +693,71 @@ func testUploadPackSuccessful(t *testing.T, ctx context.Context, sidechannel boo
 	}
 }
 
+type mockStreamCache struct {
+	fetch func(ctx context.Context, key string, dst io.Writer, create func(io.Writer) error) (written int64, created bool, err error)
+	streamcache.Cache
+}
+
+func (m mockStreamCache) Fetch(ctx context.Context, key string, dst io.Writer, create func(io.Writer) error) (written int64, created bool, err error) {
+	return m.fetch(ctx, key, dst, create)
+}
+
+func newRepositoryClient(tb testing.TB, cfg config.Cfg) gitalypb.RepositoryServiceClient {
+	conn, err := client.Dial(testhelper.Context(tb), cfg.SocketPath)
+	require.NoError(tb, err)
+	tb.Cleanup(func() { require.NoError(tb, conn.Close()) })
+
+	return gitalypb.NewRepositoryServiceClient(conn)
+}
+
 func TestUploadPack_packObjectsHook(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
 
-	filterDir := testhelper.TempDir(t)
-	outputPath := filepath.Join(filterDir, "output")
-	cfg := testcfg.Build(t, testcfg.WithPackObjectsCacheEnabled(), testcfg.WithBase(
-		config.Cfg{
-			BinDir: filterDir,
-		},
-	))
+	cfg := testcfg.Build(t, testcfg.WithPackObjectsCacheEnabled())
 
 	testcfg.BuildGitalySSH(t, cfg)
+	testcfg.BuildGitalyHooks(t, cfg)
 
-	// We're using a custom pack-objects hook for git-upload-pack. In order
-	// to assure that it's getting executed as expected, we're writing a
-	// custom script which replaces the hook binary. It doesn't do anything
-	// special, but writes an error message and errors out and should thus
-	// cause the clone to fail with this error message.
-	//nolint:gitaly-linters
-	testhelper.WriteExecutable(t, cfg.BinaryPath("gitaly-hooks"), []byte(fmt.Sprintf(
-		`#!/usr/bin/env bash
-		set -eo pipefail
-		echo 'I was invoked' >'%s'
-		shift
-		exec git "$@"
-	`, outputPath)))
+	cache := streamcache.New(cfg.PackObjectsCache, testhelper.SharedLogger(t))
+	defer cache.Stop()
 
-	cfg.SocketPath = runSSHServer(t, cfg)
+	var packObjectsCacheKeys []string
+	cfg.SocketPath = runSSHServer(t, cfg, testserver.WithPackObjectsCache(mockStreamCache{
+		fetch: func(ctx context.Context, key string, dst io.Writer, create func(io.Writer) error) (written int64, created bool, err error) {
+			packObjectsCacheKeys = append(packObjectsCacheKeys, key)
+			return cache.Fetch(ctx, key, dst, create)
+		},
+	}))
 
 	repo, repoPath := gittest.CreateRepository(t, testhelper.Context(t), cfg)
-	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch))
-
-	localRepoPath := testhelper.TempDir(t)
+	commitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch))
 
 	require.NoError(t, runClone(t, ctx, cfg, false, &gitalypb.SSHUploadPackRequest{
 		Repository: repo,
-	}, "git@localhost:test/test.git", localRepoPath))
+	}, "git@localhost:test/test.git", testhelper.TempDir(t)))
 
-	require.Equal(t, []byte("I was invoked\n"), testhelper.MustReadFile(t, outputPath))
+	// Perform a write into the repository before doing the second clone. We want to
+	// ensure that the cache key does not change even if the second clone runs in a
+	// different transaction snapshot due to the write.
+	resp, err := newRepositoryClient(t, cfg).WriteRef(ctx, &gitalypb.WriteRefRequest{
+		Repository: repo,
+		Ref:        []byte("refs/heads/invalidate-snapshot"),
+		Revision:   []byte(commitID),
+	})
+	require.NoError(t, err)
+	testhelper.ProtoEqual(t, &gitalypb.WriteRefResponse{}, resp)
+
+	require.NoError(t, runClone(t, ctx, cfg, false, &gitalypb.SSHUploadPackRequest{
+		Repository: repo,
+	}, "git@localhost:test/test.git", testhelper.TempDir(t)))
+
+	// We expect two calls to the pack-objects cache as we run two clones.
+	require.Len(t, packObjectsCacheKeys, 2)
+	// The pack-objects cache should be called with the same key as the clones
+	// target the same repository.
+	require.Equal(t, packObjectsCacheKeys[0], packObjectsCacheKeys[1])
 }
 
 func TestUploadPack_withoutSideband(t *testing.T) {

@@ -462,12 +462,13 @@ func packObjectsHook(ctx context.Context, payload gitcmd.HooksPayload, hookClien
 	if _, err := hookClient.PackObjectsHookWithSidechannel(
 		ctx,
 		&gitalypb.PackObjectsHookWithSidechannelRequest{
-			Repository:  payload.Repo,
-			Args:        args,
-			GlId:        glID,
-			GlUsername:  glUsername,
-			GitProtocol: gitProtocol,
-			RemoteIp:    remoteIP,
+			Repository:           payload.Repo,
+			EnvironmentVariables: os.Environ(),
+			Args:                 args,
+			GlId:                 glID,
+			GlUsername:           glUsername,
+			GitProtocol:          gitProtocol,
+			RemoteIp:             remoteIP,
 		},
 	); err != nil {
 		return wrapGRPCError(err)

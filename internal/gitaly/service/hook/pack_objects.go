@@ -385,6 +385,24 @@ func (s *server) PackObjectsHookWithSidechannel(ctx context.Context, req *gitaly
 	}
 	defer c.Close()
 
+	hookPayload, err := gitcmd.HooksPayloadFromEnv(req.GetEnvironmentVariables())
+	if err != nil {
+		return nil, fmt.Errorf("hook payload from env: %w", err)
+	}
+
+	if hookPayload.TransactionID > 0 {
+		// If we're running with transactions, we need to restore the transaction into
+		// the context so the helpers we use everywhere work in this context as well.
+		// This handler is invoked through git and gitaly-hooks which means we're not
+		// using the same context as in the actual RPC handler that the led to this call.
+		tx, err := s.txRegistry.Get(hookPayload.TransactionID)
+		if err != nil {
+			return nil, fmt.Errorf("get transaction: %w", err)
+		}
+
+		ctx = storage.ContextWithTransaction(ctx, tx)
+	}
+
 	if err := s.packObjectsHook(ctx, req, args, c, c); err != nil {
 		if errors.Is(err, syscall.EPIPE) {
 			// EPIPE is the error we get if we try to write to c after the client has

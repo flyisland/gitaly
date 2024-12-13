@@ -8,6 +8,7 @@ import (
 	gitalyhook "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/streamcache"
@@ -22,6 +23,7 @@ type server struct {
 	gitCmdFactory      gitcmd.CommandFactory
 	packObjectsCache   streamcache.Cache
 	packObjectsLimiter limiter.Limiter
+	txRegistry         *storagemgr.TransactionRegistry
 	runPackObjectsFn   func(
 		context.Context,
 		gitcmd.CommandFactory,
@@ -42,6 +44,7 @@ func NewServer(deps *service.Dependencies) gitalypb.HookServiceServer {
 		gitCmdFactory:      deps.GetGitCmdFactory(),
 		packObjectsCache:   deps.GetPackObjectsCache(),
 		packObjectsLimiter: deps.GetPackObjectsLimiter(),
+		txRegistry:         deps.GetTransactionRegistry(),
 		runPackObjectsFn:   runPackObjects,
 	}
 
