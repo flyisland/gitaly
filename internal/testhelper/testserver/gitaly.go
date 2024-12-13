@@ -551,6 +551,15 @@ func WithPackObjectsLimiter(limiter *limiter.ConcurrencyLimiter) GitalyServerOpt
 	}
 }
 
+// WithPackObjectsCache sets the PackObjectsCache that will be
+// used for gitaly services initialization.
+func WithPackObjectsCache(cache streamcache.Cache) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.packObjectsCache = cache
+		return deps
+	}
+}
+
 // WithHousekeepingManager sets the housekeeping.Manager that will be used for Gitaly services
 // initialization.
 func WithHousekeepingManager(manager housekeepingmgr.Manager) GitalyServerOpt {

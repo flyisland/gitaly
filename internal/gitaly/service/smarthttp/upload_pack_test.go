@@ -26,7 +26,9 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/streamcache"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -261,6 +263,23 @@ func testServerPostUploadPackSuppressDeepenExitError(t *testing.T, ctx context.C
 	require.Equal(t, gittest.Pktlinef(t, "shallow %s", commitID)+"0000", response.String())
 }
 
+type mockStreamCache struct {
+	fetch func(ctx context.Context, key string, dst io.Writer, create func(io.Writer) error) (written int64, created bool, err error)
+	streamcache.Cache
+}
+
+func (m mockStreamCache) Fetch(ctx context.Context, key string, dst io.Writer, create func(io.Writer) error) (written int64, created bool, err error) {
+	return m.fetch(ctx, key, dst, create)
+}
+
+func newRepositoryClient(tb testing.TB, cfg config.Cfg) gitalypb.RepositoryServiceClient {
+	conn, err := client.Dial(testhelper.Context(tb), cfg.SocketPath)
+	require.NoError(tb, err)
+	tb.Cleanup(func() { require.NoError(tb, conn.Close()) })
+
+	return gitalypb.NewRepositoryServiceClient(conn)
+}
+
 func TestServer_PostUploadPackWithSidechannel_usesPackObjectsHook(t *testing.T) {
 	t.Parallel()
 
@@ -277,21 +296,20 @@ func testServerPostUploadPackWithSidechannelUsesPackObjectsHook(t *testing.T, ct
 
 func testServerPostUploadPackUsesPackObjectsHook(t *testing.T, ctx context.Context, makeRequest requestMaker, opts ...testcfg.Option) {
 	cfg := testcfg.Build(t, append(opts, testcfg.WithPackObjectsCacheEnabled())...)
+	testcfg.BuildGitalyHooks(t, cfg)
 
-	outputPath := filepath.Join(cfg.BinDir, "output")
-	//nolint:gitaly-linters
-	hookScript := fmt.Sprintf("#!/bin/sh\necho 'I was invoked' >'%s'\nshift\nexec git \"$@\"\n", outputPath)
+	cache := streamcache.New(cfg.PackObjectsCache, testhelper.SharedLogger(t))
+	defer cache.Stop()
 
-	// We're using a custom pack-objects hook for git-upload-pack. In order
-	// to assure that it's getting executed as expected, we're writing a
-	// custom script which replaces the hook binary. It doesn't do anything
-	// special, but writes a message into a status file and then errors
-	// out. In the best case we'd have just printed the error to stderr and
-	// check the return error message. But it's unfortunately not
-	// transferred back.
-	testhelper.WriteExecutable(t, cfg.BinaryPath("gitaly-hooks"), []byte(hookScript))
+	var packObjectsCacheKeys []string
+	testServer := startSmartHTTPServerWithOptions(t, cfg, nil, []testserver.GitalyServerOpt{testserver.WithPackObjectsCache(mockStreamCache{
+		fetch: func(ctx context.Context, key string, dst io.Writer, create func(io.Writer) error) (written int64, created bool, err error) {
+			packObjectsCacheKeys = append(packObjectsCacheKeys, key)
+			return cache.Fetch(ctx, key, dst, create)
+		},
+	})})
 
-	cfg.SocketPath = runSmartHTTPServer(t, cfg)
+	cfg.SocketPath = testServer.Address()
 
 	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 	oldHead := gittest.WriteCommit(t, cfg, repoPath)
@@ -305,11 +323,40 @@ func testServerPostUploadPackUsesPackObjectsHook(t *testing.T, ctx context.Conte
 
 	_, err := makeRequest(t, ctx, cfg.SocketPath, cfg.Auth.Token, &gitalypb.PostUploadPackWithSidechannelRequest{
 		Repository: repo,
-	}, &requestBuffer)
+	}, bytes.NewReader(requestBuffer.Bytes()))
 	require.NoError(t, err)
 
-	contents := testhelper.MustReadFile(t, outputPath)
-	require.Equal(t, "I was invoked\n", string(contents))
+	// Perform write into the repository before doing the second fetch. We want to
+	// ensure that the cache key does not change even if the second fetch runs in a
+	// different transaction snapshot due to the write.
+	resp, err := newRepositoryClient(t, cfg).WriteRef(ctx, &gitalypb.WriteRefRequest{
+		Repository: repo,
+		Ref:        []byte("refs/heads/invalidate-snapshot"),
+		Revision:   []byte(newHead),
+	})
+	require.NoError(t, err)
+	testhelper.ProtoEqual(t, &gitalypb.WriteRefResponse{}, resp)
+
+	_, err = makeRequest(t, ctx, cfg.SocketPath, cfg.Auth.Token, &gitalypb.PostUploadPackWithSidechannelRequest{
+		Repository: repo,
+	}, bytes.NewReader(requestBuffer.Bytes()))
+	require.NoError(t, err)
+
+	// We expect two calls to the pack-objects cache as we run two fetches.
+	require.Len(t, packObjectsCacheKeys, 2)
+	if testhelper.IsWALEnabled() {
+		// This is a bug. The cache key used with transactions is the rewritten relative
+		// path that contains the the snapshot prefix. Expected behavior is that the
+		// cache key does not change even if the fetches happen in different snapshots.
+		//
+		// Issue: https://gitlab.com/gitlab-org/gitaly/-/issues/6547
+		require.NotEqual(t, packObjectsCacheKeys[0], packObjectsCacheKeys[1])
+		return
+	}
+
+	// The pack-objects cache should be called with the same key as the fetches
+	// target the same repository.
+	require.Equal(t, packObjectsCacheKeys[0], packObjectsCacheKeys[1])
 }
 
 func TestServer_PostUploadPack_validation(t *testing.T) {
