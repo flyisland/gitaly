@@ -259,7 +259,6 @@ func WithInternalFetchWithSidechannel(req *gitalypb.SSHUploadPackWithSidechannel
 			// system certs to trust
 			fmt.Sprintf("%s=%s", x509.SSLCertDir, os.Getenv(x509.SSLCertDir)),
 			fmt.Sprintf("%s=%s", x509.SSLCertFile, os.Getenv(x509.SSLCertFile)),
-			"GITALY_USE_SIDECHANNEL=1",
 		)
 
 		return nil
