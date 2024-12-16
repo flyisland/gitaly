@@ -10,18 +10,6 @@ option go_package = "gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb";
 
 // SSHService is a service that provides RPCs required for SSH-based Git clones.
 service SSHService {
-  // SSHUploadPack is an RPC to forward git-upload-pack(1) to Gitaly for SSH sessions. The RPC uses
-  // bidirectional streaming so the client can stream stdin and the server can stream stdout and
-  // stderr for git-upload-pack(1).
-  rpc SSHUploadPack(stream SSHUploadPackRequest) returns (stream SSHUploadPackResponse) {
-    option (op_type) = {
-      op: ACCESSOR
-    };
-    // SSHUploadPackWithSidechannel is a perfect replacemet.
-    // https://gitlab.com/gitlab-org/gitaly/-/issues/6410
-    option deprecated = true;
-  }
-
   // SSHUploadPackWithSidechannel is an RPC to forward git-upload-pack(1) to Gitaly for SSH
   // sessions, via sidechannels. Sidechannel connections sidestep gRPC Protobuf message overhead and
   // allow higher throughput of bulk data transfers. The stdin, stdout, and stderr for the
@@ -49,35 +37,6 @@ service SSHService {
       op: ACCESSOR
     };
   }
-}
-
-// SSHUploadPackRequest is a request for the SSHUploadPack RPC. The first request of the stream must
-// only contain repository, git_config_options, and git_protocol. All subsequent requests must only
-// contain stdin data.
-message SSHUploadPackRequest {
-  // repository is the repository where git-upload-pack(1) is spawned.
-  Repository repository = 1 [(target_repository)=true];
-  // stdin is a chunk of raw data to be copied to git-upload-pack(1) standard input.
-  bytes stdin = 2;
-  // Prevent re-use of field id 3 and/or the "git_config_parameters" name.
-  reserved 3;
-  reserved "git_config_parameters";
-  // git_config_options are parameters to use with git -c (key=value pairs).
-  repeated string git_config_options = 4;
-  // git_protocol is the git protocol version.
-  string git_protocol = 5;
-}
-
-// SSHUploadPackResponse is a response for the SSHUploadPack RPC. Responses are stream back to
-// clients in chunks containing the stdout and stderr from git-upload-pack(1).
-message SSHUploadPackResponse {
-  // stdout is a chunk of raw data from git-upload-pack(1) standard output.
-  bytes stdout = 1;
-  // stderr is a chunk of raw data from git-upload-pack(1) standard error.
-  bytes stderr = 2;
-  // exit_status is the exit status when the command has finished. This field
-  // may be nil. This is intentional.
-  ExitStatus exit_status = 3;
 }
 
 // SSHUploadPackWithSidechannelRequest is a request for the SSHUploadPackWithSidechannel RPC.
