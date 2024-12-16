@@ -1,5 +1,22 @@
 /title [Feature flag] Enable description of feature
 
+<!--
+
+IMPORTANT: when Gitaly is started in a Rails test, all feature flags are enabled:
+https://gitlab.com/gitlab-org/gitlab/blob/28bdb35c83fbfcfca09a9d237bfecb71e55b8f9e/spec/support/helpers/gitaly_setup.rb#L69
+
+Any flags which change user-facing behaviour have a chance of causing test failures, which
+in turn will block Gitaly deployment MRs. In these situations, you can do the following:
+
+1. Get the Gitaly change reviewed and merged. Validate the Gitaly pipeline is passing on the default branch.
+1. Open a Rails MR that simultaneously updates the commit SHA in
+   GITALY_SERVER_VERSION (https://gitlab.com/gitlab-org/gitlab/-/blob/master/GITALY_SERVER_VERSION) and
+   contains the updated assertions. This will allow tests to execute against a version of Gitaly that
+   contains your changes, while updating the version at the same time.
+1. Get the Rails MR reviewed and merged.
+
+-->
+
 ## What
 
 Enable the `:feature_name` feature flag ...
