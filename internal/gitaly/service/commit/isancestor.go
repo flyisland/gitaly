@@ -29,7 +29,7 @@ func (s *server) CommitIsAncestor(ctx context.Context, in *gitalypb.CommitIsAnce
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	ret, err := s.commitIsAncestorName(ctx, repo, in.GetAncestorId(), in.GetChildId())
 	return &gitalypb.CommitIsAncestorResponse{Value: ret}, err

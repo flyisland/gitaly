@@ -340,7 +340,7 @@ func (s *server) GetTreeEntries(in *gitalypb.GetTreeEntriesRequest, stream gital
 		return err
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	revision := string(in.GetRevision())
 	path := string(in.GetPath())

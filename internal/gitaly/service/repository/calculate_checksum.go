@@ -19,7 +19,7 @@ func (s *server) CalculateChecksum(ctx context.Context, in *gitalypb.CalculateCh
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repoProto)
+	repo := s.localRepoFactory.Build(repoProto)
 	repoPath, err := repo.Path(ctx)
 	if err != nil {
 		return nil, err

@@ -25,7 +25,7 @@ func (s *server) FindMergeBase(ctx context.Context, req *gitalypb.FindMergeBaseR
 		return nil, structerr.NewInvalidArgument("at least 2 revisions are required")
 	}
 
-	repo := s.localrepo(repoProto)
+	repo := s.localRepoFactory.Build(repoProto)
 
 	cmd, err := repo.Exec(ctx,
 		gitcmd.Command{

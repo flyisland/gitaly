@@ -2,7 +2,6 @@ package ref
 
 import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -13,24 +12,20 @@ import (
 
 type server struct {
 	gitalypb.UnimplementedRefServiceServer
-	logger        log.Logger
-	txManager     transaction.Manager
-	locator       storage.Locator
-	gitCmdFactory gitcmd.CommandFactory
-	catfileCache  catfile.Cache
+	logger           log.Logger
+	txManager        transaction.Manager
+	locator          storage.Locator
+	catfileCache     catfile.Cache
+	localRepoFactory localrepo.Factory
 }
 
 // NewServer creates a new instance of a grpc RefServer
 func NewServer(deps *service.Dependencies) gitalypb.RefServiceServer {
 	return &server{
-		logger:        deps.GetLogger(),
-		txManager:     deps.GetTxManager(),
-		locator:       deps.GetLocator(),
-		gitCmdFactory: deps.GetGitCmdFactory(),
-		catfileCache:  deps.GetCatfileCache(),
+		logger:           deps.GetLogger(),
+		txManager:        deps.GetTxManager(),
+		locator:          deps.GetLocator(),
+		catfileCache:     deps.GetCatfileCache(),
+		localRepoFactory: deps.GetRepositoryFactory(),
 	}
-}
-
-func (s *server) localrepo(repo storage.Repository) *localrepo.Repo {
-	return localrepo.New(s.logger, s.locator, s.gitCmdFactory, s.catfileCache, repo)
 }

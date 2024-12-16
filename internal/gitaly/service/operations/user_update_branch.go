@@ -44,7 +44,7 @@ func (s *Server) UserUpdateBranch(ctx context.Context, req *gitalypb.UserUpdateB
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

@@ -34,7 +34,7 @@ func (s *server) CommitLanguages(ctx context.Context, req *gitalypb.CommitLangua
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	revision := string(req.GetRevision())
 	if revision == "" {

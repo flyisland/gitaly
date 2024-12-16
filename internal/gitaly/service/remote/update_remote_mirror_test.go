@@ -574,6 +574,7 @@ func TestUpdateRemoteMirror(t *testing.T) {
 					cmdFactory = tc.wrapCommandFactory(t, deps.GetGitCmdFactory())
 				}
 				deps.GitCmdFactory = cmdFactory
+				deps.LocalRepositoryFactory = localrepo.NewFactory(deps.GetLogger(), deps.GetLocator(), cmdFactory, deps.GetCatfileCache())
 
 				gitalypb.RegisterRemoteServiceServer(srv, NewServer(deps))
 			})

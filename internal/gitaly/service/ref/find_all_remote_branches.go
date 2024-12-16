@@ -25,7 +25,7 @@ func (s *server) FindAllRemoteBranches(req *gitalypb.FindAllRemoteBranchesReques
 }
 
 func (s *server) findAllRemoteBranches(req *gitalypb.FindAllRemoteBranchesRequest, stream gitalypb.RefService_FindAllRemoteBranchesServer) error {
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	args := []gitcmd.Option{
 		gitcmd.Flag{Name: "--format=" + strings.Join(localBranchFormatFields, "%00")},

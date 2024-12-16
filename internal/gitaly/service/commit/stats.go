@@ -38,7 +38,7 @@ func (s *server) CommitStats(ctx context.Context, in *gitalypb.CommitStatsReques
 }
 
 func (s *server) commitStats(ctx context.Context, in *gitalypb.CommitStatsRequest) (*gitalypb.CommitStatsResponse, error) {
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

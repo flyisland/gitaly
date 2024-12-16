@@ -35,7 +35,7 @@ func (s *server) RewriteHistory(server gitalypb.CleanupService_RewriteHistorySer
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repoProto)
+	repo := s.localRepoFactory.Build(repoProto)
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {
@@ -209,7 +209,7 @@ func (s *server) initStagingRepo(ctx context.Context, repo *gitalypb.Repository,
 		return nil, "", structerr.New("creating repository: %w", err).WithMetadata("stderr", &stderr)
 	}
 
-	stagingRepo := s.localrepo(stagingRepoProto)
+	stagingRepo := s.localRepoFactory.Build(stagingRepoProto)
 
 	// Ensure HEAD matches the source repository. In practice a mismatch doesn't cause problems,
 	// but out of an abundance of caution let's keep the two repos as similar as possible.

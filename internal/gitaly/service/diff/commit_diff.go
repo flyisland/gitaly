@@ -28,7 +28,7 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 	whitespaceChanges := in.GetWhitespaceChanges()
 	paths := in.GetPaths()
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

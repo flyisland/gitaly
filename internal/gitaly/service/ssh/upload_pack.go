@@ -76,7 +76,7 @@ type sshUploadPackRequest interface {
 func (s *server) sshUploadPack(ctx context.Context, req sshUploadPackRequest, stdin io.Reader, stdout, stderr io.Writer) (negotiation *stats.PackfileNegotiation, _ int, _ error) {
 	repoProto := req.GetRepository()
 
-	repo := s.localrepo(repoProto)
+	repo := s.localRepoFactory.Build(repoProto)
 	repoPath, err := repo.Path(ctx)
 	if err != nil {
 		return nil, 0, err

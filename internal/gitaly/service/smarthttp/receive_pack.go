@@ -77,7 +77,7 @@ func (s *server) postReceivePack(
 		return stream.Send(&gitalypb.PostReceivePackResponse{Data: p})
 	})
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	repoPath, err := repo.Path(ctx)
 	if err != nil {

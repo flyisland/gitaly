@@ -23,7 +23,7 @@ func (s *server) ListBranchNamesContainingCommit(in *gitalypb.ListBranchNamesCon
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {
 		return fmt.Errorf("detecting object hash: %w", err)
@@ -78,7 +78,7 @@ func (s *server) ListTagNamesContainingCommit(in *gitalypb.ListTagNamesContainin
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {
 		return fmt.Errorf("detecting object hash: %w", err)

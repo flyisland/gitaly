@@ -18,7 +18,7 @@ func (s *server) FindAllCommits(in *gitalypb.FindAllCommitsRequest, stream gital
 
 	ctx := stream.Context()
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	var revisions []string
 	if len(in.GetRevision()) == 0 {

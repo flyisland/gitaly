@@ -167,3 +167,8 @@ func (dc *Dependencies) GetBundleURISink() *bundleuri.Sink {
 func (dc *Dependencies) GetProcReceiveRegistry() *gitalyhook.ProcReceiveRegistry {
 	return dc.ProcReceiveRegistry
 }
+
+// GetRepositoryFactory returns the RepositoryFactory
+func (dc *Dependencies) GetRepositoryFactory() localrepo.Factory {
+	return dc.LocalRepositoryFactory
+}

@@ -283,7 +283,7 @@ func (s *server) extractSnapshot(ctx context.Context, source, target *gitalypb.R
 }
 
 func (s *server) syncReferences(ctx context.Context, source, target *gitalypb.Repository) error {
-	repo := s.localrepo(target)
+	repo := s.localRepoFactory.Build(target)
 
 	if err := fetchInternalRemote(ctx, s.txManager, s.conns, repo, source); err != nil {
 		return fmt.Errorf("fetch internal remote: %w", err)

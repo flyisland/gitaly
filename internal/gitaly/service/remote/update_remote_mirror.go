@@ -64,7 +64,7 @@ func (s *server) updateRemoteMirror(stream gitalypb.RemoteService_UpdateRemoteMi
 		return fmt.Errorf("create reference matcher: %w", err)
 	}
 
-	repo := s.localrepo(firstRequest.GetRepository())
+	repo := s.localRepoFactory.Build(firstRequest.GetRepository())
 	remote := firstRequest.GetRemote()
 
 	remoteSuffix, err := text.RandomHex(8)

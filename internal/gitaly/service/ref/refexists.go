@@ -22,7 +22,7 @@ func (s *server) RefExists(ctx context.Context, in *gitalypb.RefExistsRequest) (
 		return nil, structerr.NewInvalidArgument("invalid refname")
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	exists, err := s.refExists(ctx, repo, ref)
 	if err != nil {

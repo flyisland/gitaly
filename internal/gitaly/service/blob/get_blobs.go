@@ -159,7 +159,7 @@ func (s *server) GetBlobs(req *gitalypb.GetBlobsRequest, stream gitalypb.BlobSer
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	objectReader, cancel, err := s.catfileCache.ObjectReader(stream.Context(), repo)
 	if err != nil {

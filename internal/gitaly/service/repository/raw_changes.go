@@ -26,7 +26,7 @@ func (s *server) GetRawChanges(req *gitalypb.GetRawChangesRequest, stream gitaly
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {
 		return fmt.Errorf("detecting object hash: %w", err)

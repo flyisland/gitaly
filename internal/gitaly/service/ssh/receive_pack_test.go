@@ -135,11 +135,13 @@ func TestReceivePack_success(t *testing.T) {
 	logger := testhelper.SharedLogger(t)
 	backchannelRegistry := backchannel.NewRegistry()
 	transactionRegistry := storagemgr.NewTransactionRegistry()
+	locator := config.NewLocator(cfg)
+	gitCmdFactory := gittest.NewCommandFactory(t, cfg)
 	hookManager := hook.NewManager(
 		cfg,
-		config.NewLocator(cfg),
+		locator,
 		logger,
-		gittest.NewCommandFactory(t, cfg),
+		gitCmdFactory,
 		transaction.NewManager(cfg, logger, backchannelRegistry),
 		gitlab.NewMockClient(t, gitlab.MockAllowed, gitlab.MockPreReceive, gitlab.MockPostReceive),
 		hook.NewTransactionRegistry(transactionRegistry),
@@ -183,6 +185,7 @@ func TestReceivePack_success(t *testing.T) {
 		testserver.WithHookManager(mockHookManager),
 		testserver.WithTransactionRegistry(transactionRegistry),
 		testserver.WithBackchannelRegistry(backchannelRegistry),
+		testserver.WithRepositoryFactory(localrepo.NewFactory(logger, locator, gitCmdFactory, nil)),
 	)
 
 	remoteRepo, remoteRepoPath := gittest.CreateRepository(t, ctx, cfg)

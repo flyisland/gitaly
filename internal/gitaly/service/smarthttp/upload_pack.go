@@ -122,7 +122,7 @@ func (s *server) runUploadPack(ctx context.Context, req *gitalypb.PostUploadPack
 		gitConfig = append(gitConfig, uploadPackConfig...)
 	}
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

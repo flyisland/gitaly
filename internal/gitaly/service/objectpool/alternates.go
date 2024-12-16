@@ -22,7 +22,7 @@ func (s *server) DisconnectGitAlternates(ctx context.Context, req *gitalypb.Disc
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	storageRoot, err := s.locator.GetStorageByName(ctx, repo.GetStorageName())
 	if err != nil {

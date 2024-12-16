@@ -25,7 +25,7 @@ func (s *server) ListAllCommits(
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 
 	objectReader, cancel, err := s.catfileCache.ObjectReader(ctx, repo)
 	if err != nil {

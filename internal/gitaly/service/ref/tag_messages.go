@@ -31,7 +31,7 @@ func validateGetTagMessagesRequest(ctx context.Context, locator storage.Locator,
 
 func (s *server) getAndStreamTagMessages(request *gitalypb.GetTagMessagesRequest, stream gitalypb.RefService_GetTagMessagesServer) error {
 	ctx := stream.Context()
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 
 	objectReader, cancel, err := s.catfileCache.ObjectReader(ctx, repo)
 	if err != nil {

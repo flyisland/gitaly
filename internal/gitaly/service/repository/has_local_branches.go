@@ -12,7 +12,7 @@ func (s *server) HasLocalBranches(ctx context.Context, in *gitalypb.HasLocalBran
 	if err := s.locator.ValidateRepository(ctx, repository); err != nil {
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
-	hasBranches, err := s.localrepo(repository).HasBranches(ctx)
+	hasBranches, err := s.localRepoFactory.Build(repository).HasBranches(ctx)
 	if err != nil {
 		return nil, structerr.NewInternal("%w", err)
 	}

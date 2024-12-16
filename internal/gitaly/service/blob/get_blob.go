@@ -20,7 +20,7 @@ func (s *server) GetBlob(in *gitalypb.GetBlobRequest, stream gitalypb.BlobServic
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	objectReader, cancel, err := s.catfileCache.ObjectReader(stream.Context(), repo)
 	if err != nil {

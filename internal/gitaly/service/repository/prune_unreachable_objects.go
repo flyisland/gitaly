@@ -26,7 +26,7 @@ func (s *server) PruneUnreachableObjects(
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	// Verify that the repository exists on-disk such that we can return a proper gRPC code in
 	// case it doesn't.

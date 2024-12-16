@@ -16,7 +16,7 @@ func (s *server) FindRefsByOID(ctx context.Context, in *gitalypb.FindRefsByOIDRe
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	patterns := in.GetRefPatterns()
 	if len(patterns) == 0 {

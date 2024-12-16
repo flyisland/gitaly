@@ -37,7 +37,7 @@ func (s *server) GetArchive(in *gitalypb.GetArchiveRequest, stream gitalypb.Repo
 		return structerr.NewInvalidArgument("%w", err)
 	}
 	compressArgs, format := parseArchiveFormat(in.GetFormat())
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	repoRoot, err := repo.Path(ctx)
 	if err != nil {
@@ -233,7 +233,7 @@ func (s *server) handleArchive(ctx context.Context, p archiveParams) error {
 		config = append(config, smudgeGitConfig)
 	}
 
-	repo := s.localrepo(p.in.GetRepository())
+	repo := s.localRepoFactory.Build(p.in.GetRepository())
 
 	archiveCommand, err := repo.Exec(ctx, gitcmd.Command{
 		Name:        "archive",

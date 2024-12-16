@@ -25,7 +25,7 @@ func (s *server) FindCommit(ctx context.Context, in *gitalypb.FindCommitRequest)
 	if err := validateFindCommitRequest(ctx, s.locator, in); err != nil {
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	var opts []localrepo.ReadCommitOpt
 	if in.GetTrailers() {

@@ -33,7 +33,7 @@ func (s *server) ListLastCommitsForTree(in *gitalypb.ListLastCommitsForTreeReque
 
 func (s *server) listLastCommitsForTree(in *gitalypb.ListLastCommitsForTreeRequest, stream gitalypb.CommitService_ListLastCommitsForTreeServer) error {
 	ctx := stream.Context()
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	if _, err := repo.Path(ctx); err != nil {
 		return err

@@ -40,7 +40,7 @@ func (s *server) RawBlame(in *gitalypb.RawBlameRequest, stream gitalypb.CommitSe
 		flags = append(flags, gitcmd.ValueFlag{Name: "-L", Value: blameRange})
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	if in.GetIgnoreRevisionsBlob() != nil {
 		ignoreRevsFile, cleanup, err := s.createTemporaryIgnoreRevsFile(ctx, repo, string(in.GetIgnoreRevisionsBlob()))

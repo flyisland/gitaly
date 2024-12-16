@@ -30,7 +30,7 @@ func (s *server) FindAllTags(in *gitalypb.FindAllTagsRequest, stream gitalypb.Re
 
 	opts := buildPaginationOpts(ctx, in.GetPaginationParams())
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	if err := s.findAllTags(ctx, repo, sortField, stream, opts); err != nil {
 		return structerr.NewInternal("%w", err)

@@ -119,7 +119,7 @@ func (s *server) sshReceivePack(stream gitalypb.SSHService_SSHReceivePackServer,
 		_ = pw.Close()
 	}()
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	transactionID := storage.ExtractTransactionID(ctx)
 	transactionsEnabled := transactionID > 0

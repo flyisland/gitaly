@@ -33,7 +33,7 @@ func (s *server) ObjectsSize(server gitalypb.RepositoryService_ObjectsSizeServer
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 
 	var stderr, stdout strings.Builder
 	cmd, err := repo.Exec(ctx,

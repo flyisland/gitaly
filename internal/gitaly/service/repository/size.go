@@ -19,7 +19,7 @@ func (s *server) RepositorySize(ctx context.Context, in *gitalypb.RepositorySize
 	if err := s.locator.ValidateRepository(ctx, repository); err != nil {
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	path, err := repo.Path(ctx)
 	if err != nil {
@@ -39,7 +39,7 @@ func (s *server) GetObjectDirectorySize(ctx context.Context, in *gitalypb.GetObj
 	if err := s.locator.ValidateRepository(ctx, repository); err != nil {
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	path, err := repo.ObjectDirectoryPath(ctx)
 	if err != nil {

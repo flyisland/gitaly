@@ -38,7 +38,7 @@ func (s *server) GetTagSignatures(req *gitalypb.GetTagSignaturesRequest, stream 
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	objectReader, cancel, err := s.catfileCache.ObjectReader(ctx, repo)
 	if err != nil {

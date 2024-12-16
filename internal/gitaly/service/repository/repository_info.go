@@ -18,7 +18,7 @@ func (s *server) RepositoryInfo(
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 
 	repoPath, err := repo.Path(ctx)
 	if err != nil {

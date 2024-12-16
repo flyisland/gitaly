@@ -34,7 +34,7 @@ func validateFirstFilterShasWithSignaturesRequest(ctx context.Context, locator s
 
 func (s *server) filterShasWithSignatures(bidi gitalypb.CommitService_FilterShasWithSignaturesServer, firstRequest *gitalypb.FilterShasWithSignaturesRequest) error {
 	ctx := bidi.Context()
-	repo := s.localrepo(firstRequest.GetRepository())
+	repo := s.localRepoFactory.Build(firstRequest.GetRepository())
 
 	objectReader, cancel, err := s.catfileCache.ObjectReader(ctx, repo)
 	if err != nil {

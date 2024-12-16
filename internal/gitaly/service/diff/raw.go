@@ -26,7 +26,7 @@ func (s *server) RawDiff(in *gitalypb.RawDiffRequest, stream gitalypb.DiffServic
 		return stream.Send(&gitalypb.RawDiffResponse{Data: p})
 	})
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	return sendRawOutput(stream.Context(), repo, sw, subCmd)
 }
@@ -46,7 +46,7 @@ func (s *server) RawPatch(in *gitalypb.RawPatchRequest, stream gitalypb.DiffServ
 		return stream.Send(&gitalypb.RawPatchResponse{Data: p})
 	})
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	return sendRawOutput(stream.Context(), repo, sw, subCmd)
 }

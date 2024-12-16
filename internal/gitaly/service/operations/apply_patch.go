@@ -65,7 +65,7 @@ func (s *Server) userApplyPatch(ctx context.Context, header *gitalypb.UserApplyP
 	branchCreated := false
 	targetBranch := git.NewReferenceNameFromBranchName(string(header.GetTargetBranch()))
 
-	repo := s.localrepo(header.GetRepository())
+	repo := s.localRepoFactory.Build(header.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

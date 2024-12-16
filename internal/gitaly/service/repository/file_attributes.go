@@ -16,7 +16,7 @@ func (s *server) GetFileAttributes(ctx context.Context, in *gitalypb.GetFileAttr
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	checkAttrCmd, finishAttr, err := gitattributes.CheckAttr(ctx, repo, git.Revision(in.GetRevision()), in.GetAttributes())
 	if err != nil {

@@ -24,7 +24,7 @@ func (s *server) CreateBundleFromRefList(stream gitalypb.RepositoryService_Creat
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	if err := housekeeping.CleanupWorktrees(ctx, repo); err != nil {
 		return structerr.NewInternal("cleaning up worktrees: %w", err)

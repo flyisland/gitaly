@@ -41,7 +41,7 @@ func (s *server) FindCommits(req *gitalypb.FindCommitsRequest, stream gitalypb.C
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	// Use Gitaly's default branch lookup function because that is already
 	// migrated.
@@ -68,7 +68,7 @@ func (s *server) FindCommits(req *gitalypb.FindCommitsRequest, stream gitalypb.C
 
 func (s *server) findCommits(ctx context.Context, req *gitalypb.FindCommitsRequest, stream gitalypb.CommitService_FindCommitsServer) (err error) {
 	opts := gitcmd.ConvertGlobalOptions(req.GetGlobalOptions())
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	var stderr bytes.Buffer
 	gitLogCmd := getLogCommandSubCmd(req)

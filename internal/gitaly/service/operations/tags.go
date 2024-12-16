@@ -37,7 +37,7 @@ func (s *Server) UserDeleteTag(ctx context.Context, req *gitalypb.UserDeleteTagR
 	}
 	referenceName := git.ReferenceName(fmt.Sprintf("refs/tags/%s", req.GetTagName()))
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

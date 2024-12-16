@@ -24,7 +24,7 @@ func (s *server) RangeDiff(in *gitalypb.RangeDiffRequest, stream gitalypb.DiffSe
 	}
 
 	ctx := stream.Context()
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	flags := []gitcmd.Option{
 		gitcmd.Flag{Name: "--no-color"},
@@ -53,7 +53,7 @@ func (s *server) RangeDiff(in *gitalypb.RangeDiffRequest, stream gitalypb.DiffSe
 		Args:  revisions,
 	}
 
-	return s.eachRangeDiff(ctx, "RangeDiff", s.localrepo(in.GetRepository()), cmd, func(pair *rangediff.CommitPair) error {
+	return s.eachRangeDiff(ctx, "RangeDiff", s.localRepoFactory.Build(in.GetRepository()), cmd, func(pair *rangediff.CommitPair) error {
 		patchData := pair.PatchData
 		response := &gitalypb.RangeDiffResponse{
 			FromCommitId:       pair.FromCommit,

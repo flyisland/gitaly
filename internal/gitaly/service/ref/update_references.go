@@ -24,7 +24,7 @@ func (s *server) UpdateReferences(server gitalypb.RefService_UpdateReferencesSer
 	if err := s.locator.ValidateRepository(ctx, request.GetRepository()); err != nil {
 		return err
 	}
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

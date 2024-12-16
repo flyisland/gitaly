@@ -24,7 +24,7 @@ func (s *server) FastExport(
 
 	var stderr bytes.Buffer
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 	cmd, err := repo.Exec(ctx, gitcmd.Command{
 		Name: "fast-export",
 		Flags: []gitcmd.Option{
