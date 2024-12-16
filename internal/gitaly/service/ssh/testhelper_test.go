@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,6 +10,7 @@ import (
 	hookservice "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/objectpool"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/repository"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -38,7 +40,18 @@ func startSSHServerWithOptions(t *testing.T, cfg config.Cfg, opts []ServerOpt, s
 }
 
 func newSSHClient(t *testing.T, serverSocketPath string) gitalypb.SSHServiceClient {
-	conn, err := grpc.Dial(serverSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(serverSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		testhelper.MustClose(t, conn)
+	})
+
+	return gitalypb.NewSSHServiceClient(conn)
+}
+
+func newSSHClientWithSidechannel(t *testing.T, ctx context.Context, registry *sidechannel.Registry, serverSocketPath string) gitalypb.SSHServiceClient {
+	logger := testhelper.SharedLogger(t)
+	conn, err := sidechannel.Dial(ctx, registry, logger, serverSocketPath, []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		testhelper.MustClose(t, conn)
