@@ -290,6 +290,8 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 	defer catfileCache.Stop()
 	prometheus.MustRegister(catfileCache)
 
+	localrepoFactory := localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache)
+
 	diskCache := cache.New(cfg, locator, logger)
 	prometheus.MustRegister(diskCache)
 	if err := diskCache.StartWalkers(); err != nil {
@@ -411,7 +413,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 				migration.NewFactory(
 					partition.NewFactory(
 						gitCmdFactory,
-						localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache),
+						localrepoFactory,
 						partitionMetrics,
 						logConsumer,
 					),
@@ -458,7 +460,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 					dbMgr,
 					partition.NewFactory(
 						gitCmdFactory,
-						localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache),
+						localrepoFactory,
 						partitionMetrics,
 						nil,
 					),
@@ -568,25 +570,26 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		}
 
 		setup.RegisterAll(srv, &service.Dependencies{
-			Logger:              logger,
-			Cfg:                 cfg,
-			GitalyHookManager:   hookManager,
-			TransactionManager:  transactionManager,
-			StorageLocator:      locator,
-			ClientPool:          conns,
-			GitCmdFactory:       gitCmdFactory,
-			CatfileCache:        catfileCache,
-			DiskCache:           diskCache,
-			PackObjectsCache:    streamCache,
-			PackObjectsLimiter:  packObjectsLimiter,
-			RepositoryCounter:   repoCounter,
-			UpdaterWithHooks:    updaterWithHooks,
-			Node:                node,
-			TransactionRegistry: txRegistry,
-			HousekeepingManager: housekeepingManager,
-			BackupSink:          backupSink,
-			BackupLocator:       backupLocator,
-			BundleURISink:       bundleURISink,
+			Logger:                 logger,
+			Cfg:                    cfg,
+			GitalyHookManager:      hookManager,
+			TransactionManager:     transactionManager,
+			StorageLocator:         locator,
+			ClientPool:             conns,
+			GitCmdFactory:          gitCmdFactory,
+			CatfileCache:           catfileCache,
+			DiskCache:              diskCache,
+			PackObjectsCache:       streamCache,
+			PackObjectsLimiter:     packObjectsLimiter,
+			RepositoryCounter:      repoCounter,
+			UpdaterWithHooks:       updaterWithHooks,
+			Node:                   node,
+			TransactionRegistry:    txRegistry,
+			HousekeepingManager:    housekeepingManager,
+			BackupSink:             backupSink,
+			BackupLocator:          backupLocator,
+			BundleURISink:          bundleURISink,
+			LocalRepositoryFactory: localrepoFactory,
 		})
 		b.RegisterStarter(starter.New(c, srv, logger))
 	}

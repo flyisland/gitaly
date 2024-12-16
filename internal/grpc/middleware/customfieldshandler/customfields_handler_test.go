@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/ref"
@@ -48,14 +49,16 @@ func createNewServer(t *testing.T, cfg config.Cfg, logger log.Logger) *grpc.Serv
 
 	gitCommandFactory := gittest.NewCommandFactory(t, cfg)
 	catfileCache := catfile.NewCache(cfg)
+	locator := config.NewLocator(cfg)
 	t.Cleanup(catfileCache.Stop)
 
 	gitalypb.RegisterRefServiceServer(server, ref.NewServer(&service.Dependencies{
-		Logger:             logger,
-		StorageLocator:     config.NewLocator(cfg),
-		GitCmdFactory:      gitCommandFactory,
-		TransactionManager: transaction.NewManager(cfg, logger, backchannel.NewRegistry()),
-		CatfileCache:       catfileCache,
+		Logger:                 logger,
+		StorageLocator:         locator,
+		GitCmdFactory:          gitCommandFactory,
+		TransactionManager:     transaction.NewManager(cfg, logger, backchannel.NewRegistry()),
+		CatfileCache:           catfileCache,
+		LocalRepositoryFactory: localrepo.NewFactory(logger, locator, gitCommandFactory, catfileCache),
 	}))
 
 	return server

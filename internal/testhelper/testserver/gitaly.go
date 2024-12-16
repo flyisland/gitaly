@@ -296,6 +296,7 @@ type gitalyServerDeps struct {
 	transactionRegistry *storagemgr.TransactionRegistry
 	procReceiveRegistry *hook.ProcReceiveRegistry
 	bundleGenerationMgr *bundleuri.GenerationManager
+	localRepoFactory    localrepo.Factory
 }
 
 func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Context, cfg config.Cfg) *service.Dependencies {
@@ -430,6 +431,8 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		cfg.Git.SigningKey = gsd.signingKey
 	}
 
+	gsd.localRepoFactory = localrepo.NewFactory(gsd.logger, gsd.locator, gsd.gitCmdFactory, gsd.catfileCache)
+
 	return &service.Dependencies{
 		Logger:                  gsd.logger,
 		Cfg:                     cfg,
@@ -455,6 +458,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		BundleURISink:           gsd.bundleURISink,
 		ProcReceiveRegistry:     gsd.procReceiveRegistry,
 		BundleGenerationManager: gsd.bundleGenerationMgr,
+		LocalRepositoryFactory:  gsd.localRepoFactory,
 	}
 }
 
@@ -613,6 +617,14 @@ func WithTransactionRegistry(registry *storagemgr.TransactionRegistry) GitalySer
 func WithProcReceiveRegistry(registry *hook.ProcReceiveRegistry) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
 		deps.procReceiveRegistry = registry
+		return deps
+	}
+}
+
+// WithRepositoryFactory sets the localrepo.Factory that will be used for gitaly services initialisation.
+func WithRepositoryFactory(repoFactory localrepo.Factory) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.localRepoFactory = repoFactory
 		return deps
 	}
 }

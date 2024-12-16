@@ -16,6 +16,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook"
@@ -256,17 +257,19 @@ func runServer(t *testing.T, cfg config.Cfg) string {
 
 	srv, err := NewGitalyServerFactory(cfg, logger, registry, diskCache, []*limithandler.LimiterMiddleware{limitHandler}, TransactionMiddleware{}).New(true, false)
 	require.NoError(t, err)
+	localRepoFactory := localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache)
 
 	setup.RegisterAll(srv, &service.Dependencies{
-		Logger:             logger,
-		Cfg:                cfg,
-		GitalyHookManager:  hookManager,
-		TransactionManager: txManager,
-		StorageLocator:     locator,
-		ClientPool:         conns,
-		GitCmdFactory:      gitCmdFactory,
-		CatfileCache:       catfileCache,
-		UpdaterWithHooks:   updaterWithHooks,
+		Logger:                 logger,
+		Cfg:                    cfg,
+		GitalyHookManager:      hookManager,
+		TransactionManager:     txManager,
+		StorageLocator:         locator,
+		ClientPool:             conns,
+		GitCmdFactory:          gitCmdFactory,
+		CatfileCache:           catfileCache,
+		UpdaterWithHooks:       updaterWithHooks,
+		LocalRepositoryFactory: localRepoFactory,
 	})
 	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
 
