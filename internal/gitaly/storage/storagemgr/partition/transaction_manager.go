@@ -35,7 +35,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/fshistory"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/fsrecorder"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal/reftree"
@@ -1019,7 +1018,7 @@ func NewTransactionManager(
 	cmdFactory gitcmd.CommandFactory,
 	repositoryFactory localrepo.StorageScopedFactory,
 	metrics ManagerMetrics,
-	consumer storage.LogConsumer,
+	logManager storage.LogManager,
 ) *TransactionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -1038,7 +1037,7 @@ func NewTransactionManager(
 		storagePath:         storagePath,
 		partitionID:         ptnID,
 		db:                  db,
-		logManager:          log.NewManager(storageName, ptnID, stagingDir, stateDir, consumer),
+		logManager:          logManager,
 		admissionQueue:      make(chan *Transaction),
 		completedQueue:      make(chan struct{}, 1),
 		initialized:         make(chan struct{}),
