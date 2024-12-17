@@ -3,7 +3,6 @@ package praefect
 import (
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -25,6 +24,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testdb"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/grpc"
 )
 
 func TestRemoveRepositorySubcommand(t *testing.T) {
@@ -32,14 +32,21 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 
-	g1Cfg := testcfg.Build(t, testcfg.WithStorages("gitaly-1"))
-	g2Cfg := testcfg.Build(t, testcfg.WithStorages("gitaly-2"))
+	gitalyOneCfg := testcfg.Build(t, testcfg.WithStorages("gitaly-1"))
+	gitalyTwoCfg := testcfg.Build(t, testcfg.WithStorages("gitaly-2"))
 
-	g1Addr := testserver.RunGitalyServer(t, g1Cfg, setup.RegisterAll, testserver.WithDisablePraefect())
-	g2Srv := testserver.StartGitalyServer(t, g2Cfg, setup.RegisterAll, testserver.WithDisablePraefect())
+	gitalyOneAddr := testserver.RunGitalyServer(t, gitalyOneCfg, setup.RegisterAll, testserver.WithDisablePraefect())
+	gitalyTwoSrv := testserver.StartGitalyServer(t, gitalyTwoCfg, setup.RegisterAll, testserver.WithDisablePraefect())
 
-	g1Locator := gitalycfg.NewLocator(g1Cfg)
-	g2Locator := gitalycfg.NewLocator(g2Cfg)
+	gitalyOneConfig, err := client.Dial(ctx, gitalyOneAddr)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, gitalyOneConfig)
+
+	gitalyTwoConfig, err := client.Dial(ctx, gitalyTwoSrv.Address())
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, gitalyTwoConfig)
+
+	gitalyTwoClient := gitalypb.NewRepositoryServiceClient(gitalyTwoConfig)
 
 	db := testdb.New(t)
 
@@ -49,8 +56,8 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			{
 				Name: "praefect",
 				Nodes: []*config.Node{
-					{Storage: g1Cfg.Storages[0].Name, Address: g1Addr},
-					{Storage: g2Cfg.Storages[0].Name, Address: g2Srv.Address()},
+					{Storage: gitalyOneCfg.Storages[0].Name, Address: gitalyOneAddr},
+					{Storage: gitalyTwoCfg.Storages[0].Name, Address: gitalyTwoSrv.Address()},
 				},
 			},
 		},
@@ -70,13 +77,21 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 
 	praefectStorage := conf.VirtualStorages[0].Name
 
-	repositoryExists := func(tb testing.TB, repo *gitalypb.Repository) bool {
+	praefectRepositoryExists := func(tb testing.TB, repo *gitalypb.Repository) bool {
 		response, err := gitalypb.NewRepositoryServiceClient(cc).RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
 			Repository: repo,
 		})
 		require.NoError(tb, err)
 		return response.GetExists()
 	}
+
+	gitalyRepositoryExists := func(tb testing.TB, conn *grpc.ClientConn, storageName, relativePath string) bool {
+		return gittest.RepositoryExists(tb, ctx, conn, &gitalypb.Repository{
+			StorageName:  storageName,
+			RelativePath: relativePath,
+		})
+	}
+
 	confPath := writeConfigToFile(t, conf)
 
 	for _, tc := range []struct {
@@ -154,9 +169,10 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 				return []string{"-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath()}
 			},
 			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
-				require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
-				require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
-				require.True(t, repositoryExists(t, repo))
+				require.NoError(t, err)
+
+				require.True(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
+				require.True(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
 			},
 			assertOutput: func(t *testing.T, out string, _ *gitalypb.Repository) {
 				assert.Contains(t, out, "Repository found in the database.\n")
@@ -166,15 +182,18 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 		{
 			desc: "ok",
 			args: func(t *testing.T, repo *gitalypb.Repository, replicaPath string) []string {
-				require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
-				require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
+				require.True(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
+				require.True(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
+
 				return []string{"-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply"}
 			},
 			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
 				require.NoError(t, err)
-				require.NoDirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
-				require.NoDirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
-				require.False(t, repositoryExists(t, repo))
+
+				require.False(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
+				require.False(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
+
+				require.False(t, praefectRepositoryExists(t, repo))
 			},
 			assertOutput: func(t *testing.T, out string, repo *gitalypb.Repository) {
 				assert.Contains(t, out, "Repository found in the database.\n")
@@ -189,16 +208,10 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			},
 			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
 				require.NoError(t, err)
-				require.False(t, repositoryExists(t, repo))
+				require.False(t, praefectRepositoryExists(t, repo))
 				// Repo is still present on-disk on the Gitaly nodes.
-				require.NoError(t, g1Locator.ValidateRepository(ctx, &gitalypb.Repository{
-					StorageName:  g1Cfg.Storages[0].Name,
-					RelativePath: replicaPath,
-				}))
-				require.NoError(t, g2Locator.ValidateRepository(ctx, &gitalypb.Repository{
-					StorageName:  g2Cfg.Storages[0].Name,
-					RelativePath: replicaPath,
-				}))
+				require.True(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
+				require.True(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
 			},
 			assertOutput: func(t *testing.T, out string, repo *gitalypb.Repository) {
 				assert.Contains(t, out, "Repository found in the database.\n")
@@ -209,13 +222,22 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 		{
 			desc: "repository doesnt exist on one gitaly",
 			args: func(t *testing.T, repo *gitalypb.Repository, replicaPath string) []string {
-				require.NoError(t, os.RemoveAll(filepath.Join(g2Cfg.Storages[0].Path, replicaPath)))
+				_, err := gitalyTwoClient.RemoveRepository(ctx, &gitalypb.RemoveRepositoryRequest{
+					Repository: &gitalypb.Repository{
+						StorageName:  gitalyTwoCfg.Storages[0].Name,
+						RelativePath: replicaPath,
+					},
+				})
+				require.NoError(t, err)
 				return []string{"-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply"}
 			},
 			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
-				require.NoDirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
-				require.NoDirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
-				require.False(t, repositoryExists(t, repo))
+				require.NoError(t, err)
+
+				require.False(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
+				require.False(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
+
+				require.False(t, praefectRepositoryExists(t, repo))
 			},
 			assertOutput: func(t *testing.T, out string, repo *gitalypb.Repository) {
 				assert.Contains(t, out, "Repository found in the database.\n")
@@ -233,9 +255,11 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			},
 			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
 				require.EqualError(t, err, "repository is not being tracked in Praefect")
-				require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
-				require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
-				require.False(t, repositoryExists(t, repo))
+
+				require.True(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
+				require.True(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
+
+				require.False(t, praefectRepositoryExists(t, repo))
 			},
 		},
 	} {
@@ -257,15 +281,17 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 
 	t.Run("one of gitalies is out of service", func(t *testing.T) {
 		repo := createRepo(t, ctx, repoClient, praefectStorage, t.Name())
-		g2Srv.Shutdown()
+		gitalyTwoSrv.Shutdown()
 		replicaPath := gittest.GetReplicaPath(t, ctx, gitalycfg.Cfg{SocketPath: praefectServer.Address()}, repo)
 		stdout, stderr, err := runApp([]string{"-config", confPath, "remove-repository", "-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply"})
 		assert.Empty(t, stderr)
 		require.NoError(t, err)
 		assert.Contains(t, stdout, "Repository removal completed.")
-		require.NoDirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
-		require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
-		require.False(t, repositoryExists(t, repo))
+
+		require.False(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
+		require.DirExists(t, filepath.Join(gitalyTwoCfg.Storages[0].Path, replicaPath))
+
+		require.False(t, praefectRepositoryExists(t, repo))
 	})
 }
 

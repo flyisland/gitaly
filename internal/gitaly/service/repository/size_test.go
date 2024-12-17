@@ -37,18 +37,33 @@ func TestRepositorySize_poolMember(t *testing.T) {
 	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch), gittest.WithTreeEntries(
 		gittest.TreeEntry{Mode: "100644", Path: "16kbblob", Content: string(incompressibleData(16 * 1000))},
 	))
-	gittest.Exec(t, cfg, "-C", repoPath, "repack", "-Adl")
-	requireRepositorySize(t, ctx, client, repo, 17)
+
+	_, err := client.OptimizeRepository(ctx, &gitalypb.OptimizeRepositoryRequest{
+		Repository: repo,
+		Strategy:   gitalypb.OptimizeRepositoryRequest_STRATEGY_HEURISTICAL,
+	})
+	require.NoError(t, err)
+
+	expectedSize := 19
+	if testhelper.IsReftableEnabled() || gittest.ObjectHashIsSHA256() {
+		expectedSize = 20
+	}
+
+	requireRepositorySize(t, ctx, client, repo, int64(expectedSize))
 
 	// We create an object pool now and link the repository to it. When repacking, this should cause us to
 	// deduplicate all objects and thus reduce the size of the repository.
 	gittest.CreateObjectPool(t, ctx, cfg, repo, gittest.CreateObjectPoolConfig{
 		LinkRepositoryToObjectPool: true,
 	})
-	gittest.Exec(t, cfg, "-C", repoPath, "repack", "-Adl")
 
-	// The blob has been deduplicated, so the repository should now be basically empty again.
-	requireRepositorySize(t, ctx, client, repo, 0)
+	_, err = client.OptimizeRepository(ctx, &gitalypb.OptimizeRepositoryRequest{
+		Repository: repo,
+		Strategy:   gitalypb.OptimizeRepositoryRequest_STRATEGY_HEURISTICAL,
+	})
+	require.NoError(t, err)
+
+	requireRepositorySize(t, ctx, client, repo, 1)
 }
 
 func TestRepositorySize_normalRepository(t *testing.T) {

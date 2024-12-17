@@ -382,7 +382,6 @@ func generateCreateRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 				},
 				Commit{
 					TransactionID: 1,
-					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,
@@ -432,7 +431,6 @@ func generateCreateRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 				},
 				Commit{
 					TransactionID: 1,
-					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,
@@ -902,7 +900,6 @@ func generateDeleteRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 				Commit{
 					TransactionID:    1,
 					DeleteRepository: true,
-					ExpectedError:    storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,
@@ -946,7 +943,6 @@ func generateDeleteRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 				Commit{
 					TransactionID:    1,
 					DeleteRepository: true,
-					ExpectedError:    storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,

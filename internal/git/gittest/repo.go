@@ -19,6 +19,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/transactiontest"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -91,9 +92,13 @@ type CreateRepositoryConfig struct {
 	SkipCreationViaService bool
 	// ObjectFormat overrides the object format used by the repository.
 	ObjectFormat string
+	// SkipSnapshotInvalidation skips the use of ForceSnapshotInvalidation workaround and instead
+	// uses ForceWALSync.
+	SkipSnapshotInvalidation bool
 }
 
-func dialService(tb testing.TB, ctx context.Context, cfg config.Cfg) *grpc.ClientConn {
+// DialService dials the Gitaly service and returns a client connection.
+func DialService(tb testing.TB, ctx context.Context, cfg config.Cfg) *grpc.ClientConn {
 	tb.Helper()
 
 	dialOptions := []grpc.DialOption{client.UnaryInterceptor(), client.StreamInterceptor()}
@@ -115,6 +120,7 @@ func dialService(tb testing.TB, ctx context.Context, cfg config.Cfg) *grpc.Clien
 
 	conn, err := client.Dial(ctx, addr, client.WithGrpcOptions(dialOptions))
 	require.NoError(tb, err)
+	tb.Cleanup(func() { testhelper.MustClose(tb, conn) })
 	return conn
 }
 
@@ -154,11 +160,11 @@ func CreateRepository(tb testing.TB, ctx context.Context, cfg config.Cfg, config
 	if !opts.SkipCreationViaService {
 		conn := opts.ClientConn
 		if conn == nil {
-			conn = dialService(tb, ctx, cfg)
-			tb.Cleanup(func() { testhelper.MustClose(tb, conn) })
+			conn = DialService(tb, ctx, cfg)
 		}
 		client := gitalypb.NewRepositoryServiceClient(conn)
 
+		var objectHash git.ObjectHash
 		if opts.Seed != "" {
 			_, err := client.CreateRepositoryFromURL(ctx, &gitalypb.CreateRepositoryFromURLRequest{
 				Repository: repository,
@@ -171,15 +177,30 @@ func CreateRepository(tb testing.TB, ctx context.Context, cfg config.Cfg, config
 			if objectFormat == "" {
 				objectFormat = DefaultObjectHash.Format
 			}
-
-			objectHash, err := git.ObjectHashByFormat(objectFormat)
+			var err error
+			objectHash, err = git.ObjectHashByFormat(objectFormat)
 			require.NoError(tb, err)
 
-			_, err = client.CreateRepository(ctx, &gitalypb.CreateRepositoryRequest{
+			_, createRepositoryErr := client.CreateRepository(ctx, &gitalypb.CreateRepositoryRequest{
 				Repository:   repository,
 				ObjectFormat: objectHash.ProtoFormat,
 			})
-			require.NoError(tb, err)
+			require.NoError(tb, createRepositoryErr)
+		}
+
+		if cfg.SocketPath != testcfg.UnconfiguredSocketPath && testhelper.IsWALEnabled() {
+			if opts.SkipSnapshotInvalidation {
+				// To ensure the repository is fully written on the disk before we perform any operations on it.
+				transactiontest.ForceWALSync(tb, ctx, conn, repository)
+			} else {
+				// ForceSnapshotInvalidation ensures that any subsequent read requests gets a fresh snapshot.
+				// If a read request were used instead, the snapshot would be cached, and follow-up read requests
+				// would use an outdated snapshot. This is particularly problematic when raw Git operations, such as
+				// the ones present in gittest.WriteCommit, modify the repository state in the meantime. This is a
+				// temporary fix which would be removed once we introduce a RPC alternative of WriteCommit.
+				revision := objectHash.ZeroOID.String()
+				transactiontest.ForceSnapshotInvalidation(tb, ctx, revision, conn, repository)
+			}
 		}
 
 		tb.Cleanup(func() {
@@ -243,8 +264,7 @@ func GetReplicaPath(tb testing.TB, ctx context.Context, cfg config.Cfg, repo sto
 
 	conn := opt.ClientConn
 	if conn == nil {
-		conn = dialService(tb, ctx, cfg)
-		defer conn.Close()
+		conn = DialService(tb, ctx, cfg)
 	}
 
 	return getReplicaPath(tb, ctx, conn, repo)
@@ -350,4 +370,12 @@ func RepositoryPath(tb testing.TB, ctx context.Context, pather RepositoryPather,
 	path, err := pather.Path(ctx)
 	require.NoError(tb, err)
 	return filepath.Join(append([]string{path}, components...)...)
+}
+
+// RepositoryExists checks if the repository exists using the RepositoryService.
+func RepositoryExists(tb testing.TB, ctx context.Context, conn *grpc.ClientConn, repo *gitalypb.Repository) bool {
+	client := gitalypb.NewRepositoryServiceClient(conn)
+	respExists, err := client.RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{Repository: repo})
+	require.NoError(tb, err)
+	return respExists.GetExists()
 }

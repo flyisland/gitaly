@@ -145,12 +145,14 @@ func TestCreateRepositoryFromBundle(t *testing.T) {
 			}
 			require.NoError(t, err)
 
+			// Verify connectivity and validity of the repository objects.
+			resp, err := repoClient.Fsck(ctx, &gitalypb.FsckRequest{Repository: setup.repoProto})
+			require.NoError(t, err)
+			require.Nil(t, resp.GetError())
+
 			repo := localrepo.NewTestRepo(t, cfg, setup.repoProto)
 			repoPath, err := repo.Path(ctx)
 			require.NoError(t, err)
-
-			// Verify connectivity and validity of the repository objects.
-			gittest.Exec(t, cfg, "-C", repoPath, "fsck")
 
 			refs := gittest.GetReferences(t, cfg, repoPath)
 			head := gittest.GetSymbolicRef(t, cfg, repoPath, "HEAD")

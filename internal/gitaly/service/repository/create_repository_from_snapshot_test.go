@@ -91,6 +91,7 @@ enabled. For more details, see: https://gitlab.com/gitlab-org/gitaly/-/issues/56
 
 	ctx := testhelper.Context(t)
 	cfg, client := setupRepositoryService(t)
+	conn := gittest.DialService(t, ctx, cfg)
 
 	_, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg)
 	gittest.WriteCommit(t, cfg, sourceRepoPath, gittest.WithBranch(git.DefaultBranch))
@@ -117,6 +118,9 @@ enabled. For more details, see: https://gitlab.com/gitlab-org/gitaly/-/issues/56
 	})
 	require.NoError(t, err)
 	testhelper.ProtoEqual(t, response, &gitalypb.CreateRepositoryFromSnapshotResponse{})
+
+	// verify that the repository exists, if WAL is enabled this would help in applying any pending transactions.
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, repo))
 
 	repoAbsolutePath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, repo))
 	require.DirExists(t, repoAbsolutePath)
@@ -286,7 +290,7 @@ func TestCreateRepositoryFromSnapshot_resolvedAddressSuccess(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 	cfg, client := setupRepositoryService(t)
-
+	conn := gittest.DialService(t, ctx, cfg)
 	_, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg)
 
 	// Ensure these won't be in the archive
@@ -323,6 +327,9 @@ func TestCreateRepositoryFromSnapshot_resolvedAddressSuccess(t *testing.T) {
 	})
 	require.NoError(t, err)
 	testhelper.ProtoEqual(t, response, &gitalypb.CreateRepositoryFromSnapshotResponse{})
+
+	// verify that the repository exists, if WAL is enabled this would help in applying any pending transactions.
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, repo))
 
 	repoAbsolutePath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, repo))
 	require.DirExists(t, repoAbsolutePath)

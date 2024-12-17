@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,7 +18,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -1187,6 +1185,7 @@ func TestFetchRemote(t *testing.T) {
 			t.Parallel()
 
 			cfg, client := setupRepositoryService(t)
+			refClient := gitalypb.NewRefServiceClient(gittest.DialService(t, ctx, cfg))
 			setupData := tc.setup(t, cfg)
 
 			for _, run := range setupData.runs {
@@ -1194,17 +1193,23 @@ func TestFetchRemote(t *testing.T) {
 				testhelper.RequireGrpcError(t, run.expectedErr, err)
 				testhelper.ProtoEqual(t, run.expectedResponse, response)
 
-				var refs map[string]git.ObjectID
-				refLines := text.ChompBytes(gittest.Exec(t, cfg, "-C", setupData.repoPath, "for-each-ref", `--format=%(refname) %(objectname)`))
-				if refLines != "" {
-					refs = make(map[string]git.ObjectID)
-					for _, line := range strings.Split(refLines, "\n") {
-						refname, objectID, found := strings.Cut(line, " ")
-						require.True(t, found, "shouldn't have issues parsing the refs")
-						refs[refname] = git.ObjectID(objectID)
+				existFetchedRepo, _ := client.RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
+					Repository: setupData.request.GetRepository(),
+				})
+
+				if existFetchedRepo.GetExists() {
+					var refs map[string]git.ObjectID
+					refResponse := gittest.GetReferencesAPI(t, ctx, refClient, setupData.request.GetRepository(), [][]byte{[]byte("refs/")})
+
+					for _, ref := range refResponse {
+						if refs == nil {
+							refs = make(map[string]git.ObjectID)
+						}
+						refs[ref.Name.String()] = git.ObjectID(ref.Target)
 					}
+
+					require.Equal(t, run.expectedRefs, refs)
 				}
-				require.Equal(t, run.expectedRefs, refs)
 			}
 		})
 	}
@@ -1379,8 +1384,9 @@ func TestFetchRemote_pooledRepository(t *testing.T) {
 
 			gitCmdFactory := gittest.NewCommandFactory(t, cfg)
 
-			client, swocketPath := runRepositoryService(t, cfg, testserver.WithGitCommandFactory(gitCmdFactory))
-			cfg.SocketPath = swocketPath
+			client, socketPath := runRepositoryService(t, cfg, testserver.WithGitCommandFactory(gitCmdFactory))
+			cfg.SocketPath = socketPath
+			commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
 
 			// Create a repository that emulates an object pool. This object contains a
 			// single reference with an object that is neither in the pool member nor in
@@ -1400,7 +1406,8 @@ func TestFetchRemote_pooledRepository(t *testing.T) {
 			// And then finally create a third repository that emulates the remote side
 			// we're fetching from. We need to create at least one reference so that Git
 			// would actually try to fetch objects.
-			_, remoteRepoPath := gittest.CreateRepository(t, ctx, cfg)
+			remoteRepoProto, remoteRepoPath := gittest.CreateRepository(t, ctx, cfg)
+
 			gittest.WriteCommit(t, cfg, remoteRepoPath,
 				gittest.WithBranch("remote"),
 				gittest.WithTreeEntries(gittest.TreeEntry{Path: "remote", Mode: "100644", Content: "remote contents"}),
@@ -1430,10 +1437,11 @@ func TestFetchRemote_pooledRepository(t *testing.T) {
 
 			// This should result in the "remote" branch having been fetched into the
 			// pooled repository.
-			require.Equal(t,
-				gittest.ResolveRevision(t, cfg, pooledRepoPath, "refs/heads/remote"),
-				gittest.ResolveRevision(t, cfg, remoteRepoPath, "refs/heads/remote"),
-			)
+			remoteObject := gittest.ResolveRevisionAPI(t, ctx, commitClient, remoteRepoProto, "refs/heads/remote")
+
+			pooledObject := gittest.ResolveRevisionAPI(t, ctx, commitClient, pooledRepoProto, "refs/heads/remote")
+
+			require.Equal(t, pooledObject, remoteObject)
 
 			// Verify whether alternate refs have been announced as part of the
 			// reference negotiation phase.

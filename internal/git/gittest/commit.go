@@ -2,6 +2,7 @@ package gittest
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -273,4 +274,38 @@ func CommitEqual(tb testing.TB, expected, actual *gitalypb.GitCommit) {
 	require.Equal(tb, expected.GetSubject(), actual.GetSubject(), "subject does not match")
 	require.Equal(tb, expected.GetId(), actual.GetId(), "object ID does not match")
 	require.Equal(tb, expected.GetParentIds(), actual.GetParentIds(), "parent IDs do not match")
+}
+
+func requireObjectExistsAPI(t *testing.T, ctx context.Context, commitClient gitalypb.CommitServiceClient, repo *gitalypb.Repository, objectID git.ObjectID, expectedExists bool) {
+	t.Helper()
+	stream, err := commitClient.CheckObjectsExist(ctx)
+	require.NoError(t, err)
+
+	// Send the request
+	require.NoError(t, stream.Send(&gitalypb.CheckObjectsExistRequest{
+		Repository: repo,
+		Revisions:  [][]byte{[]byte(objectID)},
+	}))
+	require.NoError(t, stream.CloseSend())
+
+	// Receive the response
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(resp.GetRevisions()))
+
+	exists := resp.GetRevisions()[0].GetExists()
+	require.Equal(t, expectedExists, exists)
+}
+
+// RequireObjectExistsAPI asserts that the given object ID exists in the repository by using the CommitService.
+func RequireObjectExistsAPI(t *testing.T, ctx context.Context, commitClient gitalypb.CommitServiceClient, repo *gitalypb.Repository, objectID git.ObjectID) {
+	t.Helper()
+	requireObjectExistsAPI(t, ctx, commitClient, repo, objectID, true)
+}
+
+// RequireObjectNotExistsAPI asserts that the given object ID does not exist in the repository by using the CommitService.
+func RequireObjectNotExistsAPI(t *testing.T, ctx context.Context, commitClient gitalypb.CommitServiceClient, repo *gitalypb.Repository, objectID git.ObjectID) {
+	t.Helper()
+	requireObjectExistsAPI(t, ctx, commitClient, repo, objectID, false)
 }

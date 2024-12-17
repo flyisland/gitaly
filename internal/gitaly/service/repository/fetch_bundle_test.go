@@ -27,17 +27,26 @@ func TestServer_FetchBundle_success(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 	cfg, client := setupRepositoryService(t)
+	refClient := gitalypb.NewRefServiceClient(gittest.DialService(t, ctx, cfg))
 
-	_, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg)
+	sourceRepo, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg)
+
 	main := gittest.WriteCommit(t, cfg, sourceRepoPath, gittest.WithBranch("main"))
 	gittest.WriteCommit(t, cfg, sourceRepoPath, gittest.WithBranch("feature"), gittest.WithParents(main))
-	gittest.Exec(t, cfg, "-C", sourceRepoPath, "symbolic-ref", "HEAD", "refs/heads/feature")
-	expectedRefs := gittest.Exec(t, cfg, "-C", sourceRepoPath, "show-ref", "--head")
+
+	_, err := client.WriteRef(ctx, &gitalypb.WriteRefRequest{
+		Repository: sourceRepo,
+		Ref:        []byte("HEAD"),
+		Revision:   []byte("refs/heads/feature"),
+	})
+	require.NoError(t, err)
+
+	expectedRefs := gittest.GetReferencesAPI(t, ctx, refClient, sourceRepo, [][]byte{[]byte("refs/"), []byte("HEAD")})
 
 	bundlePath := filepath.Join(testhelper.TempDir(t), "test.bundle")
 	gittest.BundleRepo(t, cfg, sourceRepoPath, bundlePath)
 
-	targetRepo, targetRepoPath := gittest.CreateRepository(t, ctx, cfg)
+	targetRepo, _ := gittest.CreateRepository(t, ctx, cfg)
 
 	stream, err := client.FetchBundle(ctx)
 	require.NoError(t, err)
@@ -65,8 +74,8 @@ func TestServer_FetchBundle_success(t *testing.T) {
 	_, err = stream.CloseAndRecv()
 	require.NoError(t, err)
 
-	refs := gittest.Exec(t, cfg, "-C", targetRepoPath, "show-ref", "--head")
-	require.Equal(t, string(expectedRefs), string(refs))
+	refs := gittest.GetReferencesAPI(t, ctx, refClient, targetRepo, [][]byte{[]byte("refs/"), []byte("HEAD")})
+	require.Equal(t, expectedRefs, refs)
 }
 
 func TestServer_FetchBundle_transaction(t *testing.T) {

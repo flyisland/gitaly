@@ -72,8 +72,12 @@ func TestPartitionBackup_CreateSuccess(t *testing.T) {
 			)
 
 			// Creating repositories will assign them to partitions.
-			gittest.CreateRepository(t, ctx, cfg)
-			gittest.CreateRepository(t, ctx, cfg)
+			gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipSnapshotInvalidation: true,
+			})
+			gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipSnapshotInvalidation: true,
+			})
 
 			pool := client.NewPool()
 			defer testhelper.MustClose(t, pool)

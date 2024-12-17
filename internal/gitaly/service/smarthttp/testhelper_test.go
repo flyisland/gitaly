@@ -8,6 +8,7 @@ import (
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/commit"
 	hookservice "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/objectpool"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/repository"
@@ -27,6 +28,7 @@ func TestMain(m *testing.M) {
 func startSmartHTTPServerWithOptions(t *testing.T, cfg config.Cfg, opts []ServerOpt, serverOpts []testserver.GitalyServerOpt) testserver.GitalyServer {
 	return testserver.StartGitalyServer(t, cfg, func(srv *grpc.Server, deps *service.Dependencies) {
 		gitalypb.RegisterSmartHTTPServiceServer(srv, NewServer(deps, opts...))
+		gitalypb.RegisterCommitServiceServer(srv, commit.NewServer(deps))
 		gitalypb.RegisterRepositoryServiceServer(srv, repository.NewServer(deps))
 		gitalypb.RegisterObjectPoolServiceServer(srv, objectpool.NewServer(deps))
 		gitalypb.RegisterHookServiceServer(srv, hookservice.NewServer(deps))

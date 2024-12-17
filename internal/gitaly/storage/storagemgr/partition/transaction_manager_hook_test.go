@@ -111,7 +111,6 @@ func generateCustomHooksTests(t *testing.T, setup testTransactionSetup) []transa
 					CustomHooksUpdate: &CustomHooksUpdate{
 						CustomHooksTAR: validCustomHooks(t),
 					},
-					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,
@@ -161,7 +160,6 @@ func generateCustomHooksTests(t *testing.T, setup testTransactionSetup) []transa
 					CustomHooksUpdate: &CustomHooksUpdate{
 						CustomHooksTAR: validCustomHooks(t),
 					},
-					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,
@@ -510,7 +508,6 @@ func generateCustomHooksTests(t *testing.T, setup testTransactionSetup) []transa
 					ReferenceUpdates: git.ReferenceUpdates{
 						"refs/heads/main": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
-					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,
@@ -604,7 +601,6 @@ func generateCustomHooksTests(t *testing.T, setup testTransactionSetup) []transa
 					ReferenceUpdates: git.ReferenceUpdates{
 						"refs/heads/main": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
-					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,
@@ -698,7 +694,6 @@ func generateCustomHooksTests(t *testing.T, setup testTransactionSetup) []transa
 					ReferenceUpdates: git.ReferenceUpdates{
 						"refs/heads/main": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
-					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
 				AssertManager{
 					ExpectedError: errSimulatedCrash,

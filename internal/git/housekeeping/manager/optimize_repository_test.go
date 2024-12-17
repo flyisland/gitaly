@@ -515,6 +515,7 @@ func TestOptimizeRepository(t *testing.T) {
 		expectedMetrics               []metric
 		expectedMetricsForTransaction []metric
 		expectedMetricsForPool        []metric
+		expectedCommitGraphInfo       stats.CommitGraphInfo
 	}
 
 	for _, tc := range []struct {
@@ -582,6 +583,71 @@ func TestOptimizeRepository(t *testing.T) {
 						{name: "written_commit_graph_full", status: "success", count: 1},
 						{name: "written_multi_pack_index", status: "success", count: 1},
 						{name: "total", status: "success", count: 1},
+					},
+				}
+			},
+		},
+		{
+			desc: "optimizing repository without commit-graph bloom filters and generation data",
+			setup: func(t *testing.T, cfg gitalycfg.Cfg, relativePath string) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+					RelativePath:           relativePath,
+				})
+
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
+				// Prepare the repository so that it has a commit-graph, but that commit-graph is
+				// missing bloom filters.
+				gittest.Exec(t, cfg, "-C", repoPath,
+					"-c", "commitGraph.generationVersion=1",
+					"commit-graph", "write", "--split", "--reachable")
+
+				return setupData{
+					repo: localrepo.NewTestRepo(t, cfg, repo),
+					expectedMetrics: []metric{
+						{name: "packed_objects_geometric", status: "success", count: 1},
+						{name: "written_bitmap", status: "success", count: 1},
+						{name: "written_commit_graph_full", status: "success", count: 1},
+						{name: "written_multi_pack_index", status: "success", count: 1},
+						{name: "total", status: "success", count: 1},
+					},
+					expectedCommitGraphInfo: stats.CommitGraphInfo{
+						Exists:                 true,
+						HasBloomFilters:        true,
+						HasGenerationData:      true,
+						CommitGraphChainLength: 1,
+					},
+				}
+			},
+		},
+		{
+			desc: "optimizing repository without commit-graph bloom filters with generation data",
+			setup: func(t *testing.T, cfg gitalycfg.Cfg, relativePath string) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+					RelativePath:           relativePath,
+				})
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
+				// Prepare the repository so that it has a commit-graph, but that commit-graph is
+				// missing bloom filters.
+				gittest.Exec(t, cfg, "-C", repoPath,
+					"-c", "commitGraph.generationVersion=2",
+					"commit-graph", "write", "--split", "--reachable")
+
+				return setupData{
+					repo: localrepo.NewTestRepo(t, cfg, repo),
+					expectedMetrics: []metric{
+						{name: "packed_objects_geometric", status: "success", count: 1},
+						{name: "written_bitmap", status: "success", count: 1},
+						{name: "written_commit_graph_full", status: "success", count: 1},
+						{name: "written_multi_pack_index", status: "success", count: 1},
+						{name: "total", status: "success", count: 1},
+					},
+					expectedCommitGraphInfo: stats.CommitGraphInfo{
+						Exists:                 true,
+						HasBloomFilters:        true,
+						HasGenerationData:      true,
+						CommitGraphChainLength: 1,
 					},
 				}
 			},
@@ -1112,6 +1178,27 @@ func TestOptimizeRepository(t *testing.T) {
 
 				path, err := setup.repo.Path(ctx)
 				require.NoError(t, err)
+
+				if setup.expectedCommitGraphInfo != (stats.CommitGraphInfo{}) && node != nil {
+					nodeStorage, err := node.GetStorage(setup.repo.GetStorageName())
+					require.NoError(t, err)
+
+					// Start a transaction to ensure the WAL is fully applied. This test is still
+					// accessing the repository directly in the storage.
+					tx, err := nodeStorage.Begin(ctx, storage.TransactionOptions{
+						ReadOnly:     true,
+						RelativePath: setup.repo.GetRelativePath(),
+					})
+					require.NoError(t, err)
+					defer func() {
+						require.NoError(t, tx.Rollback(ctx))
+					}()
+
+					commitGraphInfo, err := stats.CommitGraphInfoForRepository(path)
+					require.NoError(t, err)
+					require.Equal(t, setup.expectedCommitGraphInfo, commitGraphInfo)
+				}
+
 				// The state of the repo should be cleared after running housekeeping.
 				require.NotContains(t, manager.repositoryStates.values, path)
 			})

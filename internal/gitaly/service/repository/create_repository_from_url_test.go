@@ -55,7 +55,9 @@ func TestCreateRepositoryFromURL_successful(t *testing.T) {
 
 	importedRepoPath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, importedRepo))
 
-	gittest.Exec(t, cfg, "-C", importedRepoPath, "fsck")
+	resp, err := client.Fsck(ctx, &gitalypb.FsckRequest{Repository: importedRepo})
+	require.NoError(t, err)
+	require.Empty(t, resp.GetError())
 
 	remotes := gittest.Exec(t, cfg, "-C", importedRepoPath, "remote")
 	require.NotContains(t, string(remotes), "origin")
@@ -93,7 +95,10 @@ func TestCreateRepositoryFromURL_successfulWithOptionalParameters(t *testing.T) 
 	require.NoError(t, err)
 
 	importedRepoPath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, importedRepo))
-	gittest.Exec(t, cfg, "-C", importedRepoPath, "fsck")
+	resp, err := client.Fsck(ctx, &gitalypb.FsckRequest{Repository: importedRepo})
+	require.NoError(t, err)
+	require.Empty(t, resp.GetError())
+
 	require.Empty(t, gittest.Exec(t, cfg, "-C", importedRepoPath, "remote"))
 	require.Equal(t,
 		[]string{"refs/heads/" + git.DefaultBranch, "refs/merge-requests/1/head"},

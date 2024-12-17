@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -102,7 +104,7 @@ func TestSetCustomHooksRequest_success(t *testing.T) {
 			require.NoError(t, err)
 
 			ctx = metadata.IncomingToOutgoing(ctx)
-			repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+			repo, _ := gittest.CreateRepository(t, ctx, cfg)
 
 			// reset the txManager since CreateRepository would have done
 			// voting
@@ -110,21 +112,52 @@ func TestSetCustomHooksRequest_success(t *testing.T) {
 
 			writer, closeStream := tc.streamWriter(t, ctx, repo, client)
 
-			archivePath := mustCreateCustomHooksArchive(t, ctx, []testFile{
-				{name: "pre-commit.sample", content: "foo", mode: 0o755},
-				{name: "pre-push.sample", content: "bar", mode: 0o755},
-			}, repoutil.CustomHooksDir)
+			customHookFiles := []string{
+				"custom_hooks/pre-commit.sample",
+				"custom_hooks/prepare-commit-msg.sample",
+				"custom_hooks/pre-push.sample",
+			}
 
-			file, err := os.Open(archivePath)
+			// Convert the string paths to testFile structs for the archive
+			var hookFiles []testFile
+			for _, fileName := range customHookFiles {
+				hookFiles = append(hookFiles, testFile{
+					name:    strings.TrimPrefix(fileName, "custom_hooks/"),
+					content: "foo",
+					mode:    mode.Executable,
+				})
+			}
+
+			archivePath := mustCreateCustomHooksArchive(t, ctx, hookFiles, repoutil.CustomHooksDir)
+
+			archiveFile, err := os.Open(archivePath)
 			require.NoError(t, err)
+			defer testhelper.MustClose(t, archiveFile)
 
-			_, err = io.Copy(writer, file)
+			_, err = io.Copy(writer, archiveFile)
 			require.NoError(t, err)
 			closeStream()
 
-			testhelper.MustClose(t, file)
+			stream, err := client.GetCustomHooks(ctx, &gitalypb.GetCustomHooksRequest{Repository: repo})
+			require.NoError(t, err)
+			hooks := streamio.NewReader(func() ([]byte, error) {
+				resp, err := stream.Recv()
+				return resp.GetData(), err
+			})
 
-			require.FileExists(t, filepath.Join(repoPath, "custom_hooks", "pre-push.sample"))
+			expected := testhelper.DirectoryState{
+				repoutil.CustomHooksDir: {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
+			}
+
+			for _, fileName := range customHookFiles {
+				expected[fileName] = testhelper.DirectoryEntry{
+					Mode:    archive.TarFileMode | archive.ExecuteMode,
+					Content: []byte("foo"),
+				}
+			}
+
+			testhelper.RequireTarState(t, hooks, expected)
+
 			require.Equal(t, 2, len(txManager.Votes()))
 			assert.Equal(t, voting.Prepared, txManager.Votes()[0].Phase)
 			assert.Equal(t, voting.Committed, txManager.Votes()[1].Phase)

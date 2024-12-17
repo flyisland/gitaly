@@ -540,7 +540,11 @@ func TestVerifier(t *testing.T) {
 					// Create the expected repository. This creates all of the replicas transactionally.
 					repo, _ := gittest.CreateRepository(t, ctx,
 						gitalyconfig.Cfg{Storages: []gitalyconfig.Storage{{Name: virtualStorage}}},
-						gittest.CreateRepositoryConfig{ClientConn: conn, RelativePath: relativePath},
+						gittest.CreateRepositoryConfig{
+							ClientConn:               conn,
+							RelativePath:             relativePath,
+							SkipSnapshotInvalidation: true,
+						},
 					)
 
 					replicaPath := gittest.GetReplicaPath(t, ctx, gitalyconfig.Cfg{}, repo, gittest.GetReplicaPathConfig{ClientConn: conn})
@@ -597,7 +601,11 @@ func TestVerifier(t *testing.T) {
 			// Create a repository and lock its records to assert the dequeuer does not wait on row locks.
 			gittest.CreateRepository(t, ctx,
 				gitalyconfig.Cfg{Storages: []gitalyconfig.Storage{{Name: "virtual-storage"}}},
-				gittest.CreateRepositoryConfig{ClientConn: conn, RelativePath: "locked-repository"},
+				gittest.CreateRepositoryConfig{
+					ClientConn:               conn,
+					RelativePath:             "locked-repository",
+					SkipSnapshotInvalidation: true,
+				},
 			)
 
 			rowLockTx := db.Begin(t)

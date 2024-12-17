@@ -1,11 +1,9 @@
 package repository
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,7 +12,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -103,6 +100,8 @@ func TestCreateFork_revision(t *testing.T) {
 	ctx := testhelper.Context(t)
 	ctx = testhelper.MergeOutgoingMetadata(ctx, testcfg.GitalyServersMetadataFromCfg(t, cfg))
 
+	refClient := gitalypb.NewRefServiceClient(gittest.DialService(t, ctx, cfg))
+
 	for _, tt := range []struct {
 		name         string
 		revision     []byte
@@ -144,7 +143,12 @@ func TestCreateFork_revision(t *testing.T) {
 				wipRef,
 				"refs/tags/v1.0.0",
 			} {
-				gittest.WriteRef(t, cfg, repoPath, ref, commitID)
+				_, err := client.WriteRef(ctx, &gitalypb.WriteRefRequest{
+					Repository: repo,
+					Ref:        []byte(ref),
+					Revision:   []byte(commitID.String()),
+				})
+				require.NoError(t, err)
 			}
 
 			forkedRepo := &gitalypb.Repository{
@@ -162,13 +166,14 @@ func TestCreateFork_revision(t *testing.T) {
 				require.Contains(t, err.Error(), tt.expectedErr)
 			} else {
 				require.NoError(t, err)
+				refs := gittest.GetReferencesAPI(t, ctx, refClient, forkedRepo, [][]byte{[]byte("refs/")})
+				// Format refs in same format as show-ref: "<commit-id> <ref-name>"
+				var actualRefs []string
+				for _, ref := range refs {
+					actualRefs = append(actualRefs, fmt.Sprintf("%s %s", ref.Target, ref.Name))
+				}
 
-				replicaPath := gittest.GetReplicaPath(t, ctx, cfg, forkedRepo)
-				forkedRepoPath := filepath.Join(cfg.Storages[0].Path, replicaPath)
-
-				actualRefs := strings.Split(strings.Trim(string(gittest.Exec(t, cfg, "-C", forkedRepoPath, "show-ref")), "\n"), "\n")
 				var expectedRefs []string
-
 				for _, ref := range tt.expectedRefs {
 					expectedRefs = append(expectedRefs, fmt.Sprintf("%s %s", commitID.String(), ref))
 				}
@@ -184,6 +189,7 @@ func TestCreateFork_refs(t *testing.T) {
 	ctx := testhelper.Context(t)
 
 	cfg, client := setupRepositoryService(t)
+	refClient := gitalypb.NewRefServiceClient(gittest.DialService(t, ctx, cfg))
 
 	sourceRepo, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg)
 
@@ -198,7 +204,13 @@ func TestCreateFork_refs(t *testing.T) {
 	} {
 		gittest.Exec(t, cfg, "-C", sourceRepoPath, "update-ref", ref, commitID.String())
 	}
-	gittest.Exec(t, cfg, "-C", sourceRepoPath, "symbolic-ref", "HEAD", "refs/heads/something")
+
+	_, err := client.WriteRef(ctx, &gitalypb.WriteRefRequest{
+		Repository: sourceRepo,
+		Ref:        []byte("HEAD"),
+		Revision:   []byte("refs/heads/something"),
+	})
+	require.NoError(t, err)
 
 	ctx = testhelper.MergeOutgoingMetadata(ctx, testcfg.GitalyServersMetadataFromCfg(t, cfg))
 
@@ -207,29 +219,40 @@ func TestCreateFork_refs(t *testing.T) {
 		StorageName:  sourceRepo.GetStorageName(),
 	}
 
-	_, err := client.CreateFork(ctx, &gitalypb.CreateForkRequest{
+	_, err = client.CreateFork(ctx, &gitalypb.CreateForkRequest{
 		Repository:       targetRepo,
 		SourceRepository: sourceRepo,
 	})
 	require.NoError(t, err)
 
-	storagePath, err := config.NewLocator(cfg).GetStorageByName(ctx, targetRepo.GetStorageName())
+	refs := gittest.GetReferencesAPI(t, ctx, refClient, targetRepo, [][]byte{
+		[]byte("refs/heads/something"),
+		[]byte("refs/tags/something"),
+	})
+	// Verify both refs point to the expected commit
+	require.Equal(t, []git.Reference{
+		{
+			Name:   git.ReferenceName("refs/heads/something"),
+			Target: commitID.String(),
+		},
+		{
+			Name:   git.ReferenceName("refs/tags/something"),
+			Target: commitID.String(),
+		},
+	}, refs)
+
+	sourceResp, err := refClient.FindDefaultBranchName(ctx, &gitalypb.FindDefaultBranchNameRequest{
+		Repository: sourceRepo,
+	})
 	require.NoError(t, err)
 
-	targetRepoPath := filepath.Join(storagePath, gittest.GetReplicaPath(t, ctx, cfg, targetRepo))
+	targetResp, err := refClient.FindDefaultBranchName(ctx, &gitalypb.FindDefaultBranchNameRequest{
+		Repository: targetRepo,
+	})
+	require.NoError(t, err)
 
-	require.Equal(t,
-		[]string{
-			commitID.String() + " refs/heads/something",
-			commitID.String() + " refs/tags/something",
-		},
-		strings.Split(text.ChompBytes(gittest.Exec(t, cfg, "-C", targetRepoPath, "show-ref")), "\n"),
-	)
-
-	require.Equal(t,
-		string(gittest.Exec(t, cfg, "-C", sourceRepoPath, "symbolic-ref", "HEAD")),
-		string(gittest.Exec(t, cfg, "-C", targetRepoPath, "symbolic-ref", "HEAD")),
-	)
+	// Compare HEAD refs
+	require.Equal(t, sourceResp.GetName(), targetResp.GetName())
 }
 
 func TestCreateFork_fsck(t *testing.T) {
@@ -270,16 +293,11 @@ func TestCreateFork_fsck(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	forkedRepoPath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, forkedRepo))
-
 	// Verify that the broken tree is indeed in the fork and that it is reported as broken by
 	// git-fsck(1).
-	var stderr bytes.Buffer
-	fsckCmd := gittest.NewCommand(t, cfg, "-C", forkedRepoPath, "fsck")
-	fsckCmd.Stderr = &stderr
-
-	require.EqualError(t, fsckCmd.Run(), "exit status 4")
-	require.Equal(t, fmt.Sprintf("error in tree %s: duplicateEntries: contains duplicate file entries\n", treeID), stderr.String())
+	resp, err := client.Fsck(ctx, &gitalypb.FsckRequest{Repository: forkedRepo})
+	require.NoError(t, err)
+	require.Equal(t, fmt.Sprintf("error in tree %s: duplicateEntries: contains duplicate file entries\n", treeID), string(resp.GetError()))
 }
 
 func TestCreateFork_targetExists(t *testing.T) {

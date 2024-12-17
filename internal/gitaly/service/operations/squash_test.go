@@ -483,6 +483,7 @@ func TestUserSquash_emptyCommit(t *testing.T) {
 
 	testhelper.NewFeatureSets(
 		featureflag.GPGSigning,
+		featureflag.TreeOIDPagination,
 	).Run(t, testUserSquashEmptyCommit)
 }
 
@@ -592,7 +593,9 @@ func testUserSquashEmptyCommit(t *testing.T, ctx context.Context) {
 				SquashSha: tc.expectedCommit.GetId(),
 			}, response)
 
-			gittest.RequireTree(t, cfg, repoPath, tc.expectedCommit.GetId(), tc.expectedTreeEntries)
+			conn := gittest.DialService(t, ctx, cfg)
+			commitClient := gitalypb.NewCommitServiceClient(conn)
+			gittest.RequireTreeAPI(t, ctx, commitClient, cfg, repoProto, tc.expectedCommit.GetId(), tc.expectedTreeEntries)
 
 			commit, err := repo.ReadCommit(ctx, git.Revision(tc.expectedCommit.GetId()))
 			require.NoError(t, err)

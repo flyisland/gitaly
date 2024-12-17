@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"os"
 	"testing"
 
 	"github.com/go-enry/go-license-detector/v4/licensedb"
@@ -55,9 +54,9 @@ func TestFindLicense_successful(t *testing.T) {
 		{
 			desc: "repository does not exist",
 			setup: func(t *testing.T, repoPath string) {
-				require.NoError(t, os.RemoveAll(repoPath))
 			},
-			errorContains: storage.ErrRepositoryNotFound.Error(),
+			nonExistentRepository: true,
+			errorContains:         storage.ErrRepositoryNotFound.Error(),
 		},
 		{
 			desc: "empty if no license file in repo",
@@ -234,8 +233,21 @@ func TestFindLicense_successful(t *testing.T) {
 			repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 			tc.setup(t, repoPath)
 
-			if _, err := os.Stat(repoPath); !os.IsNotExist(err) {
-				gittest.Exec(t, cfg, "-C", repoPath, "symbolic-ref", "HEAD", "refs/heads/main")
+			if tc.nonExistentRepository {
+				_, err := client.RemoveRepository(ctx, &gitalypb.RemoveRepositoryRequest{Repository: repo})
+				require.NoError(t, err)
+			}
+
+			existResp, err := client.RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{Repository: repo})
+			require.NoError(t, err)
+
+			if existResp.GetExists() {
+				_, err = client.WriteRef(ctx, &gitalypb.WriteRefRequest{
+					Repository: repo,
+					Ref:        []byte("HEAD"),
+					Revision:   []byte("refs/heads/main"),
+				})
+				require.NoError(t, err)
 			}
 
 			resp, err := client.FindLicense(ctx, &gitalypb.FindLicenseRequest{Repository: repo})
@@ -294,9 +306,7 @@ func BenchmarkFindLicense(b *testing.B) {
 		Seed:                   "benchmark.git",
 	})
 
-	repoStress, repoStressPath := gittest.CreateRepository(b, ctx, cfg, gittest.CreateRepositoryConfig{
-		SkipCreationViaService: true,
-	})
+	repoStress, repoStressPath := gittest.CreateRepository(b, ctx, cfg)
 
 	// Based on https://github.com/go-enry/go-license-detector/blob/18a439e5437cd46905b074ac24c27cbb6cac4347/licensedb/internal/investigation.go#L28-L38
 	fileNames := []string{

@@ -106,7 +106,9 @@ func TestBackupPartition(t *testing.T) {
 
 			data := tc.setup(t, ctx, backupSink)
 
-			repo, _ := gittest.CreateRepository(t, ctx, data.cfg)
+			repo, _ := gittest.CreateRepository(t, ctx, data.cfg, gittest.CreateRepositoryConfig{
+				SkipSnapshotInvalidation: true,
+			})
 
 			resp, err := data.ptnClient.BackupPartition(ctx, &gitalypb.BackupPartitionRequest{
 				StorageName: data.storageName,

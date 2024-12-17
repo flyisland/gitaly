@@ -24,6 +24,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/transactiontest"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
@@ -33,6 +34,7 @@ func TestCreate(t *testing.T) {
 	ctx := testhelper.Context(t)
 	logger := testhelper.NewLogger(t)
 	cfg, repo, repoPath, _, client := setup(t, ctx)
+	conn := gittest.DialService(t, ctx, cfg)
 	commitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
 
 	txManager := transaction.NewManager(cfg, logger, nil)
@@ -51,6 +53,8 @@ func TestCreate(t *testing.T) {
 		Origin:     repo,
 	})
 	require.NoError(t, err)
+	// Make sure that the object pool is created as it will be validated locally in FromProto.
+	transactiontest.ForceWALSync(t, ctx, conn, poolProto.GetRepository())
 
 	pool, err := objectpool.FromProto(
 		ctx,

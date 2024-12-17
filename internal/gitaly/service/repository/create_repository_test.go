@@ -9,13 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -59,6 +57,9 @@ func TestCreateRepository_successful(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	conn := gittest.DialService(t, ctx, cfg)
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, repo))
+
 	repoDir := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, repo))
 
 	require.NoError(t, unix.Access(repoDir, unix.R_OK))
@@ -84,6 +85,7 @@ func TestCreateRepository_withDefaultBranch(t *testing.T) {
 
 	cfg, client := setupRepositoryService(t)
 	ctx := testhelper.Context(t)
+	refClient := gitalypb.NewRefServiceClient(gittest.DialService(t, ctx, cfg))
 
 	for _, tc := range []struct {
 		desc              string
@@ -117,12 +119,13 @@ func TestCreateRepository_withDefaultBranch(t *testing.T) {
 				require.Contains(t, err.Error(), tc.expectedErrString)
 			} else {
 				require.NoError(t, err)
-				repoPath := filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, repo))
-				symRef := text.ChompBytes(gittest.Exec(
-					t,
-					cfg,
-					"-C", repoPath,
-					"symbolic-ref", "HEAD"))
+
+				resp, err := refClient.FindDefaultBranchName(ctx, &gitalypb.FindDefaultBranchNameRequest{
+					Repository: repo,
+					HeadOnly:   true,
+				})
+				require.NoError(t, err)
+				symRef := string(resp.GetName())
 				require.Equal(t, tc.expected, symRef)
 			}
 		})
@@ -183,11 +186,14 @@ func TestCreateRepository_withObjectFormat(t *testing.T) {
 				return
 			}
 
-			repo := localrepo.NewTestRepo(t, cfg, repoProto)
+			resp, err := client.ObjectFormat(ctx, &gitalypb.ObjectFormatRequest{
+				Repository: repoProto,
+			})
+			require.NoError(t, err)
 
 			// If the repository was created we can check whether the object format of
 			// the created repository matches our expectations.
-			objectHash, err := repo.ObjectHash(ctx)
+			objectHash, err := git.ObjectHashByProto(resp.GetFormat())
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedObjectHash.Format, objectHash.Format)
 		})

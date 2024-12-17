@@ -11,6 +11,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/objectpool"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/commit"
 	hookservice "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/repository"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/ssh"
@@ -20,9 +21,9 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/transactiontest"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestMain(m *testing.M) {
@@ -52,11 +53,7 @@ func setupWithConfig(t *testing.T, ctx context.Context, cfg config.Cfg, opts ...
 
 	locator := config.NewLocator(cfg)
 	cfg.SocketPath = runObjectPoolServer(t, cfg, locator, testhelper.SharedLogger(t), opts...)
-
-	conn, err := grpc.Dial(cfg.SocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	require.NoError(t, err)
-	t.Cleanup(func() { testhelper.MustClose(t, conn) })
-
+	conn := gittest.DialService(t, ctx, cfg)
 	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
 	return cfg, repo, repoPath, locator, clientWithConn{ObjectPoolServiceClient: gitalypb.NewObjectPoolServiceClient(conn), conn: conn}
@@ -65,6 +62,7 @@ func setupWithConfig(t *testing.T, ctx context.Context, cfg config.Cfg, opts ...
 func runObjectPoolServer(t *testing.T, cfg config.Cfg, locator storage.Locator, logger log.Logger, opts ...testserver.GitalyServerOpt) string {
 	return testserver.RunGitalyServer(t, cfg, func(srv *grpc.Server, deps *service.Dependencies) {
 		gitalypb.RegisterObjectPoolServiceServer(srv, NewServer(deps))
+		gitalypb.RegisterCommitServiceServer(srv, commit.NewServer(deps))
 		gitalypb.RegisterHookServiceServer(srv, hookservice.NewServer(deps))
 		gitalypb.RegisterRepositoryServiceServer(srv, repository.NewServer(deps))
 		gitalypb.RegisterSSHServiceServer(srv, ssh.NewServer(deps))
@@ -87,6 +85,9 @@ func createObjectPool(
 	txManager := transaction.NewManager(cfg, logger, nil)
 	catfileCache := catfile.NewCache(cfg)
 	tb.Cleanup(catfileCache.Stop)
+	// Make sure that the object pool is created as it will be validated locally in FromProto.
+	conn := gittest.DialService(tb, ctx, cfg)
+	transactiontest.ForceWALSync(tb, ctx, conn, poolProto.GetRepository())
 
 	pool, err := objectpool.FromProto(
 		ctx,

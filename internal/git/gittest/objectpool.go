@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 )
@@ -45,8 +44,7 @@ func CreateObjectPool(
 
 	conn := createCfg.ClientConn
 	if conn == nil {
-		conn = dialService(tb, ctx, cfg)
-		defer testhelper.MustClose(tb, conn)
+		conn = DialService(tb, ctx, cfg)
 	}
 	client := gitalypb.NewObjectPoolServiceClient(conn)
 

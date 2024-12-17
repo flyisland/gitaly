@@ -88,7 +88,9 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 
 			tc.envSetup(ctx, cfg)
 
-			repo, _ := gittest.CreateRepository(t, ctx, cfg)
+			repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipSnapshotInvalidation: true,
+			})
 
 			cmd := NewApp()
 			cmd.Writer = io.Discard

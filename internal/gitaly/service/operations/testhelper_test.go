@@ -8,6 +8,7 @@ import (
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/blob"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/commit"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/ref"
@@ -84,6 +85,7 @@ func runOperationServiceServer(tb testing.TB, cfg config.Cfg, options ...testser
 		gitalypb.RegisterRepositoryServiceServer(srv, repository.NewServer(deps))
 		gitalypb.RegisterRefServiceServer(srv, ref.NewServer(deps))
 		gitalypb.RegisterCommitServiceServer(srv, commit.NewServer(deps))
+		gitalypb.RegisterBlobServiceServer(srv, blob.NewServer(deps))
 		gitalypb.RegisterSSHServiceServer(srv, ssh.NewServer(deps))
 	}, options...)
 }

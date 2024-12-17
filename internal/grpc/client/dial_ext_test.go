@@ -102,7 +102,9 @@ func TestRetryPolicy(t *testing.T) {
 		})
 	})
 
-	repo, _ := gittest.CreateRepository(t, ctx, cfg)
+	repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipSnapshotInvalidation: true,
+	})
 
 	conn, err := client.Dial(ctx, cfg.SocketPath)
 	require.NoError(t, err)
