@@ -41,7 +41,7 @@ func (cvh *cgroupV1Handler) setupParent(parentResources *specs.LinuxResources) e
 	if _, err := cgroup1.New(
 		cgroup1.StaticPath(cvh.currentProcessCgroup()),
 		parentResources,
-		cgroup1.WithHiearchy(cvh.hierarchy),
+		cgroup1.WithHierarchy(cvh.hierarchy),
 	); err != nil {
 		return fmt.Errorf("failed creating parent cgroup: %w", err)
 	}
@@ -52,7 +52,7 @@ func (cvh *cgroupV1Handler) createCgroup(reposResources *specs.LinuxResources, c
 	_, err := cgroup1.New(
 		cgroup1.StaticPath(cgroupPath),
 		reposResources,
-		cgroup1.WithHiearchy(cvh.hierarchy),
+		cgroup1.WithHierarchy(cvh.hierarchy),
 	)
 
 	return err
@@ -79,7 +79,7 @@ func (cvh *cgroupV1Handler) addToCgroup(pid int, cgroupPath string) error {
 func (cvh *cgroupV1Handler) loadCgroup(cgroupPath string) (cgroup1.Cgroup, error) {
 	control, err := cgroup1.Load(
 		cgroup1.StaticPath(cgroupPath),
-		cgroup1.WithHiearchy(cvh.hierarchy),
+		cgroup1.WithHierarchy(cvh.hierarchy),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading %s cgroup: %w", cgroupPath, err)
