@@ -483,7 +483,6 @@ func TestUserSquash_emptyCommit(t *testing.T) {
 
 	testhelper.NewFeatureSets(
 		featureflag.GPGSigning,
-		featureflag.TreeOIDPagination,
 	).Run(t, testUserSquashEmptyCommit)
 }
 
