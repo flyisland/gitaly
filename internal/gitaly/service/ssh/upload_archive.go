@@ -54,7 +54,7 @@ func (s *server) sshUploadArchive(stream gitalypb.SSHService_SSHUploadArchiveSer
 
 	timeoutTicker := s.uploadArchiveRequestTimeoutTickerFactory()
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	if err := s.runUploadCommand(ctx, repo, stdin, stdout, stderr, timeoutTicker, pktline.PktFlush(), gitcmd.Command{
 		Name: "upload-archive",

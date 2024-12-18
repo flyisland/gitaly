@@ -30,7 +30,7 @@ func (s *server) FetchBundle(stream gitalypb.RepositoryService_FetchBundleServer
 		return request.GetData(), err
 	})
 
-	repo := s.localrepo(firstRequest.GetRepository())
+	repo := s.localRepoFactory.Build(firstRequest.GetRepository())
 
 	// Verify that the repository actually exists.
 	if _, err := repo.Path(ctx); err != nil {

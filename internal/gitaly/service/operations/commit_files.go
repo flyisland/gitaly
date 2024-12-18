@@ -134,7 +134,7 @@ func (s *Server) UserCommitFiles(stream gitalypb.OperationService_UserCommitFile
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(header.GetRepository())
+	repo := s.localRepoFactory.Build(header.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {
@@ -716,7 +716,7 @@ func (s *Server) userCommitFiles(
 			return structerr.NewInvalidArgument("invalid expected old object ID: %w", err).WithMetadata("old_object_id", expectedOldOID)
 		}
 
-		oldRevision, err = s.localrepo(header.GetRepository()).ResolveRevision(
+		oldRevision, err = s.localRepoFactory.Build(header.GetRepository()).ResolveRevision(
 			ctx, git.Revision(fmt.Sprintf("%s^{object}", oldRevision)),
 		)
 		if err != nil {

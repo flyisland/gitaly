@@ -99,7 +99,7 @@ func (s *server) CreateFork(ctx context.Context, req *gitalypb.CreateForkRequest
 			return fmt.Errorf("fetching source repo: %w, stderr: %q", err, stderr.String())
 		}
 
-		repo := s.localrepo(repoProto)
+		repo := s.localRepoFactory.Build(repoProto)
 
 		if target, err := gitcmd.GetSymbolicRef(ctx, repo, "HEAD"); err != nil {
 			return fmt.Errorf("checking whether HEAD reference is sane: %w", err)

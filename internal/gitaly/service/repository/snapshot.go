@@ -18,7 +18,7 @@ func (s *server) GetSnapshot(in *gitalypb.GetSnapshotRequest, stream gitalypb.Re
 		return stream.Send(&gitalypb.GetSnapshotResponse{Data: p})
 	})
 
-	err := s.localrepo(in.GetRepository()).CreateSnapshot(stream.Context(), writer)
+	err := s.localRepoFactory.Build(in.GetRepository()).CreateSnapshot(stream.Context(), writer)
 	switch {
 	case errors.Is(err, localrepo.ErrSnapshotAlternates):
 		// This RPC historically does not consider an invalid alternates as a hard failure.

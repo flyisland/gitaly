@@ -51,7 +51,7 @@ func (s *server) CreateObjectPool(ctx context.Context, in *gitalypb.CreateObject
 			&gitalypb.ObjectPool{
 				Repository: poolRepo,
 			},
-			s.localrepo(in.GetOrigin()),
+			s.localRepoFactory.Build(in.GetOrigin()),
 		); err != nil {
 			return err
 		}

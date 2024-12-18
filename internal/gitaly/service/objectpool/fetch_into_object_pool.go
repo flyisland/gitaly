@@ -23,17 +23,17 @@ func (s *server) FetchIntoObjectPool(ctx context.Context, req *gitalypb.FetchInt
 		return nil, structerr.NewInvalidArgument("object pool invalid: %w", err)
 	}
 
-	origin := s.localrepo(req.GetOrigin())
+	origin := s.localRepoFactory.Build(req.GetOrigin())
 
 	if err := objectPool.FetchFromOrigin(ctx, origin, func(repo *gitalypb.Repository) *localrepo.Repo {
-		return s.localrepo(repo)
+		return s.localRepoFactory.Build(repo)
 	}); err != nil {
 		return nil, structerr.NewInternal("%w", err)
 	}
 
 	originalPoolRepo := objectPool.Repo
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		originalPoolRepo = s.localrepo(tx.OriginalRepository(&gitalypb.Repository{
+		originalPoolRepo = s.localRepoFactory.Build(tx.OriginalRepository(&gitalypb.Repository{
 			StorageName:  req.GetObjectPool().GetRepository().GetStorageName(),
 			RelativePath: req.GetObjectPool().GetRepository().GetRelativePath(),
 		}))
@@ -82,7 +82,7 @@ func (s *server) executeMaybeWithTransaction(ctx context.Context, repo *localrep
 		}
 	}()
 
-	if err := execute(s.localrepo(transaction.RewriteRepository(&gitalypb.Repository{
+	if err := execute(s.localRepoFactory.Build(transaction.RewriteRepository(&gitalypb.Repository{
 		StorageName:  repo.GetStorageName(),
 		RelativePath: repo.GetRelativePath(),
 	}))); err != nil {

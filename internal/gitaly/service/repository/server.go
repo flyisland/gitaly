@@ -39,8 +39,8 @@ type server struct {
 	backupLocator       backup.Locator
 	bundleURISink       *bundleuri.Sink
 	repositoryCounter   *counter.RepositoryCounter
-
-	licenseCache *unarycache.Cache[git.ObjectID, *gitalypb.FindLicenseResponse]
+	localRepoFactory    localrepo.Factory
+	licenseCache        *unarycache.Cache[git.ObjectID, *gitalypb.FindLicenseResponse]
 }
 
 // NewServer creates a new instance of a gRPC repo server
@@ -60,24 +60,17 @@ func NewServer(deps *service.Dependencies) gitalypb.RepositoryServiceServer {
 		backupLocator:       deps.GetBackupLocator(),
 		bundleURISink:       deps.GetBundleURISink(),
 		repositoryCounter:   deps.GetRepositoryCounter(),
-
-		licenseCache: newLicenseCache(),
+		localRepoFactory:    deps.GetRepositoryFactory(),
+		licenseCache:        newLicenseCache(),
 	}
 }
 
-func (s *server) localrepo(repo storage.Repository) *localrepo.Repo {
-	return localrepo.New(s.logger, s.locator, s.gitCmdFactory, s.catfileCache, repo)
-}
-
-func (s *server) quarantinedRepo(
-	ctx context.Context, repo *gitalypb.Repository,
-) (*quarantine.Dir, *localrepo.Repo, error) {
+func (s *server) quarantinedRepo(ctx context.Context, repo *gitalypb.Repository) (*quarantine.Dir, *localrepo.Repo, error) {
 	quarantineDir, err := quarantine.New(ctx, repo, s.logger, s.locator)
 	if err != nil {
 		return nil, nil, structerr.NewInternal("creating object quarantine: %w", err)
 	}
 
-	quarantineRepo := s.localrepo(quarantineDir.QuarantinedRepo())
-
+	quarantineRepo := s.localRepoFactory.Build(quarantineDir.QuarantinedRepo())
 	return quarantineDir, quarantineRepo, nil
 }

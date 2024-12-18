@@ -26,7 +26,7 @@ func (s *server) CheckBlobsGenerated(stream gitalypb.AnalysisService_CheckBlobsG
 	}
 
 	ctx := stream.Context()
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	reader, readerCancel, err := s.catfileCache.ObjectReader(ctx, repo)
 	if err != nil {

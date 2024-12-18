@@ -128,7 +128,7 @@ func (s *server) CreateRepositoryFromURL(ctx context.Context, req *gitalypb.Crea
 			)
 		}
 
-		repo := s.localrepo(repoProto)
+		repo := s.localRepoFactory.Build(repoProto)
 		if err := s.removeOriginInRepo(ctx, repo); err != nil {
 			return fmt.Errorf("removing origin remote: %w", err)
 		}

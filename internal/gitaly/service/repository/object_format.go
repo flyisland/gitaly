@@ -13,7 +13,7 @@ func (s *server) ObjectFormat(ctx context.Context, request *gitalypb.ObjectForma
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 
 	// Check for the path up-front so that we detect missing repositories early on.
 	if _, err := repo.Path(ctx); err != nil {

@@ -36,7 +36,7 @@ func (s *server) ApplyBfgObjectMapStream(server gitalypb.CleanupService_ApplyBfg
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(firstRequest.GetRepository())
+	repo := s.localRepoFactory.Build(firstRequest.GetRepository())
 	reader := &bfgStreamReader{firstRequest: firstRequest, server: server}
 	chunker := chunk.New(&bfgStreamWriter{server: server})
 

@@ -18,7 +18,7 @@ func (s *server) GenerateBundleURI(ctx context.Context, req *gitalypb.GenerateBu
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	if err := s.bundleURISink.Generate(ctx, repo); err != nil {
 		return nil, structerr.NewInternal("generate bundle: %w", err)

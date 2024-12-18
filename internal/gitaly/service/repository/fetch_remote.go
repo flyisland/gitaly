@@ -93,7 +93,7 @@ func (s *server) fetchRemoteAtomic(ctx context.Context, req *gitalypb.FetchRemot
 		return false, false, fmt.Errorf("creating quarantine directory: %w", err)
 	}
 
-	quarantineRepo := s.localrepo(quarantineDir.QuarantinedRepo())
+	quarantineRepo := s.localRepoFactory.Build(quarantineDir.QuarantinedRepo())
 	if err := quarantineRepo.FetchRemote(ctx, "inmemory", opts); err != nil {
 		// When `git-fetch(1)` fails to apply all reference updates successfully, the command
 		// returns `exit status 1`. Despite this error, successful reference updates should still be

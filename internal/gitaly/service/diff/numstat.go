@@ -17,7 +17,7 @@ func (s *server) DiffStats(in *gitalypb.DiffStatsRequest, stream gitalypb.DiffSe
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	var batch []*gitalypb.DiffStats
 	cmd, err := repo.Exec(stream.Context(), gitcmd.Command{

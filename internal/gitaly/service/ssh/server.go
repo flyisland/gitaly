@@ -4,8 +4,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/bundleuri"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook"
@@ -24,8 +22,6 @@ type server struct {
 	logger                                   log.Logger
 	cfg                                      config.Cfg
 	locator                                  storage.Locator
-	gitCmdFactory                            gitcmd.CommandFactory
-	catfileCache                             catfile.Cache
 	txManager                                transaction.Manager
 	txRegistry                               *storagemgr.TransactionRegistry
 	hookManager                              hook.Manager
@@ -36,20 +32,19 @@ type server struct {
 	backupLocator                            backup.Locator
 	backupSink                               *backup.Sink
 	bundleURISink                            *bundleuri.Sink
+	localRepoFactory                         localrepo.Factory
 }
 
 // NewServer creates a new instance of a grpc SSHServer
 func NewServer(deps *service.Dependencies, serverOpts ...ServerOpt) gitalypb.SSHServiceServer {
 	s := &server{
-		logger:        deps.GetLogger(),
-		cfg:           deps.GetCfg(),
-		locator:       deps.GetLocator(),
-		gitCmdFactory: deps.GetGitCmdFactory(),
-		catfileCache:  deps.GetCatfileCache(),
-		txManager:     deps.GetTxManager(),
-		txRegistry:    deps.GetTransactionRegistry(),
-		hookManager:   deps.GetHookManager(),
-		updater:       deps.GetUpdaterWithHooks(),
+		logger:      deps.GetLogger(),
+		cfg:         deps.GetCfg(),
+		locator:     deps.GetLocator(),
+		txManager:   deps.GetTxManager(),
+		txRegistry:  deps.GetTransactionRegistry(),
+		hookManager: deps.GetHookManager(),
+		updater:     deps.GetUpdaterWithHooks(),
 		uploadPackRequestTimeoutTickerFactory: func() helper.Ticker {
 			return helper.NewTimerTicker(deps.Cfg.Timeout.UploadPackNegotiation.Duration())
 		},
@@ -60,9 +55,10 @@ func NewServer(deps *service.Dependencies, serverOpts ...ServerOpt) gitalypb.SSH
 			prometheus.CounterOpts{},
 			[]string{"git_negotiation_feature"},
 		),
-		backupLocator: deps.GetBackupLocator(),
-		backupSink:    deps.GetBackupSink(),
-		bundleURISink: deps.GetBundleURISink(),
+		backupLocator:    deps.GetBackupLocator(),
+		backupSink:       deps.GetBackupSink(),
+		bundleURISink:    deps.GetBundleURISink(),
+		localRepoFactory: deps.GetRepositoryFactory(),
 	}
 
 	for _, serverOpt := range serverOpts {
@@ -94,8 +90,4 @@ func WithPackfileNegotiationMetrics(c *prometheus.CounterVec) ServerOpt {
 	return func(s *server) {
 		s.packfileNegotiationMetrics = c
 	}
-}
-
-func (s *server) localrepo(repo storage.Repository) *localrepo.Repo {
-	return localrepo.New(s.logger, s.locator, s.gitCmdFactory, s.catfileCache, repo)
 }

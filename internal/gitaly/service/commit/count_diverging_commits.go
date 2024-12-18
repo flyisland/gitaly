@@ -20,7 +20,7 @@ func (s *server) CountDivergingCommits(ctx context.Context, req *gitalypb.CountD
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 	from, to := string(req.GetFrom()), string(req.GetTo())
 	maxCount := int(req.GetMaxCount())
 

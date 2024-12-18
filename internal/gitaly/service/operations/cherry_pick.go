@@ -142,7 +142,7 @@ func (s *Server) UserCherryPick(ctx context.Context, req *gitalypb.UserCherryPic
 			return nil, structerr.NewInvalidArgument("invalid expected old object ID: %w", err).
 				WithMetadata("old_object_id", expectedOldOID)
 		}
-		oldrev, err = s.localrepo(req.GetRepository()).ResolveRevision(
+		oldrev, err = s.localRepoFactory.Build(req.GetRepository()).ResolveRevision(
 			ctx, git.Revision(fmt.Sprintf("%s^{object}", oldrev)),
 		)
 		if err != nil {

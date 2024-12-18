@@ -7,6 +7,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/manager"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	gitalyhook "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook/updateref"
@@ -49,6 +50,7 @@ type Dependencies struct {
 	BundleURISink           *bundleuri.Sink
 	ProcReceiveRegistry     *gitalyhook.ProcReceiveRegistry
 	BundleGenerationManager *bundleuri.GenerationManager
+	LocalRepositoryFactory  localrepo.Factory
 }
 
 // GetLogger returns the logger.
@@ -164,4 +166,9 @@ func (dc *Dependencies) GetBundleURISink() *bundleuri.Sink {
 // GetProcReceiveRegistry returns the ProcReceiveRegistry.
 func (dc *Dependencies) GetProcReceiveRegistry() *gitalyhook.ProcReceiveRegistry {
 	return dc.ProcReceiveRegistry
+}
+
+// GetRepositoryFactory returns the RepositoryFactory
+func (dc *Dependencies) GetRepositoryFactory() localrepo.Factory {
+	return dc.LocalRepositoryFactory
 }

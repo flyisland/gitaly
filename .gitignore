@@ -8,3 +8,9 @@
 # Configuration and runtime data
 /config.mak
 /*.toml
+
+## macOS
+.DS_Store
+
+## IDE
+.idea

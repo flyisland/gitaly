@@ -16,8 +16,7 @@ func (s *server) GetObjectPool(ctx context.Context, in *gitalypb.GetObjectPoolRe
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repository)
-
+	repo := s.localRepoFactory.Build(repository)
 	objectPool, err := objectpool.FromRepo(ctx, s.logger, s.locator, s.gitCmdFactory, s.catfileCache, s.txManager, s.housekeepingManager, repo)
 	if err != nil && !errors.Is(err, objectpool.ErrAlternateObjectDirNotExist) {
 		s.logger.

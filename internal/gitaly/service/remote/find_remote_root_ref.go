@@ -37,7 +37,7 @@ func (s *server) findRemoteRootRefCmd(ctx context.Context, request *gitalypb.Fin
 		})
 	}
 
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 
 	return repo.Exec(ctx,
 		gitcmd.Command{

@@ -13,7 +13,7 @@ func (s *server) FindDefaultBranchName(ctx context.Context, in *gitalypb.FindDef
 	if err := s.locator.ValidateRepository(ctx, repository); err != nil {
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	if in.GetHeadOnly() {
 		head, err := repo.HeadReference(ctx)

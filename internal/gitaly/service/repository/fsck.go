@@ -15,7 +15,7 @@ func (s *server) Fsck(ctx context.Context, req *gitalypb.FsckRequest) (*gitalypb
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(repoProto)
+	repo := s.localRepoFactory.Build(repoProto)
 
 	var output strings.Builder
 	cmd, err := repo.Exec(ctx,

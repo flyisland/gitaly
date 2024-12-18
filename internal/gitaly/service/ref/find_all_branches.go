@@ -21,7 +21,7 @@ func (s *server) FindAllBranches(in *gitalypb.FindAllBranchesRequest, stream git
 }
 
 func (s *server) findAllBranches(in *gitalypb.FindAllBranchesRequest, stream gitalypb.RefService_FindAllBranchesServer) error {
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	args := []gitcmd.Option{
 		// %00 inserts the null character into the output (see for-each-ref docs)

@@ -28,7 +28,7 @@ func (s *server) ListFiles(in *gitalypb.ListFilesRequest, stream gitalypb.Commit
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 	if _, err := repo.Path(ctx); err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func (s *server) ListFiles(in *gitalypb.ListFilesRequest, stream gitalypb.Commit
 		revision = defaultBranch.String()
 	}
 
-	contained, err := s.localrepo(repo).HasRevision(ctx, git.Revision(revision))
+	contained, err := repo.HasRevision(ctx, git.Revision(revision))
 	if err != nil {
 		return structerr.NewInternal("%w", err)
 	}

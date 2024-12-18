@@ -15,7 +15,7 @@ func (s *server) OptimizeRepository(ctx context.Context, in *gitalypb.OptimizeRe
 		return nil, err
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	var strategyConstructor housekeepingmgr.OptimizationStrategyConstructor
 	switch in.GetStrategy() {

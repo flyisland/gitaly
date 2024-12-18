@@ -35,7 +35,7 @@ func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.D
 		return structerr.NewInternal("creating quarantine directory: %w", err)
 	}
 
-	repo := s.localrepo(quarantineDir.QuarantinedRepo())
+	repo := s.localRepoFactory.Build(quarantineDir.QuarantinedRepo())
 
 	if _, err := repo.WriteBlob(ctx, strings.NewReader(""), localrepo.WriteBlobConfig{}); err != nil {
 		return structerr.NewInternal("writing empty blob: %w", err)

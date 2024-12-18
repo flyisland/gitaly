@@ -100,7 +100,7 @@ func (s *Server) UserRebaseToRef(ctx context.Context, request *gitalypb.UserReba
 		return nil, structerr.NewInternal("migrating quarantined objects: %w", err)
 	}
 
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 	if err := repo.UpdateRef(ctx, git.ReferenceName(request.GetTargetRef()), rebasedOID, oldTargetOID); err != nil {
 		return nil, structerr.NewFailedPrecondition("could not update %s. Please refresh and try again", string(request.GetTargetRef()))
 	}

@@ -26,7 +26,7 @@ func (s *server) WriteRef(ctx context.Context, req *gitalypb.WriteRefRequest) (*
 }
 
 func (s *server) writeRef(ctx context.Context, req *gitalypb.WriteRefRequest) error {
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	if string(req.GetRef()) == "HEAD" {
 		if err := repo.SetDefaultBranch(ctx, s.txManager, git.ReferenceName(req.GetRevision())); err != nil {

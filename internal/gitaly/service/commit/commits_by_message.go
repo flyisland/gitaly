@@ -41,7 +41,7 @@ func (s *server) CommitsByMessage(in *gitalypb.CommitsByMessageRequest, stream g
 func (s *server) commitsByMessage(in *gitalypb.CommitsByMessageRequest, stream gitalypb.CommitService_CommitsByMessageServer) error {
 	ctx := stream.Context()
 	sender := &commitsByMessageSender{stream: stream}
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	gitLogExtraOptions := []gitcmd.Option{
 		gitcmd.Flag{Name: "--grep=" + in.GetQuery()},

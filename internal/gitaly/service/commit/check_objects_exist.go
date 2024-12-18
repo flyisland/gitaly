@@ -36,7 +36,7 @@ func (s *server) CheckObjectsExist(
 
 	objectInfoReader, cancel, err := s.catfileCache.ObjectInfoReader(
 		ctx,
-		s.localrepo(repository),
+		s.localRepoFactory.Build(repository),
 	)
 	if err != nil {
 		return structerr.NewInternal("creating object info reader: %w", err)

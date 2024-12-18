@@ -19,6 +19,7 @@ type server struct {
 	locator          storage.Locator
 	gitCmdFactory    gitcmd.CommandFactory
 	catfileCache     catfile.Cache
+	localRepoFactory localrepo.Factory
 }
 
 // NewServer creates a new instance of a gRPC DiffServer
@@ -29,9 +30,6 @@ func NewServer(deps *service.Dependencies) gitalypb.DiffServiceServer {
 		locator:          deps.GetLocator(),
 		gitCmdFactory:    deps.GetGitCmdFactory(),
 		catfileCache:     deps.GetCatfileCache(),
+		localRepoFactory: deps.GetRepositoryFactory(),
 	}
-}
-
-func (s *server) localrepo(repo storage.Repository) *localrepo.Repo {
-	return localrepo.New(s.logger, s.locator, s.gitCmdFactory, s.catfileCache, repo)
 }

@@ -97,7 +97,7 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 		flags = append(flags, gitcmd.Flag{Name: "-c"})
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	cmd, err := repo.Exec(stream.Context(), gitcmd.Command{
 		Name:  "diff-tree",
@@ -331,7 +331,7 @@ func (s *server) validateFindChangedPathsRequestParams(ctx context.Context, in *
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	gitRepo := s.localrepo(repository)
+	gitRepo := s.localRepoFactory.Build(repository)
 
 	if len(in.GetCommits()) > 0 { //nolint:staticcheck
 		if len(in.GetRequests()) > 0 {

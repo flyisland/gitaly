@@ -21,7 +21,7 @@ func (s *server) GetCommitSignatures(request *gitalypb.GetCommitSignaturesReques
 		return err
 	}
 
-	repo := s.localrepo(request.GetRepository())
+	repo := s.localRepoFactory.Build(request.GetRepository())
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

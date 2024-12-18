@@ -18,7 +18,7 @@ func (s *server) FindBranch(ctx context.Context, req *gitalypb.FindBranchRequest
 		return nil, structerr.NewInvalidArgument("Branch name cannot be empty")
 	}
 
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	branchName := git.NewReferenceNameFromBranchName(string(req.GetName()))
 	branchRef, err := repo.GetReference(ctx, branchName)

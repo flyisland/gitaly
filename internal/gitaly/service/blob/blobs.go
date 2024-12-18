@@ -40,7 +40,7 @@ func (s *server) ListBlobs(req *gitalypb.ListBlobsRequest, stream gitalypb.BlobS
 	}
 
 	ctx := stream.Context()
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 
 	chunker := chunk.New(&blobSender{
 		send: func(blobs []*gitalypb.ListBlobsResponse_Blob) error {
@@ -244,7 +244,7 @@ func (s *server) ListAllBlobs(req *gitalypb.ListAllBlobsRequest, stream gitalypb
 		return err
 	}
 
-	repo := s.localrepo(repository)
+	repo := s.localRepoFactory.Build(repository)
 
 	chunker := chunk.New(&allBlobsSender{
 		send: func(blobs []*gitalypb.ListAllBlobsResponse_Blob) error {

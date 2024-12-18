@@ -20,7 +20,7 @@ func (s *server) GetInfoAttributes(in *gitalypb.GetInfoAttributesRequest, stream
 		return structerr.NewInvalidArgument("%w", err)
 	}
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 	var stderr strings.Builder
 	// Call cat-file -p HEAD:.gitattributes instead of cat info/attributes
 	catFileCmd, err := repo.Exec(ctx, gitcmd.Command{

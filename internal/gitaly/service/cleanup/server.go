@@ -13,24 +13,22 @@ import (
 
 type server struct {
 	gitalypb.UnimplementedCleanupServiceServer
-	logger        log.Logger
-	locator       storage.Locator
-	gitCmdFactory gitcmd.CommandFactory
-	catfileCache  catfile.Cache
-	txManager     transaction.Manager
+	logger           log.Logger
+	locator          storage.Locator
+	gitCmdFactory    gitcmd.CommandFactory
+	catfileCache     catfile.Cache
+	txManager        transaction.Manager
+	localRepoFactory localrepo.Factory
 }
 
 // NewServer creates a new instance of a grpc CleanupServer
 func NewServer(deps *service.Dependencies) gitalypb.CleanupServiceServer {
 	return &server{
-		logger:        deps.GetLogger(),
-		locator:       deps.GetLocator(),
-		gitCmdFactory: deps.GetGitCmdFactory(),
-		catfileCache:  deps.GetCatfileCache(),
-		txManager:     deps.GetTxManager(),
+		logger:           deps.GetLogger(),
+		locator:          deps.GetLocator(),
+		gitCmdFactory:    deps.GetGitCmdFactory(),
+		catfileCache:     deps.GetCatfileCache(),
+		txManager:        deps.GetTxManager(),
+		localRepoFactory: deps.GetRepositoryFactory(),
 	}
-}
-
-func (s *server) localrepo(repo storage.Repository) *localrepo.Repo {
-	return localrepo.New(s.logger, s.locator, s.gitCmdFactory, s.catfileCache, repo)
 }

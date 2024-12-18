@@ -23,6 +23,7 @@ type server struct {
 	node                storage.Node
 	housekeepingManager housekeepingmgr.Manager
 	repositoryCounter   *counter.RepositoryCounter
+	localRepoFactory    localrepo.Factory
 }
 
 // NewServer creates a new instance of a gRPC repo server
@@ -36,9 +37,6 @@ func NewServer(deps *service.Dependencies) gitalypb.ObjectPoolServiceServer {
 		node:                deps.GetNode(),
 		housekeepingManager: deps.GetHousekeepingManager(),
 		repositoryCounter:   deps.GetRepositoryCounter(),
+		localRepoFactory:    deps.GetRepositoryFactory(),
 	}
-}
-
-func (s *server) localrepo(repo storage.Repository) *localrepo.Repo {
-	return localrepo.New(s.logger, s.locator, s.gitCmdFactory, s.catfileCache, repo)
 }

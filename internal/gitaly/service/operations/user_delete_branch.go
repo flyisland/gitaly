@@ -34,7 +34,7 @@ func (s *Server) UserDeleteBranch(ctx context.Context, req *gitalypb.UserDeleteB
 	}
 	referenceName := git.NewReferenceNameFromBranchName(string(req.GetBranchName()))
 
-	repo := s.localrepo(req.GetRepository())
+	repo := s.localRepoFactory.Build(req.GetRepository())
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("detecting object format: %w", err)

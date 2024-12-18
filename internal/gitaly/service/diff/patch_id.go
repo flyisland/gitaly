@@ -19,7 +19,7 @@ func (s *server) GetPatchID(ctx context.Context, in *gitalypb.GetPatchIDRequest)
 
 	var diffCmdStderr strings.Builder
 
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	diffCmd, err := repo.Exec(ctx,
 		gitcmd.Command{

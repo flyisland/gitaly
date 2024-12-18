@@ -13,24 +13,22 @@ import (
 
 type server struct {
 	gitalypb.UnimplementedCommitServiceServer
-	logger        log.Logger
-	locator       storage.Locator
-	gitCmdFactory gitcmd.CommandFactory
-	catfileCache  catfile.Cache
-	cfg           config.Cfg
+	logger           log.Logger
+	locator          storage.Locator
+	gitCmdFactory    gitcmd.CommandFactory
+	catfileCache     catfile.Cache
+	cfg              config.Cfg
+	localRepoFactory localrepo.Factory
 }
 
 // NewServer creates a new instance of a grpc CommitServiceServer
 func NewServer(deps *service.Dependencies) gitalypb.CommitServiceServer {
 	return &server{
-		logger:        deps.GetLogger(),
-		locator:       deps.GetLocator(),
-		gitCmdFactory: deps.GetGitCmdFactory(),
-		catfileCache:  deps.GetCatfileCache(),
-		cfg:           deps.GetCfg(),
+		logger:           deps.GetLogger(),
+		locator:          deps.GetLocator(),
+		gitCmdFactory:    deps.GetGitCmdFactory(),
+		catfileCache:     deps.GetCatfileCache(),
+		cfg:              deps.GetCfg(),
+		localRepoFactory: deps.GetRepositoryFactory(),
 	}
-}
-
-func (s *server) localrepo(repo storage.Repository) *localrepo.Repo {
-	return localrepo.New(s.logger, s.locator, s.gitCmdFactory, s.catfileCache, repo)
 }

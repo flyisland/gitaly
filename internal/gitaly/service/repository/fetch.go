@@ -104,7 +104,7 @@ func (s *server) FetchSourceBranch(ctx context.Context, req *gitalypb.FetchSourc
 		return nil, structerr.NewInternal("migrating quarantined objects: %w", err)
 	}
 
-	origTargetRepo := s.localrepo(req.GetRepository())
+	origTargetRepo := s.localRepoFactory.Build(req.GetRepository())
 	if err := origTargetRepo.UpdateRef(ctx,
 		git.ReferenceName(req.GetTargetRef()),
 		sourceOid,

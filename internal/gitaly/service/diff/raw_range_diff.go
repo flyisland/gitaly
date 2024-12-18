@@ -25,7 +25,7 @@ func (s *server) RawRangeDiff(in *gitalypb.RawRangeDiffRequest, stream gitalypb.
 	}
 
 	ctx := stream.Context()
-	repo := s.localrepo(in.GetRepository())
+	repo := s.localRepoFactory.Build(in.GetRepository())
 
 	var flags []gitcmd.Option
 	objectHash, err := repo.ObjectHash(ctx)
@@ -56,7 +56,7 @@ func (s *server) RawRangeDiff(in *gitalypb.RawRangeDiffRequest, stream gitalypb.
 		return stream.Send(&gitalypb.RawRangeDiffResponse{Data: p})
 	})
 
-	return sendRawRangeDiffOutput(ctx, s.localrepo(in.GetRepository()), sw, subCmd)
+	return sendRawRangeDiffOutput(ctx, repo, sw, subCmd)
 }
 
 func validateRawRangeDiffRequest(ctx context.Context, locator storage.Locator, in *gitalypb.RawRangeDiffRequest) error {
