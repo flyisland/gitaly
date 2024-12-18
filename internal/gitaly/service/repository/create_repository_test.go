@@ -269,6 +269,6 @@ func TestCreateRepository_transactional(t *testing.T) {
 	_, err = client.CreateRepository(ctx, &gitalypb.CreateRepositoryRequest{Repository: repo})
 	require.NoError(t, err)
 
-	require.DirExists(t, filepath.Join(cfg.Storages[0].Path, gittest.GetReplicaPath(t, ctx, cfg, repo)))
+	require.True(t, gittest.RepositoryExists(t, ctx, gittest.DialService(t, ctx, cfg), repo))
 	require.Equal(t, 2, len(txManager.Votes()), "expected transactional vote")
 }
