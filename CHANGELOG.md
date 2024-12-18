@@ -1,5 +1,15 @@
 # Gitaly changelog
 
+## 17.7.0 (2024-12-18)
+
+### Added (1 change)
+
+- [Add support for .git-blame-ignore-revs](gitlab-org/gitaly@91b05084ba8409c45e37adafc72330d1c934d907) ([merge request](gitlab-org/gitaly!7459))
+
+### Changed (1 change)
+
+- [gitaly: Query available archived WAL entries in recovery status](gitlab-org/gitaly@a8b11d9ce0a46d5d3a170bca355d665b373f1f9e) ([merge request](gitlab-org/gitaly!7404))
+
 ## 17.6.2 (2024-12-10)
 
 No changes.
