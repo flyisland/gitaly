@@ -1,7 +1,6 @@
 package commit
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
@@ -26,12 +24,8 @@ import (
 )
 
 func TestGetTreeEntries(t *testing.T) {
-	testhelper.NewFeatureSets(featureflag.TreeOIDPagination).
-		Run(t, testGetTreeEntries)
-}
-
-func testGetTreeEntries(t *testing.T, ctx context.Context) {
 	t.Parallel()
+	ctx := testhelper.Context(t)
 
 	type TestData struct {
 		cfg    config.Cfg
@@ -1332,28 +1326,23 @@ func testGetTreeEntries(t *testing.T, ctx context.Context) {
 				require.NoError(t, err)
 				testhelper.ProtoEqual(t, resp, &gitalypb.WriteRefResponse{})
 
-				expectedError := status.Error(codes.Internal, fmt.Sprintf("could not find starting OID: %s", "dir1/file2"))
-				var expectedTreeEntries []*gitalypb.TreeEntry
-				if featureflag.TreeOIDPagination.IsEnabled(ctx) {
-					expectedError = nil
-					expectedTreeEntries = []*gitalypb.TreeEntry{
-						{
-							Oid:  dir2OID.String(),
-							Path: []byte("dir2"),
-							Type: gitalypb.TreeEntry_TREE,
-							Mode: 0o40000,
-							// CommitOid field is currently being evaluated as revision could be a branch name or a commitID,
-							// for more info refer to https://gitlab.com/gitlab-org/gitaly/-/issues/6205
-							CommitOid: "main",
-						},
-						{
-							Oid:       file3OID.String(),
-							Path:      []byte("dir2/file3"),
-							Type:      gitalypb.TreeEntry_BLOB,
-							Mode:      0o100644,
-							CommitOid: "main",
-						},
-					}
+				expectedTreeEntries := []*gitalypb.TreeEntry{
+					{
+						Oid:  dir2OID.String(),
+						Path: []byte("dir2"),
+						Type: gitalypb.TreeEntry_TREE,
+						Mode: 0o40000,
+						// CommitOid field is currently being evaluated as revision could be a branch name or a commitID,
+						// for more info refer to https://gitlab.com/gitlab-org/gitaly/-/issues/6205
+						CommitOid: "main",
+					},
+					{
+						Oid:       file3OID.String(),
+						Path:      []byte("dir2/file3"),
+						Type:      gitalypb.TreeEntry_BLOB,
+						Mode:      0o100644,
+						CommitOid: "main",
+					},
 				}
 
 				return setupData{
@@ -1367,7 +1356,6 @@ func testGetTreeEntries(t *testing.T, ctx context.Context) {
 							Limit:     2,
 						},
 					},
-					expectedErr:         expectedError,
 					expectedTreeEntries: expectedTreeEntries,
 				}
 			},
