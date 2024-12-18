@@ -212,12 +212,12 @@ func TestHandshaker_idempotentClose(t *testing.T) {
 }
 
 type mockSSHService struct {
-	sshUploadPackFunc func(gitalypb.SSHService_SSHUploadPackServer) error
-	*gitalypb.UnimplementedSSHServiceServer
+	sshReceivePackFunc func(gitalypb.SSHService_SSHReceivePackServer) error
+	gitalypb.UnimplementedSSHServiceServer
 }
 
-func (m mockSSHService) SSHUploadPack(stream gitalypb.SSHService_SSHUploadPackServer) error {
-	return m.sshUploadPackFunc(stream)
+func (m mockSSHService) SSHReceivePack(stream gitalypb.SSHService_SSHReceivePackServer) error {
+	return m.sshReceivePackFunc(stream)
 }
 
 func Benchmark(b *testing.B) {
@@ -246,7 +246,7 @@ func Benchmark(b *testing.B) {
 
 					srv := grpc.NewServer(serverOpts...)
 					gitalypb.RegisterSSHServiceServer(srv, mockSSHService{
-						sshUploadPackFunc: func(stream gitalypb.SSHService_SSHUploadPackServer) error {
+						sshReceivePackFunc: func(stream gitalypb.SSHService_SSHReceivePackServer) error {
 							for {
 								_, err := stream.Recv()
 								if err != nil {
@@ -272,16 +272,15 @@ func Benchmark(b *testing.B) {
 						}
 					}
 
-					cc, err := grpc.DialContext(ctx, ln.Addr().String(), opts...)
+					cc, err := grpc.NewClient(ln.Addr().String(), opts...)
 					require.NoError(b, err)
 
 					defer cc.Close()
 
-					//nolint:staticcheck
-					client, err := gitalypb.NewSSHServiceClient(cc).SSHUploadPack(ctx)
+					client, err := gitalypb.NewSSHServiceClient(cc).SSHReceivePack(ctx)
 					require.NoError(b, err)
 
-					request := &gitalypb.SSHUploadPackRequest{Stdin: make([]byte, messageSize)}
+					request := &gitalypb.SSHReceivePackRequest{Stdin: make([]byte, messageSize)}
 					b.SetBytes(messageSize)
 
 					b.ResetTimer()

@@ -104,7 +104,7 @@ func TestConnectivity(t *testing.T) {
 		},
 	}
 
-	payload, err := protojson.Marshal(&gitalypb.SSHUploadPackRequest{
+	payload, err := protojson.Marshal(&gitalypb.SSHUploadPackWithSidechannelRequest{
 		Repository: repo,
 	})
 

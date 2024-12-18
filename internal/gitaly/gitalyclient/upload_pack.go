@@ -7,41 +7,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/stream"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"gitlab.com/gitlab-org/gitaly/v16/streamio"
 	"google.golang.org/grpc"
 )
-
-// UploadPack proxies an SSH git-upload-pack (git fetch) session to Gitaly
-func UploadPack(ctx context.Context, conn *grpc.ClientConn, stdin io.Reader, stdout, stderr io.Writer, req *gitalypb.SSHUploadPackRequest) (int32, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	ssh := gitalypb.NewSSHServiceClient(conn)
-	//nolint:staticcheck
-	uploadPackStream, err := ssh.SSHUploadPack(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	if err = uploadPackStream.Send(req); err != nil {
-		return 0, err
-	}
-
-	inWriter := streamio.NewWriter(func(p []byte) error {
-		return uploadPackStream.Send(&gitalypb.SSHUploadPackRequest{Stdin: p})
-	})
-
-	return stream.Handler(func() (stream.StdoutStderrResponse, error) {
-		return uploadPackStream.Recv()
-	}, func(errC chan error) {
-		_, errRecv := io.Copy(inWriter, stdin)
-		if err := uploadPackStream.CloseSend(); err != nil && errRecv == nil {
-			errC <- err
-		} else {
-			errC <- errRecv
-		}
-	}, stdout, stderr)
-}
 
 // UploadPackResult wraps ExitCode and PackfileNegotiationStatistics.
 type UploadPackResult struct {

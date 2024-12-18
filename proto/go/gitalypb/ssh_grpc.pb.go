@@ -19,7 +19,6 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SSHService_SSHUploadPack_FullMethodName                = "/gitaly.SSHService/SSHUploadPack"
 	SSHService_SSHUploadPackWithSidechannel_FullMethodName = "/gitaly.SSHService/SSHUploadPackWithSidechannel"
 	SSHService_SSHReceivePack_FullMethodName               = "/gitaly.SSHService/SSHReceivePack"
 	SSHService_SSHUploadArchive_FullMethodName             = "/gitaly.SSHService/SSHUploadArchive"
@@ -31,11 +30,6 @@ const (
 //
 // SSHService is a service that provides RPCs required for SSH-based Git clones.
 type SSHServiceClient interface {
-	// Deprecated: Do not use.
-	// SSHUploadPack is an RPC to forward git-upload-pack(1) to Gitaly for SSH sessions. The RPC uses
-	// bidirectional streaming so the client can stream stdin and the server can stream stdout and
-	// stderr for git-upload-pack(1).
-	SSHUploadPack(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SSHUploadPackRequest, SSHUploadPackResponse], error)
 	// SSHUploadPackWithSidechannel is an RPC to forward git-upload-pack(1) to Gitaly for SSH
 	// sessions, via sidechannels. Sidechannel connections sidestep gRPC Protobuf message overhead and
 	// allow higher throughput of bulk data transfers. The stdin, stdout, and stderr for the
@@ -59,20 +53,6 @@ func NewSSHServiceClient(cc grpc.ClientConnInterface) SSHServiceClient {
 	return &sSHServiceClient{cc}
 }
 
-// Deprecated: Do not use.
-func (c *sSHServiceClient) SSHUploadPack(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SSHUploadPackRequest, SSHUploadPackResponse], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &SSHService_ServiceDesc.Streams[0], SSHService_SSHUploadPack_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[SSHUploadPackRequest, SSHUploadPackResponse]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type SSHService_SSHUploadPackClient = grpc.BidiStreamingClient[SSHUploadPackRequest, SSHUploadPackResponse]
-
 func (c *sSHServiceClient) SSHUploadPackWithSidechannel(ctx context.Context, in *SSHUploadPackWithSidechannelRequest, opts ...grpc.CallOption) (*SSHUploadPackWithSidechannelResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SSHUploadPackWithSidechannelResponse)
@@ -85,7 +65,7 @@ func (c *sSHServiceClient) SSHUploadPackWithSidechannel(ctx context.Context, in 
 
 func (c *sSHServiceClient) SSHReceivePack(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SSHReceivePackRequest, SSHReceivePackResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &SSHService_ServiceDesc.Streams[1], SSHService_SSHReceivePack_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &SSHService_ServiceDesc.Streams[0], SSHService_SSHReceivePack_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +78,7 @@ type SSHService_SSHReceivePackClient = grpc.BidiStreamingClient[SSHReceivePackRe
 
 func (c *sSHServiceClient) SSHUploadArchive(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SSHUploadArchiveRequest, SSHUploadArchiveResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &SSHService_ServiceDesc.Streams[2], SSHService_SSHUploadArchive_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &SSHService_ServiceDesc.Streams[1], SSHService_SSHUploadArchive_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -115,11 +95,6 @@ type SSHService_SSHUploadArchiveClient = grpc.BidiStreamingClient[SSHUploadArchi
 //
 // SSHService is a service that provides RPCs required for SSH-based Git clones.
 type SSHServiceServer interface {
-	// Deprecated: Do not use.
-	// SSHUploadPack is an RPC to forward git-upload-pack(1) to Gitaly for SSH sessions. The RPC uses
-	// bidirectional streaming so the client can stream stdin and the server can stream stdout and
-	// stderr for git-upload-pack(1).
-	SSHUploadPack(grpc.BidiStreamingServer[SSHUploadPackRequest, SSHUploadPackResponse]) error
 	// SSHUploadPackWithSidechannel is an RPC to forward git-upload-pack(1) to Gitaly for SSH
 	// sessions, via sidechannels. Sidechannel connections sidestep gRPC Protobuf message overhead and
 	// allow higher throughput of bulk data transfers. The stdin, stdout, and stderr for the
@@ -143,9 +118,6 @@ type SSHServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSSHServiceServer struct{}
 
-func (UnimplementedSSHServiceServer) SSHUploadPack(grpc.BidiStreamingServer[SSHUploadPackRequest, SSHUploadPackResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method SSHUploadPack not implemented")
-}
 func (UnimplementedSSHServiceServer) SSHUploadPackWithSidechannel(context.Context, *SSHUploadPackWithSidechannelRequest) (*SSHUploadPackWithSidechannelResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SSHUploadPackWithSidechannel not implemented")
 }
@@ -175,13 +147,6 @@ func RegisterSSHServiceServer(s grpc.ServiceRegistrar, srv SSHServiceServer) {
 	}
 	s.RegisterService(&SSHService_ServiceDesc, srv)
 }
-
-func _SSHService_SSHUploadPack_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(SSHServiceServer).SSHUploadPack(&grpc.GenericServerStream[SSHUploadPackRequest, SSHUploadPackResponse]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type SSHService_SSHUploadPackServer = grpc.BidiStreamingServer[SSHUploadPackRequest, SSHUploadPackResponse]
 
 func _SSHService_SSHUploadPackWithSidechannel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SSHUploadPackWithSidechannelRequest)
@@ -228,12 +193,6 @@ var SSHService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "SSHUploadPack",
-			Handler:       _SSHService_SSHUploadPack_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
 		{
 			StreamName:    "SSHReceivePack",
 			Handler:       _SSHService_SSHReceivePack_Handler,

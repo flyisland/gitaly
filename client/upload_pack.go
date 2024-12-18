@@ -9,11 +9,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// UploadPack proxies an SSH git-upload-pack (git fetch) session to Gitaly
-func UploadPack(ctx context.Context, conn *grpc.ClientConn, stdin io.Reader, stdout, stderr io.Writer, req *gitalypb.SSHUploadPackRequest) (int32, error) {
-	return gitalyclient.UploadPack(ctx, conn, stdin, stdout, stderr, req)
-}
-
 // UploadPackResult wraps ExitCode and PackfileNegotiationStatistics.
 type UploadPackResult = gitalyclient.UploadPackResult
 

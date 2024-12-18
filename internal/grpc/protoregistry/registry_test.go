@@ -125,9 +125,9 @@ func TestNewProtoRegistry(t *testing.T) {
 			"PostUploadPackWithSidechannel": OpAccessor,
 		},
 		"SSHService": {
-			"SSHReceivePack":   OpMutator,
-			"SSHUploadArchive": OpAccessor,
-			"SSHUploadPack":    OpAccessor,
+			"SSHReceivePack":               OpMutator,
+			"SSHUploadArchive":             OpAccessor,
+			"SSHUploadPackWithSidechannel": OpAccessor,
 		},
 	}
 

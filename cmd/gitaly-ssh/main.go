@@ -39,7 +39,6 @@ type gitalySSHCommand struct {
 // GITALY_PAYLOAD="{repo...}"
 // GITALY_WD="/path/to/working-directory"
 // GITALY_FEATUREFLAGS="upload_pack_filter:false,hooks_rpc:true"
-// GITALY_USE_SIDECHANNEL=1 if desired
 // gitaly-ssh upload-pack <git-garbage-x2>
 func main() {
 	logger, err := log.Configure(os.Stderr, "text", "info")
@@ -59,11 +58,7 @@ func main() {
 	var packer packFn
 	switch command {
 	case "upload-pack":
-		if useSidechannel() {
-			packer = uploadPackWithSidechannel
-		} else {
-			packer = uploadPack
-		}
+		packer = uploadPackWithSidechannel
 	case "receive-pack":
 		packer = receivePack
 	case "upload-archive":
@@ -151,11 +146,7 @@ func getConnection(ctx context.Context, url string, registry *sidechannel.Regist
 		return nil, fmt.Errorf("gitaly address can not be empty")
 	}
 
-	if useSidechannel() {
-		return sidechannel.Dial(ctx, registry, logger, url, dialOpts())
-	}
-
-	return client.Dial(ctx, url, client.WithGrpcOptions(dialOpts()))
+	return sidechannel.Dial(ctx, registry, logger, url, dialOpts())
 }
 
 func dialOpts() []grpc.DialOption {
@@ -166,5 +157,3 @@ func dialOpts() []grpc.DialOption {
 
 	return append(connOpts, client.UnaryInterceptor(), client.StreamInterceptor())
 }
-
-func useSidechannel() bool { return os.Getenv("GITALY_USE_SIDECHANNEL") == "1" }

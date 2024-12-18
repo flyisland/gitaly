@@ -416,8 +416,6 @@ func TestWithInternalFetch(t *testing.T) {
 		"CORRELATION_ID=correlation-id-1",
 		"GIT_SSH_VARIANT=simple",
 	})
-
-	require.Contains(t, commandCfg.env, "GITALY_USE_SIDECHANNEL=1")
 }
 
 func TestConfigPairsToEnvironment(t *testing.T) {

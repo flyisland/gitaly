@@ -2,7 +2,6 @@ package ssh
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -12,68 +11,14 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/stream"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"gitlab.com/gitlab-org/gitaly/v16/streamio"
 )
 
-func (s *server) SSHUploadPack(stream gitalypb.SSHService_SSHUploadPackServer) error {
-	ctx := stream.Context()
-
-	req, err := stream.Recv() // First request contains Repository only
-	if err != nil {
-		return structerr.NewInternal("%w", err)
-	}
-
-	s.logger.WithFields(log.Fields{
-		"GlRepository":     req.GetRepository().GetGlRepository(),
-		"GitConfigOptions": req.GetGitConfigOptions(),
-		"GitProtocol":      req.GetGitProtocol(),
-	}).DebugContext(ctx, "SSHUploadPack")
-
-	if err = validateFirstUploadPackRequest(ctx, s.locator, req); err != nil {
-		return structerr.NewInvalidArgument("%w", err)
-	}
-
-	stdin := streamio.NewReader(func() ([]byte, error) {
-		request, err := stream.Recv()
-		return request.GetStdin(), err
-	})
-
-	// gRPC doesn't allow concurrent writes to a stream, so we need to
-	// synchronize writing stdout and stderr.
-	var m sync.Mutex
-	stdout := streamio.NewSyncWriter(&m, func(p []byte) error {
-		return stream.Send(&gitalypb.SSHUploadPackResponse{Stdout: p})
-	})
-	stderr := streamio.NewSyncWriter(&m, func(p []byte) error {
-		return stream.Send(&gitalypb.SSHUploadPackResponse{Stderr: p})
-	})
-
-	if _, status, err := s.sshUploadPack(ctx, req, stdin, stdout, stderr); err != nil {
-		if errSend := stream.Send(&gitalypb.SSHUploadPackResponse{
-			ExitStatus: &gitalypb.ExitStatus{Value: int32(status)},
-		}); errSend != nil {
-			s.logger.WithError(errSend).ErrorContext(ctx, "send final status code")
-		}
-
-		return structerr.NewInternal("%w", err)
-	}
-
-	return nil
-}
-
-type sshUploadPackRequest interface {
-	GetRepository() *gitalypb.Repository
-	GetGitConfigOptions() []string
-	GetGitProtocol() string
-}
-
-func (s *server) sshUploadPack(ctx context.Context, req sshUploadPackRequest, stdin io.Reader, stdout, stderr io.Writer) (negotiation *stats.PackfileNegotiation, _ int, _ error) {
+func (s *server) sshUploadPack(ctx context.Context, req *gitalypb.SSHUploadPackWithSidechannelRequest, stdin io.Reader, stdout, stderr io.Writer) (negotiation *stats.PackfileNegotiation, _ int, _ error) {
 	repoProto := req.GetRepository()
 
 	repo := s.localRepoFactory.Build(repoProto)
@@ -151,17 +96,6 @@ func (s *server) sshUploadPack(ctx context.Context, req sshUploadPackRequest, st
 	}
 
 	return nil, 0, nil
-}
-
-func validateFirstUploadPackRequest(ctx context.Context, locator storage.Locator, req *gitalypb.SSHUploadPackRequest) error {
-	if err := locator.ValidateRepository(ctx, req.GetRepository()); err != nil {
-		return err
-	}
-	if req.Stdin != nil {
-		return errors.New("non-empty stdin in first request")
-	}
-
-	return nil
 }
 
 func (s *server) SSHUploadPackWithSidechannel(ctx context.Context, req *gitalypb.SSHUploadPackWithSidechannelRequest) (*gitalypb.SSHUploadPackWithSidechannelResponse, error) {
