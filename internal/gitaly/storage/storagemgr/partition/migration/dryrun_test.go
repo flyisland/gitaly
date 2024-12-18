@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
@@ -13,7 +14,16 @@ import (
 
 func TestDryRunPartition(t *testing.T) {
 	t.Parallel()
-	ctx := testhelper.Context(t)
+
+	testhelper.NewFeatureSets(featureflag.DryRunMigrations).Run(t, testDryRunPartition)
+}
+
+func testDryRunPartition(t *testing.T, ctx context.Context) {
+	t.Parallel()
+
+	if featureflag.DryRunMigrations.IsDisabled(ctx) {
+		return
+	}
 
 	rollbackCalled := false
 	p := dryRunPartition{mockPartition{
@@ -41,6 +51,12 @@ func TestDryRunPartition(t *testing.T) {
 func TestCombinedMigrations(t *testing.T) {
 	t.Parallel()
 
+	testhelper.NewFeatureSets(featureflag.DryRunMigrations).Run(t, testCombinedMigrations)
+}
+
+func testCombinedMigrations(t *testing.T, ctx context.Context) {
+	t.Parallel()
+
 	type setup struct {
 		desc             string
 		mainPartition    storagemgr.Partition
@@ -62,7 +78,9 @@ func TestCombinedMigrations(t *testing.T) {
 					},
 					runFn: func() error {
 						ch <- struct{}{}
-						ch <- struct{}{}
+						if featureflag.DryRunMigrations.IsEnabled(ctx) {
+							ch <- struct{}{}
+						}
 						return nil
 					},
 				},
@@ -86,7 +104,9 @@ func TestCombinedMigrations(t *testing.T) {
 					},
 					runFn: func() error {
 						ch <- struct{}{}
-						ch <- struct{}{}
+						if featureflag.DryRunMigrations.IsEnabled(ctx) {
+							ch <- struct{}{}
+						}
 						return nil
 					},
 				},
@@ -110,7 +130,9 @@ func TestCombinedMigrations(t *testing.T) {
 					},
 					runFn: func() error {
 						ch <- struct{}{}
-						ch <- struct{}{}
+						if featureflag.DryRunMigrations.IsEnabled(ctx) {
+							ch <- struct{}{}
+						}
 						return nil
 					},
 				},
@@ -136,7 +158,9 @@ func TestCombinedMigrations(t *testing.T) {
 					},
 					runFn: func() error {
 						ch <- struct{}{}
-						ch <- struct{}{}
+						if featureflag.DryRunMigrations.IsEnabled(ctx) {
+							ch <- struct{}{}
+						}
 						return nil
 					},
 				},
@@ -155,7 +179,6 @@ func TestCombinedMigrations(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := testhelper.Context(t)
 			done := make(chan struct{})
 
 			logger := testhelper.NewLogger(t)

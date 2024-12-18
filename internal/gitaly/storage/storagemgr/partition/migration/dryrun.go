@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -67,22 +68,25 @@ func newCombinedMigrationPartition(partition storagemgr.Partition, logger log.Lo
 // Begin here is overrided to run both the dry-run migrations and the regular migraitons.
 // For the dry-run migrations, we simply invoke it in a go-routine and log any failures.
 func (c *combinedMigrationPartition) Begin(ctx context.Context, opts storage.BeginOptions) (storage.Transaction, error) {
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	if featureflag.DryRunMigrations.IsEnabled(ctx) {
+		c.wg.Add(1)
 
-		txn, err := c.dryRun.Begin(ctx, opts)
-		if err != nil {
-			c.logger.WithError(err).Error("failed to begin migration dry-run")
-			return
-		}
+		go func() {
+			defer c.wg.Done()
 
-		// The migrations were dry-run when the transaction began. Rollback the returned
-		// transaction.
-		if err := txn.Rollback(ctx); err != nil {
-			c.logger.WithError(err).Error("failed to rollback migration dry-run")
-		}
-	}()
+			txn, err := c.dryRun.Begin(ctx, opts)
+			if err != nil {
+				c.logger.WithError(err).Error("failed to begin migration dry-run")
+				return
+			}
+
+			// The migrations were dry-run when the transaction began. Rollback the returned
+			// transaction.
+			if err := txn.Rollback(ctx); err != nil {
+				c.logger.WithError(err).Error("failed to rollback migration dry-run")
+			}
+		}()
+	}
 
 	return c.Partition.Begin(ctx, opts)
 }
