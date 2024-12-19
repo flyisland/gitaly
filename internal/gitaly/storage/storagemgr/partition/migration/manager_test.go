@@ -20,6 +20,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 )
@@ -162,6 +163,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 
 			m := partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)).Scope(storageName)
 
+			logManager := log.NewManager(storageName, testPartitionID, stagingDir, stateDir, nil)
 			tm := partition.NewTransactionManager(
 				testPartitionID,
 				logger,
@@ -173,7 +175,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 				cmdFactory,
 				repositoryFactory,
 				m,
-				nil,
+				logManager,
 			)
 
 			mm := migrationManager{

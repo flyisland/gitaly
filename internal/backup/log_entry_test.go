@@ -25,12 +25,12 @@ import (
 
 type mockPartition struct {
 	storage.Partition
-	manager storage.LogManager
+	manager storage.LogReader
 }
 
 func (p *mockPartition) Close() {}
 
-func (p *mockPartition) GetLogManager() storage.LogManager {
+func (p *mockPartition) GetLogReader() storage.LogReader {
 	return p.manager
 }
 
@@ -73,9 +73,8 @@ type mockLogManager struct {
 	finishCount   int
 
 	sync.Mutex
+	storage.LogReader
 }
-
-func (lm *mockLogManager) Close() {}
 
 func (lm *mockLogManager) AcknowledgeConsumerPosition(lsn storage.LSN) {
 	lm.Lock()
@@ -370,7 +369,7 @@ func TestLogEntryArchiver(t *testing.T) {
 			require.NoError(t, os.Mkdir(filepath.Join(cmpDir, storageName), mode.Directory))
 
 			for info, partition := range accessor.partitions {
-				manager := partition.GetLogManager().(*mockLogManager)
+				manager := partition.GetLogReader().(*mockLogManager)
 				lastAck := manager.acknowledged[len(manager.acknowledged)-1]
 				require.Equal(t, tc.finalLSN, lastAck)
 
@@ -623,18 +622,18 @@ func TestLogEntryArchiver_WithRealLogManager(t *testing.T) {
 		"2": []byte("content-2"),
 		"3": []byte("content-3"),
 	})
-	<-logManagers[0].NotifyQueue()
+	<-logManagers[0].GetNotificationQueue()
 
 	// KV operation without any file.
 	appendLogEntry(t, ctx, logManagers[1], map[string][]byte{})
-	<-logManagers[1].NotifyQueue()
+	<-logManagers[1].GetNotificationQueue()
 
 	appendLogEntry(t, ctx, logManagers[1], map[string][]byte{
 		"4": []byte("content-4"),
 		"5": []byte("content-5"),
 		"6": []byte("content-6"),
 	})
-	<-logManagers[1].NotifyQueue()
+	<-logManagers[1].GetNotificationQueue()
 
 	archiver.Close()
 

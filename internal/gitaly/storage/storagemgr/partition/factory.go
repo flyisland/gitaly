@@ -9,7 +9,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
+	logger "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
 
 // Factory is factory type that can create new partitions.
@@ -22,7 +23,7 @@ type Factory struct {
 
 // New returns a new Partition instance.
 func (f Factory) New(
-	logger log.Logger,
+	logger logger.Logger,
 	partitionID storage.PartitionID,
 	db keyvalue.Transactioner,
 	storageName string,
@@ -42,6 +43,7 @@ func (f Factory) New(
 		panic(fmt.Errorf("building a partition for a non-existent storage: %q", storageName))
 	}
 
+	logManager := log.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, f.logConsumer)
 	return NewTransactionManager(
 		partitionID,
 		logger,
@@ -53,7 +55,7 @@ func (f Factory) New(
 		f.cmdFactory,
 		repoFactory,
 		f.metrics.Scope(storageName),
-		f.logConsumer,
+		logManager,
 	)
 }
 

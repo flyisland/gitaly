@@ -35,7 +35,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/fshistory"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/fsrecorder"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal/reftree"
@@ -869,9 +868,9 @@ type committedEntry struct {
 	objectDependencies map[git.ObjectID]struct{}
 }
 
-// GetLogManager provides controlled access to underlying log management system for log consumption purpose. It
+// GetLogReader provides controlled access to underlying log management system for log consumption purpose. It
 // allows the consumers to access to on-disk location of a LSN and acknowledge consumed position.
-func (mgr *TransactionManager) GetLogManager() storage.LogManager {
+func (mgr *TransactionManager) GetLogReader() storage.LogReader {
 	return mgr.logManager
 }
 
@@ -945,7 +944,7 @@ type TransactionManager struct {
 	// db is the handle to the key-value store used for storing the write-ahead log related state.
 	db keyvalue.Transactioner
 	// logManager manages the underlying Write-Ahead Log entries.
-	logManager *log.Manager
+	logManager storage.LogManager
 	// admissionQueue is where the incoming writes are waiting to be admitted to the transaction
 	// manager.
 	admissionQueue chan *Transaction
@@ -1001,6 +1000,7 @@ type TransactionManager struct {
 
 type testHooks struct {
 	beforeInitialization  func()
+	beforeAppendLogEntry  func()
 	beforeApplyLogEntry   func()
 	beforeStoreAppliedLSN func()
 	beforeRunExiting      func()
@@ -1018,7 +1018,7 @@ func NewTransactionManager(
 	cmdFactory gitcmd.CommandFactory,
 	repositoryFactory localrepo.StorageScopedFactory,
 	metrics ManagerMetrics,
-	consumer storage.LogConsumer,
+	logManager storage.LogManager,
 ) *TransactionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -1037,7 +1037,7 @@ func NewTransactionManager(
 		storagePath:         storagePath,
 		partitionID:         ptnID,
 		db:                  db,
-		logManager:          log.NewManager(storageName, ptnID, stagingDir, stateDir, consumer),
+		logManager:          logManager,
 		admissionQueue:      make(chan *Transaction),
 		completedQueue:      make(chan struct{}, 1),
 		initialized:         make(chan struct{}),
@@ -1052,6 +1052,7 @@ func NewTransactionManager(
 
 		testHooks: testHooks{
 			beforeInitialization:  func() {},
+			beforeAppendLogEntry:  func() {},
 			beforeApplyLogEntry:   func() {},
 			beforeStoreAppliedLSN: func() {},
 			beforeRunExiting:      func() {},
@@ -2040,7 +2041,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		return errors.New("cleanup worker failed")
 	case <-mgr.completedQueue:
 		return nil
-	case <-mgr.logManager.NotifyQueue():
+	case <-mgr.logManager.GetNotificationQueue():
 		return nil
 	case <-ctx.Done():
 	}
@@ -2145,6 +2146,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			return fmt.Errorf("verify file system operations: %w", err)
 		}
 
+		mgr.testHooks.beforeAppendLogEntry()
 		if err := mgr.appendLogEntry(ctx, transaction.objectDependencies, transaction.manifest, transaction.walFilesPath()); err != nil {
 			return fmt.Errorf("append log entry: %w", err)
 		}

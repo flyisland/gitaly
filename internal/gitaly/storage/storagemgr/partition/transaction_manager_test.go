@@ -2120,12 +2120,8 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 						string(keyAppliedLSN): storage.LSN(3).ToProto(),
 					})
 					// Transaction 2 and 3 are left-over.
-					testhelper.RequireDirectoryState(t, tm.logManager.StateDirectory(), "",
-						testhelper.DirectoryState{
-							"/":    {Mode: mode.Directory},
-							"/wal": {Mode: mode.Directory},
-						},
-					)
+					require.NoDirExists(t, tm.logManager.GetEntryPath(2))
+					require.NoDirExists(t, tm.logManager.GetEntryPath(3))
 				}),
 				StartManager{},
 				AssertManager{},
@@ -2273,12 +2269,12 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 						string(keyAppliedLSN): storage.LSN(3).ToProto(),
 					})
 					// Transaction 2 and 3 are left-over.
-					testhelper.RequireDirectoryState(t, tm.logManager.StateDirectory(), "", testhelper.DirectoryState{
-						"/":                           {Mode: mode.Directory},
-						"/wal":                        {Mode: mode.Directory},
-						"/wal/0000000000004":          {Mode: mode.Directory},
-						"/wal/0000000000004/MANIFEST": expectedManifest,
-						"/wal/0000000000004/1":        {Mode: mode.File, Content: []byte(setup.Commits.First.OID + "\n")},
+					require.NoDirExists(t, tm.logManager.GetEntryPath(2))
+					require.NoDirExists(t, tm.logManager.GetEntryPath(3))
+					testhelper.RequireDirectoryState(t, tm.logManager.GetEntryPath(4), "", testhelper.DirectoryState{
+						"/":         {Mode: mode.Directory},
+						"/MANIFEST": expectedManifest,
+						"/1":        {Mode: mode.File, Content: []byte(setup.Commits.First.OID + "\n")},
 					})
 				}),
 				StartManager{},
@@ -2413,7 +2409,9 @@ func BenchmarkTransactionManager(b *testing.B) {
 
 				// Valid partition IDs are >=1.
 				testPartitionID := storage.PartitionID(i + 1)
-				manager := NewTransactionManager(testPartitionID, logger, database, storageName, storagePath, stateDir, stagingDir, cmdFactory, repositoryFactory, m, nil)
+
+				logManager := log.NewManager(storageName, testPartitionID, stagingDir, stateDir, nil)
+				manager := NewTransactionManager(testPartitionID, logger, database, storageName, storagePath, stateDir, stagingDir, cmdFactory, repositoryFactory, m, logManager)
 
 				managers = append(managers, manager)
 

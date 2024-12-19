@@ -294,7 +294,7 @@ func (la *LogEntryArchiver) ingestNotifications(ctx context.Context) {
 		// We have already backed up all entries sent by the LogManager, but the manager is
 		// not aware of this. Acknowledge again with our last processed entry.
 		if state.nextLSN > notification.highWaterMark {
-			if err := la.callLogManager(ctx, notification.partitionInfo, func(lm storage.LogManager) {
+			if err := la.callLogReader(ctx, notification.partitionInfo, func(lm storage.LogReader) {
 				lm.AcknowledgeConsumerPosition(state.nextLSN - 1)
 			}); err != nil {
 				la.logger.WithError(err).Error("log entry archiver: failed to get LogManager for already completed entry")
@@ -328,7 +328,7 @@ func (la *LogEntryArchiver) ingestNotifications(ctx context.Context) {
 	}
 }
 
-func (la *LogEntryArchiver) callLogManager(ctx context.Context, partitionInfo PartitionInfo, callback func(lm storage.LogManager)) error {
+func (la *LogEntryArchiver) callLogReader(ctx context.Context, partitionInfo PartitionInfo, callback func(lm storage.LogReader)) error {
 	storageHandle, err := (*la.node).GetStorage(partitionInfo.StorageName)
 	if err != nil {
 		return fmt.Errorf("get storage: %w", err)
@@ -340,7 +340,7 @@ func (la *LogEntryArchiver) callLogManager(ctx context.Context, partitionInfo Pa
 	}
 	defer partition.Close()
 
-	callback(partition.GetLogManager())
+	callback(partition.GetLogReader())
 
 	return nil
 }
@@ -376,7 +376,7 @@ func (la *LogEntryArchiver) receiveEntry(ctx context.Context, entry *logEntry) {
 		la.waitDur = minRetryWait
 	}
 
-	if err := la.callLogManager(ctx, entry.partitionInfo, func(lm storage.LogManager) {
+	if err := la.callLogReader(ctx, entry.partitionInfo, func(lm storage.LogReader) {
 		lm.AcknowledgeConsumerPosition(entry.lsn)
 	}); err != nil {
 		la.logger.WithError(err).WithFields(
@@ -405,7 +405,7 @@ func (la *LogEntryArchiver) processEntry(ctx context.Context, entry *logEntry) {
 	})
 
 	var entryPath string
-	if err := la.callLogManager(context.Background(), entry.partitionInfo, func(lm storage.LogManager) {
+	if err := la.callLogReader(context.Background(), entry.partitionInfo, func(lm storage.LogReader) {
 		entryPath = lm.GetEntryPath(entry.lsn)
 	}); err != nil {
 		la.backupCounter.WithLabelValues("fail").Add(1)
