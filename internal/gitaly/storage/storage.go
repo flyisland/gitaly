@@ -205,7 +205,7 @@ type LogManager interface {
 	AppendedLSN() LSN
 
 	// GetNotificationQueue returns a channel that is used to notify external components of changes.
-	GetNotificationQueue() <-chan struct{}
+	GetNotificationQueue() <-chan error
 }
 
 // Partition is responsible for a single partition of data.

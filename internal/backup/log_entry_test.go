@@ -622,18 +622,18 @@ func TestLogEntryArchiver_WithRealLogManager(t *testing.T) {
 		"2": []byte("content-2"),
 		"3": []byte("content-3"),
 	})
-	<-logManagers[0].GetNotificationQueue()
+	require.Nil(t, <-logManagers[0].GetNotificationQueue())
 
 	// KV operation without any file.
 	appendLogEntry(t, logManagers[1], map[string][]byte{})
-	<-logManagers[1].GetNotificationQueue()
+	require.Nil(t, <-logManagers[1].GetNotificationQueue())
 
 	appendLogEntry(t, logManagers[1], map[string][]byte{
 		"4": []byte("content-4"),
 		"5": []byte("content-5"),
 		"6": []byte("content-6"),
 	})
-	<-logManagers[1].GetNotificationQueue()
+	require.Nil(t, <-logManagers[1].GetNotificationQueue())
 
 	archiver.Close()
 

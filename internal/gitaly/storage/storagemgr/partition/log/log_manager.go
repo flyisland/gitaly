@@ -97,8 +97,8 @@ type Manager struct {
 	// positions tracks positions of log entries being used externally. Those positions are tracked so that WAL
 	positions map[positionType]*position
 
-	// notifyQueue is a queue notifying when there is a new change.
-	notifyQueue chan struct{}
+	// notifyQueue is a queue notifying when there is a new change or there's something wrong with the log manager.
+	notifyQueue chan error
 }
 
 // NewManager returns an instance of Manager.
@@ -116,7 +116,7 @@ func NewManager(storageName string, partitionID storage.PartitionID, stagingDire
 		stateDirectory: stateDirectory,
 		consumer:       consumer,
 		positions:      positions,
-		notifyQueue:    make(chan struct{}, 1),
+		notifyQueue:    make(chan error, 1),
 	}
 }
 
@@ -192,13 +192,13 @@ func (mgr *Manager) AcknowledgeConsumerPosition(lsn storage.LSN) {
 
 	// Alert the outsider. If it has a pending acknowledgement already no action is required.
 	select {
-	case mgr.notifyQueue <- struct{}{}:
+	case mgr.notifyQueue <- nil:
 	default:
 	}
 }
 
 // GetNotificationQueue returns a notify channel so that caller can poll new changes.
-func (mgr *Manager) GetNotificationQueue() <-chan struct{} {
+func (mgr *Manager) GetNotificationQueue() <-chan error {
 	return mgr.notifyQueue
 }
 

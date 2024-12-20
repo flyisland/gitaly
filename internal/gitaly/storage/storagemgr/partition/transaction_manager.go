@@ -2044,7 +2044,10 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		return errors.New("cleanup worker failed")
 	case <-mgr.completedQueue:
 		return nil
-	case <-mgr.logManager.GetNotificationQueue():
+	case logErr := <-mgr.logManager.GetNotificationQueue():
+		if logErr != nil {
+			return fmt.Errorf("log manager failed: %w", logErr)
+		}
 		return nil
 	case <-ctx.Done():
 	}
