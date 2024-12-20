@@ -122,33 +122,3 @@ func GatherMetrics(c prometheus.Collector, metricNames ...string) []*dto.MetricF
 	}
 	return metrics
 }
-
-// extractHistogramMetric extracts bucket values from the given histogram metric family
-func extractHistogramMetric(concurrencyAquiringSecondsFamily []*dto.MetricFamily, m map[string]float64) {
-	for _, metric := range concurrencyAquiringSecondsFamily {
-		for _, metricData := range metric.GetMetric() {
-			label := metricData.GetLabel()
-			for _, l := range label {
-				// Check if label is the test method we invoked
-				if l.GetName() == "grpc_method" && l.GetValue() == "UnaryCall" {
-					buckets := metricData.GetHistogram().GetBucket()
-					// Save each bucket and its cumulative count
-					for _, b := range buckets {
-						m[fmt.Sprintf("%s_%.3f", metric.GetName(), b.GetUpperBound())] = float64(b.GetCumulativeCount())
-					}
-					m["sample_sum"] = metricData.GetHistogram().GetSampleSum()
-					m["sample_count"] = float64(metricData.GetHistogram().GetSampleCount())
-				}
-			}
-		}
-	}
-}
-
-// extractCounterMetric extracts values from the given counter metric family
-func extractCounterMetric(counterMetricFamily []*dto.MetricFamily, m map[string]float64) {
-	for _, metric := range counterMetricFamily {
-		for _, metricData := range metric.GetMetric() {
-			m[metric.GetName()] = metricData.GetCounter().GetValue()
-		}
-	}
-}

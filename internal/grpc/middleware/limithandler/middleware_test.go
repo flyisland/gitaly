@@ -653,21 +653,6 @@ func (q *queueTestServer) FullDuplexCall(stream grpc_testing.TestService_FullDup
 	})
 }
 
-type customQueueTestServer struct {
-	*queueTestServer
-}
-
-func (q *customQueueTestServer) UnaryCall(ctx context.Context, in *grpc_testing.SimpleRequest) (*grpc_testing.SimpleResponse, error) {
-	q.registerRequest()
-
-	time.Sleep(500 * time.Millisecond) // introduce lag time in server
-	return &grpc_testing.SimpleResponse{
-		Payload: &grpc_testing.Payload{
-			Body: []byte("success"),
-		},
-	}, nil
-}
-
 func TestConcurrencyLimitHandlerMetrics(t *testing.T) {
 	s := &queueTestServer{reqArrivedCh: make(chan struct{})}
 	s.blockCh = make(chan struct{})
@@ -857,23 +842,4 @@ func newClient(tb testing.TB, serverSocketPath string) (grpc_testing.TestService
 	}
 
 	return grpc_testing.NewTestServiceClient(conn), conn
-}
-
-func makeIntervalRequests(ctx context.Context, client grpc_testing.TestServiceClient, s *customQueueTestServer, wg *sync.WaitGroup, numRequests int) {
-	for i := 0; i < 5; i++ {
-		for j := 0; j < numRequests; j++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				//nolint:errcheck
-				client.UnaryCall(ctx, &grpc_testing.SimpleRequest{
-					Payload: &grpc_testing.Payload{
-						Body: []byte("success"),
-					},
-				})
-			}()
-		}
-
-		time.Sleep(1 * time.Second)
-	}
 }
