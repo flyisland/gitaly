@@ -61,6 +61,13 @@ func (p *position) setPosition(pos storage.LSN) {
 // references and acknowledgements. It effectively abstracts WAL operations from the TransactionManager, contributing to
 // a cleaner separation of concerns and making the system more maintainable and extensible.
 type Manager struct {
+	// ctx is the context that associated with the Manager instance. This is used for managing cancellations,
+	// deadlines, and carrying request-scoped values across log operations.
+	ctx context.Context
+	// cancel is the cancellation function for the Manager's context. It is used to explicitly cancel the context
+	// and signal internal workers to stop. It ensures proper cleanup when the Manager is no longer in use.
+	cancel context.CancelFunc
+
 	// mutex protects access to critical states, especially `oldestLSN` and `appendedLSN`, as well as the integrity
 	// of inflight log entries. Since indices are monotonic, two parallel log appending operations result in pushing
 	// files into the same directory and breaking the manifest file. Thus, Parallel log entry appending and pruning
@@ -121,7 +128,18 @@ func NewManager(storageName string, partitionID storage.PartitionID, stagingDire
 // initial log entry state, enabling consumers to start processing from the correct point. Proper initialization is
 // crucial for maintaining data consistency and ensuring that log entries are managed accurately upon system startup.
 func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) error {
-	if err := mgr.createStateDirectory(ctx); err != nil {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
+
+	if mgr.ctx != nil {
+		return fmt.Errorf("log manager already initialized")
+	} else if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	mgr.ctx, mgr.cancel = context.WithCancel(ctx)
+
+	if err := mgr.createStateDirectory(); err != nil {
 		return fmt.Errorf("create state directory: %w", err)
 	}
 
@@ -184,13 +202,29 @@ func (mgr *Manager) GetNotificationQueue() <-chan struct{} {
 	return mgr.notifyQueue
 }
 
+// Close gracefully shuts down the log manager by canceling its context and signaling any associated internal workers to
+// stop. The closer is blocked until all resources are released and workers (if any) have already stopped.
+func (mgr *Manager) Close() error {
+	if mgr.cancel == nil {
+		return fmt.Errorf("log manager has not been initialized")
+	}
+	mgr.cancel()
+	return nil
+}
+
 // AppendLogEntry appends an entry to the write-ahead log. logEntryPath is an
 // absolute path to the directory that represents the log entry. appendLogEntry
 // moves the log entry's directory to the WAL, and returns its LSN once it has
 // been committed to the log.
-func (mgr *Manager) AppendLogEntry(ctx context.Context, logEntryPath string) (storage.LSN, error) {
+func (mgr *Manager) AppendLogEntry(logEntryPath string) (storage.LSN, error) {
 	mgr.mutex.Lock()
 	defer mgr.mutex.Unlock()
+
+	select {
+	case <-mgr.ctx.Done():
+		return 0, mgr.ctx.Err()
+	default:
+	}
 
 	nextLSN := mgr.appendedLSN + 1
 
@@ -201,7 +235,7 @@ func (mgr *Manager) AppendLogEntry(ctx context.Context, logEntryPath string) (st
 	}
 
 	// After this sync, the log entry has been persisted and will be recovered on failure.
-	if err := safe.NewSyncer().SyncParent(ctx, destinationPath); err != nil {
+	if err := safe.NewSyncer().SyncParent(mgr.ctx, destinationPath); err != nil {
 		// If this fails, the log entry will be left in the write-ahead log but it is not
 		// properly persisted. If the fsync fails, something is seriously wrong and there's no
 		// point trying to delete the files. The right thing to do is to terminate Gitaly
@@ -220,7 +254,7 @@ func (mgr *Manager) AppendLogEntry(ctx context.Context, logEntryPath string) (st
 	return nextLSN, nil
 }
 
-func (mgr *Manager) createStateDirectory(ctx context.Context) error {
+func (mgr *Manager) createStateDirectory() error {
 	needsFsync := false
 	for _, path := range []string{
 		mgr.stateDirectory,
@@ -244,11 +278,11 @@ func (mgr *Manager) createStateDirectory(ctx context.Context) error {
 	}
 
 	syncer := safe.NewSyncer()
-	if err := syncer.SyncRecursive(ctx, mgr.stateDirectory); err != nil {
+	if err := syncer.SyncRecursive(mgr.ctx, mgr.stateDirectory); err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
 
-	if err := syncer.SyncParent(ctx, mgr.stateDirectory); err != nil {
+	if err := syncer.SyncParent(mgr.ctx, mgr.stateDirectory); err != nil {
 		return fmt.Errorf("sync parent: %w", err)
 	}
 
@@ -259,7 +293,7 @@ func (mgr *Manager) createStateDirectory(ctx context.Context) error {
 // needed. It ensures efficient storage management by removing redundant entries while maintaining the integrity of the
 // log sequence. The method respects the established low-water mark, ensuring no entries that might still be required
 // for transaction consistency are deleted.
-func (mgr *Manager) PruneLogEntries(ctx context.Context) error {
+func (mgr *Manager) PruneLogEntries() error {
 	mgr.mutex.Lock()
 	defer mgr.mutex.Unlock()
 
@@ -278,7 +312,7 @@ func (mgr *Manager) PruneLogEntries(ctx context.Context) error {
 	//            Low-water mark
 	//
 	for mgr.oldestLSN < mgr.lowWaterMark() {
-		if err := mgr.deleteLogEntry(ctx, mgr.oldestLSN); err != nil {
+		if err := mgr.deleteLogEntry(mgr.oldestLSN); err != nil {
 			return fmt.Errorf("deleting log entry: %w", err)
 		}
 		mgr.oldestLSN++
@@ -300,8 +334,8 @@ func (mgr *Manager) GetEntryPath(lsn storage.LSN) string {
 }
 
 // deleteLogEntry deletes the log entry at the given LSN from the log.
-func (mgr *Manager) deleteLogEntry(ctx context.Context, lsn storage.LSN) error {
-	defer trace.StartRegion(ctx, "deleteLogEntry").End()
+func (mgr *Manager) deleteLogEntry(lsn storage.LSN) error {
+	defer trace.StartRegion(mgr.ctx, "deleteLogEntry").End()
 
 	tmpDir, err := os.MkdirTemp(mgr.tmpDirectory, "")
 	if err != nil {
@@ -319,7 +353,7 @@ func (mgr *Manager) deleteLogEntry(ctx context.Context, lsn storage.LSN) error {
 		return fmt.Errorf("rename: %w", err)
 	}
 
-	if err := safe.NewSyncer().SyncParent(ctx, logEntryPath); err != nil {
+	if err := safe.NewSyncer().SyncParent(mgr.ctx, logEntryPath); err != nil {
 		return fmt.Errorf("sync file deletion: %w", err)
 	}
 

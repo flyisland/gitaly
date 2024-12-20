@@ -2263,15 +2263,20 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					manifestBytes, err := proto.Marshal(expectedManifest.Content.(proto.Message))
 					require.NoError(t, err)
 					require.NoError(t, os.WriteFile(manifestPath(logEntryPath), manifestBytes, mode.File))
-					require.NoError(t, tm.appendLogEntry(ctx, map[git.ObjectID]struct{}{setup.Commits.First.OID: {}}, nil, logEntryPath))
+
+					logManager := log.NewManager(tm.storageName, setup.PartitionID, testhelper.TempDir(t), filepath.Join(tm.storagePath, "state"), setup.Consumer)
+					require.NoError(t, logManager.Initialize(ctx, 3))
+					lsn, err := logManager.AppendLogEntry(logEntryPath)
+					require.NoError(t, err)
+					require.Equal(t, lsn, storage.LSN(4))
 
 					RequireDatabase(t, ctx, tm.db, DatabaseState{
 						string(keyAppliedLSN): storage.LSN(3).ToProto(),
 					})
 					// Transaction 2 and 3 are left-over.
-					require.NoDirExists(t, tm.logManager.GetEntryPath(2))
-					require.NoDirExists(t, tm.logManager.GetEntryPath(3))
-					testhelper.RequireDirectoryState(t, tm.logManager.GetEntryPath(4), "", testhelper.DirectoryState{
+					require.NoDirExists(t, logManager.GetEntryPath(2))
+					require.NoDirExists(t, logManager.GetEntryPath(3))
+					testhelper.RequireDirectoryState(t, logManager.GetEntryPath(4), "", testhelper.DirectoryState{
 						"/":         {Mode: mode.Directory},
 						"/MANIFEST": expectedManifest,
 						"/1":        {Mode: mode.File, Content: []byte(setup.Commits.First.OID + "\n")},

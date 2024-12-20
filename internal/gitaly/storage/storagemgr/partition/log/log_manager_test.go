@@ -14,7 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
 
-func appendLogEntry(t *testing.T, ctx context.Context, manager *Manager, files map[string][]byte) storage.LSN {
+func appendLogEntry(t *testing.T, manager *Manager, files map[string][]byte) storage.LSN {
 	t.Helper()
 
 	logEntryPath := testhelper.TempDir(t)
@@ -23,7 +23,7 @@ func appendLogEntry(t *testing.T, ctx context.Context, manager *Manager, files m
 		require.NoError(t, os.WriteFile(path, value, mode.File))
 	}
 
-	nextLSN, err := manager.AppendLogEntry(ctx, logEntryPath)
+	nextLSN, err := manager.AppendLogEntry(logEntryPath)
 	require.NoError(t, err)
 
 	return nextLSN
@@ -64,8 +64,8 @@ func TestLogManager_Initialize(t *testing.T) {
 		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 
 		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
 		require.NoError(t, logManager.Initialize(ctx, 0))
@@ -89,10 +89,10 @@ func TestLogManager_Initialize(t *testing.T) {
 		stateDir := testhelper.TempDir(t)
 
 		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
-		require.NoError(t, logManager.createStateDirectory(ctx))
+		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		for i := 0; i < 3; i++ {
-			appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
+			appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
 		}
 
 		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
@@ -123,7 +123,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		for i := 0; i < 3; i++ {
-			appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
+			appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
 		}
 
 		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
@@ -144,6 +144,48 @@ func TestLogManager_Initialize(t *testing.T) {
 			"/wal/0000000000003/1": {Mode: mode.File, Content: []byte("content-3")},
 		})
 	})
+
+	t.Run("double initialization error", func(t *testing.T) {
+		t.Parallel()
+		ctx := testhelper.Context(t)
+		stateDir := testhelper.TempDir(t)
+
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
+		require.NoError(t, logManager.Initialize(ctx, 0))
+
+		// Attempt to initialize again
+		err := logManager.Initialize(ctx, 0)
+		require.Error(t, err)
+		require.Equal(t, "log manager already initialized", err.Error())
+	})
+
+	t.Run("context canceled before initialization", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(testhelper.Context(t))
+		cancel() // Cancel the context before initializing
+		stateDir := testhelper.TempDir(t)
+
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
+		err := logManager.Initialize(ctx, 0)
+
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, err)
+	})
+
+	t.Run("context canceled after initialization", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(testhelper.Context(t))
+		stateDir := testhelper.TempDir(t)
+
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
+		require.NoError(t, logManager.Initialize(ctx, 0))
+
+		// Cancel the context after initialization
+		cancel()
+
+		// Check if the manager's context was also canceled
+		require.EqualError(t, logManager.ctx.Err(), context.Canceled.Error())
+	})
 }
 
 func TestLogManager_PruneLogEntries(t *testing.T) {
@@ -155,7 +197,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		logManager := setupLogManager(t, ctx, nil)
 
 		// Expect no entries to be removed
-		require.NoError(t, logManager.PruneLogEntries(ctx))
+		require.NoError(t, logManager.PruneLogEntries())
 		require.Equal(t, storage.LSN(1), logManager.oldestLSN)
 
 		// Assert on-disk state
@@ -171,7 +213,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		logManager := setupLogManager(t, ctx, nil)
 
 		// Inject a single log entry
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
 
 		// Set this entry as applied
 		logManager.AcknowledgeAppliedPosition(1)
@@ -185,7 +227,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		})
 
 		// Attempt to remove applied log entries
-		require.NoError(t, logManager.PruneLogEntries(ctx))
+		require.NoError(t, logManager.PruneLogEntries())
 
 		// After removal
 		require.Equal(t, storage.LSN(2), logManager.oldestLSN)
@@ -202,7 +244,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 
 		// Inject multiple log entries
 		for i := 0; i < 3; i++ {
-			appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
+			appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
 		}
 
 		// Set the applied LSN to 2
@@ -222,7 +264,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			"/wal/0000000000003/1": {Mode: mode.File, Content: []byte("content-3")},
 		})
 
-		require.NoError(t, logManager.PruneLogEntries(ctx))
+		require.NoError(t, logManager.PruneLogEntries())
 		require.Equal(t, storage.LSN(2), logManager.oldestLSN)
 
 		// Assert on-disk state to ensure no entries were removed
@@ -243,7 +285,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 
 		// Inject multiple log entries
 		for i := 0; i < 5; i++ {
-			appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
+			appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
 		}
 
 		// Set the applied LSN to 3, allowing the first three entries to be pruned
@@ -265,7 +307,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			"/wal/0000000000005/1": {Mode: mode.File, Content: []byte("content-5")},
 		})
 
-		require.NoError(t, logManager.PruneLogEntries(ctx))
+		require.NoError(t, logManager.PruneLogEntries())
 
 		// Ensure only entries starting from LSN 4 are retained
 		require.Equal(t, storage.LSN(4), logManager.oldestLSN)
@@ -293,7 +335,7 @@ func TestLogManager_AppendLogEntry(t *testing.T) {
 
 		require.Equal(t, logManager.appendedLSN, storage.LSN(0))
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
 
 		require.Equal(t, logManager.appendedLSN, storage.LSN(1))
 		testhelper.RequireDirectoryState(t, logManager.stateDirectory, "", testhelper.DirectoryState{
@@ -312,7 +354,7 @@ func TestLogManager_AppendLogEntry(t *testing.T) {
 
 		require.Equal(t, logManager.appendedLSN, storage.LSN(0))
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{
+		appendLogEntry(t, logManager, map[string][]byte{
 			"1": []byte("content-1"),
 			"2": []byte("content-2"),
 			"3": []byte("content-3"),
@@ -337,9 +379,9 @@ func TestLogManager_AppendLogEntry(t *testing.T) {
 
 		require.Equal(t, logManager.appendedLSN, storage.LSN(0))
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2-1"), "2": []byte("content-2-2")})
-		appendLogEntry(t, ctx, logManager, nil)
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2-1"), "2": []byte("content-2-2")})
+		appendLogEntry(t, logManager, nil)
 
 		require.Equal(t, logManager.appendedLSN, storage.LSN(3))
 		testhelper.RequireDirectoryState(t, logManager.stateDirectory, "", testhelper.DirectoryState{
@@ -373,7 +415,7 @@ func TestLogManager_Positions(t *testing.T) {
 	simulatePositions := func(t *testing.T, logManager *Manager, consumed storage.LSN, applied storage.LSN) {
 		logManager.AcknowledgeConsumerPosition(consumed)
 		logManager.AcknowledgeAppliedPosition(applied)
-		require.NoError(t, logManager.PruneLogEntries(ctx))
+		require.NoError(t, logManager.PruneLogEntries())
 	}
 
 	t.Run("consumer pos is set to 0 after initialized", func(t *testing.T) {
@@ -398,8 +440,8 @@ func TestLogManager_Positions(t *testing.T) {
 		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, mockConsumer)
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 
 		// Apply to 3 but consume to 1
 		simulatePositions(t, logManager, 1, 2)
@@ -407,8 +449,8 @@ func TestLogManager_Positions(t *testing.T) {
 		require.Equal(t, storage.LSN(2), logManager.lowWaterMark())
 
 		// Inject 3, 4
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-3")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-4")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-3")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-4")})
 
 		testhelper.RequireDirectoryState(t, logManager.stateDirectory, "", testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
@@ -445,8 +487,8 @@ func TestLogManager_Positions(t *testing.T) {
 		mockConsumer := &mockLogConsumer{}
 		logManager := setupLogManager(t, ctx, mockConsumer)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 
 		simulatePositions(t, logManager, 0, 2)
 
@@ -467,8 +509,8 @@ func TestLogManager_Positions(t *testing.T) {
 		mockConsumer := &mockLogConsumer{}
 		logManager := setupLogManager(t, ctx, mockConsumer)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 
 		simulatePositions(t, logManager, 1, 2)
 
@@ -487,8 +529,8 @@ func TestLogManager_Positions(t *testing.T) {
 		mockConsumer := &mockLogConsumer{}
 		logManager := setupLogManager(t, ctx, mockConsumer)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 
 		simulatePositions(t, logManager, 2, 0)
 
@@ -509,10 +551,10 @@ func TestLogManager_Positions(t *testing.T) {
 		mockConsumer := &mockLogConsumer{}
 		logManager := setupLogManager(t, ctx, mockConsumer)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
 		simulatePositions(t, logManager, 1, 1)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 		simulatePositions(t, logManager, 2, 2)
 
 		// The oldest LSN changes after each acknowledgement
@@ -529,13 +571,13 @@ func TestLogManager_Positions(t *testing.T) {
 		mockConsumer := &mockLogConsumer{}
 		logManager := setupLogManager(t, ctx, mockConsumer)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
 		simulatePositions(t, logManager, 0, 1)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 		simulatePositions(t, logManager, 0, 2)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-3")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-3")})
 		simulatePositions(t, logManager, 3, 3)
 
 		require.Equal(t, storage.LSN(4), logManager.lowWaterMark())
@@ -549,9 +591,9 @@ func TestLogManager_Positions(t *testing.T) {
 		mockConsumer := &mockLogConsumer{}
 		logManager := setupLogManager(t, ctx, mockConsumer)
 
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-1")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-2")})
-		appendLogEntry(t, ctx, logManager, map[string][]byte{"1": []byte("content-3")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-3")})
 
 		// 2 and 3 are not applied, hence kept intact.
 		simulatePositions(t, logManager, 3, 1)
@@ -573,5 +615,55 @@ func TestLogManager_Positions(t *testing.T) {
 			"/":    {Mode: mode.Directory},
 			"/wal": {Mode: mode.Directory},
 		})
+	})
+}
+
+func TestLogManager_Close(t *testing.T) {
+	t.Parallel()
+
+	t.Run("close uninitialized manager", func(t *testing.T) {
+		t.Parallel()
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), nil)
+
+		// Attempt to close the manager before initialization
+		err := logManager.Close()
+		require.Error(t, err)
+		require.Equal(t, "log manager has not been initialized", err.Error())
+	})
+
+	t.Run("close after initialization", func(t *testing.T) {
+		t.Parallel()
+		ctx := testhelper.Context(t)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), nil)
+
+		// Properly initialize the manager
+		require.NoError(t, logManager.Initialize(ctx, 0))
+
+		// Close the manager
+		require.NoError(t, logManager.Close())
+
+		// Verify the context has been canceled
+		require.EqualError(t, logManager.ctx.Err(), context.Canceled.Error())
+	})
+
+	t.Run("close after appending log entries", func(t *testing.T) {
+		t.Parallel()
+		ctx := testhelper.Context(t)
+		logManager := setupLogManager(t, ctx, nil)
+
+		// Append some log entries
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"2": []byte("content-2")})
+
+		// Close the manager
+		require.NoError(t, logManager.Close())
+
+		// Verify the context has been canceled
+		require.EqualError(t, logManager.ctx.Err(), context.Canceled.Error())
+
+		// Further appending should fail due to the canceled context
+		_, err := logManager.AppendLogEntry(testhelper.TempDir(t))
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, err)
 	})
 }
