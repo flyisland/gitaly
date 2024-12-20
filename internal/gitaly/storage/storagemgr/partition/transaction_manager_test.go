@@ -2115,14 +2115,6 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					TransactionID: 4,
 					ExpectedError: storage.ErrTransactionProcessingStopped,
 				},
-				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
-					RequireDatabase(t, ctx, tm.db, DatabaseState{
-						string(keyAppliedLSN): storage.LSN(3).ToProto(),
-					})
-					// Transaction 2 and 3 are left-over.
-					require.NoDirExists(t, tm.logManager.GetEntryPath(2))
-					require.NoDirExists(t, tm.logManager.GetEntryPath(3))
-				}),
 				StartManager{},
 				AssertManager{},
 				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
@@ -2134,6 +2126,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					require.Equal(t, tm.appliedLSN, storage.LSN(3))
 					require.Equal(t, tm.logManager.AppendedLSN(), storage.LSN(3))
 				}),
+				CloseManager{},
 			},
 			expectedState: StateAssertion{
 				Database: DatabaseState{
@@ -2273,14 +2266,12 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					RequireDatabase(t, ctx, tm.db, DatabaseState{
 						string(keyAppliedLSN): storage.LSN(3).ToProto(),
 					})
-					// Transaction 2 and 3 are left-over.
-					require.NoDirExists(t, logManager.GetEntryPath(2))
-					require.NoDirExists(t, logManager.GetEntryPath(3))
 					testhelper.RequireDirectoryState(t, logManager.GetEntryPath(4), "", testhelper.DirectoryState{
 						"/":         {Mode: mode.Directory},
 						"/MANIFEST": expectedManifest,
 						"/1":        {Mode: mode.File, Content: []byte(setup.Commits.First.OID + "\n")},
 					})
+					require.NoError(t, logManager.Close())
 				}),
 				StartManager{},
 				AssertManager{},
@@ -2292,6 +2283,10 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					})
 					require.Equal(t, tm.appliedLSN, storage.LSN(4))
 					require.Equal(t, tm.logManager.AppendedLSN(), storage.LSN(4))
+
+					// Transaction 2 and 3 are left-over.
+					require.NoDirExists(t, tm.logManager.GetEntryPath(2))
+					require.NoDirExists(t, tm.logManager.GetEntryPath(3))
 				}),
 			},
 			expectedState: StateAssertion{

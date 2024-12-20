@@ -377,20 +377,30 @@ func generateConsumerTests(t *testing.T, setup testTransactionSetup) []transacti
 						"refs/heads/third": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.Third.OID},
 					},
 				},
-				ConsumerAcknowledge{
-					LSN: 3,
-				},
 				CloseManager{},
 				StartManager{},
+				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
+					// Wait until the first acknowledgement after restart
+					<-tm.logManager.GetNotificationQueue()
+				}),
 			},
 			expectedState: StateAssertion{
 				Database: DatabaseState{
 					string(keyAppliedLSN): storage.LSN(3).ToProto(),
 				},
-				Directory: testhelper.DirectoryState{
-					"/":    {Mode: mode.Directory},
-					"/wal": {Mode: mode.Directory},
-				},
+				Directory: gittest.FilesOrReftables(
+					testhelper.DirectoryState{
+						"/":    {Mode: mode.Directory},
+						"/wal": {Mode: mode.Directory},
+						// 1 and 2 were pruned before the manager was closed.
+						// 3 is not pruned because the consumer hasn't acknowledged it after the
+						// restart.
+						"/wal/0000000000003":          {Mode: mode.Directory},
+						"/wal/0000000000003/MANIFEST": manifestDirectoryEntry(refChangeLogEntry(setup, "refs/heads/third", setup.Commits.Third.OID)),
+						"/wal/0000000000003/1":        {Mode: mode.File, Content: []byte(setup.Commits.Third.OID + "\n")},
+					}, buildReftableDirectory(map[int][]git.ReferenceUpdates{
+						3: {{"refs/heads/third": git.ReferenceUpdate{NewOID: setup.Commits.Third.OID}}},
+					})),
 				Repositories: RepositoryStates{
 					setup.RelativePath: {
 						DefaultBranch: "refs/heads/main",

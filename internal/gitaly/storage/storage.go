@@ -196,11 +196,6 @@ type LogManager interface {
 	// the Log Sequence Number (LSN) of the appended log entry.
 	AppendLogEntry(logEntryPath string) (LSN, error)
 
-	// PruneLogEntries removes log entries that are no longer needed, based on retention policies. This is a leaky
-	// abstraction. The log manager should be fully responsible for the life cycle of log entries. We'll remove
-	// external access to log entry pruning in https://gitlab.com/gitlab-org/gitaly/-/issues/6529.
-	PruneLogEntries() error
-
 	// AppendedLSN returns the LSN of the latest appended log entry.
 	AppendedLSN() LSN
 

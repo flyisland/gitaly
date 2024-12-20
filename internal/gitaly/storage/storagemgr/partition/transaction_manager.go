@@ -2013,10 +2013,6 @@ func (mgr *TransactionManager) run(ctx context.Context) (returnedErr error) {
 			continue
 		}
 
-		if err := mgr.logManager.PruneLogEntries(); err != nil {
-			return fmt.Errorf("pruning log entries: %w", err)
-		}
-
 		if err := mgr.processTransaction(ctx); err != nil {
 			return fmt.Errorf("process transaction: %w", err)
 		}

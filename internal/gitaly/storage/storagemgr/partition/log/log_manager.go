@@ -68,11 +68,17 @@ type Manager struct {
 	// and signal internal workers to stop. It ensures proper cleanup when the Manager is no longer in use.
 	cancel context.CancelFunc
 
-	// mutex protects access to critical states, especially `oldestLSN` and `appendedLSN`, as well as the integrity
+	// mutex protects access to critical states, especially `appendedLSN`, as well as the integrity
 	// of inflight log entries. Since indices are monotonic, two parallel log appending operations result in pushing
 	// files into the same directory and breaking the manifest file. Thus, Parallel log entry appending and pruning
 	// are not supported.
 	mutex sync.Mutex
+	// pruningMutex guards `oldestLSN` from parallel access and ensures there's only one pruning task running at the
+	// same time.
+	pruningMutex sync.Mutex
+	// wg tracks the concurrent tasks spawned by the log manager (if any). It is used to ensure all
+	// tasks exit gracefully.
+	wg sync.WaitGroup
 
 	// storageName is the name of the storage the Manager's partition is a member of.
 	storageName string
@@ -94,7 +100,8 @@ type Manager struct {
 	// consumer is an external caller that may perform read-only operations against applied log entries. Log entries
 	// are retained until the consumer has acknowledged past their LSN.
 	consumer storage.LogConsumer
-	// positions tracks positions of log entries being used externally. Those positions are tracked so that WAL
+	// positions tracks positions of log entries being used externally. Those positions are tracked so that WAL log
+	// entries are only pruned when they are not used anymore.
 	positions map[positionType]*position
 
 	// notifyQueue is a queue notifying when there is a new change or there's something wrong with the log manager.
@@ -109,6 +116,7 @@ func NewManager(storageName string, partitionID storage.PartitionID, stagingDire
 	if consumer != nil {
 		positions[consumerPosition] = newPosition()
 	}
+
 	return &Manager{
 		storageName:    storageName,
 		partitionID:    partitionID,
@@ -180,6 +188,7 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 // AcknowledgeAppliedPosition acknowledges the position of latest applied log entry.
 func (mgr *Manager) AcknowledgeAppliedPosition(lsn storage.LSN) {
 	mgr.positions[appliedPosition].setPosition(lsn)
+	mgr.pruneLogEntries()
 }
 
 // AcknowledgeConsumerPosition acknowledges log entries up and including LSN as successfully processed for the specified
@@ -189,6 +198,7 @@ func (mgr *Manager) AcknowledgeConsumerPosition(lsn storage.LSN) {
 		panic("log manager's consumer must be present prior to AcknowledgeConsumerPos call")
 	}
 	mgr.positions[consumerPosition].setPosition(lsn)
+	mgr.pruneLogEntries()
 
 	// Alert the outsider. If it has a pending acknowledgement already no action is required.
 	select {
@@ -209,6 +219,7 @@ func (mgr *Manager) Close() error {
 		return fmt.Errorf("log manager has not been initialized")
 	}
 	mgr.cancel()
+	mgr.wg.Wait()
 	return nil
 }
 
@@ -217,9 +228,6 @@ func (mgr *Manager) Close() error {
 // moves the log entry's directory to the WAL, and returns its LSN once it has
 // been committed to the log.
 func (mgr *Manager) AppendLogEntry(logEntryPath string) (storage.LSN, error) {
-	mgr.mutex.Lock()
-	defer mgr.mutex.Unlock()
-
 	select {
 	case <-mgr.ctx.Done():
 		return 0, mgr.ctx.Err()
@@ -227,26 +235,33 @@ func (mgr *Manager) AppendLogEntry(logEntryPath string) (storage.LSN, error) {
 	}
 
 	nextLSN := mgr.appendedLSN + 1
+	if err := func() error {
+		mgr.mutex.Lock()
+		defer mgr.mutex.Unlock()
 
-	// Move the log entry from the staging directory into its place in the log.
-	destinationPath := mgr.GetEntryPath(nextLSN)
-	if err := os.Rename(logEntryPath, destinationPath); err != nil {
-		return 0, fmt.Errorf("move wal files: %w", err)
+		// Move the log entry from the staging directory into its place in the log.
+		destinationPath := mgr.GetEntryPath(nextLSN)
+		if err := os.Rename(logEntryPath, destinationPath); err != nil {
+			return fmt.Errorf("move wal files: %w", err)
+		}
+
+		// After this sync, the log entry has been persisted and will be recovered on failure.
+		if err := safe.NewSyncer().SyncParent(mgr.ctx, destinationPath); err != nil {
+			// If this fails, the log entry will be left in the write-ahead log but it is not
+			// properly persisted. If the fsync fails, something is seriously wrong and there's no
+			// point trying to delete the files. The right thing to do is to terminate Gitaly
+			// immediately as going further could cause data loss and corruption. This error check
+			// will later be replaced with a panic that terminates Gitaly.
+			//
+			// For more details, see: https://gitlab.com/gitlab-org/gitaly/-/issues/5774
+			return fmt.Errorf("sync log entry: %w", err)
+		}
+		mgr.appendedLSN = nextLSN
+
+		return nil
+	}(); err != nil {
+		return 0, err
 	}
-
-	// After this sync, the log entry has been persisted and will be recovered on failure.
-	if err := safe.NewSyncer().SyncParent(mgr.ctx, destinationPath); err != nil {
-		// If this fails, the log entry will be left in the write-ahead log but it is not
-		// properly persisted. If the fsync fails, something is seriously wrong and there's no
-		// point trying to delete the files. The right thing to do is to terminate Gitaly
-		// immediately as going further could cause data loss and corruption. This error check
-		// will later be replaced with a panic that terminates Gitaly.
-		//
-		// For more details, see: https://gitlab.com/gitlab-org/gitaly/-/issues/5774
-		return 0, fmt.Errorf("sync log entry: %w", err)
-	}
-
-	mgr.appendedLSN = nextLSN
 
 	if mgr.consumer != nil {
 		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.lowWaterMark(), nextLSN)
@@ -257,6 +272,7 @@ func (mgr *Manager) AppendLogEntry(logEntryPath string) (storage.LSN, error) {
 func (mgr *Manager) createStateDirectory() error {
 	needsFsync := false
 	for _, path := range []string{
+		mgr.tmpDirectory,
 		mgr.stateDirectory,
 		filepath.Join(mgr.stateDirectory, "wal"),
 	} {
@@ -289,35 +305,62 @@ func (mgr *Manager) createStateDirectory() error {
 	return nil
 }
 
-// PruneLogEntries prunes log entries from the Write-Ahead Log (WAL) that have been committed and are no longer
-// needed. It ensures efficient storage management by removing redundant entries while maintaining the integrity of the
-// log sequence. The method respects the established low-water mark, ensuring no entries that might still be required
-// for transaction consistency are deleted.
-func (mgr *Manager) PruneLogEntries() error {
-	mgr.mutex.Lock()
-	defer mgr.mutex.Unlock()
-
-	// When a log entry is applied, if there is any log in front of it which are still referred, we cannot delete
-	// it. This condition is to prevent a "hole" in the list. A transaction referring to a log entry at the
-	// low-water mark might scan all afterward log entries. Thus, the manager needs to keep in the database.
-	//
-	//                  ┌── Consumer not acknowledged
-	//                  │       ┌─ Applied til this point
-	//    Can remove    │       │       ┌─ Free, but cannot be removed
-	//  ◄───────────►   │       │       │
-	// ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐
-	// └┬┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘
-	//  └─ oldestLSN    ▲
-	//                  │
-	//            Low-water mark
-	//
-	for mgr.oldestLSN < mgr.lowWaterMark() {
-		if err := mgr.deleteLogEntry(mgr.oldestLSN); err != nil {
-			return fmt.Errorf("deleting log entry: %w", err)
-		}
-		mgr.oldestLSN++
+// pruneLogEntries schedules a task to prune log entries from the Write-Ahead Log (WAL) that have been committed and are
+// no longer needed. It ensures efficient storage management by removing redundant entries while maintaining the
+// integrity of the log sequence. The method respects the established low-water mark, ensuring no entries that might
+// still be required for transaction consistency are deleted. The pruning task is performed in parallel so that the
+// caller is unblocked instantly. It's guarantee that there's only one pruning task running at the same time. If
+// there's one, a pruning task is initiated.
+func (mgr *Manager) pruneLogEntries() {
+	select {
+	case <-mgr.ctx.Done():
+		return
+	default:
 	}
-	return nil
+
+	// Try to acquire the pruning mutex. If it cannot be acquired, another pruning task is running.
+	if pruning := mgr.pruningMutex.TryLock(); !pruning {
+		return
+	}
+
+	// Now we have the responsibility to initiate a new pruning task. We defer the Unlock() to ensure:
+	// - No concurrent goroutines can also perform pruning.
+	// - The below goroutine only begins once this function exits.
+	defer mgr.pruningMutex.Unlock()
+
+	mgr.wg.Add(1)
+	go func() {
+		defer mgr.wg.Done()
+
+		// This task acquires the same mutex for the aforementioned task creation. This also guarantees
+		// redundant goroutines (rare, but possible) wait until the prior one finishes.
+		mgr.pruningMutex.Lock()
+		defer mgr.pruningMutex.Unlock()
+
+		// All log entries below the low-water mark can be removed. However, we could like to maintain the
+		// oldest LSN. The log entries must be removed in order and the oldestLSN advances one by one. This
+		// approach is to prevent a log entry from being forgotten if the manager fails to remove it in a prior
+		// session.
+		//
+		//                  ┌── Consumer not acknowledged
+		//                  │       ┌─ Applied til this point
+		//    Can remove    │       │       ┌─ Not consumed nor applied, cannot be removed.
+		//  ◄───────────►   │       │       │
+		// ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐
+		// └┬┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘
+		//  └─ oldestLSN    ▲
+		//                  │
+		//            Low-water mark
+		//
+		for mgr.oldestLSN < mgr.lowWaterMark() {
+			if err := mgr.deleteLogEntry(mgr.oldestLSN); err != nil {
+				err = fmt.Errorf("deleting log entry: %w", err)
+				mgr.notifyQueue <- err
+				return
+			}
+			mgr.oldestLSN++
+		}
+	}()
 }
 
 // AppendedLSN returns the index of latest appended log entry.
@@ -370,6 +413,9 @@ func (mgr *Manager) deleteLogEntry(lsn storage.LSN) error {
 // lowWaterMark returns the earliest LSN of log entries which should be kept in the database. Any log entries LESS than
 // this mark are removed.
 func (mgr *Manager) lowWaterMark() storage.LSN {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
+
 	minAcknowledged := mgr.appendedLSN + 1
 
 	// Position is the last acknowledged LSN, this is eligible for pruning.
