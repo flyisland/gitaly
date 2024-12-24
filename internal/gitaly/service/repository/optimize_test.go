@@ -22,6 +22,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/transactiontest"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
@@ -95,6 +96,8 @@ func TestOptimizeRepository(t *testing.T) {
 			Strategy:   gitalypb.OptimizeRepositoryRequest_STRATEGY_EAGER,
 		})
 		require.NoError(t, err)
+
+		transactiontest.ForceWALSync(t, ctx, gittest.DialService(t, ctx, cfg), repo)
 		// We should have a single packfile now.
 		packfiles, err := filepath.Glob(filepath.Join(repoPath, "objects", "pack", "pack-*.pack"))
 		require.NoError(t, err)
@@ -107,6 +110,8 @@ func TestOptimizeRepository(t *testing.T) {
 			Repository: repo,
 		})
 		require.NoError(t, err)
+
+		transactiontest.ForceWALSync(t, ctx, gittest.DialService(t, ctx, cfg), repo)
 
 		// The packfile should not have changed.
 		updatedPackfiles, err := filepath.Glob(filepath.Join(repoPath, "objects", "pack", "pack-*.pack"))

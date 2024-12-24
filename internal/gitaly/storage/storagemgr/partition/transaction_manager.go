@@ -1165,8 +1165,6 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 		return unwrapExpectedError(err)
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-mgr.closed:
-		return storage.ErrTransactionProcessingStopped
 	}
 }
 

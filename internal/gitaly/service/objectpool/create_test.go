@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
@@ -15,7 +14,6 @@ import (
 	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/manager"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/objectpool"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
@@ -110,25 +108,12 @@ func TestCreate_emptySource(t *testing.T) {
 
 	objectPoolRepo := localrepo.NewTestRepo(t, cfg, objectPoolProto.GetRepository())
 
+	repoClient := gitalypb.NewRepositoryServiceClient(gittest.DialService(t, ctx, cfg))
+
 	// Assert that the created object pool is indeed empty.
-	info, err := stats.RepositoryInfoForRepository(ctx, objectPoolRepo)
+	resp, err := repoClient.RepositorySize(ctx, &gitalypb.RepositorySizeRequest{Repository: objectPoolProto.GetRepository()})
 	require.NoError(t, err)
-	info.Packfiles.LastFullRepack = time.Time{}
-	require.Equal(t, stats.RepositoryInfo{
-		IsObjectPool: true,
-		References: stats.ReferencesInfo{
-			ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
-			ReftableTables: gittest.FilesOrReftables(
-				nil,
-				[]stats.ReftableTable{
-					{
-						Size:           124,
-						UpdateIndexMin: 1,
-						UpdateIndexMax: 1,
-					},
-				}),
-		},
-	}, info)
+	require.Equal(t, int64(0), resp.GetSize())
 
 	// And furthermore assert that the object hash of the new object pool matches what we
 	// expect.
