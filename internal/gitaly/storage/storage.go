@@ -180,9 +180,17 @@ type LogReader interface {
 	AcknowledgeAppliedPosition(lsn LSN)
 }
 
+// LogWriter adds entries to the Write-Ahead Log.
+type LogWriter interface {
+	// AppendLogEntry appends an entry to the WAL. logEntryPath specifies the directory of the log entry. It returns
+	// the Log Sequence Number (LSN) of the appended log entry.
+	AppendLogEntry(logEntryPath string) (LSN, error)
+}
+
 // LogManager is the interface used to manage the underlying Write-Ahead Log entries.
 type LogManager interface {
 	LogReader
+	LogWriter
 
 	// Initialize sets up the initial state of the LogManager, preparing it to manage log entries.
 	// It ensures the environment is ready, and previous states are resumed correctly.
@@ -191,10 +199,6 @@ type LogManager interface {
 	// Close stops the log manager, cleans up resources, and stops internal workers. The caller
 	// is blocked until complete.
 	Close() error
-
-	// AppendLogEntry appends an entry to the WAL. logEntryPath specifies the directory of the log entry. It returns
-	// the Log Sequence Number (LSN) of the appended log entry.
-	AppendLogEntry(logEntryPath string) (LSN, error)
 
 	// AppendedLSN returns the LSN of the latest appended log entry.
 	AppendedLSN() LSN
@@ -212,6 +216,8 @@ type Partition interface {
 	// GetLogReader provides controlled access to underlying log management system for log consumption purpose.
 	// It allows the consumers to access to on-disk location of a LSN and acknowledge consumed position.
 	GetLogReader() LogReader
+	// GetLogWriter provides controlled access to underlying log management system for log appending purpose.
+	GetLogWriter() LogWriter
 }
 
 // TransactionOptions are used to pass transaction options into Begin.
