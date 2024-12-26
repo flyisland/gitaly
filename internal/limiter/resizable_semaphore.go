@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 )
 
 // resizableSemaphore struct models a semaphore with a dynamically adjustable size. It bounds the concurrent access to
@@ -72,12 +70,7 @@ func (s *resizableSemaphore) Acquire(ctx context.Context) error {
 
 	w := &waiter{ready: make(chan struct{})}
 
-	var element *list.Element
-	if featureflag.UseResizableSemaphoreLifoStrategy.IsEnabled(ctx) {
-		element = s.waiters.PushFront(w)
-	} else {
-		element = s.waiters.PushBack(w)
-	}
+	element := s.waiters.PushFront(w)
 	s.Unlock()
 
 	select {
