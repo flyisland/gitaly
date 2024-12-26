@@ -74,7 +74,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(1), logManager.oldestLSN)
 		require.Equal(t, storage.LSN(0), logManager.appendedLSN)
-		require.Equal(t, storage.LSN(1), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(1), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
@@ -102,7 +102,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(1), logManager.oldestLSN)
 		require.Equal(t, storage.LSN(2), logManager.appendedLSN)
-		require.Equal(t, storage.LSN(1), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(1), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
@@ -138,7 +138,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(3), logManager.oldestLSN)
 		require.Equal(t, storage.LSN(3), logManager.appendedLSN)
-		require.Equal(t, storage.LSN(3), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(3), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
@@ -170,7 +170,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(4), logManager.oldestLSN)
 		require.Equal(t, storage.LSN(3), logManager.appendedLSN)
-		require.Equal(t, storage.LSN(4), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(4), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
@@ -748,7 +748,7 @@ func TestLogManager_Positions(t *testing.T) {
 		logManager := setupLogManager(t, ctx, mockConsumer)
 
 		require.Equal(t, [][]storage.LSN(nil), mockConsumer.positions)
-		require.Equal(t, storage.LSN(1), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(1), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
@@ -771,7 +771,7 @@ func TestLogManager_Positions(t *testing.T) {
 		// Apply to 3 but consume to 1
 		simulatePositions(t, logManager, 1, 2)
 		require.Equal(t, [][]storage.LSN{{1, 1}, {1, 2}}, mockConsumer.positions)
-		require.Equal(t, storage.LSN(2), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(2), logManager.LowWaterMark())
 
 		// Inject 3, 4
 		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-3")})
@@ -802,7 +802,7 @@ func TestLogManager_Positions(t *testing.T) {
 
 		// All log entries are pruned at this point. The consumer should not be notified again.
 		require.Equal(t, [][]storage.LSN{{2, 4}}, mockConsumer.positions)
-		require.Equal(t, storage.LSN(5), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(5), logManager.LowWaterMark())
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
 			"/wal": {Mode: mode.Directory},
@@ -819,7 +819,7 @@ func TestLogManager_Positions(t *testing.T) {
 		simulatePositions(t, logManager, 0, 2)
 
 		require.Equal(t, [][]storage.LSN{{1, 1}, {1, 2}}, mockConsumer.positions)
-		require.Equal(t, storage.LSN(1), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(1), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
@@ -841,7 +841,7 @@ func TestLogManager_Positions(t *testing.T) {
 		simulatePositions(t, logManager, 1, 2)
 
 		require.Equal(t, [][]storage.LSN{{1, 1}, {1, 2}}, mockConsumer.positions)
-		require.Equal(t, storage.LSN(2), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(2), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
@@ -861,7 +861,7 @@ func TestLogManager_Positions(t *testing.T) {
 		simulatePositions(t, logManager, 2, 0)
 
 		require.Equal(t, [][]storage.LSN{{1, 1}, {1, 2}}, mockConsumer.positions)
-		require.Equal(t, storage.LSN(1), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(1), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
@@ -892,7 +892,7 @@ func TestLogManager_Positions(t *testing.T) {
 
 		// The oldest LSN changes after each acknowledgement
 		require.Equal(t, [][]storage.LSN{{1, 1}, {2, 2}}, mockConsumer.positions)
-		require.Equal(t, storage.LSN(3), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(3), logManager.LowWaterMark())
 	})
 
 	t.Run("append while consumer is busy with prior entries", func(t *testing.T) {
@@ -908,7 +908,7 @@ func TestLogManager_Positions(t *testing.T) {
 		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-3")})
 		simulatePositions(t, logManager, 3, 3)
 
-		require.Equal(t, storage.LSN(4), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(4), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
@@ -927,7 +927,7 @@ func TestLogManager_Positions(t *testing.T) {
 		// 2 and 3 are not applied, hence kept intact.
 		simulatePositions(t, logManager, 3, 1)
 
-		require.Equal(t, storage.LSN(2), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(2), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
@@ -939,7 +939,7 @@ func TestLogManager_Positions(t *testing.T) {
 		})
 
 		simulatePositions(t, logManager, 3, 3)
-		require.Equal(t, storage.LSN(4), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(4), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
@@ -967,7 +967,7 @@ func TestLogManager_Positions(t *testing.T) {
 		// Consumed = 3, Applied = 2, TestPosition1 = 1, testPosition2 = 1
 		simulatePositions(t, logManager, 3, 2)
 
-		require.Equal(t, storage.LSN(1), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(1), logManager.LowWaterMark())
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
 			"/wal":                 {Mode: mode.Directory},
@@ -984,7 +984,7 @@ func TestLogManager_Positions(t *testing.T) {
 		require.NoError(t, logManager.AcknowledgePosition(t2, 2))
 		simulatePositions(t, logManager, 3, 3)
 
-		require.Equal(t, storage.LSN(3), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(3), logManager.LowWaterMark())
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
 			"/wal":                 {Mode: mode.Directory},
@@ -997,7 +997,7 @@ func TestLogManager_Positions(t *testing.T) {
 		require.NoError(t, logManager.AcknowledgePosition(t2, 3))
 		simulatePositions(t, logManager, 3, 3)
 
-		require.Equal(t, storage.LSN(4), logManager.lowWaterMark())
+		require.Equal(t, storage.LSN(4), logManager.LowWaterMark())
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
 			"/wal": {Mode: mode.Directory},

@@ -247,7 +247,7 @@ func (mgr *Manager) CompareAndAppendLogEntry(nextLSN storage.LSN, logEntryPath s
 	}
 
 	if mgr.consumer != nil {
-		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.lowWaterMark(), nextLSN)
+		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.LowWaterMark(), nextLSN)
 	}
 
 	return nextLSN, nil
@@ -336,8 +336,8 @@ func (mgr *Manager) pruneLogEntries() {
 		//                  │
 		//            Low-water mark
 		//
-		for mgr.oldestLSN < mgr.lowWaterMark() {
-			if err := mgr.deleteLogEntry(mgr.oldestLSN); err != nil {
+		for mgr.oldestLSN < mgr.LowWaterMark() {
+			if err := mgr.DeleteLogEntry(mgr.oldestLSN); err != nil {
 				err = fmt.Errorf("deleting log entry: %w", err)
 				mgr.notifyQueue <- err
 				return
@@ -360,8 +360,8 @@ func (mgr *Manager) GetEntryPath(lsn storage.LSN) string {
 	return EntryPath(mgr.stateDirectory, lsn)
 }
 
-// deleteLogEntry deletes the log entry at the given LSN from the log.
-func (mgr *Manager) deleteLogEntry(lsn storage.LSN) error {
+// DeleteLogEntry deletes the log entry at the given LSN from the log.
+func (mgr *Manager) DeleteLogEntry(lsn storage.LSN) error {
 	defer trace.StartRegion(mgr.ctx, "deleteLogEntry").End()
 
 	tmpDir, err := os.MkdirTemp(mgr.tmpDirectory, "")
@@ -394,9 +394,9 @@ func (mgr *Manager) deleteLogEntry(lsn storage.LSN) error {
 	return nil
 }
 
-// lowWaterMark returns the earliest LSN of log entries which should be kept in the database. Any log entries LESS than
+// LowWaterMark returns the earliest LSN of log entries which should be kept in the database. Any log entries LESS than
 // this mark are removed.
-func (mgr *Manager) lowWaterMark() storage.LSN {
+func (mgr *Manager) LowWaterMark() storage.LSN {
 	mgr.mutex.Lock()
 	defer mgr.mutex.Unlock()
 
