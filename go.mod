@@ -57,7 +57,7 @@ require (
 	// - https://gitlab.com/gitlab-com/request-for-help/-/issues/2127
 	// - https://gitlab.com/gitlab-org/gitaly/-/issues/6385
 	google.golang.org/grpc v1.66.3
-	google.golang.org/protobuf v1.35.2
+	google.golang.org/protobuf v1.36.0
 )
 
 require (
