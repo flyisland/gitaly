@@ -28,6 +28,7 @@ type Diff struct {
 	ToID            string
 	OldMode         int32
 	NewMode         int32
+	PatchSize       int32
 	FromPath        []byte
 	ToPath          []byte
 	Patch           []byte
@@ -200,6 +201,9 @@ func (parser *Parser) Parse() bool {
 			return false
 		}
 	}
+
+	// PatchSize is needed for clients to determine if patch exceeded the soft or hard limit when patch was pruned.
+	parser.currentDiff.PatchSize = int32(len(parser.currentDiff.Patch))
 
 	if parser.limits.CollapseDiffs && parser.isOverSafeLimits() && parser.currentDiff.lineCount > 0 {
 		parser.prunePatch()
