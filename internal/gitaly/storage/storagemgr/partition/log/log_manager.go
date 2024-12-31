@@ -15,6 +15,10 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
 )
 
+// ErrLogEntryNotAppended is returned by CompareAndAppendLogEntry if the expected LSN
+// doesn't match the latest appended LSN.
+var ErrLogEntryNotAppended = errors.New("failed to append log entry: expected LSN does not match the latest appended LSN")
+
 // StatePath returns the WAL directory's path.
 func StatePath(stateDir string) string {
 	return filepath.Join(stateDir, "wal")
@@ -196,16 +200,27 @@ func (mgr *Manager) Close() error {
 // moves the log entry's directory to the WAL, and returns its LSN once it has
 // been committed to the log.
 func (mgr *Manager) AppendLogEntry(logEntryPath string) (storage.LSN, error) {
+	return mgr.CompareAndAppendLogEntry(0, logEntryPath)
+}
+
+// CompareAndAppendLogEntry is a variant of AppendLogEntry. It appends the log entry to the write-ahead log if and only
+// if the inserting position matches the expected LSN.
+func (mgr *Manager) CompareAndAppendLogEntry(nextLSN storage.LSN, logEntryPath string) (storage.LSN, error) {
 	select {
 	case <-mgr.ctx.Done():
 		return 0, mgr.ctx.Err()
 	default:
 	}
 
-	nextLSN := mgr.appendedLSN + 1
 	if err := func() error {
 		mgr.mutex.Lock()
 		defer mgr.mutex.Unlock()
+
+		if nextLSN == 0 {
+			nextLSN = mgr.appendedLSN + 1
+		} else if nextLSN != mgr.appendedLSN+1 {
+			return ErrLogEntryNotAppended
+		}
 
 		// Move the log entry from the staging directory into its place in the log.
 		destinationPath := mgr.GetEntryPath(nextLSN)
@@ -234,6 +249,7 @@ func (mgr *Manager) AppendLogEntry(logEntryPath string) (storage.LSN, error) {
 	if mgr.consumer != nil {
 		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.lowWaterMark(), nextLSN)
 	}
+
 	return nextLSN, nil
 }
 
