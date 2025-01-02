@@ -20,7 +20,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 )
@@ -156,28 +155,12 @@ func TestMigrationManager_Begin(t *testing.T) {
 			cache := catfile.NewCache(cfg)
 			defer cache.Stop()
 
-			repositoryFactory, err := localrepo.NewFactory(
-				logger, config.NewLocator(cfg), cmdFactory, cache,
-			).ScopeByStorage(ctx, cfg.Storages[0].Name)
-			require.NoError(t, err)
+			repositoryFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, cache)
 
-			m := partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)).Scope(storageName)
+			m := partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))
 
-			logManager := log.NewManager(storageName, testPartitionID, stagingDir, stateDir, nil)
-			tm := partition.NewTransactionManager(
-				testPartitionID,
-				logger,
-				database,
-				storageName,
-				storagePath,
-				stateDir,
-				stagingDir,
-				cmdFactory,
-				repositoryFactory,
-				m,
-				logManager,
-			)
-
+			factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil)
+			tm := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
 			mm := migrationManager{
 				Partition:       tm,
 				logger:          logger,
