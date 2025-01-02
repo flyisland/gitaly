@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -89,7 +90,7 @@ func (g *GenerationManager) StopAll() {
 // does not attempt to verify any feature flag or conditions. Calling this method WILL
 // generate a bundle.
 func Generate(ctx context.Context, sink *Sink, repo *localrepo.Repo) (returnErr error) {
-	bundlePath := sink.relativePath(repo, defaultBundle)
+	bundlePath := bundleRelativePath(repo, defaultBundle)
 
 	ref, err := repo.HeadReference(ctx)
 	if err != nil {
@@ -103,7 +104,7 @@ func Generate(ctx context.Context, sink *Sink, repo *localrepo.Repo) (returnErr 
 
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		origRepo := tx.OriginalRepository(repoProto)
-		bundlePath = sink.relativePath(origRepo, defaultBundle)
+		bundlePath = bundleRelativePath(origRepo, defaultBundle)
 	}
 
 	writer := backup.NewLazyWriter(func() (io.WriteCloser, error) {
@@ -136,7 +137,7 @@ func Generate(ctx context.Context, sink *Sink, repo *localrepo.Repo) (returnErr 
 // background goroutine to generate a bundle is started.
 func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *localrepo.Repo, f func() error) error {
 	repoPath := repo.GetRelativePath()
-	bundlePath := g.sink.relativePath(repo, defaultBundle)
+	bundlePath := bundleRelativePath(repo, defaultBundle)
 
 	g.inProgressTracker.IncrementInProgress(repoPath)
 	defer g.inProgressTracker.DecrementInProgress(repoPath)
@@ -184,4 +185,10 @@ func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *
 		}()
 	}
 	return f()
+}
+
+// bundleRelativePath returns a relative path of the bundle-URI bundle inside the bucket.
+func bundleRelativePath(repo storage.Repository, name string) string {
+	repoPath := filepath.Join(repo.GetStorageName(), repo.GetRelativePath())
+	return filepath.Join(repoPath, "uri", name+".bundle")
 }

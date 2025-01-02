@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"time"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -42,17 +41,6 @@ func NewSink(ctx context.Context, uri string) (*Sink, error) {
 	}, nil
 }
 
-// relativePath returns a relative path of the bundle-URI bundle inside the
-// bucket.
-func (s *Sink) relativePath(repo storage.Repository, name string) string {
-	repoPath := filepath.Join(
-		repo.GetStorageName(),
-		repo.GetRelativePath(),
-	)
-
-	return filepath.Join(repoPath, "uri", name+".bundle")
-}
-
 // getWriter creates a writer to store data into a relative path on the
 // configured bucket.
 // It is the callers responsibility to Close the reader after usage.
@@ -74,7 +62,7 @@ func (s *Sink) getWriter(ctx context.Context, relativePath string) (io.WriteClos
 
 // SignedURL returns a public URL to give anyone access to download the bundle from.
 func (s Sink) SignedURL(ctx context.Context, repo storage.Repository) (string, error) {
-	relativePath := s.relativePath(repo, defaultBundle)
+	relativePath := bundleRelativePath(repo, defaultBundle)
 
 	repoProto, ok := repo.(*gitalypb.Repository)
 	if !ok {
@@ -83,7 +71,7 @@ func (s Sink) SignedURL(ctx context.Context, repo storage.Repository) (string, e
 
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		origRepo := tx.OriginalRepository(repoProto)
-		relativePath = s.relativePath(origRepo, defaultBundle)
+		relativePath = bundleRelativePath(origRepo, defaultBundle)
 	}
 
 	if exists, err := s.bucket.Exists(ctx, relativePath); !exists {

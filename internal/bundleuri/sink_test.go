@@ -44,7 +44,7 @@ func TestSink_SignedURL(t *testing.T) {
 		{
 			desc: "signs bundle successfully",
 			setup: func(t *testing.T, sinkDir string, sink *Sink) {
-				path := filepath.Join(sinkDir, sink.relativePath(repo, "default"))
+				path := filepath.Join(sinkDir, bundleRelativePath(repo, "default"))
 				require.NoError(t, os.MkdirAll(filepath.Dir(path), mode.Directory))
 				require.NoError(t, os.WriteFile(path, []byte("hello"), mode.File))
 			},
