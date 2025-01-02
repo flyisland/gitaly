@@ -83,7 +83,7 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 				sink, err := NewSink(ctx, "file://"+sinkDir)
 				require.NoError(t, err)
 
-				require.NoError(t, sink.Generate(ctx, repo))
+				require.NoError(t, Generate(ctx, sink, repo))
 
 				return setupData{
 					sink: sink,
@@ -99,7 +99,7 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 				sink, err := NewSink(ctx, "file://"+sinkDir+"?base_url=http://example.com&secret_key_path="+keyFile.Name())
 				require.NoError(t, err)
 
-				require.NoError(t, sink.Generate(ctx, repo))
+				require.NoError(t, Generate(ctx, sink, repo))
 
 				return setupData{
 					sink: sink,

@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -73,49 +70,6 @@ func (s *Sink) getWriter(ctx context.Context, relativePath string) (io.WriteClos
 		return nil, fmt.Errorf("new writer for %q: %w", relativePath, err)
 	}
 	return writer, nil
-}
-
-// Generate creates a bundle for bundle-URI use into the bucket.
-func (s Sink) Generate(ctx context.Context, repo *localrepo.Repo) (returnErr error) {
-	ref, err := repo.HeadReference(ctx)
-	if err != nil {
-		return fmt.Errorf("resolve HEAD ref: %w", err)
-	}
-
-	bundlePath := s.relativePath(repo, defaultBundle)
-
-	repoProto, ok := repo.Repository.(*gitalypb.Repository)
-	if !ok {
-		return fmt.Errorf("unexpected repository type %t", repo.Repository)
-	}
-
-	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		origRepo := tx.OriginalRepository(repoProto)
-		bundlePath = s.relativePath(origRepo, defaultBundle)
-	}
-
-	writer := backup.NewLazyWriter(func() (io.WriteCloser, error) {
-		return s.getWriter(ctx, bundlePath)
-	})
-	defer func() {
-		if err := writer.Close(); err != nil && returnErr == nil {
-			returnErr = fmt.Errorf("write bundle: %w", err)
-		}
-	}()
-
-	opts := localrepo.CreateBundleOpts{
-		Patterns: strings.NewReader(ref.String()),
-	}
-
-	err = repo.CreateBundle(ctx, writer, &opts)
-	switch {
-	case errors.Is(err, localrepo.ErrEmptyBundle):
-		return structerr.NewFailedPrecondition("ref %q does not exist: %w", ref, err)
-	case err != nil:
-		return structerr.NewInternal("%w", err)
-	}
-
-	return nil
 }
 
 // SignedURL returns a public URL to give anyone access to download the bundle from.

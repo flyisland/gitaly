@@ -449,7 +449,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 					gittest.WithBranch("main"))
 
 				repo := localrepo.NewTestRepo(t, cfg, repoProto)
-				require.NoError(t, sink.Generate(ctx, repo))
+				require.NoError(t, bundleuri.Generate(ctx, sink, repo))
 			},
 		},
 		{
@@ -461,7 +461,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 					gittest.WithBranch("main"))
 
 				repo := localrepo.NewTestRepo(t, cfg, repoProto)
-				require.NoError(t, sink.Generate(ctx, repo))
+				require.NoError(t, bundleuri.Generate(ctx, sink, repo))
 			},
 			expectBundleURI: true,
 		},

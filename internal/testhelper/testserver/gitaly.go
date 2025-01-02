@@ -338,6 +338,10 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		gsd.procReceiveRegistry = hook.NewProcReceiveRegistry()
 	}
 
+	if gsd.bundleURISink == nil {
+		gsd.bundleURISink, _ = bundleuri.NewSink(ctx, cfg.BundleURI.GoCloudURL)
+	}
+
 	var node storage.Node
 	if testhelper.IsWALEnabled() {
 		dbMgr, err := databasemgr.NewDBManager(

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/bundleuri"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -20,7 +21,7 @@ func (s *server) GenerateBundleURI(ctx context.Context, req *gitalypb.GenerateBu
 
 	repo := s.localRepoFactory.Build(repository)
 
-	if err := s.bundleURISink.Generate(ctx, repo); err != nil {
+	if err := bundleuri.Generate(ctx, s.bundleURISink, repo); err != nil {
 		return nil, structerr.NewInternal("generate bundle: %w", err)
 	}
 

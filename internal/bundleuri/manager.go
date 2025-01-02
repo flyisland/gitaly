@@ -2,14 +2,21 @@ package bundleuri
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
 var bundleGenerationLatency = prometheus.NewHistogram(
@@ -78,37 +85,46 @@ func (g *GenerationManager) StopAll() {
 	g.wg.Wait()
 }
 
-func (g *GenerationManager) generate(ctx context.Context, repo *localrepo.Repo) error {
-	bundlePath := g.sink.relativePath(repo, defaultBundle)
+// Generate will generate a bundle for the given `repo` at the given `Sink`. This method
+// does not attempt to verify any feature flag or conditions. Calling this method WILL
+// generate a bundle.
+func Generate(ctx context.Context, sink *Sink, repo *localrepo.Repo) (returnErr error) {
+	bundlePath := sink.relativePath(repo, defaultBundle)
 
-	shouldGenerate := func() bool {
-		g.mutex.Lock()
-		defer g.mutex.Unlock()
-
-		if _, ok := g.bundleGenerationInProgress[bundlePath]; ok {
-			return false
-		}
-		if len(g.bundleGenerationInProgress) >= g.concurrencyLimit {
-			return false
-		}
-
-		g.bundleGenerationInProgress[bundlePath] = struct{}{}
-
-		return true
+	ref, err := repo.HeadReference(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve HEAD ref: %w", err)
 	}
 
-	if !shouldGenerate() {
-		return nil
+	repoProto, ok := repo.Repository.(*gitalypb.Repository)
+	if !ok {
+		return fmt.Errorf("unexpected repository type %t", repo.Repository)
 	}
 
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		origRepo := tx.OriginalRepository(repoProto)
+		bundlePath = sink.relativePath(origRepo, defaultBundle)
+	}
+
+	writer := backup.NewLazyWriter(func() (io.WriteCloser, error) {
+		return sink.getWriter(ctx, bundlePath)
+	})
 	defer func() {
-		g.mutex.Lock()
-		defer g.mutex.Unlock()
-		delete(g.bundleGenerationInProgress, bundlePath)
+		if err := writer.Close(); err != nil && returnErr == nil {
+			returnErr = fmt.Errorf("write bundle: %w", err)
+		}
 	}()
 
-	if err := g.sink.Generate(ctx, repo); err != nil {
-		return fmt.Errorf("generate: %w", err)
+	opts := localrepo.CreateBundleOpts{
+		Patterns: strings.NewReader(ref.String()),
+	}
+
+	err = repo.CreateBundle(ctx, writer, &opts)
+	switch {
+	case errors.Is(err, localrepo.ErrEmptyBundle):
+		return structerr.NewFailedPrecondition("ref %q does not exist: %w", ref, err)
+	case err != nil:
+		return structerr.NewInternal("%w", err)
 	}
 
 	return nil
@@ -120,6 +136,8 @@ func (g *GenerationManager) generate(ctx context.Context, repo *localrepo.Repo) 
 // background goroutine to generate a bundle is started.
 func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *localrepo.Repo, f func() error) error {
 	repoPath := repo.GetRelativePath()
+	bundlePath := g.sink.relativePath(repo, defaultBundle)
+
 	g.inProgressTracker.IncrementInProgress(repoPath)
 	defer g.inProgressTracker.DecrementInProgress(repoPath)
 
@@ -129,7 +147,32 @@ func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *
 			defer g.wg.Done()
 			if featureflag.BundleGeneration.IsEnabled(ctx) {
 				start := time.Now()
-				if err := g.generate(g.ctx, repo); err != nil {
+				shouldGenerate := func() bool {
+					g.mutex.Lock()
+					defer g.mutex.Unlock()
+
+					if _, ok := g.bundleGenerationInProgress[bundlePath]; ok {
+						return false
+					}
+					if len(g.bundleGenerationInProgress) >= g.concurrencyLimit {
+						return false
+					}
+
+					g.bundleGenerationInProgress[bundlePath] = struct{}{}
+
+					return true
+				}
+
+				if !shouldGenerate() {
+					return
+				}
+
+				defer func() {
+					g.mutex.Lock()
+					defer g.mutex.Unlock()
+					delete(g.bundleGenerationInProgress, bundlePath)
+				}()
+				if err := Generate(g.ctx, g.sink, repo); err != nil {
 					g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).
 						WithError(err).
 						Error("failed to generate bundle")
@@ -140,6 +183,5 @@ func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *
 			g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).Info("bundle generation")
 		}()
 	}
-
 	return f()
 }
