@@ -617,23 +617,23 @@ func TestLogEntryArchiver_WithRealLogManager(t *testing.T) {
 		logManagers = append(logManagers, logManager)
 	}
 
-	appendLogEntry(t, ctx, logManagers[0], map[string][]byte{
+	appendLogEntry(t, logManagers[0], map[string][]byte{
 		"1": []byte("content-1"),
 		"2": []byte("content-2"),
 		"3": []byte("content-3"),
 	})
-	<-logManagers[0].GetNotificationQueue()
+	require.Nil(t, <-logManagers[0].GetNotificationQueue())
 
 	// KV operation without any file.
-	appendLogEntry(t, ctx, logManagers[1], map[string][]byte{})
-	<-logManagers[1].GetNotificationQueue()
+	appendLogEntry(t, logManagers[1], map[string][]byte{})
+	require.Nil(t, <-logManagers[1].GetNotificationQueue())
 
-	appendLogEntry(t, ctx, logManagers[1], map[string][]byte{
+	appendLogEntry(t, logManagers[1], map[string][]byte{
 		"4": []byte("content-4"),
 		"5": []byte("content-5"),
 		"6": []byte("content-6"),
 	})
-	<-logManagers[1].GetNotificationQueue()
+	require.Nil(t, <-logManagers[1].GetNotificationQueue())
 
 	archiver.Close()
 
@@ -680,7 +680,7 @@ func TestLogEntryArchiver_WithRealLogManager(t *testing.T) {
 	testhelper.RequirePromMetrics(t, archiver.backupCounter, buildMetrics(t, 3, 0))
 }
 
-func appendLogEntry(t *testing.T, ctx context.Context, manager *log.Manager, files map[string][]byte) storage.LSN {
+func appendLogEntry(t *testing.T, manager *log.Manager, files map[string][]byte) storage.LSN {
 	t.Helper()
 
 	logEntryPath := testhelper.TempDir(t)
@@ -689,7 +689,7 @@ func appendLogEntry(t *testing.T, ctx context.Context, manager *log.Manager, fil
 		require.NoError(t, os.WriteFile(path, value, mode.File))
 	}
 
-	nextLSN, err := manager.AppendLogEntry(ctx, logEntryPath)
+	nextLSN, err := manager.AppendLogEntry(logEntryPath)
 	require.NoError(t, err)
 
 	return nextLSN

@@ -1990,6 +1990,11 @@ func (mgr *TransactionManager) run(ctx context.Context) (returnedErr error) {
 			returnedErr = errors.Join(returnedErr, fmt.Errorf("clean up worker: %w", err))
 		}
 	}()
+	defer func() {
+		if err := mgr.logManager.Close(); err != nil {
+			returnedErr = errors.Join(returnedErr, fmt.Errorf("stopping log manager: %w", err))
+		}
+	}()
 	// Defer the Stop in order to release all on-going Commit calls in case of error.
 	defer close(mgr.closed)
 	defer mgr.Close()
@@ -2006,10 +2011,6 @@ func (mgr *TransactionManager) run(ctx context.Context) (returnedErr error) {
 				return fmt.Errorf("apply log entry: %w", err)
 			}
 			continue
-		}
-
-		if err := mgr.logManager.PruneLogEntries(mgr.ctx); err != nil {
-			return fmt.Errorf("pruning log entries: %w", err)
 		}
 
 		if err := mgr.processTransaction(ctx); err != nil {
@@ -2039,7 +2040,10 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		return errors.New("cleanup worker failed")
 	case <-mgr.completedQueue:
 		return nil
-	case <-mgr.logManager.GetNotificationQueue():
+	case logErr := <-mgr.logManager.GetNotificationQueue():
+		if logErr != nil {
+			return fmt.Errorf("log manager failed: %w", logErr)
+		}
 		return nil
 	case <-ctx.Done():
 	}
@@ -2985,7 +2989,7 @@ func (mgr *TransactionManager) appendLogEntry(ctx context.Context, objectDepende
 
 	// After this latch block, the transaction is committed and all subsequent transactions
 	// are guaranteed to read it.
-	appendedLSN, err := mgr.logManager.AppendLogEntry(ctx, logEntryPath)
+	appendedLSN, err := mgr.logManager.AppendLogEntry(logEntryPath)
 	if err != nil {
 		mgr.mutex.Lock()
 		delete(mgr.snapshotLocks, mgr.logManager.AppendedLSN()+1)

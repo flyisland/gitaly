@@ -188,20 +188,19 @@ type LogManager interface {
 	// It ensures the environment is ready, and previous states are resumed correctly.
 	Initialize(ctx context.Context, appliedLSN LSN) error
 
+	// Close stops the log manager, cleans up resources, and stops internal workers. The caller
+	// is blocked until complete.
+	Close() error
+
 	// AppendLogEntry appends an entry to the WAL. logEntryPath specifies the directory of the log entry. It returns
 	// the Log Sequence Number (LSN) of the appended log entry.
-	AppendLogEntry(ctx context.Context, logEntryPath string) (LSN, error)
-
-	// PruneLogEntries removes log entries that are no longer needed, based on retention policies. This is a leaky
-	// abstraction. The log manager should be fully responsible for the life cycle of log entries. We'll remove
-	// external access to log entry pruning in https://gitlab.com/gitlab-org/gitaly/-/issues/6529.
-	PruneLogEntries(ctx context.Context) error
+	AppendLogEntry(logEntryPath string) (LSN, error)
 
 	// AppendedLSN returns the LSN of the latest appended log entry.
 	AppendedLSN() LSN
 
 	// GetNotificationQueue returns a channel that is used to notify external components of changes.
-	GetNotificationQueue() <-chan struct{}
+	GetNotificationQueue() <-chan error
 }
 
 // Partition is responsible for a single partition of data.
