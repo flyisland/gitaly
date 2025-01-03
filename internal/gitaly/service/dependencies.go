@@ -172,3 +172,8 @@ func (dc *Dependencies) GetProcReceiveRegistry() *gitalyhook.ProcReceiveRegistry
 func (dc *Dependencies) GetRepositoryFactory() localrepo.Factory {
 	return dc.LocalRepositoryFactory
 }
+
+// GetBundleManager returns the RepositoryFactory
+func (dc *Dependencies) GetBundleManager() *bundleuri.GenerationManager {
+	return dc.BundleGenerationManager
+}

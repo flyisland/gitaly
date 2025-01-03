@@ -7,9 +7,7 @@ import (
 	"io"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"gocloud.dev/blob"
 
 	_ "gocloud.dev/blob/azureblob" // register Azure driver
@@ -60,20 +58,7 @@ func (s *Sink) getWriter(ctx context.Context, relativePath string) (io.WriteClos
 	return writer, nil
 }
 
-// SignedURL returns a public URL to give anyone access to download the bundle from.
-func (s Sink) SignedURL(ctx context.Context, repo storage.Repository) (string, error) {
-	relativePath := bundleRelativePath(repo, defaultBundle)
-
-	repoProto, ok := repo.(*gitalypb.Repository)
-	if !ok {
-		return "", fmt.Errorf("unexpected repository type %t", repo)
-	}
-
-	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		origRepo := tx.OriginalRepository(repoProto)
-		relativePath = bundleRelativePath(origRepo, defaultBundle)
-	}
-
+func (s *Sink) signedURL(ctx context.Context, relativePath string) (string, error) {
 	if exists, err := s.bucket.Exists(ctx, relativePath); !exists {
 		if err == nil {
 			return "", structerr.NewNotFound("no bundle available")

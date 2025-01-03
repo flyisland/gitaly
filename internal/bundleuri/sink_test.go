@@ -63,8 +63,8 @@ func TestSink_SignedURL(t *testing.T) {
 			require.NoError(t, err)
 
 			tc.setup(t, sinkDir, sink)
-
-			uri, err := sink.SignedURL(ctx, repoProto)
+			path := bundleRelativePath(repoProto, defaultBundle)
+			uri, err := sink.signedURL(ctx, path)
 			if tc.expectedErr == nil {
 				require.NoError(t, err)
 				require.Regexp(t, "http://example\\.com", uri)

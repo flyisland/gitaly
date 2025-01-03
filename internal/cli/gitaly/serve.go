@@ -546,6 +546,14 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		}
 	}
 
+	// The manager created here merely to have a non-nil manager in order to use
+	// the SignedURL() method on it. It is not used, yet, to generate bundles
+	// based on this configuration (concurrencyLimit: 3, threshold: 1).
+	// Further tests and analysis would be required to come up with the
+	// appropriate configuration. This will be done once we are ready to use this manager
+	// to generate bundles based on this configuration (ie: calling GenerateIfAboveThreshold(...))
+	bundleManager := bundleuri.NewGenerationManager(bundleURISink, logger, 3, 1, bundleuri.NewInProgressTracker())
+
 	for _, c := range []starter.Config{
 		{Name: starter.Unix, Addr: cfg.SocketPath, HandoverOnUpgrade: true},
 		{Name: starter.Unix, Addr: cfg.InternalSocketPath(), HandoverOnUpgrade: false},
@@ -570,26 +578,27 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		}
 
 		setup.RegisterAll(srv, &service.Dependencies{
-			Logger:                 logger,
-			Cfg:                    cfg,
-			GitalyHookManager:      hookManager,
-			TransactionManager:     transactionManager,
-			StorageLocator:         locator,
-			ClientPool:             conns,
-			GitCmdFactory:          gitCmdFactory,
-			CatfileCache:           catfileCache,
-			DiskCache:              diskCache,
-			PackObjectsCache:       streamCache,
-			PackObjectsLimiter:     packObjectsLimiter,
-			RepositoryCounter:      repoCounter,
-			UpdaterWithHooks:       updaterWithHooks,
-			Node:                   node,
-			TransactionRegistry:    txRegistry,
-			HousekeepingManager:    housekeepingManager,
-			BackupSink:             backupSink,
-			BackupLocator:          backupLocator,
-			BundleURISink:          bundleURISink,
-			LocalRepositoryFactory: localrepoFactory,
+			Logger:                  logger,
+			Cfg:                     cfg,
+			GitalyHookManager:       hookManager,
+			TransactionManager:      transactionManager,
+			StorageLocator:          locator,
+			ClientPool:              conns,
+			GitCmdFactory:           gitCmdFactory,
+			CatfileCache:            catfileCache,
+			DiskCache:               diskCache,
+			PackObjectsCache:        streamCache,
+			PackObjectsLimiter:      packObjectsLimiter,
+			RepositoryCounter:       repoCounter,
+			UpdaterWithHooks:        updaterWithHooks,
+			Node:                    node,
+			TransactionRegistry:     txRegistry,
+			HousekeepingManager:     housekeepingManager,
+			BackupSink:              backupSink,
+			BackupLocator:           backupLocator,
+			BundleURISink:           bundleURISink,
+			LocalRepositoryFactory:  localrepoFactory,
+			BundleGenerationManager: bundleManager,
 		})
 		b.RegisterStarter(starter.New(c, srv, logger))
 	}

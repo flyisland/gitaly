@@ -184,7 +184,27 @@ func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *
 			g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).Info("bundle generation")
 		}()
 	}
-	return f()
+	if f != nil {
+		return f()
+	}
+	return nil
+}
+
+// SignedURL returns a public URL to give anyone access to download the bundle from.
+func (g *GenerationManager) SignedURL(ctx context.Context, repo storage.Repository) (string, error) {
+	relativePath := bundleRelativePath(repo, defaultBundle)
+
+	repoProto, ok := repo.(*gitalypb.Repository)
+	if !ok {
+		return "", fmt.Errorf("unexpected repository type %t", repo)
+	}
+
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		origRepo := tx.OriginalRepository(repoProto)
+		relativePath = bundleRelativePath(origRepo, defaultBundle)
+	}
+
+	return g.sink.signedURL(ctx, relativePath)
 }
 
 // bundleRelativePath returns a relative path of the bundle-URI bundle inside the bucket.

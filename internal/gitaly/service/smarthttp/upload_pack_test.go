@@ -487,8 +487,10 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 			cfg := testcfg.Build(t)
 			logger := testhelper.NewLogger(t)
 			hook := testhelper.AddLoggerHook(logger)
+			bundleManager := bundleuri.NewGenerationManager(sink, logger, 2, 0, nil)
+
 			server := startSmartHTTPServerWithOptions(t, cfg, nil, []testserver.GitalyServerOpt{
-				testserver.WithBundleURISink(sink),
+				testserver.WithBundleGenerationManager(bundleManager),
 				testserver.WithLogger(logger),
 			})
 			cfg.SocketPath = server.Address()

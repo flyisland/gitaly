@@ -138,8 +138,9 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 
 			data := tc.setup(t)
 			sink := data.sink
+			manager := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 0, nil)
 
-			actual, err := UploadPackGitConfig(ctx, sink, repoProto)
+			actual, err := UploadPackGitConfig(ctx, manager, repoProto)
 
 			if featureflag.BundleURI.IsEnabled(ctx) {
 				require.Equal(t, tc.expectedErr, err)

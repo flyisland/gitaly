@@ -31,6 +31,7 @@ type server struct {
 	backupSink                 *backup.Sink
 	bundleURISink              *bundleuri.Sink
 	localRepoFactory           localrepo.Factory
+	bundleManager              *bundleuri.GenerationManager
 }
 
 // NewServer creates a new instance of a grpc SmartHTTPServer
@@ -52,6 +53,7 @@ func NewServer(deps *service.Dependencies, serverOpts ...ServerOpt) gitalypb.Sma
 		backupSink:       deps.GetBackupSink(),
 		bundleURISink:    deps.GetBundleURISink(),
 		localRepoFactory: deps.GetRepositoryFactory(),
+		bundleManager:    deps.GetBundleManager(),
 	}
 
 	for _, serverOpt := range serverOpts {
