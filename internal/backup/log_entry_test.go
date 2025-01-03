@@ -607,7 +607,10 @@ func TestLogEntryArchiver_WithRealLogManager(t *testing.T) {
 			PartitionID: storage.PartitionID(i),
 		}
 
-		logManager := log.NewManager(storageName, storage.PartitionID(i), testhelper.TempDir(t), testhelper.TempDir(t), archiver)
+		tracker := log.NewPositionTracker()
+		require.NoError(t, tracker.Register(log.ConsumerPosition))
+
+		logManager := log.NewManager(storageName, storage.PartitionID(i), testhelper.TempDir(t), testhelper.TempDir(t), archiver, tracker)
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		accessor.Lock()

@@ -2257,7 +2257,11 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					require.NoError(t, err)
 					require.NoError(t, os.WriteFile(manifestPath(logEntryPath), manifestBytes, mode.File))
 
-					logManager := log.NewManager(tm.storageName, setup.PartitionID, testhelper.TempDir(t), filepath.Join(tm.storagePath, "state"), setup.Consumer)
+					tracker := log.NewPositionTracker()
+					if setup.Consumer != nil {
+						require.NoError(t, tracker.Register(log.ConsumerPosition))
+					}
+					logManager := log.NewManager(tm.storageName, setup.PartitionID, testhelper.TempDir(t), filepath.Join(tm.storagePath, "state"), setup.Consumer, tracker)
 					require.NoError(t, logManager.Initialize(ctx, 3))
 					lsn, err := logManager.AppendLogEntry(logEntryPath)
 					require.NoError(t, err)

@@ -43,7 +43,14 @@ func (f Factory) New(
 		panic(fmt.Errorf("building a partition for a non-existent storage: %q", storageName))
 	}
 
-	logManager := log.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, f.logConsumer)
+	positionTracker := log.NewPositionTracker()
+	if f.logConsumer != nil {
+		if err := positionTracker.Register(log.ConsumerPosition); err != nil {
+			panic(err)
+		}
+	}
+
+	logManager := log.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, f.logConsumer, positionTracker)
 	return NewTransactionManager(
 		partitionID,
 		logger,

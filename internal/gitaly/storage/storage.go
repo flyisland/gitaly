@@ -203,6 +203,13 @@ type LogManager interface {
 	GetNotificationQueue() <-chan error
 }
 
+// PositionType implements storage.LogPositionType. It's a specific type of position to be tracked in the
+// Write-Ahead Log (WAL) tracking system. It defines whether changes to this position type should trigger notifications.
+type PositionType struct {
+	Name         string
+	ShouldNotify bool
+}
+
 // Partition is responsible for a single partition of data.
 type Partition interface {
 	// Begin begins a transaction against the partition.
