@@ -49,7 +49,7 @@ require (
 	golang.org/x/crypto v0.30.0
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/sys v0.29.0
 	golang.org/x/text v0.21.0
 	golang.org/x/time v0.7.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240930140551-af27646dc61f
