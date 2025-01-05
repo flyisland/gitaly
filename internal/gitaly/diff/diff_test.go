@@ -63,6 +63,7 @@ index %[2]s..%[4]s
 			Status:    'A',
 			Collapsed: true,
 			lineCount: 100000,
+			PatchSize: 12500021,
 		},
 		{
 			OldMode:   0,
@@ -75,6 +76,7 @@ index %[2]s..%[4]s
 			Collapsed: false,
 			Patch:     []byte("@@ -0,0 +1 @@\n+Lorem ipsum\n"),
 			lineCount: 1,
+			PatchSize: 27,
 		},
 	}
 
@@ -131,6 +133,7 @@ index %[1]s..%[3]s 100644
 			Collapsed: false,
 			Patch:     []byte("@@ -1 +1,2 @@\n Lorem ipsum\n+Lorem ipsum\n"),
 			lineCount: 2,
+			PatchSize: 40,
 		},
 	}
 
@@ -176,6 +179,7 @@ index %[1]s..%[2]s 100644
 			Collapsed: false,
 			Patch:     []byte("@@ -1 +1,2 @@\n Lorem ipsum\n+Lorem ipsum\n"),
 			lineCount: 2,
+			PatchSize: 40,
 		},
 		{
 			OldMode:   0o100644,
@@ -237,6 +241,7 @@ index %s..%s
 			Collapsed: false,
 			Patch:     []byte("@@ -0,0 +1,3 @@\n+A\n~\n+B\n+C\n~\n"),
 			lineCount: 5,
+			PatchSize: 29,
 		},
 	}
 
@@ -291,6 +296,7 @@ index %[2]s..%[4]s
 			Collapsed: false,
 			lineCount: 100000,
 			TooLarge:  true,
+			PatchSize: 12500021,
 		},
 		{
 			OldMode:   0,
@@ -303,6 +309,7 @@ index %[2]s..%[4]s
 			Collapsed: false,
 			Patch:     []byte("@@ -0,0 +1 @@\n+Lorem ipsum\n"),
 			lineCount: 1,
+			PatchSize: 27,
 		},
 	}
 
@@ -357,6 +364,7 @@ index %[2]s..%[4]s
 			Patch:     []byte(bigPatch),
 			lineCount: 1000,
 			TooLarge:  false,
+			PatchSize: 124021,
 		},
 		{
 			OldMode:   0,
@@ -369,6 +377,7 @@ index %[2]s..%[4]s
 			Collapsed: false,
 			Patch:     []byte("@@ -0,0 +1 @@\n+Lorem ipsum\n"),
 			lineCount: 1,
+			PatchSize: 27,
 		},
 	}
 
@@ -421,6 +430,7 @@ index %s..%s
 			Collapsed: false,
 			Patch:     []byte(patch),
 			lineCount: 5,
+			PatchSize: 51,
 		},
 		{
 			OldMode:   0,
@@ -433,6 +443,7 @@ index %s..%s
 			Collapsed: false,
 			Patch:     []byte(patch),
 			lineCount: 5,
+			PatchSize: 51,
 		},
 		{
 			OldMode:   0,
@@ -445,6 +456,7 @@ index %s..%s
 			Collapsed: true,
 			Patch:     nil,
 			lineCount: 5,
+			PatchSize: 51,
 		},
 	}
 
@@ -481,6 +493,7 @@ index %[1]s..%[2]s
 			Collapsed: false,
 			Patch:     []byte(patch),
 			lineCount: 1,
+			PatchSize: 100019,
 		},
 	}
 
@@ -561,6 +574,7 @@ index %s..%s
 	// .md does not
 	require.False(t, diffs[1].Collapsed)
 	require.True(t, diffs[1].TooLarge)
+	require.Equal(t, diffs[1].PatchSize, int32(10219))
 	require.Equal(t, diffs[1].Patch, []byte(nil))
 }
 

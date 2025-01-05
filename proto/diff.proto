@@ -613,4 +613,10 @@ message DiffBlobsResponse {
   bool binary = 5;
   // over_patch_bytes_limit indicates the patch was pruned since it surpassed the set limit.
   bool over_patch_bytes_limit = 6;
+  // patch_size is the size of the patch in bytes and is always returned even if a patch is pruned.
+  // To improve performance, a client may make an initial DiffBlobs request with a lower "soft"
+  // patch_bytes_limit to avoid receiving large patches. If a patch exceeds this byte limit and gets
+  // pruned, the patch size can be used by the client to determine whether it is sensible to make a
+  // follow-up DiffBlobs request by increasing the patch_bytes_limit to a "hard" limit.
+  int32 patch_size = 7;
 }
