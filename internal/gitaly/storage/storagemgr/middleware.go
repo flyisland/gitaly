@@ -45,6 +45,8 @@ var NonTransactionalRPCs = map[string]struct{}{
 	gitalypb.ServerService_ServerInfo_FullMethodName:      {},
 	gitalypb.ServerService_ReadinessCheck_FullMethodName:  {},
 	gitalypb.ServerService_ServerSignature_FullMethodName: {},
+	// This RPC does not need to be transactional as it acts as a forwarder.
+	gitalypb.RaftService_SendMessage_FullMethodName: {},
 }
 
 // repositoryCreatingRPCs are all of the RPCs that may create a repository.
