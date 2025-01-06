@@ -379,10 +379,6 @@ func generateConsumerTests(t *testing.T, setup testTransactionSetup) []transacti
 				},
 				CloseManager{},
 				StartManager{},
-				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
-					// Wait until the first acknowledgement after restart
-					<-tm.logManager.GetNotificationQueue()
-				}),
 			},
 			expectedState: StateAssertion{
 				Database: DatabaseState{

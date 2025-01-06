@@ -145,13 +145,15 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 		}
 	}
 
+	mgr.positionTracker.Each(func(t string, _ storage.LSN) {
+		// Set acknowledged position to oldestLSN - 1. If set the position to 0, the consumer is unable to read
+		// pruned entry anyway.
+		_ = mgr.positionTracker.Set(t, mgr.oldestLSN-1)
+	})
+
 	if mgr.consumer != nil && mgr.appendedLSN != 0 {
-		// Set acknowledged position to oldestLSN - 1 and notify the consumer from oldestLSN -> appendedLSN.
-		// If set the position to 0, the consumer is unable to read pruned entry anyway.
-		mgr.AcknowledgeConsumerPosition(mgr.oldestLSN - 1)
 		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.oldestLSN, mgr.appendedLSN)
 	}
-	mgr.AcknowledgeAppliedPosition(appliedLSN)
 
 	return nil
 }

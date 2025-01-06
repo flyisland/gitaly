@@ -129,6 +129,8 @@ func TestLogManager_Initialize(t *testing.T) {
 		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 2))
 
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
+
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(3), logManager.oldestLSN)
 		require.Equal(t, storage.LSN(3), logManager.appendedLSN)
@@ -159,6 +161,7 @@ func TestLogManager_Initialize(t *testing.T) {
 
 		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 3))
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 3))
 
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(4), logManager.oldestLSN)
@@ -277,12 +280,15 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
 		}
 
+		// Set the applied LSN to 2
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
+		// Manually set the consumer's position to the first entry, forcing low-water mark to retain it
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, 1))
+
 		// Before removal
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
 			"/wal":                 {Mode: mode.Directory},
-			"/wal/0000000000001":   {Mode: mode.Directory},
-			"/wal/0000000000001/1": {Mode: mode.File, Content: []byte("content-1")},
 			"/wal/0000000000002":   {Mode: mode.Directory},
 			"/wal/0000000000002/1": {Mode: mode.File, Content: []byte("content-2")},
 			"/wal/0000000000003":   {Mode: mode.Directory},
@@ -397,6 +403,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		// Restart the manager
 		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 5))
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 5))
 
 		waitUntilPruningFinish(t, logManager)
 		testhelper.RequireDirectoryState(t, logManager.stateDirectory, "", testhelper.DirectoryState{
