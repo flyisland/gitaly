@@ -538,6 +538,15 @@ func (s LogEntryStore) Exists(ctx context.Context, info PartitionInfo, lsn stora
 	return exists, nil
 }
 
+// GetReader returns a reader in order to read a log entry from the store.
+func (s *LogEntryStore) GetReader(ctx context.Context, info PartitionInfo, lsn storage.LSN) (io.ReadCloser, error) {
+	r, err := s.sink.GetReader(ctx, archivePath(info, lsn))
+	if err != nil {
+		return nil, fmt.Errorf("get reader: %w", err)
+	}
+	return r, nil
+}
+
 // GetWriter returns a writer in order to write a new log entry into the store.
 func (s LogEntryStore) GetWriter(ctx context.Context, info PartitionInfo, lsn storage.LSN) (io.WriteCloser, error) {
 	w, err := s.sink.GetWriter(ctx, archivePath(info, lsn))

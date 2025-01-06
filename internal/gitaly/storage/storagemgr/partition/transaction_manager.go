@@ -874,6 +874,11 @@ func (mgr *TransactionManager) GetLogReader() storage.LogReader {
 	return mgr.logManager
 }
 
+// GetLogWriter provides controlled access to underlying log management system for log appending purpose.
+func (mgr *TransactionManager) GetLogWriter() storage.LogWriter {
+	return mgr.logManager
+}
+
 // TransactionManager is responsible for transaction management of a single repository. Each repository has
 // a single TransactionManager; it is the repository's single-writer. It accepts writes one at a time from
 // the admissionQueue. Each admitted write is processed in three steps:
