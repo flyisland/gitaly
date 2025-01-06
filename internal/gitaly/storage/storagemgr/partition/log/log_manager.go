@@ -158,17 +158,6 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 	return nil
 }
 
-// AcknowledgeAppliedPosition acknowledges the position of latest applied log entry.
-func (mgr *Manager) AcknowledgeAppliedPosition(lsn storage.LSN) {
-	_ = mgr.AcknowledgePosition(AppliedPosition, lsn)
-}
-
-// AcknowledgeConsumerPosition acknowledges log entries up and including LSN as successfully processed for the specified
-// LogConsumer. The manager is awakened if it is currently awaiting a new or completed transaction.
-func (mgr *Manager) AcknowledgeConsumerPosition(lsn storage.LSN) {
-	_ = mgr.AcknowledgePosition(ConsumerPosition, lsn)
-}
-
 // AcknowledgePosition acknowledges the position of a position type.
 func (mgr *Manager) AcknowledgePosition(t storage.PositionType, lsn storage.LSN) error {
 	if err := mgr.positionTracker.Set(t.Name, lsn); err != nil {

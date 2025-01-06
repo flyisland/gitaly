@@ -36,6 +36,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/proto"
@@ -1419,7 +1420,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			transaction := openTransactions[step.TransactionID]
 			transaction.WriteCommitGraphs(step.Config)
 		case ConsumerAcknowledge:
-			transactionManager.logManager.AcknowledgeConsumerPosition(step.LSN)
+			require.NoError(t, transactionManager.logManager.AcknowledgePosition(log.ConsumerPosition, step.LSN))
 		case RepositoryAssertion:
 			require.Contains(t, openTransactions, step.TransactionID, "test error: transaction's snapshot asserted before beginning it")
 			transaction := openTransactions[step.TransactionID]

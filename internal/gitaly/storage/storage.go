@@ -169,15 +169,9 @@ type LogReader interface {
 	// GetEntryPath returns the path of the log entry's root directory.
 	GetEntryPath(lsn LSN) string
 
-	// The following functions allows other components acknowledge their positions. The log manager uses those
-	// positions to prune entries. Those interfaces are not great. We have a plan to refator them in:
-	// https://gitlab.com/gitlab-org/gitaly/-/issues/6528
-
-	// AcknowledgeConsumerPosition acknowledges log entries up and including lsn as successfully processed
-	// for the specified LogConsumer.
-	AcknowledgeConsumerPosition(lsn LSN)
-	// AcknowledgeAppliedPosition acknowledges the position of latest applied log entry.
-	AcknowledgeAppliedPosition(lsn LSN)
+	// AcknowledgePosition acknowledges log entries up and including lsn as successfully processed
+	// for the specified position type.
+	AcknowledgePosition(PositionType, LSN) error
 }
 
 // LogManager is the interface used to manage the underlying Write-Ahead Log entries.

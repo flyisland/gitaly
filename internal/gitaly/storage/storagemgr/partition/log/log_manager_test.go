@@ -259,7 +259,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		})
 
 		// Set this entry as applied
-		logManager.AcknowledgeAppliedPosition(1)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 1))
 		waitUntilPruningFinish(t, logManager)
 
 		// After removal
@@ -296,9 +296,9 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		})
 
 		// Set the applied LSN to 2
-		logManager.AcknowledgeAppliedPosition(2)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
 		// Manually set the consumer's position to the first entry, forcing low-water mark to retain it
-		logManager.AcknowledgeConsumerPosition(1)
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, 1))
 
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(2), logManager.oldestLSN)
@@ -341,7 +341,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		})
 
 		// Set the applied LSN to 3, allowing the first three entries to be pruned
-		logManager.AcknowledgeAppliedPosition(3)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 3))
 		waitUntilPruningFinish(t, logManager)
 
 		// Ensure only entries starting from LSN 4 are retained
@@ -382,7 +382,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		require.NoError(t, os.Chmod(infectedPath, 0o444))
 
 		// The error is notified via notification queue so that the caller can act accordingly
-		logManager.AcknowledgeAppliedPosition(5)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 5))
 		require.ErrorContains(t, <-logManager.GetNotificationQueue(), "permission denied")
 
 		require.NoError(t, logManager.Close())
@@ -443,12 +443,12 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 					if logManager.AppendedLSN() == totalLSN {
 						return
 					}
-					logManager.AcknowledgeAppliedPosition(logManager.AppendedLSN())
+					require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, logManager.AppendedLSN()))
 				}
 			}()
 		}
 		wg.Wait()
-		logManager.AcknowledgeAppliedPosition(logManager.AppendedLSN())
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, logManager.AppendedLSN()))
 
 		require.NoError(t, logManager.Close())
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
@@ -550,8 +550,8 @@ func TestLogManager_Positions(t *testing.T) {
 	ctx := testhelper.Context(t)
 
 	simulatePositions := func(t *testing.T, logManager *Manager, consumed storage.LSN, applied storage.LSN) {
-		logManager.AcknowledgeConsumerPosition(consumed)
-		logManager.AcknowledgeAppliedPosition(applied)
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, consumed))
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, applied))
 	}
 
 	t.Run("consumer pos is set to 0 after initialized", func(t *testing.T) {
@@ -601,7 +601,7 @@ func TestLogManager_Positions(t *testing.T) {
 
 		// Restart the log consumer.
 		mockConsumer = &mockLogConsumer{}
-		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, mockConsumer, newTracker(t, nil))
+		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, mockConsumer, newTracker(t, mockConsumer))
 		require.NoError(t, logManager.Initialize(ctx, 2))
 
 		// Notify consumer to consume from 2 -> 4
@@ -875,7 +875,7 @@ func TestLogManager_Close(t *testing.T) {
 		appendLogEntry(t, logManager, map[string][]byte{"2": []byte("content-2")})
 
 		// Trigger pruning
-		logManager.AcknowledgeAppliedPosition(2)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
 
 		// Close the manager and ensure all tasks are completed
 		require.NoError(t, logManager.Close())

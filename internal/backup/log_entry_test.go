@@ -76,7 +76,7 @@ type mockLogManager struct {
 	storage.LogReader
 }
 
-func (lm *mockLogManager) AcknowledgeConsumerPosition(lsn storage.LSN) {
+func (lm *mockLogManager) AcknowledgePosition(_ storage.PositionType, lsn storage.LSN) error {
 	lm.Lock()
 	defer lm.Unlock()
 
@@ -109,6 +109,7 @@ func (lm *mockLogManager) AcknowledgeConsumerPosition(lsn storage.LSN) {
 		lm.finishCount--
 		lm.finishFunc()
 	}
+	return nil
 }
 
 func (lm *mockLogManager) SendNotification() {
