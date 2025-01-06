@@ -120,8 +120,34 @@ func recoveryStatusAction(ctx *cli.Context) (returnErr error) {
 	}, recoveryContext.appliedLSN+1)
 
 	fmt.Fprintf(ctx.App.Writer, "Available backup entries:\n")
+
+	var startLSN, lastLSN storage.LSN
+	firstRun := true
+
 	for entries.Next(ctx.Context) {
-		fmt.Fprintf(ctx.App.Writer, " - %s\n", entries.LSN())
+		currentLSN := entries.LSN()
+
+		if firstRun {
+			startLSN = currentLSN
+			lastLSN = currentLSN
+			firstRun = false
+			continue
+		}
+
+		if currentLSN != lastLSN+1 {
+			// We've found a gap, print the previous range
+			printLSNRange(ctx.App.Writer, startLSN, lastLSN)
+			startLSN = currentLSN
+		}
+
+		lastLSN = currentLSN
+	}
+
+	// Print the last range or handle no entries case
+	if !firstRun {
+		printLSNRange(ctx.App.Writer, startLSN, lastLSN)
+	} else {
+		fmt.Fprintf(ctx.App.Writer, "No entries found\n")
 	}
 
 	if err := entries.Err(); err != nil {
@@ -441,6 +467,14 @@ func parsePartitionID(id *storage.PartitionID, value string) error {
 	*id = storage.PartitionID(parsedID)
 
 	return nil
+}
+
+func printLSNRange(w io.Writer, start, end storage.LSN) {
+	if start == end {
+		fmt.Fprintf(w, " - %s\n", start)
+	} else {
+		fmt.Fprintf(w, " - from %s to %s\n", start, end)
+	}
 }
 
 func (rc *recoveryContext) Cleanup() error {
