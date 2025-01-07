@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -86,7 +87,7 @@ func StartPraefect(tb testing.TB, cfg config.Config) PraefectServer {
 	praefectServer := PraefectServer{
 		address: "unix://" + praefectServerSocket.Addr().String(),
 		shutdown: func() {
-			_ = cmd.Process.Kill()
+			_ = cmd.Process.Signal(syscall.SIGTERM)
 			_ = wait()
 		},
 	}
