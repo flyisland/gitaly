@@ -189,7 +189,71 @@ Applied LSN: %s
 Relative paths:
  - %s
 Available backup entries:
+ - from %s to %s
+`,
+						storage.PartitionID(2),
+						storage.LSN(1),
+						repo.GetRelativePath(),
+						storage.LSN(2),
+						storage.LSN(3),
+					),
+				}
+			},
+		},
+		{
+			desc: "success, non-contiguous backups",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				logger := testhelper.SharedLogger(t)
+				repo := &gitalypb.Repository{
+					StorageName:  opts.cfg.Storages[0].Name,
+					RelativePath: gittest.NewRepositoryName(t),
+				}
+
+				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
+					RelativePath: repo.GetRelativePath(),
+					AllowPartitionAssignmentWithoutRepository: true,
+				})
+				require.NoError(t, err)
+
+				err = repoutil.Create(
+					storage.ContextWithTransaction(ctx, txn),
+					logger,
+					opts.locator,
+					opts.gitCmdFactory,
+					opts.catfileCache,
+					transaction.NewTrackingManager(),
+					counter.NewRepositoryCounter(opts.cfg.Storages),
+					txn.RewriteRepository(repo),
+					func(repo *gitalypb.Repository) error {
+						return nil
+					},
+				)
+				require.NoError(t, err)
+
+				require.NoError(t, txn.Commit(ctx))
+
+				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"):  "",
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"):  "",
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"):  "",
+					filepath.Join(partitionPath, storage.LSN(5).String()+".tar"):  "",
+					filepath.Join(partitionPath, storage.LSN(6).String()+".tar"):  "",
+					filepath.Join(partitionPath, storage.LSN(7).String()+".tar"):  "",
+					filepath.Join(partitionPath, storage.LSN(8).String()+".tar"):  "",
+					filepath.Join(partitionPath, storage.LSN(10).String()+".tar"): "",
+				})
+
+				return setupData{
+					storageName: repo.GetStorageName(),
+					partitionID: 2,
+					expectedOutput: fmt.Sprintf(`Partition ID: %s
+Applied LSN: %s
+Relative paths:
  - %s
+Available backup entries:
+ - from %s to %s
+ - from %s to %s
  - %s
 `,
 						storage.PartitionID(2),
@@ -197,6 +261,9 @@ Available backup entries:
 						repo.GetRelativePath(),
 						storage.LSN(2),
 						storage.LSN(3),
+						storage.LSN(5),
+						storage.LSN(8),
+						storage.LSN(10),
 					),
 				}
 			},
