@@ -29,8 +29,16 @@ func appendLogEntry(t *testing.T, manager *Manager, files map[string][]byte) sto
 	return nextLSN
 }
 
+func newTracker(t *testing.T, consumer storage.LogConsumer) *PositionTracker {
+	tracker := NewPositionTracker()
+	if consumer != nil {
+		require.NoError(t, tracker.Register(ConsumerPosition))
+	}
+	return tracker
+}
+
 func setupLogManager(t *testing.T, ctx context.Context, consumer storage.LogConsumer) *Manager {
-	logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), consumer)
+	logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), consumer, newTracker(t, consumer))
 	require.NoError(t, logManager.Initialize(ctx, 0))
 
 	return logManager
@@ -56,7 +64,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		ctx := testhelper.Context(t)
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		waitUntilPruningFinish(t, logManager)
@@ -78,13 +86,13 @@ func TestLogManager_Initialize(t *testing.T) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil)
+		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
 		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 
-		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil)
+		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		waitUntilPruningFinish(t, logManager)
@@ -105,11 +113,12 @@ func TestLogManager_Initialize(t *testing.T) {
 
 	t.Run("existing WAL entries with appliedLSN in-between", func(t *testing.T) {
 		t.Parallel()
+
 		ctx := testhelper.Context(t)
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil)
+		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		for i := 0; i < 3; i++ {
@@ -117,8 +126,10 @@ func TestLogManager_Initialize(t *testing.T) {
 		}
 		require.NoError(t, logManager.Close())
 
-		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
+		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 2))
+
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
 
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(3), logManager.oldestLSN)
@@ -140,7 +151,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil)
+		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		for i := 0; i < 3; i++ {
@@ -148,8 +159,9 @@ func TestLogManager_Initialize(t *testing.T) {
 		}
 		require.NoError(t, logManager.Close())
 
-		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil)
+		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 3))
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 3))
 
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(4), logManager.oldestLSN)
@@ -169,7 +181,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		ctx := testhelper.Context(t)
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		// Attempt to initialize again
@@ -186,7 +198,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		cancel() // Cancel the context before initializing
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
 		err := logManager.Initialize(ctx, 0)
 
 		require.Error(t, err)
@@ -198,7 +210,7 @@ func TestLogManager_Initialize(t *testing.T) {
 		ctx, cancel := context.WithCancel(testhelper.Context(t))
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		// Cancel the context after initialization
@@ -247,7 +259,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		})
 
 		// Set this entry as applied
-		logManager.AcknowledgeAppliedPosition(1)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 1))
 		waitUntilPruningFinish(t, logManager)
 
 		// After removal
@@ -268,12 +280,15 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
 		}
 
+		// Set the applied LSN to 2
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
+		// Manually set the consumer's position to the first entry, forcing low-water mark to retain it
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, 1))
+
 		// Before removal
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
 			"/wal":                 {Mode: mode.Directory},
-			"/wal/0000000000001":   {Mode: mode.Directory},
-			"/wal/0000000000001/1": {Mode: mode.File, Content: []byte("content-1")},
 			"/wal/0000000000002":   {Mode: mode.Directory},
 			"/wal/0000000000002/1": {Mode: mode.File, Content: []byte("content-2")},
 			"/wal/0000000000003":   {Mode: mode.Directory},
@@ -281,9 +296,9 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		})
 
 		// Set the applied LSN to 2
-		logManager.AcknowledgeAppliedPosition(2)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
 		// Manually set the consumer's position to the first entry, forcing low-water mark to retain it
-		logManager.AcknowledgeConsumerPosition(1)
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, 1))
 
 		waitUntilPruningFinish(t, logManager)
 		require.Equal(t, storage.LSN(2), logManager.oldestLSN)
@@ -326,7 +341,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		})
 
 		// Set the applied LSN to 3, allowing the first three entries to be pruned
-		logManager.AcknowledgeAppliedPosition(3)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 3))
 		waitUntilPruningFinish(t, logManager)
 
 		// Ensure only entries starting from LSN 4 are retained
@@ -349,7 +364,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil)
+		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		for i := 0; i < 5; i++ {
@@ -367,7 +382,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		require.NoError(t, os.Chmod(infectedPath, 0o444))
 
 		// The error is notified via notification queue so that the caller can act accordingly
-		logManager.AcknowledgeAppliedPosition(5)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 5))
 		require.ErrorContains(t, <-logManager.GetNotificationQueue(), "permission denied")
 
 		require.NoError(t, logManager.Close())
@@ -386,8 +401,9 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		})
 
 		// Restart the manager
-		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil)
+		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 5))
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 5))
 
 		waitUntilPruningFinish(t, logManager)
 		testhelper.RequireDirectoryState(t, logManager.stateDirectory, "", testhelper.DirectoryState{
@@ -402,7 +418,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil)
+		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		var wg sync.WaitGroup
@@ -427,12 +443,12 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 					if logManager.AppendedLSN() == totalLSN {
 						return
 					}
-					logManager.AcknowledgeAppliedPosition(logManager.AppendedLSN())
+					require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, logManager.AppendedLSN()))
 				}
 			}()
 		}
 		wg.Wait()
-		logManager.AcknowledgeAppliedPosition(logManager.AppendedLSN())
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, logManager.AppendedLSN()))
 
 		require.NoError(t, logManager.Close())
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
@@ -534,8 +550,8 @@ func TestLogManager_Positions(t *testing.T) {
 	ctx := testhelper.Context(t)
 
 	simulatePositions := func(t *testing.T, logManager *Manager, consumed storage.LSN, applied storage.LSN) {
-		logManager.AcknowledgeConsumerPosition(consumed)
-		logManager.AcknowledgeAppliedPosition(applied)
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, consumed))
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, applied))
 	}
 
 	t.Run("consumer pos is set to 0 after initialized", func(t *testing.T) {
@@ -557,7 +573,7 @@ func TestLogManager_Positions(t *testing.T) {
 		// Before restart
 		mockConsumer := &mockLogConsumer{}
 
-		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, mockConsumer)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, mockConsumer, newTracker(t, mockConsumer))
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
@@ -585,7 +601,7 @@ func TestLogManager_Positions(t *testing.T) {
 
 		// Restart the log consumer.
 		mockConsumer = &mockLogConsumer{}
-		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, mockConsumer)
+		logManager = NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, mockConsumer, newTracker(t, mockConsumer))
 		require.NoError(t, logManager.Initialize(ctx, 2))
 
 		// Notify consumer to consume from 2 -> 4
@@ -741,6 +757,63 @@ func TestLogManager_Positions(t *testing.T) {
 			"/wal": {Mode: mode.Directory},
 		})
 	})
+
+	t.Run("more position types apart from defaults are supported", func(t *testing.T) {
+		consumer := &mockLogConsumer{}
+
+		tracker := newTracker(t, consumer)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), consumer, tracker)
+
+		t1 := storage.PositionType{Name: "TestPosition1", ShouldNotify: false}
+		t2 := storage.PositionType{Name: "TestPosition2", ShouldNotify: false}
+		require.NoError(t, tracker.Register(t1))
+		require.NoError(t, tracker.Register(t2))
+
+		require.NoError(t, logManager.Initialize(ctx, 0))
+
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-3")})
+
+		// Consumed = 3, Applied = 2, TestPosition1 = 1, testPosition2 = 1
+		simulatePositions(t, logManager, 3, 2)
+
+		require.Equal(t, storage.LSN(1), logManager.lowWaterMark())
+		assertDirectoryState(t, logManager, testhelper.DirectoryState{
+			"/":                    {Mode: mode.Directory},
+			"/wal":                 {Mode: mode.Directory},
+			"/wal/0000000000001":   {Mode: mode.Directory},
+			"/wal/0000000000001/1": {Mode: mode.File, Content: []byte("content-1")},
+			"/wal/0000000000002":   {Mode: mode.Directory},
+			"/wal/0000000000002/1": {Mode: mode.File, Content: []byte("content-2")},
+			"/wal/0000000000003":   {Mode: mode.Directory},
+			"/wal/0000000000003/1": {Mode: mode.File, Content: []byte("content-3")},
+		})
+
+		// Consumed = 3, Applied = 3, TestPosition1 = 2, testPosition2 = 2
+		require.NoError(t, logManager.AcknowledgePosition(t1, 2))
+		require.NoError(t, logManager.AcknowledgePosition(t2, 2))
+		simulatePositions(t, logManager, 3, 3)
+
+		require.Equal(t, storage.LSN(3), logManager.lowWaterMark())
+		assertDirectoryState(t, logManager, testhelper.DirectoryState{
+			"/":                    {Mode: mode.Directory},
+			"/wal":                 {Mode: mode.Directory},
+			"/wal/0000000000003":   {Mode: mode.Directory},
+			"/wal/0000000000003/1": {Mode: mode.File, Content: []byte("content-3")},
+		})
+
+		// All positions are 3
+		require.NoError(t, logManager.AcknowledgePosition(t1, 3))
+		require.NoError(t, logManager.AcknowledgePosition(t2, 3))
+		simulatePositions(t, logManager, 3, 3)
+
+		require.Equal(t, storage.LSN(4), logManager.lowWaterMark())
+		assertDirectoryState(t, logManager, testhelper.DirectoryState{
+			"/":    {Mode: mode.Directory},
+			"/wal": {Mode: mode.Directory},
+		})
+	})
 }
 
 func TestLogManager_Close(t *testing.T) {
@@ -748,7 +821,7 @@ func TestLogManager_Close(t *testing.T) {
 
 	t.Run("close uninitialized manager", func(t *testing.T) {
 		t.Parallel()
-		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), nil)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), nil, newTracker(t, nil))
 
 		// Attempt to close the manager before initialization
 		err := logManager.Close()
@@ -759,7 +832,7 @@ func TestLogManager_Close(t *testing.T) {
 	t.Run("close after initialization", func(t *testing.T) {
 		t.Parallel()
 		ctx := testhelper.Context(t)
-		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), nil)
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), nil, newTracker(t, nil))
 
 		// Properly initialize the manager
 		require.NoError(t, logManager.Initialize(ctx, 0))
@@ -802,7 +875,7 @@ func TestLogManager_Close(t *testing.T) {
 		appendLogEntry(t, logManager, map[string][]byte{"2": []byte("content-2")})
 
 		// Trigger pruning
-		logManager.AcknowledgeAppliedPosition(2)
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
 
 		// Close the manager and ensure all tasks are completed
 		require.NoError(t, logManager.Close())

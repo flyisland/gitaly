@@ -35,6 +35,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/fshistory"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/fsrecorder"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal/reftree"
@@ -2360,6 +2361,9 @@ func (mgr *TransactionManager) initialize(ctx context.Context) error {
 	if err := mgr.logManager.Initialize(ctx, mgr.appliedLSN); err != nil {
 		return fmt.Errorf("initialize log management: %w", err)
 	}
+	if err := mgr.logManager.AcknowledgePosition(log.AppliedPosition, mgr.appliedLSN); err != nil {
+		return fmt.Errorf("acknowledge applied LSN: %w", err)
+	}
 
 	if err := os.Mkdir(mgr.snapshotsDir(), mode.Directory); err != nil {
 		return fmt.Errorf("create snapshot manager directory: %w", err)
@@ -3079,7 +3083,9 @@ func (mgr *TransactionManager) storeAppliedLSN(lsn storage.LSN) error {
 	if err := mgr.setKey(keyAppliedLSN, lsn.ToProto()); err != nil {
 		return err
 	}
-	mgr.logManager.AcknowledgeAppliedPosition(lsn)
+	if err := mgr.logManager.AcknowledgePosition(log.AppliedPosition, lsn); err != nil {
+		return fmt.Errorf("acknowledge applied LSN: %w", err)
+	}
 	mgr.appliedLSN = lsn
 	return nil
 }

@@ -13,8 +13,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
 
 const (
@@ -88,7 +89,7 @@ type PartitionInfo struct {
 // an exponential backoff.
 type LogEntryArchiver struct {
 	// logger is the logger to use to write log messages.
-	logger log.Logger
+	logger logging.Logger
 	// store is where the log archives are kept.
 	store LogEntryStore
 	// node is used to access the LogManagers.
@@ -130,12 +131,12 @@ type LogEntryArchiver struct {
 }
 
 // NewLogEntryArchiver constructs a new LogEntryArchiver.
-func NewLogEntryArchiver(logger log.Logger, archiveSink *Sink, workerCount uint, node *storage.Node) *LogEntryArchiver {
+func NewLogEntryArchiver(logger logging.Logger, archiveSink *Sink, workerCount uint, node *storage.Node) *LogEntryArchiver {
 	return newLogEntryArchiver(logger, archiveSink, workerCount, node, helper.NewTimerTicker)
 }
 
 // newLogEntryArchiver constructs a new LogEntryArchiver with a configurable ticker function.
-func newLogEntryArchiver(logger log.Logger, archiveSink *Sink, workerCount uint, node *storage.Node, tickerFunc func(time.Duration) helper.Ticker) *LogEntryArchiver {
+func newLogEntryArchiver(logger logging.Logger, archiveSink *Sink, workerCount uint, node *storage.Node, tickerFunc func(time.Duration) helper.Ticker) *LogEntryArchiver {
 	if workerCount < 1 {
 		workerCount = 1
 	}
@@ -294,8 +295,8 @@ func (la *LogEntryArchiver) ingestNotifications(ctx context.Context) {
 		// We have already backed up all entries sent by the LogManager, but the manager is
 		// not aware of this. Acknowledge again with our last processed entry.
 		if state.nextLSN > notification.highWaterMark {
-			if err := la.callLogReader(ctx, notification.partitionInfo, func(lm storage.LogReader) {
-				lm.AcknowledgeConsumerPosition(state.nextLSN - 1)
+			if err := la.callLogReader(ctx, notification.partitionInfo, func(lm storage.LogReader) error {
+				return lm.AcknowledgePosition(log.ConsumerPosition, state.nextLSN-1)
 			}); err != nil {
 				la.logger.WithError(err).Error("log entry archiver: failed to get LogManager for already completed entry")
 			}
@@ -306,7 +307,7 @@ func (la *LogEntryArchiver) ingestNotifications(ctx context.Context) {
 		// we will be unable to backup the full sequence.
 		if state.nextLSN < notification.lowWaterMark {
 			la.logger.WithFields(
-				log.Fields{
+				logging.Fields{
 					"storage":      notification.partitionInfo.StorageName,
 					"partition_id": notification.partitionInfo.PartitionID,
 					"expected_lsn": state.nextLSN,
@@ -328,7 +329,7 @@ func (la *LogEntryArchiver) ingestNotifications(ctx context.Context) {
 	}
 }
 
-func (la *LogEntryArchiver) callLogReader(ctx context.Context, partitionInfo PartitionInfo, callback func(lm storage.LogReader)) error {
+func (la *LogEntryArchiver) callLogReader(ctx context.Context, partitionInfo PartitionInfo, callback func(lm storage.LogReader) error) error {
 	storageHandle, err := (*la.node).GetStorage(partitionInfo.StorageName)
 	if err != nil {
 		return fmt.Errorf("get storage: %w", err)
@@ -340,7 +341,9 @@ func (la *LogEntryArchiver) callLogReader(ctx context.Context, partitionInfo Par
 	}
 	defer partition.Close()
 
-	callback(partition.GetLogReader())
+	if err := callback(partition.GetLogReader()); err != nil {
+		return fmt.Errorf("acknowledge consumer position: %w", err)
+	}
 
 	return nil
 }
@@ -376,11 +379,11 @@ func (la *LogEntryArchiver) receiveEntry(ctx context.Context, entry *logEntry) {
 		la.waitDur = minRetryWait
 	}
 
-	if err := la.callLogReader(ctx, entry.partitionInfo, func(lm storage.LogReader) {
-		lm.AcknowledgeConsumerPosition(entry.lsn)
+	if err := la.callLogReader(ctx, entry.partitionInfo, func(lm storage.LogReader) error {
+		return lm.AcknowledgePosition(log.ConsumerPosition, entry.lsn)
 	}); err != nil {
 		la.logger.WithError(err).WithFields(
-			log.Fields{
+			logging.Fields{
 				"storage":      entry.partitionInfo.StorageName,
 				"partition_id": entry.partitionInfo.PartitionID,
 				"lsn":          entry.lsn,
@@ -398,15 +401,16 @@ func (la *LogEntryArchiver) processEntries(ctx context.Context, inCh, outCh chan
 
 // processEntry checks if an existing backup exists, and performs a backup if not present.
 func (la *LogEntryArchiver) processEntry(ctx context.Context, entry *logEntry) {
-	logger := la.logger.WithFields(log.Fields{
+	logger := la.logger.WithFields(logging.Fields{
 		"storage":      entry.partitionInfo.StorageName,
 		"partition_id": entry.partitionInfo.PartitionID,
 		"lsn":          entry.lsn,
 	})
 
 	var entryPath string
-	if err := la.callLogReader(context.Background(), entry.partitionInfo, func(lm storage.LogReader) {
+	if err := la.callLogReader(context.Background(), entry.partitionInfo, func(lm storage.LogReader) error {
 		entryPath = lm.GetEntryPath(entry.lsn)
+		return nil
 	}); err != nil {
 		la.backupCounter.WithLabelValues("fail").Add(1)
 		la.logger.WithError(err).Error("log entry archiver: failed to get LogManager for entry path")

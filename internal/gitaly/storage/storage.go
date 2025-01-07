@@ -169,15 +169,9 @@ type LogReader interface {
 	// GetEntryPath returns the path of the log entry's root directory.
 	GetEntryPath(lsn LSN) string
 
-	// The following functions allows other components acknowledge their positions. The log manager uses those
-	// positions to prune entries. Those interfaces are not great. We have a plan to refator them in:
-	// https://gitlab.com/gitlab-org/gitaly/-/issues/6528
-
-	// AcknowledgeConsumerPosition acknowledges log entries up and including lsn as successfully processed
-	// for the specified LogConsumer.
-	AcknowledgeConsumerPosition(lsn LSN)
-	// AcknowledgeAppliedPosition acknowledges the position of latest applied log entry.
-	AcknowledgeAppliedPosition(lsn LSN)
+	// AcknowledgePosition acknowledges log entries up and including lsn as successfully processed
+	// for the specified position type.
+	AcknowledgePosition(PositionType, LSN) error
 }
 
 // LogWriter adds entries to the Write-Ahead Log.
@@ -205,6 +199,13 @@ type LogManager interface {
 
 	// GetNotificationQueue returns a channel that is used to notify external components of changes.
 	GetNotificationQueue() <-chan error
+}
+
+// PositionType implements storage.LogPositionType. It's a specific type of position to be tracked in the
+// Write-Ahead Log (WAL) tracking system. It defines whether changes to this position type should trigger notifications.
+type PositionType struct {
+	Name         string
+	ShouldNotify bool
 }
 
 // Partition is responsible for a single partition of data.

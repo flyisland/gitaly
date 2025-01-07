@@ -76,7 +76,7 @@ type mockLogManager struct {
 	storage.LogReader
 }
 
-func (lm *mockLogManager) AcknowledgeConsumerPosition(lsn storage.LSN) {
+func (lm *mockLogManager) AcknowledgePosition(_ storage.PositionType, lsn storage.LSN) error {
 	lm.Lock()
 	defer lm.Unlock()
 
@@ -109,6 +109,7 @@ func (lm *mockLogManager) AcknowledgeConsumerPosition(lsn storage.LSN) {
 		lm.finishCount--
 		lm.finishFunc()
 	}
+	return nil
 }
 
 func (lm *mockLogManager) SendNotification() {
@@ -607,7 +608,10 @@ func TestLogEntryArchiver_WithRealLogManager(t *testing.T) {
 			PartitionID: storage.PartitionID(i),
 		}
 
-		logManager := log.NewManager(storageName, storage.PartitionID(i), testhelper.TempDir(t), testhelper.TempDir(t), archiver)
+		tracker := log.NewPositionTracker()
+		require.NoError(t, tracker.Register(log.ConsumerPosition))
+
+		logManager := log.NewManager(storageName, storage.PartitionID(i), testhelper.TempDir(t), testhelper.TempDir(t), archiver, tracker)
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		accessor.Lock()

@@ -2257,7 +2257,11 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					require.NoError(t, err)
 					require.NoError(t, os.WriteFile(manifestPath(logEntryPath), manifestBytes, mode.File))
 
-					logManager := log.NewManager(tm.storageName, setup.PartitionID, testhelper.TempDir(t), filepath.Join(tm.storagePath, "state"), setup.Consumer)
+					tracker := log.NewPositionTracker()
+					if setup.Consumer != nil {
+						require.NoError(t, tracker.Register(log.ConsumerPosition))
+					}
+					logManager := log.NewManager(tm.storageName, setup.PartitionID, testhelper.TempDir(t), filepath.Join(tm.storagePath, "state"), setup.Consumer, tracker)
 					require.NoError(t, logManager.Initialize(ctx, 3))
 					lsn, err := logManager.AppendLogEntry(logEntryPath)
 					require.NoError(t, err)
@@ -2381,10 +2385,7 @@ func BenchmarkTransactionManager(b *testing.B) {
 				managers  []*TransactionManager
 			)
 
-			repositoryFactory, err := localrepo.NewFactory(
-				logger, config.NewLocator(cfg), cmdFactory, cache,
-			).ScopeByStorage(ctx, cfg.Storages[0].Name)
-			require.NoError(b, err)
+			repositoryFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, cache)
 
 			// transactionWG tracks the number of on going transaction.
 			var transactionWG sync.WaitGroup
@@ -2405,13 +2406,14 @@ func BenchmarkTransactionManager(b *testing.B) {
 				stagingDir := filepath.Join(storagePath, "staging", strconv.Itoa(i))
 				require.NoError(b, os.MkdirAll(stagingDir, mode.Directory))
 
-				m := NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)).Scope(storageName)
+				m := NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))
 
 				// Valid partition IDs are >=1.
 				testPartitionID := storage.PartitionID(i + 1)
 
-				logManager := log.NewManager(storageName, testPartitionID, stagingDir, stateDir, nil)
-				manager := NewTransactionManager(testPartitionID, logger, database, storageName, storagePath, stateDir, stagingDir, cmdFactory, repositoryFactory, m, logManager)
+				factory := NewFactory(cmdFactory, repositoryFactory, m, nil)
+				// transactionManager is the current TransactionManager instance.
+				manager := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 
 				managers = append(managers, manager)
 
@@ -2421,7 +2423,10 @@ func BenchmarkTransactionManager(b *testing.B) {
 					assert.NoError(b, manager.Run())
 				}()
 
-				objectHash, err := repositoryFactory.Build(repo.GetRelativePath()).ObjectHash(ctx)
+				scopedRepositoryFactory, err := repositoryFactory.ScopeByStorage(ctx, cfg.Storages[0].Name)
+				require.NoError(b, err)
+
+				objectHash, err := scopedRepositoryFactory.Build(repo.GetRelativePath()).ObjectHash(ctx)
 				require.NoError(b, err)
 
 				for updaterID := 0; updaterID < tc.concurrentUpdaters; updaterID++ {

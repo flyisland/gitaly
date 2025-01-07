@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime/trace"
 	"sync"
-	"sync/atomic"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
@@ -24,34 +23,6 @@ func StatePath(stateDir string) string {
 // EntryPath returns an absolute path to a given log entry's WAL files.
 func EntryPath(stateDir string, lsn storage.LSN) string {
 	return filepath.Join(StatePath(stateDir), lsn.String())
-}
-
-type positionType int
-
-const (
-	// appliedPosition keeps track of latest applied position. WAL could not prune a log entry if it has not been applied.
-	appliedPosition positionType = iota + 1
-	// consumerPosition keeps track of the latest consumer acknowledgement.
-	consumerPosition
-)
-
-// position tracks the last LSN acknowledged for of a particular type.
-type position struct {
-	lsn atomic.Value
-}
-
-func newPosition() *position {
-	p := position{}
-	p.setPosition(0)
-	return &p
-}
-
-func (p *position) getPosition() storage.LSN {
-	return p.lsn.Load().(storage.LSN)
-}
-
-func (p *position) setPosition(pos storage.LSN) {
-	p.lsn.Store(pos)
 }
 
 // Manager is responsible for managing the Write-Ahead Log (WAL) entries on disk. It maintains the in-memory state
@@ -100,31 +71,31 @@ type Manager struct {
 	// consumer is an external caller that may perform read-only operations against applied log entries. Log entries
 	// are retained until the consumer has acknowledged past their LSN.
 	consumer storage.LogConsumer
-	// positions tracks positions of log entries being used externally. Those positions are tracked so that WAL log
-	// entries are only pruned when they are not used anymore.
-	positions map[positionType]*position
+	// positionTracker tracks positionTracker of log entries being used externally. Those positionTracker are
+	// tracked so that WAL log entries are only pruned when they are not used anymore.
+	positionTracker *PositionTracker
 
 	// notifyQueue is a queue notifying when there is a new change or there's something wrong with the log manager.
 	notifyQueue chan error
 }
 
 // NewManager returns an instance of Manager.
-func NewManager(storageName string, partitionID storage.PartitionID, stagingDirectory string, stateDirectory string, consumer storage.LogConsumer) *Manager {
-	positions := map[positionType]*position{
-		appliedPosition: newPosition(),
-	}
-	if consumer != nil {
-		positions[consumerPosition] = newPosition()
-	}
-
+func NewManager(
+	storageName string,
+	partitionID storage.PartitionID,
+	stagingDirectory string,
+	stateDirectory string,
+	consumer storage.LogConsumer,
+	positionTracker *PositionTracker,
+) *Manager {
 	return &Manager{
-		storageName:    storageName,
-		partitionID:    partitionID,
-		tmpDirectory:   stagingDirectory,
-		stateDirectory: stateDirectory,
-		consumer:       consumer,
-		positions:      positions,
-		notifyQueue:    make(chan error, 1),
+		storageName:     storageName,
+		partitionID:     partitionID,
+		tmpDirectory:    stagingDirectory,
+		stateDirectory:  stateDirectory,
+		consumer:        consumer,
+		positionTracker: positionTracker,
+		notifyQueue:     make(chan error, 1),
 	}
 }
 
@@ -174,37 +145,34 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 		}
 	}
 
+	mgr.positionTracker.Each(func(t string, _ storage.LSN) {
+		// Set acknowledged position to oldestLSN - 1. If set the position to 0, the consumer is unable to read
+		// pruned entry anyway.
+		_ = mgr.positionTracker.Set(t, mgr.oldestLSN-1)
+	})
+
 	if mgr.consumer != nil && mgr.appendedLSN != 0 {
-		// Set acknowledged position to oldestLSN - 1 and notify the consumer from oldestLSN -> appendedLSN.
-		// If set the position to 0, the consumer is unable to read pruned entry anyway.
-		mgr.AcknowledgeConsumerPosition(mgr.oldestLSN - 1)
 		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.oldestLSN, mgr.appendedLSN)
 	}
-	mgr.AcknowledgeAppliedPosition(appliedLSN)
 
 	return nil
 }
 
-// AcknowledgeAppliedPosition acknowledges the position of latest applied log entry.
-func (mgr *Manager) AcknowledgeAppliedPosition(lsn storage.LSN) {
-	mgr.positions[appliedPosition].setPosition(lsn)
-	mgr.pruneLogEntries()
-}
-
-// AcknowledgeConsumerPosition acknowledges log entries up and including LSN as successfully processed for the specified
-// LogConsumer. The manager is awakened if it is currently awaiting a new or completed transaction.
-func (mgr *Manager) AcknowledgeConsumerPosition(lsn storage.LSN) {
-	if mgr.consumer == nil {
-		panic("log manager's consumer must be present prior to AcknowledgeConsumerPos call")
+// AcknowledgePosition acknowledges the position of a position type.
+func (mgr *Manager) AcknowledgePosition(t storage.PositionType, lsn storage.LSN) error {
+	if err := mgr.positionTracker.Set(t.Name, lsn); err != nil {
+		return fmt.Errorf("acknowledge position: %w", err)
 	}
-	mgr.positions[consumerPosition].setPosition(lsn)
-	mgr.pruneLogEntries()
 
 	// Alert the outsider. If it has a pending acknowledgement already no action is required.
-	select {
-	case mgr.notifyQueue <- nil:
-	default:
+	if t.ShouldNotify {
+		select {
+		case mgr.notifyQueue <- nil:
+		default:
+		}
 	}
+	mgr.pruneLogEntries()
+	return nil
 }
 
 // GetNotificationQueue returns a notify channel so that caller can poll new changes.
@@ -420,11 +388,11 @@ func (mgr *Manager) lowWaterMark() storage.LSN {
 
 	// Position is the last acknowledged LSN, this is eligible for pruning.
 	// lowWaterMark returns the lowest LSN that cannot be pruned, so add one.
-	for _, pos := range mgr.positions {
-		if pos.getPosition()+1 < minAcknowledged {
-			minAcknowledged = pos.getPosition() + 1
+	mgr.positionTracker.Each(func(_ string, p storage.LSN) {
+		if p+1 < minAcknowledged {
+			minAcknowledged = p + 1
 		}
-	}
+	})
 
 	return minAcknowledged
 }
