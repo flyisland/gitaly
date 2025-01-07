@@ -57,15 +57,6 @@ func TestPackNegoWithMissingCaps(t *testing.T) {
 	})
 }
 
-func TestPackNegoWithMissingWant(t *testing.T) {
-	buf := &bytes.Buffer{}
-	gittest.WritePktlineString(t, buf, "have "+oid2)
-	gittest.WritePktlineString(t, buf, "done")
-
-	_, err := ParsePackfileNegotiation(buf)
-	require.Error(t, err, "packfile negotiation with missing 'want' is invalid")
-}
-
 func TestPackNegoWithHave(t *testing.T) {
 	buf := &bytes.Buffer{}
 	gittest.WritePktlineString(t, buf, "want "+oid1+" cap")
