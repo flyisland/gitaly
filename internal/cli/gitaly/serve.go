@@ -371,7 +371,8 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 	storageMetrics := storagemgr.NewMetrics(cfg.Prometheus)
 	housekeepingMetrics := housekeeping.NewMetrics(cfg.Prometheus)
 	partitionMetrics := partition.NewMetrics(housekeepingMetrics)
-	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics)
+	migrationMetrics := migration.NewMetrics()
+	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics, migrationMetrics)
 
 	var txMiddleware server.TransactionMiddleware
 	var node storage.Node
@@ -417,6 +418,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 						partitionMetrics,
 						logConsumer,
 					),
+					migrationMetrics,
 				),
 				2,
 				storageMetrics,

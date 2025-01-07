@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
@@ -30,6 +31,11 @@ type migrationManager struct {
 	storagemgr.Partition
 	mu     sync.Mutex
 	logger log.Logger
+	// ctx is the isolated context used for migrations.
+	ctx context.Context
+	// cancelFn provides the cancellation function for the context used within the migrationManager.
+	cancelFn context.CancelFunc
+	metrics  Metrics
 	// migrations defines all migration jobs that are expected to be performed on a repository
 	// before it can process incoming transactions.
 	migrations []migration
@@ -38,11 +44,16 @@ type migrationManager struct {
 	migrationStates map[string]*migrationState
 }
 
-// NewPartition creates a migration manager that wraps the provided partition.
-func NewPartition(partition storagemgr.Partition, logger log.Logger) storagemgr.Partition {
+// newPartition creates a migration manager that wraps the provided partition.
+func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, migrations []migration) storagemgr.Partition {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &migrationManager{
+		ctx:             ctx,
+		cancelFn:        cancel,
 		Partition:       partition,
 		logger:          logger,
+		metrics:         metrics,
 		migrations:      migrations,
 		migrationStates: map[string]*migrationState{},
 	}
@@ -54,6 +65,11 @@ func (m *migrationManager) Begin(ctx context.Context, opts storage.BeginOptions)
 	}
 
 	return m.Partition.Begin(ctx, opts)
+}
+
+func (m *migrationManager) Close() {
+	m.cancelFn()
+	m.Partition.Close()
 }
 
 // migrate handles setting up migration state and executing outstanding migrations.
@@ -103,10 +119,10 @@ func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) 
 }
 
 // performMigrations performs any missing migrations on a repository.
-func (m *migrationManager) performMigrations(ctx context.Context, relativePaths []string) (returnedErr error) {
+func (m *migrationManager) performMigrations(reqCtx context.Context, relativePaths []string) (returnedErr error) {
 	relativePath := relativePaths[0]
 
-	id, err := m.getLastMigrationID(ctx, relativePath)
+	id, err := m.getLastMigrationID(m.ctx, relativePath)
 	if errors.Is(err, storage.ErrRepositoryNotFound) {
 		// If the repository is not found pretend the repository is up-to-date with migrations and
 		// let the downstream transaction set the migration key during repository creation.
@@ -125,7 +141,7 @@ func (m *migrationManager) performMigrations(ctx context.Context, relativePaths 
 	}
 
 	// Start a single transaction that records all outstanding migrations that get executed.
-	txn, err := m.Partition.Begin(ctx, storage.BeginOptions{
+	txn, err := m.Partition.Begin(m.ctx, storage.BeginOptions{
 		Write:         true,
 		RelativePaths: relativePaths,
 	})
@@ -134,37 +150,56 @@ func (m *migrationManager) performMigrations(ctx context.Context, relativePaths 
 	}
 	defer func() {
 		if returnedErr != nil {
-			if err := txn.Rollback(ctx); err != nil {
+			if err := txn.Rollback(m.ctx); err != nil {
 				returnedErr = errors.Join(err, fmt.Errorf("rollback: %w", err))
 			}
 		}
 	}()
 
 	for _, migration := range m.migrations {
+		timer := prometheus.NewTimer(m.metrics.latencyMetric.With(prometheus.Labels{
+			"migration_name": migration.name,
+		}))
+
 		if id >= migration.id {
 			continue
 		}
+
+		logger := m.logger.WithFields(log.Fields{
+			"migration_name": migration.name,
+			"migration_id":   migration.id,
+			"relative_path":  relativePath,
+		})
 
 		// A migration may have configuration allowing it to be disabled. As migrations are
 		// performed in order, if a disabled migration is encountered, the remaining migrations are
 		// also not executed. Since repository migrations are currently only attempted once for a
 		// repository during the partition lifetime, a previously disabled migration may not
 		// immediately be executed in the next transaction. Migration state must first be reset.
-		if migration.isDisabled != nil && migration.isDisabled(ctx) {
+		//
+		// Since the manager's context won't have the featureflag information, we use the request
+		// cotext. The request context here should be devoid of cancellation.
+		if migration.isDisabled != nil && migration.isDisabled(reqCtx) {
 			break
 		}
 
-		m.logger.WithFields(log.Fields{
-			"migration_id":  migration.id,
-			"relative_path": relativePath,
-		}).Info("running migration")
+		logger.Info("running migration")
 
-		if err := migration.run(ctx, txn, relativePath); err != nil {
+		if err := migration.run(m.ctx, txn, relativePath); err != nil {
 			return fmt.Errorf("run migration: %w", err)
 		}
+
+		// If migration operations are successfully recorded, the last run migration ID is also recorded
+		// signifying it has been completed.
+		if err := migration.recordID(txn, relativePath); err != nil {
+			return fmt.Errorf("setting migration key: %w", err)
+		}
+
+		duration := timer.ObserveDuration()
+		logger.WithField("duration", duration).Info("migration successful")
 	}
 
-	if err := txn.Commit(ctx); err != nil {
+	if err := txn.Commit(m.ctx); err != nil {
 		return fmt.Errorf("commit migration update: %w", err)
 	}
 

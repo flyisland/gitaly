@@ -52,6 +52,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 		expectedState        *migrationState
 		expectedMigrationIDs map[uint64]struct{}
 		expectedErr          error
+		expectedLastID       uint64
 	}{
 		{
 			desc:                 "no migrations configured",
@@ -74,6 +75,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			noRepository:         false,
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{1: {}, 2: {}},
+			expectedLastID:       2,
 		},
 		{
 			desc:                 "no outstanding migrations",
@@ -81,6 +83,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			startingMigration:    &migration{id: 2},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: nil,
+			expectedLastID:       2,
 		},
 		{
 			desc:                 "single outstanding migration applied",
@@ -88,6 +91,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			startingMigration:    &migration{id: 1},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{2: {}},
+			expectedLastID:       2,
 		},
 		{
 			desc:                 "multiple outstanding migration applied",
@@ -95,6 +99,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			startingMigration:    &migration{id: 1},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{2: {}, 3: {}},
+			expectedLastID:       3,
 		},
 		{
 			desc:                 "disabled migration",
@@ -102,6 +107,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			startingMigration:    &migration{id: 0},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{1: {}},
+			expectedLastID:       1,
 		},
 		{
 			desc:              "error returned during migrations",
@@ -112,6 +118,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			},
 			expectedMigrationIDs: nil,
 			expectedErr:          migrationErr,
+			expectedLastID:       1,
 		},
 		{
 			desc:              "starting migration key invalid",
@@ -122,6 +129,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 			},
 			expectedMigrationIDs: nil,
 			expectedErr:          errors.New("repository has invalid migration key: 4"),
+			expectedLastID:       4,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -161,10 +169,16 @@ func TestMigrationManager_Begin(t *testing.T) {
 
 			factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil)
 			tm := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
+
+			ctx, cancel := context.WithCancel(ctx)
+
 			mm := migrationManager{
+				ctx:             ctx,
+				cancelFn:        cancel,
 				Partition:       tm,
 				logger:          logger,
 				migrations:      tc.migrations,
+				metrics:         NewMetrics(),
 				migrationStates: map[string]*migrationState{},
 			}
 
@@ -220,6 +234,10 @@ func TestMigrationManager_Begin(t *testing.T) {
 				require.Nil(t, tc.expectedState)
 				require.Empty(t, mm.migrationStates)
 			}
+
+			id, err := mm.getLastMigrationID(ctx, repo.GetRelativePath())
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedLastID, id)
 
 			tm.Close()
 			require.NoError(t, tm.CloseSnapshots())
@@ -304,12 +322,17 @@ func TestMigrationManager_Concurrent(t *testing.T) {
 				return tc.expectedErr
 			})
 
+			ctx, cancel := context.WithCancel(ctx)
+
 			// In this test, the configured migrations are never executed because the repository
 			// does not exist in the snapshot. The migration is configured only to trigger the
 			// migration manager to block concurrent transactions.
 			mm := migrationManager{
+				ctx:             ctx,
+				cancelFn:        cancel,
 				Partition:       mockPartition,
 				logger:          testhelper.NewLogger(t),
+				metrics:         NewMetrics(),
 				migrations:      []migration{{id: 1, fn: noopFn}},
 				migrationStates: map[string]*migrationState{},
 			}
@@ -370,11 +393,78 @@ func TestMigrationManager_Concurrent(t *testing.T) {
 	}
 }
 
+func TestMigrationManager_Context(t *testing.T) {
+	t.Parallel()
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	requestCtx, requestCancel := context.WithCancel(ctx)
+
+	var mm *migrationManager
+	called := false
+	mm = newPartition(
+		mockPartition{
+			beginFn: func(context.Context, storage.BeginOptions) (storage.Transaction, error) {
+				return mockTransaction{
+					kvFn: func() keyvalue.ReadWriter {
+						return &mockReadWriter{
+							getFn: func(key []byte) (keyvalue.Item, error) {
+								return &mockItem{
+									valueFn: func(fn func(value []byte) error) error {
+										return fn(uint64ToBytes(0))
+									},
+								}, nil
+							},
+						}
+					},
+				}, nil
+			},
+			closeFn: func() {},
+		},
+		testhelper.NewLogger(t),
+		NewMetrics(),
+		[]migration{{id: 1, fn: func(ctx context.Context, tx storage.Transaction) error {
+			// Canceling the context of the request that started this migraiton
+			// should not lead to canceling the migration.
+			requestCancel()
+			require.NoError(t, ctx.Err())
+
+			mm.Close()
+			require.Equal(t, context.Canceled, ctx.Err())
+			called = true
+			return nil
+		}}},
+	).(*migrationManager)
+
+	repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+	relativePath := repo.GetRelativePath()
+
+	_, err := mm.Begin(requestCtx, storage.BeginOptions{
+		Write:         true,
+		RelativePaths: []string{relativePath},
+	})
+
+	require.NoError(t, err)
+	require.True(t, called)
+}
+
 type mockPartition struct {
 	storagemgr.Partition
 	beginFn func(context.Context, storage.BeginOptions) (storage.Transaction, error)
+	closeFn func()
+	runFn   func() error
 }
 
 func (m mockPartition) Begin(ctx context.Context, opts storage.BeginOptions) (storage.Transaction, error) {
 	return m.beginFn(ctx, opts)
+}
+
+func (m mockPartition) Close() {
+	m.closeFn()
+}
+
+func (m mockPartition) Run() error {
+	return m.runFn()
 }

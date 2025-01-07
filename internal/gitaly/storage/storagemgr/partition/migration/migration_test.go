@@ -47,8 +47,7 @@ func TestMigration_Run(t *testing.T) {
 			},
 			relativePath: "foobar",
 			expectedKV: map[string][]byte{
-				"foo":      []byte("bar"),
-				"m/foobar": uint64ToBytes(1),
+				"foo": []byte("bar"),
 			},
 		},
 	} {
@@ -80,9 +79,10 @@ func TestMigration_Run(t *testing.T) {
 
 type mockTransaction struct {
 	storage.Transaction
-	kvFn     func() keyvalue.ReadWriter
-	commitFn func(context.Context) error
-	rootFn   func() string
+	kvFn       func() keyvalue.ReadWriter
+	commitFn   func(context.Context) error
+	rollbackFn func(context.Context) error
+	rootFn     func() string
 }
 
 func (m mockTransaction) KV() keyvalue.ReadWriter {
@@ -99,7 +99,12 @@ func (m mockTransaction) Commit(ctx context.Context) error {
 	return nil
 }
 
-func (m mockTransaction) Rollback(context.Context) error { return nil }
+func (m mockTransaction) Rollback(ctx context.Context) error {
+	if m.rollbackFn != nil {
+		return m.rollbackFn(ctx)
+	}
+	return nil
+}
 
 func (m mockTransaction) Root() string {
 	if m.rootFn != nil {

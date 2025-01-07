@@ -9,12 +9,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 )
 
-var (
-	// migrations is a list of configured migrations that must be performed on repositories.
-	migrations []migration
-	// errInvalidMigration is returned if a migration being run is improperly configured.
-	errInvalidMigration = errors.New("invalid migration")
-)
+// errInvalidMigration is returned if a migration being run is improperly configured.
+var errInvalidMigration = errors.New("invalid migration")
 
 const migrationKeyPrefix = "m/"
 
@@ -23,6 +19,8 @@ type migration struct {
 	// id is the unique identifier for a migration and used by the repository to record the last
 	// migration it performed. Subsequent migration jobs should always use increasing numbers.
 	id uint64
+	// name is a human-readable description for the migration to be used in logs/tracing.
+	name string
 	// fn is the function executed to modify the WAL entry during transaction commit.
 	fn func(context.Context, storage.Transaction) error
 	// isDisabled defines an optional check to prevent a migration from being executed.
@@ -37,12 +35,6 @@ func (m migration) run(ctx context.Context, txn storage.Transaction, relativePat
 
 	if err := m.fn(ctx, txn); err != nil {
 		return fmt.Errorf("migrate repository: %w", err)
-	}
-
-	// If migration operations are successfully recorded, the last run migration ID is also recorded
-	// signifying it has been completed.
-	if err := m.recordID(txn, relativePath); err != nil {
-		return fmt.Errorf("setting migration key: %w", err)
 	}
 
 	return nil

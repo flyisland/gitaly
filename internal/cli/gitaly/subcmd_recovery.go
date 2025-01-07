@@ -342,6 +342,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	housekeepingMetrics := housekeeping.NewMetrics(cfg.Prometheus)
 	partitionMetrics := partition.NewMetrics(housekeepingMetrics)
 	storageMetrics := storagemgr.NewMetrics(cfg.Prometheus)
+	migrationMetrics := migration.NewMetrics()
 
 	locator := config.NewLocator(cfg)
 
@@ -357,6 +358,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 					partitionMetrics,
 					nil,
 				),
+				migrationMetrics,
 			),
 			1,
 			storageMetrics,
