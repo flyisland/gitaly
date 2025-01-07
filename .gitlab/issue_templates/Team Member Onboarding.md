@@ -39,4 +39,4 @@ Please complete all but the "Reading material" section in your first few working
 
 /confidential
 /assign me
-/cc @andrashorvath @jcaigitlab
+/cc @jcaigitlab
