@@ -172,6 +172,13 @@ type LogReader interface {
 	// AcknowledgePosition acknowledges log entries up and including lsn as successfully processed
 	// for the specified position type.
 	AcknowledgePosition(PositionType, LSN) error
+
+	// AppendedLSN returns the LSN of the latest appended log entry.
+	AppendedLSN() LSN
+
+	// LowWaterMark returns the earliest LSN of log entries which should be kept in the database. Any log entries LESS than
+	// this mark are removed.
+	LowWaterMark() LSN
 }
 
 // LogWriter adds entries to the Write-Ahead Log.
@@ -179,6 +186,9 @@ type LogWriter interface {
 	// AppendLogEntry appends an entry to the WAL. logEntryPath specifies the directory of the log entry. It returns
 	// the Log Sequence Number (LSN) of the appended log entry.
 	AppendLogEntry(logEntryPath string) (LSN, error)
+
+	// DeleteLogEntry deletes the log entry at the given LSN from the log.
+	DeleteLogEntry(lsn LSN) error
 }
 
 // LogManager is the interface used to manage the underlying Write-Ahead Log entries.
@@ -193,9 +203,6 @@ type LogManager interface {
 	// Close stops the log manager, cleans up resources, and stops internal workers. The caller
 	// is blocked until complete.
 	Close() error
-
-	// AppendedLSN returns the LSN of the latest appended log entry.
-	AppendedLSN() LSN
 
 	// GetNotificationQueue returns a channel that is used to notify external components of changes.
 	GetNotificationQueue() <-chan error
