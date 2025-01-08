@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 17.7.1 (2025-01-08)
+
+No changes.
+
 ## 17.7.0 (2024-12-18)
 
 ### Added (1 change)
@@ -9,6 +13,10 @@
 ### Changed (1 change)
 
 - [gitaly: Query available archived WAL entries in recovery status](gitlab-org/gitaly@a8b11d9ce0a46d5d3a170bca355d665b373f1f9e) ([merge request](gitlab-org/gitaly!7404))
+
+## 17.6.3 (2025-01-08)
+
+No changes.
 
 ## 17.6.2 (2024-12-10)
 
@@ -28,6 +36,10 @@ No changes.
 ### Fixed (1 change)
 
 - [Update GoCloud to a version that supports s3ForcePathStyle](gitlab-org/gitaly@6becf2026cf1ec5297829937a66c139d00c95283) ([merge request](gitlab-org/gitaly!7411))
+
+## 17.5.5 (2025-01-08)
+
+No changes.
 
 ## 17.5.4 (2024-12-10)
 
