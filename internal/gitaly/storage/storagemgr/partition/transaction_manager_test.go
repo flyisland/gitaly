@@ -30,6 +30,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/refdb"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -2255,7 +2256,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 					expectedManifest := manifestDirectoryEntry(refChangeLogEntry(setup, "refs/heads/branch-3", setup.Commits.First.OID))
 					manifestBytes, err := proto.Marshal(expectedManifest.Content.(proto.Message))
 					require.NoError(t, err)
-					require.NoError(t, os.WriteFile(manifestPath(logEntryPath), manifestBytes, mode.File))
+					require.NoError(t, os.WriteFile(wal.ManifestPath(logEntryPath), manifestBytes, mode.File))
 
 					tracker := log.NewPositionTracker()
 					if setup.Consumer != nil {
