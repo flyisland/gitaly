@@ -37,6 +37,10 @@ No changes.
 
 - [Update GoCloud to a version that supports s3ForcePathStyle](gitlab-org/gitaly@6becf2026cf1ec5297829937a66c139d00c95283) ([merge request](gitlab-org/gitaly!7411))
 
+## 17.5.5 (2025-01-08)
+
+No changes.
+
 ## 17.5.4 (2024-12-10)
 
 No changes.
