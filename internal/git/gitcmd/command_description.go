@@ -250,6 +250,9 @@ var commandDescriptions = map[string]commandDescription{
 			}
 		},
 	},
+	"refs": {
+		flags: scNoRefUpdates,
+	},
 	"range-diff": {
 		flags: scNoRefUpdates | scNoEndOfOptions,
 	},

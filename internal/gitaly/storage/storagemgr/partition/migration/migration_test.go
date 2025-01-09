@@ -10,6 +10,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
 func TestMigration_Run(t *testing.T) {
@@ -83,6 +84,7 @@ type mockTransaction struct {
 	commitFn   func(context.Context) error
 	rollbackFn func(context.Context) error
 	rootFn     func() string
+	fs         storage.FS
 }
 
 func (m mockTransaction) KV() keyvalue.ReadWriter {
@@ -111,6 +113,14 @@ func (m mockTransaction) Root() string {
 		return m.rootFn()
 	}
 	return ""
+}
+
+func (m mockTransaction) FS() storage.FS {
+	return m.fs
+}
+
+func (m mockTransaction) RewriteRepository(repo *gitalypb.Repository) *gitalypb.Repository {
+	return repo
 }
 
 type mockReadWriter struct {
