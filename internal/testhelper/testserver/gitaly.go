@@ -369,6 +369,8 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 						localrepo.NewFactory(gsd.logger, gsd.locator, gsd.gitCmdFactory, gsd.catfileCache),
 						partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
 						nil,
+						cfg.Raft,
+						nil,
 					),
 					migration.NewMetrics(),
 					migrations,

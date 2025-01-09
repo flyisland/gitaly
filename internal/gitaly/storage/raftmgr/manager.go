@@ -158,7 +158,27 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ManagerOptions, error
 	return options, nil
 }
 
-// NewManager creates a new Raft Manager instance.
+// RaftManagerFactory defines a function type that creates a new Raft Manager instance.
+type RaftManagerFactory func(
+	storageName string,
+	partitionID storage.PartitionID,
+	raftStorage *Storage,
+	logger logging.Logger,
+) (*Manager, error)
+
+// DefaultFactory returns a RaftManagerFactory that returns a manager from input raft config
+func DefaultFactory(raftCfg config.Raft) RaftManagerFactory {
+	return func(
+		storageName string,
+		partitionID storage.PartitionID,
+		raftStorage *Storage,
+		logger logging.Logger,
+	) (*Manager, error) {
+		return NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+	}
+}
+
+// NewManager creates an instance of Manager.
 func NewManager(
 	authorityName string,
 	partitionID storage.PartitionID,

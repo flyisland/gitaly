@@ -2413,7 +2413,7 @@ func BenchmarkTransactionManager(b *testing.B) {
 				// Valid partition IDs are >=1.
 				testPartitionID := storage.PartitionID(i + 1)
 
-				factory := NewFactory(cmdFactory, repositoryFactory, m, nil)
+				factory := NewFactory(cmdFactory, repositoryFactory, m, nil, cfg.Raft, nil)
 				// transactionManager is the current TransactionManager instance.
 				manager := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 
