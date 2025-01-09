@@ -311,6 +311,7 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 		metrics:      mgr.metrics,
 	}
 
+	mgr.createSnapshotLockIfNeeded(txn.snapshotLSN)
 	mgr.snapshotLocks[txn.snapshotLSN].activeSnapshotters.Add(1)
 	defer mgr.snapshotLocks[txn.snapshotLSN].activeSnapshotters.Done()
 	readReady := mgr.snapshotLocks[txn.snapshotLSN].applied
@@ -2378,13 +2379,13 @@ func (mgr *TransactionManager) initialize(ctx context.Context) error {
 
 	// Create a snapshot lock for the applied LSN as it is used for synchronizing
 	// the snapshotters with the log application.
-	mgr.snapshotLocks[mgr.appliedLSN] = &snapshotLock{applied: make(chan struct{})}
+	mgr.createSnapshotLockIfNeeded(mgr.appliedLSN)
 	close(mgr.snapshotLocks[mgr.appliedLSN].applied)
 
 	// Each unapplied log entry should have a snapshot lock as they are created in normal
 	// operation when committing a log entry. Recover these entries.
 	for i := mgr.appliedLSN + 1; i <= mgr.logManager.AppendedLSN(); i++ {
-		mgr.snapshotLocks[i] = &snapshotLock{applied: make(chan struct{})}
+		mgr.createSnapshotLockIfNeeded(i)
 	}
 
 	mgr.testHooks.beforeInitialization()
@@ -2954,18 +2955,10 @@ func (mgr *TransactionManager) applyReferenceTransaction(ctx context.Context, ch
 func (mgr *TransactionManager) appendLogEntry(ctx context.Context, objectDependencies map[git.ObjectID]struct{}, logEntry *gitalypb.LogEntry, logEntryPath string) error {
 	defer trace.StartRegion(ctx, "appendLogEntry").End()
 
-	// Pre-setup an snapshot lock entry for the assumed appended LSN location.
-	mgr.mutex.Lock()
-	mgr.snapshotLocks[mgr.logManager.AppendedLSN()+1] = &snapshotLock{applied: make(chan struct{})}
-	mgr.mutex.Unlock()
-
 	// After this latch block, the transaction is committed and all subsequent transactions
 	// are guaranteed to read it.
 	appendedLSN, err := mgr.logManager.AppendLogEntry(logEntryPath)
 	if err != nil {
-		mgr.mutex.Lock()
-		delete(mgr.snapshotLocks, mgr.logManager.AppendedLSN()+1)
-		mgr.mutex.Unlock()
 		return fmt.Errorf("append log entry: %w", err)
 	}
 
@@ -2995,7 +2988,14 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 	// the new state to the repository. No new snapshotters can arrive at this point. All
 	// new transactions would be waiting for the committed log entry we are about to apply.
 	previousLSN := lsn - 1
-	mgr.snapshotLocks[previousLSN].activeSnapshotters.Wait()
+
+	mgr.mutex.Lock()
+	previousLock := mgr.snapshotLocks[previousLSN]
+	mgr.mutex.Unlock()
+
+	// This might take a while, it should better wait out side of mutex lock.
+	previousLock.activeSnapshotters.Wait()
+
 	mgr.mutex.Lock()
 	delete(mgr.snapshotLocks, previousLSN)
 	mgr.mutex.Unlock()
@@ -3019,7 +3019,10 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 
 	// Notify the transactions waiting for this log entry to be applied prior to take their
 	// snapshot.
+	mgr.mutex.Lock()
+	mgr.createSnapshotLockIfNeeded(lsn)
 	close(mgr.snapshotLocks[lsn].applied)
+	mgr.mutex.Unlock()
 
 	return nil
 }
@@ -3145,4 +3148,10 @@ func (mgr *TransactionManager) cleanCommittedEntry(entry *committedEntry) bool {
 		elm = mgr.committedEntries.Front()
 	}
 	return removedAnyEntry
+}
+
+func (mgr *TransactionManager) createSnapshotLockIfNeeded(lsn storage.LSN) {
+	if _, exist := mgr.snapshotLocks[lsn]; !exist {
+		mgr.snapshotLocks[lsn] = &snapshotLock{applied: make(chan struct{})}
+	}
 }
