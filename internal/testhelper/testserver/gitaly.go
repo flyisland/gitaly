@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
@@ -30,6 +31,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	nodeimpl "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/node"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
@@ -358,6 +360,16 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		require.NoError(tb, err)
 		tb.Cleanup(dbMgr.Close)
 
+		var raftFactory raftmgr.RaftManagerFactory
+		if testhelper.IsRaftEnabled() && !testhelper.IsPraefectEnabled() {
+			cfg.Raft = config.DefaultRaftConfig(uuid.New().String())
+			// Speed up initial election overhead in the test setup
+			cfg.Raft.ElectionTicks = 5
+			cfg.Raft.RTTMilliseconds = 100
+			cfg.Raft.SnapshotDir = testhelper.TempDir(tb)
+			raftFactory = raftmgr.DefaultFactory(cfg.Raft)
+		}
+
 		nodeMgr, err := nodeimpl.NewManager(
 			cfg.Storages,
 			storagemgr.NewFactory(
@@ -370,7 +382,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 						partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
 						nil,
 						cfg.Raft,
-						nil,
+						raftFactory,
 					),
 					migration.NewMetrics(),
 					migrations,

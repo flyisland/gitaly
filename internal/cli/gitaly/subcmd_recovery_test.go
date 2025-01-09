@@ -53,6 +53,8 @@ type setupData struct {
 func TestRecoveryCLI_status(t *testing.T) {
 	t.Parallel()
 
+	testhelper.SkipWithRaft(t, "Raft must not be enabled during recovery")
+
 	for _, tc := range []struct {
 		desc  string
 		setup func(tb testing.TB, ctx context.Context, opts setupOptions) setupData
@@ -378,6 +380,8 @@ Available WAL backup entries: up to LSN: %s`,
 
 func TestRecoveryCLI_replay(t *testing.T) {
 	t.Parallel()
+
+	testhelper.SkipWithRaft(t, "Raft must not be enabled during recovery")
 
 	for _, tc := range []struct {
 		desc  string
