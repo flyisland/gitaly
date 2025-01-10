@@ -539,22 +539,23 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 	}
 
 	var bundleURISink *bundleuri.Sink
+	var bundleManager *bundleuri.GenerationManager
 	if cfg.BundleURI.GoCloudURL != "" {
 		bundleURISink, err = bundleuri.NewSink(ctx, cfg.BundleURI.GoCloudURL)
 		if err != nil {
 			return fmt.Errorf("create bundle-URI sink: %w", err)
 		}
-	}
 
-	// The manager created here merely to have a non-nil manager in order to use
-	// the SignedURL() method on it. It is not used, yet, to generate bundles
-	// based on this configuration (concurrencyLimit: 3, threshold: 1).
-	// Further tests and analysis would be required to come up with the
-	// appropriate configuration. This will be done once we are ready to use this manager
-	// to generate bundles based on this configuration (ie: calling GenerateIfAboveThreshold(...))
-	bundleManager, err := bundleuri.NewGenerationManager(bundleURISink, logger, 3, 1, bundleuri.NewInProgressTracker())
-	if err != nil {
-		return fmt.Errorf("error creating bundle manager: %w", err)
+		// The manager created here merely to have a non-nil manager in order to use
+		// the SignedURL() method on it. It is not used, yet, to generate bundles
+		// based on this configuration (concurrencyLimit: 3, threshold: 1).
+		// Further tests and analysis would be required to come up with the
+		// appropriate configuration. This will be done once we are ready to use this manager
+		// to generate bundles based on this configuration (ie: calling GenerateIfAboveThreshold(...))
+		bundleManager, err = bundleuri.NewGenerationManager(bundleURISink, logger, 3, 1, bundleuri.NewInProgressTracker())
+		if err != nil {
+			return fmt.Errorf("error creating bundle manager: %w", err)
+		}
 	}
 
 	for _, c := range []starter.Config{
@@ -599,7 +600,6 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			HousekeepingManager:     housekeepingManager,
 			BackupSink:              backupSink,
 			BackupLocator:           backupLocator,
-			BundleURISink:           bundleURISink,
 			LocalRepositoryFactory:  localrepoFactory,
 			BundleGenerationManager: bundleManager,
 		})

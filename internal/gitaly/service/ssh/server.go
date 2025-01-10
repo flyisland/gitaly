@@ -31,7 +31,6 @@ type server struct {
 	packfileNegotiationMetrics               *prometheus.CounterVec
 	backupLocator                            backup.Locator
 	backupSink                               *backup.Sink
-	bundleURISink                            *bundleuri.Sink
 	localRepoFactory                         localrepo.Factory
 	bundleURIManager                         *bundleuri.GenerationManager
 }
@@ -58,7 +57,6 @@ func NewServer(deps *service.Dependencies, serverOpts ...ServerOpt) gitalypb.SSH
 		),
 		backupLocator:    deps.GetBackupLocator(),
 		backupSink:       deps.GetBackupSink(),
-		bundleURISink:    deps.GetBundleURISink(),
 		localRepoFactory: deps.GetRepositoryFactory(),
 		bundleURIManager: deps.GetBundleManager(),
 	}

@@ -291,7 +291,6 @@ type gitalyServerDeps struct {
 	housekeepingManager housekeepingmgr.Manager
 	backupSink          *backup.Sink
 	backupLocator       backup.Locator
-	bundleURISink       *bundleuri.Sink
 	signingKey          string
 	transactionRegistry *storagemgr.TransactionRegistry
 	procReceiveRegistry *hook.ProcReceiveRegistry
@@ -336,10 +335,6 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 
 	if gsd.procReceiveRegistry == nil {
 		gsd.procReceiveRegistry = hook.NewProcReceiveRegistry()
-	}
-
-	if gsd.bundleURISink == nil {
-		gsd.bundleURISink, _ = bundleuri.NewSink(ctx, cfg.BundleURI.GoCloudURL)
 	}
 
 	var node storage.Node
@@ -459,7 +454,6 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		Node:                    node,
 		BackupSink:              gsd.backupSink,
 		BackupLocator:           gsd.backupLocator,
-		BundleURISink:           gsd.bundleURISink,
 		ProcReceiveRegistry:     gsd.procReceiveRegistry,
 		BundleGenerationManager: gsd.bundleGenerationMgr,
 		LocalRepositoryFactory:  gsd.localRepoFactory,
@@ -589,14 +583,6 @@ func WithBackupSink(backupSink *backup.Sink) GitalyServerOpt {
 func WithBackupLocator(backupLocator backup.Locator) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
 		deps.backupLocator = backupLocator
-		return deps
-	}
-}
-
-// WithBundleURISink sets the bundleuri.Sink that will be used for Gitaly services
-func WithBundleURISink(sink *bundleuri.Sink) GitalyServerOpt {
-	return func(deps gitalyServerDeps) gitalyServerDeps {
-		deps.bundleURISink = sink
 		return deps
 	}
 }
