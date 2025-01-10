@@ -53,7 +53,11 @@ func NewGenerationManager(
 	concurrencyLimit int,
 	threshold uint,
 	inProgressTracker InProgressTracker,
-) *GenerationManager {
+) (*GenerationManager, error) {
+	if sink == nil {
+		return nil, structerr.NewInvalidArgument("cannot create bundle manager: missing sink")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	return &GenerationManager{
 		sink:                       sink,
@@ -65,7 +69,7 @@ func NewGenerationManager(
 		inProgressTracker:          inProgressTracker,
 		logger:                     logger,
 		metrics:                    []prometheus.Collector{bundleGenerationLatency},
-	}
+	}, nil
 }
 
 // Describe is used to describe Prometheus metrics.
@@ -86,10 +90,9 @@ func (g *GenerationManager) StopAll() {
 	g.wg.Wait()
 }
 
-// Generate will generate a bundle for the given `repo` at the given `Sink`. This method
-// does not attempt to verify any feature flag or conditions. Calling this method WILL
-// generate a bundle.
-func Generate(ctx context.Context, sink *Sink, repo *localrepo.Repo) (returnErr error) {
+// Generate will generate a bundle for the given `repo`. This method does not attempt to
+// verify any feature flag or conditions. Calling this method WILL generate a bundle.
+func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) (returnErr error) {
 	bundlePath := bundleRelativePath(repo, defaultBundle)
 
 	ref, err := repo.HeadReference(ctx)
@@ -108,7 +111,7 @@ func Generate(ctx context.Context, sink *Sink, repo *localrepo.Repo) (returnErr 
 	}
 
 	writer := backup.NewLazyWriter(func() (io.WriteCloser, error) {
-		return sink.getWriter(ctx, bundlePath)
+		return g.sink.getWriter(ctx, bundlePath)
 	})
 	defer func() {
 		if err := writer.Close(); err != nil && returnErr == nil {
@@ -173,7 +176,7 @@ func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *
 					defer g.mutex.Unlock()
 					delete(g.bundleGenerationInProgress, bundlePath)
 				}()
-				if err := Generate(g.ctx, g.sink, repo); err != nil {
+				if err := g.Generate(g.ctx, repo); err != nil {
 					g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).
 						WithError(err).
 						Error("failed to generate bundle")

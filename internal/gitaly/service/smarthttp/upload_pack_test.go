@@ -429,11 +429,11 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 	testCases := []struct {
 		desc            string
 		sinkURI         string
-		setup           func(t *testing.T, ctx context.Context, cfg config.Cfg, sink *bundleuri.Sink, repoProto *gitalypb.Repository, repoPath string)
+		setup           func(t *testing.T, ctx context.Context, cfg config.Cfg, manager *bundleuri.GenerationManager, repoProto *gitalypb.Repository, repoPath string)
 		expectBundleURI bool
 	}{
 		{
-			desc:    "no backup sink",
+			desc:    "no manager",
 			sinkURI: "",
 		},
 		{
@@ -443,25 +443,25 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 		{
 			desc:    "broken URL signing",
 			sinkURI: "mem://bundleuri",
-			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg, sink *bundleuri.Sink, repoProto *gitalypb.Repository, repoPath string) {
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg, manager *bundleuri.GenerationManager, repoProto *gitalypb.Repository, repoPath string) {
 				gittest.WriteCommit(t, cfg, repoPath,
 					gittest.WithTreeEntries(gittest.TreeEntry{Mode: "100644", Path: "README", Content: "much"}),
 					gittest.WithBranch("main"))
 
 				repo := localrepo.NewTestRepo(t, cfg, repoProto)
-				require.NoError(t, bundleuri.Generate(ctx, sink, repo))
+				require.NoError(t, manager.Generate(ctx, repo))
 			},
 		},
 		{
 			desc:    "valid bundle",
 			sinkURI: "file://" + testhelper.TempDir(t) + "?base_url=" + baseURL + "&no_tmp_dir=true&secret_key_path=" + keyFile.Name(),
-			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg, sink *bundleuri.Sink, repoProto *gitalypb.Repository, repoPath string) {
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg, manager *bundleuri.GenerationManager, repoProto *gitalypb.Repository, repoPath string) {
 				gittest.WriteCommit(t, cfg, repoPath,
 					gittest.WithTreeEntries(gittest.TreeEntry{Mode: "100644", Path: "README", Content: "much"}),
 					gittest.WithBranch("main"))
 
 				repo := localrepo.NewTestRepo(t, cfg, repoProto)
-				require.NoError(t, bundleuri.Generate(ctx, sink, repo))
+				require.NoError(t, manager.Generate(ctx, repo))
 			},
 			expectBundleURI: true,
 		},
@@ -477,27 +477,29 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 
 			t.Parallel()
 
-			var sink *bundleuri.Sink
-			var err error
-			if tc.sinkURI != "" {
-				sink, err = bundleuri.NewSink(ctx, tc.sinkURI)
-				require.NoError(t, err)
-			}
-
 			cfg := testcfg.Build(t)
 			logger := testhelper.NewLogger(t)
 			hook := testhelper.AddLoggerHook(logger)
-			bundleManager := bundleuri.NewGenerationManager(sink, logger, 2, 0, nil)
+			require.NoError(t, err)
+
+			var bundleManager *bundleuri.GenerationManager
+			if tc.sinkURI != "" {
+				sink, err := bundleuri.NewSink(ctx, tc.sinkURI)
+				require.NoError(t, err)
+
+				bundleManager, err = bundleuri.NewGenerationManager(sink, logger, 2, 0, bundleuri.NewInProgressTracker())
+				require.NoError(t, err)
+			}
 
 			server := startSmartHTTPServerWithOptions(t, cfg, nil, []testserver.GitalyServerOpt{
 				testserver.WithBundleGenerationManager(bundleManager),
 				testserver.WithLogger(logger),
 			})
-			cfg.SocketPath = server.Address()
 
+			cfg.SocketPath = server.Address()
 			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
 			if tc.setup != nil {
-				tc.setup(t, ctx, cfg, sink, repoProto, repoPath)
+				tc.setup(t, ctx, cfg, bundleManager, repoProto, repoPath)
 			}
 
 			requestBody := &bytes.Buffer{}

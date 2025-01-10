@@ -83,7 +83,8 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 			logger := testhelper.NewLogger(t)
 			hook := testhelper.AddLoggerHook(logger)
 
-			manager := NewGenerationManager(sink, logger, tc.concurrencyLimit, tc.threshold, NewInProgressTracker())
+			manager, err := NewGenerationManager(sink, logger, tc.concurrencyLimit, tc.threshold, NewInProgressTracker())
+			require.NoError(t, err)
 
 			err = manager.GenerateIfAboveThreshold(ctx, repo, func() error {
 				manager.wg.Wait()
@@ -119,7 +120,8 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 		})
 		repo := localrepo.NewTestRepo(t, cfg, repoProto)
 
-		manager := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 1, NewInProgressTracker())
+		manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 1, NewInProgressTracker())
+		require.NoError(t, err)
 
 		// pretend like there is already another bundle generation happening for
 		// this repo.
@@ -147,7 +149,8 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 		})
 		repo := localrepo.NewTestRepo(t, cfg, repoProto)
 
-		manager := NewGenerationManager(sink, testhelper.NewLogger(t), 2, 1, NewInProgressTracker())
+		manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 2, 1, NewInProgressTracker())
+		require.NoError(t, err)
 
 		// pretend like there is already another bundle generation happening for
 		// another repo

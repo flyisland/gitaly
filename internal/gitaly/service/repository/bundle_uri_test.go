@@ -33,10 +33,10 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 		expectedErr error
 	}{
 		{
-			desc: "no bundle-URI sink",
+			desc: "no bundle manager",
 			setup: func(t *testing.T, ctx context.Context, tempDir string) setupData {
 				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleURISink(nil),
+					testserver.WithBundleGenerationManager(nil),
 				)
 
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
@@ -47,7 +47,7 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 					repo:   repo,
 				}
 			},
-			expectedErr: structerr.NewFailedPrecondition("no bundle-URI sink available"),
+			expectedErr: structerr.NewFailedPrecondition("no bundle-generation manager available"),
 		},
 		{
 			desc: "no valid repo",
@@ -55,8 +55,12 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 				sink, err := bundleuri.NewSink(ctx, "file://"+tempDir)
 				require.NoError(t, err)
 
+				logger := testhelper.NewLogger(t)
+				manager, err := bundleuri.NewGenerationManager(sink, logger, 3, 1, bundleuri.NewInProgressTracker())
+				require.NoError(t, err)
+
 				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleURISink(sink),
+					testserver.WithBundleGenerationManager(manager),
 				)
 
 				return setupData{
@@ -72,8 +76,12 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 				sink, err := bundleuri.NewSink(ctx, "file://"+tempDir)
 				require.NoError(t, err)
 
+				logger := testhelper.NewLogger(t)
+				manager, err := bundleuri.NewGenerationManager(sink, logger, 3, 1, bundleuri.NewInProgressTracker())
+				require.NoError(t, err)
+
 				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleURISink(sink),
+					testserver.WithBundleGenerationManager(manager),
 				)
 
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
@@ -92,8 +100,12 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 				sink, err := bundleuri.NewSink(ctx, "file://"+tempDir)
 				require.NoError(t, err)
 
+				logger := testhelper.NewLogger(t)
+				manager, err := bundleuri.NewGenerationManager(sink, logger, 3, 1, bundleuri.NewInProgressTracker())
+				require.NoError(t, err)
+
 				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleURISink(sink),
+					testserver.WithBundleGenerationManager(manager),
 				)
 
 				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)

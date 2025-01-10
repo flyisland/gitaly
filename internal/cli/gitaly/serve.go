@@ -552,7 +552,10 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 	// Further tests and analysis would be required to come up with the
 	// appropriate configuration. This will be done once we are ready to use this manager
 	// to generate bundles based on this configuration (ie: calling GenerateIfAboveThreshold(...))
-	bundleManager := bundleuri.NewGenerationManager(bundleURISink, logger, 3, 1, bundleuri.NewInProgressTracker())
+	bundleManager, err := bundleuri.NewGenerationManager(bundleURISink, logger, 3, 1, bundleuri.NewInProgressTracker())
+	if err != nil {
+		return fmt.Errorf("error creating bundle manager: %w", err)
+	}
 
 	for _, c := range []starter.Config{
 		{Name: starter.Unix, Addr: cfg.SocketPath, HandoverOnUpgrade: true},
