@@ -1005,12 +1005,18 @@ type TransactionManager struct {
 	metrics ManagerMetrics
 }
 
+// testHooks defines hooks for testing various stages of WAL log operations.
 type testHooks struct {
-	beforeInitialization  func()
-	beforeAppendLogEntry  func()
-	beforeApplyLogEntry   func()
-	beforeStoreAppliedLSN func()
-	beforeRunExiting      func()
+	// beforeInitialization is triggered before initialization starts.
+	beforeInitialization func()
+	// beforeAppendLogEntry is triggered before appending a log entry at the target LSN.
+	beforeAppendLogEntry func(targetLSN storage.LSN)
+	// beforeApplyLogEntry is triggered before applying a log entry at the target LSN.
+	beforeApplyLogEntry func(targetLSN storage.LSN)
+	// beforeStoreAppliedLSN is triggered before storing the target applied LSN.
+	beforeStoreAppliedLSN func(targetLSN storage.LSN)
+	// beforeRunExiting is triggered before the run loop exits.
+	beforeRunExiting func()
 }
 
 // NewTransactionManager returns a new TransactionManager for the given repository.
@@ -1059,9 +1065,9 @@ func NewTransactionManager(
 
 		testHooks: testHooks{
 			beforeInitialization:  func() {},
-			beforeAppendLogEntry:  func() {},
-			beforeApplyLogEntry:   func() {},
-			beforeStoreAppliedLSN: func() {},
+			beforeAppendLogEntry:  func(storage.LSN) {},
+			beforeApplyLogEntry:   func(storage.LSN) {},
+			beforeStoreAppliedLSN: func(storage.LSN) {},
 			beforeRunExiting:      func() {},
 		},
 	}
@@ -2157,7 +2163,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			return fmt.Errorf("verify file system operations: %w", err)
 		}
 
-		mgr.testHooks.beforeAppendLogEntry()
+		mgr.testHooks.beforeAppendLogEntry(mgr.logManager.AppendedLSN() + 1)
 		if err := mgr.appendLogEntry(ctx, transaction.objectDependencies, transaction.manifest, transaction.walFilesPath()); err != nil {
 			return fmt.Errorf("append log entry: %w", err)
 		}
@@ -3000,7 +3006,7 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 	delete(mgr.snapshotLocks, previousLSN)
 	mgr.mutex.Unlock()
 
-	mgr.testHooks.beforeApplyLogEntry()
+	mgr.testHooks.beforeApplyLogEntry(lsn)
 
 	if err := mgr.db.Update(func(tx keyvalue.ReadWriter) error {
 		if err := applyOperations(ctx, safe.NewSyncer().Sync, mgr.storagePath, mgr.logManager.GetEntryPath(lsn), manifest.GetOperations(), tx); err != nil {
@@ -3029,7 +3035,7 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 
 // storeAppliedLSN stores the partition's applied LSN in the database.
 func (mgr *TransactionManager) storeAppliedLSN(lsn storage.LSN) error {
-	mgr.testHooks.beforeStoreAppliedLSN()
+	mgr.testHooks.beforeStoreAppliedLSN(lsn)
 
 	if err := mgr.setKey(keyAppliedLSN, lsn.ToProto()); err != nil {
 		return err
