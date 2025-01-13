@@ -170,10 +170,7 @@ func (mgr *Manager) AcknowledgePosition(t storage.PositionType, lsn storage.LSN)
 
 	// Alert the outsider. If it has a pending acknowledgement already no action is required.
 	if t.ShouldNotify {
-		select {
-		case mgr.notifyQueue <- nil:
-		default:
-		}
+		mgr.NotifyNewEntries()
 	}
 	mgr.pruneLogEntries()
 	return nil
@@ -182,6 +179,18 @@ func (mgr *Manager) AcknowledgePosition(t storage.PositionType, lsn storage.LSN)
 // GetNotificationQueue returns a notify channel so that caller can poll new changes.
 func (mgr *Manager) GetNotificationQueue() <-chan error {
 	return mgr.notifyQueue
+}
+
+// NotifyNewEntries sends a signal to the notification queue. This signal indicates that new log entries were inserted
+// into the write-ahead log. The listener of GetNotificationQueue() should act accordingly. By default, only errors are
+// reported through that channel. Typically, the caller inserts log entries via AppendLogEntry or
+// CompareAndAppendLogEntry. The result is returned immediately. Sending a signal is redundant. On rarer occasions,
+// another caller inserts a log entries out-of-band. Thus, it needs to trigger this notification manually.
+func (mgr *Manager) NotifyNewEntries() {
+	select {
+	case mgr.notifyQueue <- nil:
+	default:
+	}
 }
 
 // Close gracefully shuts down the log manager by canceling its context and signaling any associated internal workers to

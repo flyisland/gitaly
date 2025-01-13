@@ -187,6 +187,14 @@ type LogWriter interface {
 	// the Log Sequence Number (LSN) of the appended log entry.
 	AppendLogEntry(logEntryPath string) (LSN, error)
 
+	// NotifyNewEntries sends a signal to the notification queue. This signal indicates that new log entries were
+	// inserted into the write-ahead log. The listener of GetNotificationQueue() should act accordingly. By default,
+	// only errors are reported through that channel. Typically, the caller inserts log entries via AppendLogEntry
+	// or CompareAndAppendLogEntry. The result is returned immediately. Sending a signal is redundant. On rarer
+	// occasions, another caller inserts a log entries out-of-band. Thus, it needs to trigger this notification
+	// manually.
+	NotifyNewEntries()
+
 	// DeleteLogEntry deletes the log entry at the given LSN from the log.
 	DeleteLogEntry(lsn LSN) error
 }
