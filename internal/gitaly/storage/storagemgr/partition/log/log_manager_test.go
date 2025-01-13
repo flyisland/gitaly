@@ -1142,3 +1142,184 @@ func TestLogManager_NotifyNewEntries(t *testing.T) {
 		}
 	})
 }
+
+func TestLogManager_DeleteTrailingLogEntries(t *testing.T) {
+	t.Parallel()
+	ctx := testhelper.Context(t)
+
+	t.Run("reject deletion if requested LSN is below low water mark", func(t *testing.T) {
+		// Setup a log manager without a consumer.
+		logManager := setupLogManager(t, ctx, nil)
+
+		// Append two log entries.
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")})
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
+
+		// Acknowledge the first entry as applied so that LowWaterMark() becomes 2.
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 1))
+		waitUntilPruningFinish(t, logManager)
+		require.Equal(t, storage.LSN(2), logManager.LowWaterMark())
+
+		// Attempt deletion starting from LSN 1 (which is below the low water mark).
+		err := logManager.DeleteTrailingLogEntries(1)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "requested LSN is below the low water mark")
+
+		// This method does not delete any log entries. Log entry 1 was deleted by the background
+		// pruning task, though.
+		require.Equal(t, storage.LSN(2), logManager.AppendedLSN())
+		assertDirectoryState(t, logManager, testhelper.DirectoryState{
+			"/": {
+				Mode: mode.Directory,
+			},
+			"/wal": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000002": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000002/1": {
+				Mode:    mode.File,
+				Content: []byte("content-2"),
+			},
+		})
+	})
+
+	t.Run("successfully delete tail entries", func(t *testing.T) {
+		// Setup a log manager without a consumer.
+		logManager := setupLogManager(t, ctx, nil)
+
+		// Append four log entries.
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")}) // LSN 1
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")}) // LSN 2
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-3")}) // LSN 3
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-4")}) // LSN 4
+
+		// Acknowledge the first two entries as applied.
+		// That makes the low water mark = 2
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 1))
+		waitUntilPruningFinish(t, logManager)
+		require.Equal(t, storage.LSN(2), logManager.LowWaterMark())
+
+		// Delete entries starting from LSN 3 (which is >= low water mark).
+		err := logManager.DeleteTrailingLogEntries(3)
+		require.NoError(t, err)
+
+		// appendedLSN should now be lowered to one before the 'from' LSN.
+		require.Equal(t, storage.LSN(2), logManager.AppendedLSN())
+
+		// Assert that only LSN 2 remain in the on-disk WAL. 1 was removed by background pruning task.
+		assertDirectoryState(t, logManager, testhelper.DirectoryState{
+			"/": {
+				Mode: mode.Directory,
+			},
+			"/wal": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000002": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000002/1": {
+				Mode:    mode.File,
+				Content: []byte("content-2"),
+			},
+		})
+	})
+
+	t.Run("requested LSN above appended LSN (nothing to delete)", func(t *testing.T) {
+		// Setup a log manager without a consumer.
+		logManager := setupLogManager(t, ctx, nil)
+
+		// Append two log entries.
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-A")}) // LSN 1
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-B")}) // LSN 2
+
+		// Call DeleteLogEntriesFrom with a LSN greater than the current appendedLSN.
+		err := logManager.DeleteTrailingLogEntries(5)
+		require.NoError(t, err)
+
+		// appendedLSN should remain unchanged.
+		require.Equal(t, storage.LSN(2), logManager.appendedLSN)
+
+		// Assert that the WAL still contains both log entries.
+		assertDirectoryState(t, logManager, testhelper.DirectoryState{
+			"/": {
+				Mode: mode.Directory,
+			},
+			"/wal": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000001": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000001/1": {
+				Mode:    mode.File,
+				Content: []byte("content-A"),
+			},
+			"/wal/0000000000002": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000002/1": {
+				Mode:    mode.File,
+				Content: []byte("content-B"),
+			},
+		})
+	})
+
+	t.Run("concurrent deletion invocation", func(t *testing.T) {
+		// Setup a log manager without a consumer.
+		logManager := setupLogManager(t, ctx, nil)
+
+		// Append four log entries.
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-1")}) // LSN 1
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")}) // LSN 2
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-3")}) // LSN 3
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-4")}) // LSN 4
+
+		// Acknowledge LSN 1 as applied so that low water mark = 2.
+		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 1))
+		waitUntilPruningFinish(t, logManager)
+		require.Equal(t, storage.LSN(2), logManager.LowWaterMark())
+
+		// Launch concurrent deletion calls.
+		const numRoutines = 3
+		var wg sync.WaitGroup
+		errCh := make(chan error, numRoutines)
+
+		for i := 1; i <= numRoutines; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				// All routines try deleting from LSN 3.
+				errCh <- logManager.DeleteTrailingLogEntries(3)
+			}()
+		}
+		wg.Wait()
+		close(errCh)
+
+		// Ensure that all calls returned without error.
+		for err := range errCh {
+			require.NoError(t, err)
+		}
+
+		// appendedLSN should now be 2 because deletion starting at LSN 3 should remove tail entries.
+		require.Equal(t, storage.LSN(2), logManager.AppendedLSN())
+
+		// Assert that only entries LSN 2.
+		assertDirectoryState(t, logManager, testhelper.DirectoryState{
+			"/": {
+				Mode: mode.Directory,
+			},
+			"/wal": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000002": {
+				Mode: mode.Directory,
+			},
+			"/wal/0000000000002/1": {
+				Mode:    mode.File,
+				Content: []byte("content-2"),
+			},
+		})
+	})
+}
