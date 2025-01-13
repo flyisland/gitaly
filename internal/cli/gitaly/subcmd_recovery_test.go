@@ -606,8 +606,10 @@ Successfully processed log entries up to LSN %s
 			cmd := exec.Command(cfg.BinaryPath("gitaly"), "recovery", "-config", configPath, "replay", "-storage", data.storageName, "-partition", data.partitionID.String())
 
 			output, err := cmd.CombinedOutput()
+			if err != nil && data.expectedErr == nil {
+				t.Log(string(output))
+			}
 			testhelper.RequireGrpcError(t, data.expectedErr, err)
-
 			require.Contains(t, string(output), data.expectedOutput)
 
 			// Creating storage manager again as we had to close it previously to run the command in offline mode

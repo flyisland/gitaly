@@ -2,6 +2,7 @@ package gitaly
 
 import (
 	"archive/tar"
+	"container/list"
 	"errors"
 	"fmt"
 	"io"
@@ -43,7 +44,7 @@ type recoveryContext struct {
 	storageName   string
 	logWriter     storage.LogWriter
 	logEntryStore backup.LogEntryStore
-	cleanupFuncs  []func() error
+	cleanupFuncs  *list.List
 }
 
 func newRecoveryCommand() *cli.Command {
@@ -305,7 +306,9 @@ func extractArchive(path string) error {
 }
 
 func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error) {
-	recoveryContext := recoveryContext{}
+	recoveryContext := recoveryContext{
+		cleanupFuncs: list.New(),
+	}
 	defer func() {
 		if returnErr != nil {
 			returnErr = errors.Join(returnErr, recoveryContext.Cleanup())
@@ -323,7 +326,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("creating runtime dir: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		return os.RemoveAll(runtimeDir)
 	})
 
@@ -345,7 +348,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("new db manager: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		dbMgr.Close()
 		return nil
 	})
@@ -354,13 +357,13 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("creating Git command factory: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		cleanup()
 		return nil
 	})
 
 	catfileCache := catfile.NewCache(cfg)
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		catfileCache.Stop()
 		return nil
 	})
@@ -393,7 +396,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("new node: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		node.Close()
 		return nil
 	})
@@ -425,7 +428,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("get partition: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		partition.Close()
 		return nil
 	})
@@ -436,7 +439,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("begin: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		return txn.Rollback(ctx.Context)
 	})
 
@@ -481,8 +484,8 @@ func printLSNRange(w io.Writer, start, end storage.LSN) {
 
 func (rc *recoveryContext) Cleanup() error {
 	var err error
-	for _, cleanup := range rc.cleanupFuncs {
-		err = errors.Join(err, cleanup())
+	for i := rc.cleanupFuncs.Front(); i != nil; i = i.Next() {
+		err = errors.Join(err, i.Value.(func() error)())
 	}
 	return err
 }
