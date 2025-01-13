@@ -187,6 +187,10 @@ type LogWriter interface {
 	// the Log Sequence Number (LSN) of the appended log entry.
 	AppendLogEntry(logEntryPath string) (LSN, error)
 
+	// CompareAndAppendLogEntry is a variant of AppendLogEntry. It appends the log entry to the write-ahead log if and only
+	// if the inserting position matches the expected LSN.
+	CompareAndAppendLogEntry(lsn LSN, logEntryPath string) (LSN, error)
+
 	// NotifyNewEntries sends a signal to the notification queue. This signal indicates that new log entries were
 	// inserted into the write-ahead log. The listener of GetNotificationQueue() should act accordingly. By default,
 	// only errors are reported through that channel. Typically, the caller inserts log entries via AppendLogEntry

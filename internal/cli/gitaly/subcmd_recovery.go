@@ -232,12 +232,8 @@ func processLogEntry(reader io.Reader, tempDir string, logWriter storage.LogWrit
 		return fmt.Errorf("extract archive: %w", err)
 	}
 
-	appendedLSN, err := logWriter.AppendLogEntry(path)
-	if err != nil {
+	if _, err := logWriter.CompareAndAppendLogEntry(lsn, path); err != nil {
 		return fmt.Errorf("append log entry: %w", err)
-	}
-	if appendedLSN != lsn {
-		return fmt.Errorf("appended LSN %s does not match expected LSN %s", appendedLSN, lsn)
 	}
 
 	return nil
