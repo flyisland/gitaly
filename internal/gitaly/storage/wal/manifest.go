@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/proto"
 )
@@ -32,7 +31,7 @@ func ReadManifest(stateDir string) (*gitalypb.LogEntry, error) {
 	return &logEntry, nil
 }
 
-// WriteManifest writes the log entry's manifest to the disk, and fsyncs the entire log entry.
+// WriteManifest writes the log entry's manifest to the disk.
 func WriteManifest(ctx context.Context, stateDir string, manifest *gitalypb.LogEntry) error {
 	manifestBytes, err := proto.Marshal(manifest)
 	if err != nil {
@@ -45,25 +44,10 @@ func WriteManifest(ctx context.Context, stateDir string, manifest *gitalypb.LogE
 		return fmt.Errorf("write manifest: %w", err)
 	}
 
-	// Sync the log entry completely before committing it.
-	//
-	// Ideally the log entry would be completely flushed to the disk before queuing the
-	// transaction for commit to ensure we don't write a lot to the disk while in the critical
-	// section. We currently stage some of the files only in the critical section though. This
-	// is due to currently lacking conflict checks which prevents staging the log entry completely
-	// before queuing it for commit.
-	//
-	// See https://gitlab.com/gitlab-org/gitaly/-/issues/5892 for more details. Once the issue is
-	// addressed, we could stage the transaction entirely before queuing it for commit, and thus not
-	// need to sync here.
-	if err := safe.NewSyncer().SyncRecursive(ctx, stateDir); err != nil {
-		return fmt.Errorf("synchronizing WAL directory: %w", err)
-	}
-
 	return nil
 }
 
-// RemoveManifest removes the existing log entry.
+// RemoveManifest removes the existing manifest file.
 func RemoveManifest(ctx context.Context, stateDir string) error {
 	return os.Remove(ManifestPath(stateDir))
 }

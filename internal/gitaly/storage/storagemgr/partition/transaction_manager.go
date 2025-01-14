@@ -2124,7 +2124,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 					}
 
 					// Operations working on the staging snapshot add more files into the log entry,
-					// and modify the manifest. Flush it to the disk to persist the new changes.
+					// and modify the manifest.
 					if err := wal.WriteManifest(ctx, transaction.walEntry.Directory(), transaction.manifest); err != nil {
 						return fmt.Errorf("flush log entry: %w", err)
 					}
