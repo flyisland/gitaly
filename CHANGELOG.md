@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 17.7.2 (2025-01-14)
+
+No changes.
+
 ## 17.7.1 (2025-01-08)
 
 No changes.
