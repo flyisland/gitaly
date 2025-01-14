@@ -1,7 +1,6 @@
 package stats
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -30,6 +29,8 @@ type PackfileNegotiation struct {
 	Deepen string
 	// Filter-spec specified by the client.
 	Filter string
+	// Commands is the command submitted by the Git client
+	Command string
 }
 
 // ToProto converts PackfileNegotiation to its Protobuf representation.
@@ -75,7 +76,21 @@ func (n *PackfileNegotiation) Parse(body io.Reader) error {
 
 		done := false
 
-		switch split[0] {
+		lineFirstPart := split[0]
+
+		// commands are in the form `command=<name>` so it does not fit well
+		// into the switch case below. So we handle them here.
+		// The commands we look for are the ones described here:
+		// https://git-scm.com/docs/protocol-v2#_command_request
+		// We are also interested in the `bundle-uri` commandm, which is
+		// explained here:
+		// https://git-scm.com/docs/bundle-uri#_implementation_plan
+		if command, ok := strings.CutPrefix(lineFirstPart, "command="); ok {
+			n.Command = command
+			continue
+		}
+
+		switch lineFirstPart {
 		case "want":
 			if len(split) < 2 {
 				return fmt.Errorf("invalid 'want' for packet %d: %v", n.Packets, data)
@@ -120,9 +135,6 @@ func (n *PackfileNegotiation) Parse(body io.Reader) error {
 	if scanner.Err() != nil {
 		return scanner.Err()
 	}
-	if n.Wants == 0 {
-		return errors.New("no 'want' sent by client")
-	}
 
 	return nil
 }
@@ -130,6 +142,9 @@ func (n *PackfileNegotiation) Parse(body io.Reader) error {
 // UpdateMetrics updates Prometheus counters with features that have been used
 // during a packfile negotiation.
 func (n *PackfileNegotiation) UpdateMetrics(metrics *prometheus.CounterVec) {
+	if n.Command != "" {
+		metrics.WithLabelValues(n.Command).Inc()
+	}
 	if n.Deepen != "" {
 		metrics.WithLabelValues("deepen").Inc()
 	}
