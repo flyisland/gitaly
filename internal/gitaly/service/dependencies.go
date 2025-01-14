@@ -47,7 +47,6 @@ type Dependencies struct {
 	Node                    storage.Node
 	BackupSink              *backup.Sink
 	BackupLocator           backup.Locator
-	BundleURISink           *bundleuri.Sink
 	ProcReceiveRegistry     *gitalyhook.ProcReceiveRegistry
 	BundleGenerationManager *bundleuri.GenerationManager
 	LocalRepositoryFactory  localrepo.Factory
@@ -158,11 +157,6 @@ func (dc *Dependencies) GetBackupLocator() backup.Locator {
 	return dc.BackupLocator
 }
 
-// GetBundleURISink return the bundleuri.Sink.
-func (dc *Dependencies) GetBundleURISink() *bundleuri.Sink {
-	return dc.BundleURISink
-}
-
 // GetProcReceiveRegistry returns the ProcReceiveRegistry.
 func (dc *Dependencies) GetProcReceiveRegistry() *gitalyhook.ProcReceiveRegistry {
 	return dc.ProcReceiveRegistry
@@ -171,4 +165,9 @@ func (dc *Dependencies) GetProcReceiveRegistry() *gitalyhook.ProcReceiveRegistry
 // GetRepositoryFactory returns the RepositoryFactory
 func (dc *Dependencies) GetRepositoryFactory() localrepo.Factory {
 	return dc.LocalRepositoryFactory
+}
+
+// GetBundleManager returns the RepositoryFactory
+func (dc *Dependencies) GetBundleManager() *bundleuri.GenerationManager {
+	return dc.BundleGenerationManager
 }

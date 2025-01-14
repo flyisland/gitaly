@@ -9,8 +9,8 @@ import (
 
 // GenerateBundleURI generates a bundle on the server for bundle-URI use.
 func (s *server) GenerateBundleURI(ctx context.Context, req *gitalypb.GenerateBundleURIRequest) (_ *gitalypb.GenerateBundleURIResponse, returnErr error) {
-	if s.bundleURISink == nil {
-		return nil, structerr.NewFailedPrecondition("no bundle-URI sink available")
+	if s.bundleManager == nil {
+		return nil, structerr.NewFailedPrecondition("no bundle-generation manager available")
 	}
 
 	repository := req.GetRepository()
@@ -20,7 +20,7 @@ func (s *server) GenerateBundleURI(ctx context.Context, req *gitalypb.GenerateBu
 
 	repo := s.localRepoFactory.Build(repository)
 
-	if err := s.bundleURISink.Generate(ctx, repo); err != nil {
+	if err := s.bundleManager.Generate(ctx, repo); err != nil {
 		return nil, structerr.NewInternal("generate bundle: %w", err)
 	}
 

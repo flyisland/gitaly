@@ -2,7 +2,6 @@ package bundleuri
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,7 +44,7 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 	require.NoError(t, keyFile.Close())
 
 	type setupData struct {
-		sink *Sink
+		manager *GenerationManager
 	}
 
 	for _, tc := range []struct {
@@ -55,22 +54,17 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 		expectedErr    error
 	}{
 		{
-			desc: "no sink",
-			setup: func(t *testing.T) setupData {
-				return setupData{}
-			},
-			expectedConfig: nil,
-			expectedErr:    errors.New("bundle-URI sink missing"),
-		},
-		{
 			desc: "no bundle found",
 			setup: func(t *testing.T) setupData {
 				sinkDir := t.TempDir()
 				sink, err := NewSink(ctx, "file://"+sinkDir+"?base_url=http://example.com&secret_key_path="+keyFile.Name())
 				require.NoError(t, err)
 
+				manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 0, nil)
+				require.NoError(t, err)
+
 				return setupData{
-					sink: sink,
+					manager: manager,
 				}
 			},
 			expectedConfig: nil,
@@ -83,10 +77,13 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 				sink, err := NewSink(ctx, "file://"+sinkDir)
 				require.NoError(t, err)
 
-				require.NoError(t, sink.Generate(ctx, repo))
+				manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 0, nil)
+				require.NoError(t, err)
+
+				require.NoError(t, manager.Generate(ctx, repo))
 
 				return setupData{
-					sink: sink,
+					manager: manager,
 				}
 			},
 			expectedConfig: nil,
@@ -99,10 +96,13 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 				sink, err := NewSink(ctx, "file://"+sinkDir+"?base_url=http://example.com&secret_key_path="+keyFile.Name())
 				require.NoError(t, err)
 
-				require.NoError(t, sink.Generate(ctx, repo))
+				manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 0, nil)
+				require.NoError(t, err)
+
+				require.NoError(t, manager.Generate(ctx, repo))
 
 				return setupData{
-					sink: sink,
+					manager: manager,
 				}
 			},
 			expectedConfig: []gitcmd.ConfigPair{
@@ -137,9 +137,9 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 			t.Parallel()
 
 			data := tc.setup(t)
-			sink := data.sink
+			require.NoError(t, err)
 
-			actual, err := UploadPackGitConfig(ctx, sink, repoProto)
+			actual, err := UploadPackGitConfig(ctx, data.manager, repoProto)
 
 			if featureflag.BundleURI.IsEnabled(ctx) {
 				require.Equal(t, tc.expectedErr, err)

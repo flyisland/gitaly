@@ -34,18 +34,18 @@ func CapabilitiesGitConfig(ctx context.Context) []gitcmd.ConfigPair {
 // who clones/fetches from the repository.
 func UploadPackGitConfig(
 	ctx context.Context,
-	sink *Sink,
+	manager *GenerationManager,
 	repo storage.Repository,
 ) ([]gitcmd.ConfigPair, error) {
 	if featureflag.BundleURI.IsDisabled(ctx) {
 		return []gitcmd.ConfigPair{}, nil
 	}
 
-	if sink == nil {
+	if manager == nil || manager.sink == nil {
 		return CapabilitiesGitConfig(ctx), errors.New("bundle-URI sink missing")
 	}
 
-	uri, err := sink.SignedURL(ctx, repo)
+	uri, err := manager.SignedURL(ctx, repo)
 	if err != nil {
 		return nil, err
 	}

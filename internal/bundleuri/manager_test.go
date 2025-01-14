@@ -83,7 +83,8 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 			logger := testhelper.NewLogger(t)
 			hook := testhelper.AddLoggerHook(logger)
 
-			manager := NewGenerationManager(sink, logger, tc.concurrencyLimit, tc.threshold, NewInProgressTracker())
+			manager, err := NewGenerationManager(sink, logger, tc.concurrencyLimit, tc.threshold, NewInProgressTracker())
+			require.NoError(t, err)
 
 			err = manager.GenerateIfAboveThreshold(ctx, repo, func() error {
 				manager.wg.Wait()
@@ -99,10 +100,10 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 
 			if tc.expectFileExist {
 				require.Equal(t, 1, testutil.CollectAndCount(manager, "gitaly_bundle_generation_seconds"))
-				require.FileExists(t, filepath.Join(sinkDir, sink.relativePath(repo, "default")))
+				require.FileExists(t, filepath.Join(sinkDir, bundleRelativePath(repo, "default")))
 				return
 			}
-			require.NoFileExists(t, filepath.Join(sinkDir, sink.relativePath(repo, "default")))
+			require.NoFileExists(t, filepath.Join(sinkDir, bundleRelativePath(repo, "default")))
 		})
 	}
 
@@ -119,11 +120,12 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 		})
 		repo := localrepo.NewTestRepo(t, cfg, repoProto)
 
-		manager := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 1, NewInProgressTracker())
+		manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 1, NewInProgressTracker())
+		require.NoError(t, err)
 
 		// pretend like there is already another bundle generation happening for
 		// this repo.
-		bundlePath := sink.relativePath(repo, defaultBundle)
+		bundlePath := bundleRelativePath(repo, defaultBundle)
 		manager.bundleGenerationInProgress[bundlePath] = struct{}{}
 
 		err = manager.GenerateIfAboveThreshold(ctx, repo, func() error {
@@ -147,7 +149,8 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 		})
 		repo := localrepo.NewTestRepo(t, cfg, repoProto)
 
-		manager := NewGenerationManager(sink, testhelper.NewLogger(t), 2, 1, NewInProgressTracker())
+		manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 2, 1, NewInProgressTracker())
+		require.NoError(t, err)
 
 		// pretend like there is already another bundle generation happening for
 		// another repo
@@ -159,6 +162,6 @@ func TestGenerationManager_GenerateIfAboveThreshold(t *testing.T) {
 			return nil
 		})
 		require.NoError(t, err)
-		require.NoFileExists(t, filepath.Join(sinkDir, sink.relativePath(repo, "default")))
+		require.NoFileExists(t, filepath.Join(sinkDir, bundleRelativePath(repo, "default")))
 	})
 }
