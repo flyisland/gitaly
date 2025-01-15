@@ -1,11 +1,13 @@
 package partition
 
 import (
+	"testing"
+
 	"github.com/dgraph-io/badger/v4"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 )
 
-func generateKeyValueTests(setup testTransactionSetup) []transactionTestCase {
+func generateKeyValueTests(t *testing.T, setup testTransactionSetup) []transactionTestCase {
 	return []transactionTestCase{
 		{
 			desc: "set keys with values",
@@ -615,9 +617,7 @@ func generateKeyValueTests(setup testTransactionSetup) []transactionTestCase {
 			steps: steps{
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeApplyLogEntry: func(hookContext) {
-							panic(errSimulatedCrash)
-						},
+						BeforeApplyLogEntry: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},

@@ -464,9 +464,7 @@ func generateDefaultBranchTests(t *testing.T, setup testTransactionSetup) []tran
 			steps: steps{
 				StartManager{
 					Hooks: testTransactionHooks{
-						BeforeStoreAppliedLSN: func(hookCtx hookContext) {
-							panic(errSimulatedCrash)
-						},
+						BeforeStoreAppliedLSN: simulateCrashHook(),
 					},
 					ExpectedError: errSimulatedCrash,
 				},

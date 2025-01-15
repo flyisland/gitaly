@@ -311,6 +311,7 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 		metrics:      mgr.metrics,
 	}
 
+	mgr.createSnapshotLockIfNeeded(txn.snapshotLSN)
 	mgr.snapshotLocks[txn.snapshotLSN].activeSnapshotters.Add(1)
 	defer mgr.snapshotLocks[txn.snapshotLSN].activeSnapshotters.Done()
 	readReady := mgr.snapshotLocks[txn.snapshotLSN].applied
@@ -1004,12 +1005,18 @@ type TransactionManager struct {
 	metrics ManagerMetrics
 }
 
+// testHooks defines hooks for testing various stages of WAL log operations.
 type testHooks struct {
-	beforeInitialization  func()
-	beforeAppendLogEntry  func()
-	beforeApplyLogEntry   func()
-	beforeStoreAppliedLSN func()
-	beforeRunExiting      func()
+	// beforeInitialization is triggered before initialization starts.
+	beforeInitialization func()
+	// beforeAppendLogEntry is triggered before appending a log entry at the target LSN.
+	beforeAppendLogEntry func(targetLSN storage.LSN)
+	// beforeApplyLogEntry is triggered before applying a log entry at the target LSN.
+	beforeApplyLogEntry func(targetLSN storage.LSN)
+	// beforeStoreAppliedLSN is triggered before storing the target applied LSN.
+	beforeStoreAppliedLSN func(targetLSN storage.LSN)
+	// beforeRunExiting is triggered before the run loop exits.
+	beforeRunExiting func()
 }
 
 // NewTransactionManager returns a new TransactionManager for the given repository.
@@ -1058,9 +1065,9 @@ func NewTransactionManager(
 
 		testHooks: testHooks{
 			beforeInitialization:  func() {},
-			beforeAppendLogEntry:  func() {},
-			beforeApplyLogEntry:   func() {},
-			beforeStoreAppliedLSN: func() {},
+			beforeAppendLogEntry:  func(storage.LSN) {},
+			beforeApplyLogEntry:   func(storage.LSN) {},
+			beforeStoreAppliedLSN: func(storage.LSN) {},
 			beforeRunExiting:      func() {},
 		},
 	}
@@ -1141,8 +1148,9 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 	if err := transaction.stageKeyValueOperations(); err != nil {
 		return fmt.Errorf("stage key-value operations: %w", err)
 	}
+	transaction.manifest.Operations = transaction.walEntry.Operations()
 
-	if err := transaction.flushLogEntry(ctx); err != nil {
+	if err := wal.WriteManifest(ctx, transaction.walEntry.Directory(), transaction.manifest); err != nil {
 		return fmt.Errorf("flush log entry: %w", err)
 	}
 
@@ -2114,16 +2122,17 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 						}
 						transaction.manifest.Housekeeping = housekeepingEntry
 					}
+					transaction.manifest.Operations = transaction.walEntry.Operations()
 
 					// The transaction has already written the manifest to the disk as a read-only file
 					// before queuing for commit. Remove the old file so we can replace it below.
-					if err := os.Remove(manifestPath(transaction.walEntry.Directory())); err != nil {
+					if err := wal.RemoveManifest(ctx, transaction.walEntry.Directory()); err != nil {
 						return fmt.Errorf("remove outdated manifest")
 					}
 
 					// Operations working on the staging snapshot add more files into the log entry,
-					// and modify the manifest. Flush it to the disk to persist the new changes.
-					if err := transaction.flushLogEntry(ctx); err != nil {
+					// and modify the manifest.
+					if err := wal.WriteManifest(ctx, transaction.walEntry.Directory(), transaction.manifest); err != nil {
 						return fmt.Errorf("flush log entry: %w", err)
 					}
 				}
@@ -2154,7 +2163,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 			return fmt.Errorf("verify file system operations: %w", err)
 		}
 
-		mgr.testHooks.beforeAppendLogEntry()
+		mgr.testHooks.beforeAppendLogEntry(mgr.logManager.AppendedLSN() + 1)
 		if err := mgr.appendLogEntry(ctx, transaction.objectDependencies, transaction.manifest, transaction.walFilesPath()); err != nil {
 			return fmt.Errorf("append log entry: %w", err)
 		}
@@ -2376,13 +2385,13 @@ func (mgr *TransactionManager) initialize(ctx context.Context) error {
 
 	// Create a snapshot lock for the applied LSN as it is used for synchronizing
 	// the snapshotters with the log application.
-	mgr.snapshotLocks[mgr.appliedLSN] = &snapshotLock{applied: make(chan struct{})}
+	mgr.createSnapshotLockIfNeeded(mgr.appliedLSN)
 	close(mgr.snapshotLocks[mgr.appliedLSN].applied)
 
 	// Each unapplied log entry should have a snapshot lock as they are created in normal
 	// operation when committing a log entry. Recover these entries.
 	for i := mgr.appliedLSN + 1; i <= mgr.logManager.AppendedLSN(); i++ {
-		mgr.snapshotLocks[i] = &snapshotLock{applied: make(chan struct{})}
+		mgr.createSnapshotLockIfNeeded(i)
 	}
 
 	mgr.testHooks.beforeInitialization()
@@ -2414,11 +2423,6 @@ func (mgr *TransactionManager) doesRepositoryExist(ctx context.Context, relative
 // getAbsolutePath returns the relative path's absolute path in the storage.
 func (mgr *TransactionManager) getAbsolutePath(relativePath ...string) string {
 	return filepath.Join(append([]string{mgr.storagePath}, relativePath...)...)
-}
-
-// manifestPath returns the manifest file's path in the log entry.
-func manifestPath(logEntryPath string) string {
-	return filepath.Join(logEntryPath, "MANIFEST")
 }
 
 // packFilePath returns a log entry's pack file's absolute path in the wal files directory.
@@ -2952,57 +2956,15 @@ func (mgr *TransactionManager) applyReferenceTransaction(ctx context.Context, ch
 	return nil
 }
 
-// flushLogEntry writes the log entry's manifest to the disk, and fsyncs the entire
-// log entry.
-func (txn *Transaction) flushLogEntry(ctx context.Context) error {
-	txn.manifest.Operations = txn.walEntry.Operations()
-
-	manifestBytes, err := proto.Marshal(txn.manifest)
-	if err != nil {
-		return fmt.Errorf("marshal manifest: %w", err)
-	}
-
-	// Finalize the log entry by writing the MANIFEST file into the log entry's directory.
-	manifestPath := manifestPath(txn.walEntry.Directory())
-	if err := os.WriteFile(manifestPath, manifestBytes, mode.File); err != nil {
-		return fmt.Errorf("write manifest: %w", err)
-	}
-
-	// Sync the log entry completely before committing it.
-	//
-	// Ideally the log entry would be completely flushed to the disk before queuing the
-	// transaction for commit to ensure we don't write a lot to the disk while in the critical
-	// section. We currently stage some of the files only in the critical section though. This
-	// is due to currently lacking conflict checks which prevents staging the log entry completely
-	// before queuing it for commit.
-	//
-	// See https://gitlab.com/gitlab-org/gitaly/-/issues/5892 for more details. Once the issue is
-	// addressed, we could stage the transaction entirely before queuing it for commit, and thus not
-	// need to sync here.
-	if err := safe.NewSyncer().SyncRecursive(ctx, txn.walEntry.Directory()); err != nil {
-		return fmt.Errorf("synchronizing WAL directory: %w", err)
-	}
-
-	return nil
-}
-
 // appendLogEntry appends a log entry of a transaction to the write-ahead log. After the log entry is appended to WAL,
 // the corresponding snapshot lock and in-memory reference for the latest appended LSN is created.
 func (mgr *TransactionManager) appendLogEntry(ctx context.Context, objectDependencies map[git.ObjectID]struct{}, logEntry *gitalypb.LogEntry, logEntryPath string) error {
 	defer trace.StartRegion(ctx, "appendLogEntry").End()
 
-	// Pre-setup an snapshot lock entry for the assumed appended LSN location.
-	mgr.mutex.Lock()
-	mgr.snapshotLocks[mgr.logManager.AppendedLSN()+1] = &snapshotLock{applied: make(chan struct{})}
-	mgr.mutex.Unlock()
-
 	// After this latch block, the transaction is committed and all subsequent transactions
 	// are guaranteed to read it.
 	appendedLSN, err := mgr.logManager.AppendLogEntry(logEntryPath)
 	if err != nil {
-		mgr.mutex.Lock()
-		delete(mgr.snapshotLocks, mgr.logManager.AppendedLSN()+1)
-		mgr.mutex.Unlock()
 		return fmt.Errorf("append log entry: %w", err)
 	}
 
@@ -3023,7 +2985,7 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 
 	defer prometheus.NewTimer(mgr.metrics.transactionApplicationDurationSeconds).ObserveDuration()
 
-	logEntry, err := mgr.readLogEntry(lsn)
+	manifest, err := wal.ReadManifest(mgr.logManager.GetEntryPath(lsn))
 	if err != nil {
 		return fmt.Errorf("read log entry: %w", err)
 	}
@@ -3032,15 +2994,22 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 	// the new state to the repository. No new snapshotters can arrive at this point. All
 	// new transactions would be waiting for the committed log entry we are about to apply.
 	previousLSN := lsn - 1
-	mgr.snapshotLocks[previousLSN].activeSnapshotters.Wait()
+
+	mgr.mutex.Lock()
+	previousLock := mgr.snapshotLocks[previousLSN]
+	mgr.mutex.Unlock()
+
+	// This might take a while, it should better wait out side of mutex lock.
+	previousLock.activeSnapshotters.Wait()
+
 	mgr.mutex.Lock()
 	delete(mgr.snapshotLocks, previousLSN)
 	mgr.mutex.Unlock()
 
-	mgr.testHooks.beforeApplyLogEntry()
+	mgr.testHooks.beforeApplyLogEntry(lsn)
 
 	if err := mgr.db.Update(func(tx keyvalue.ReadWriter) error {
-		if err := applyOperations(ctx, safe.NewSyncer().Sync, mgr.storagePath, mgr.logManager.GetEntryPath(lsn), logEntry.GetOperations(), tx); err != nil {
+		if err := applyOperations(ctx, safe.NewSyncer().Sync, mgr.storagePath, mgr.logManager.GetEntryPath(lsn), manifest.GetOperations(), tx); err != nil {
 			return fmt.Errorf("apply operations: %w", err)
 		}
 
@@ -3056,29 +3025,17 @@ func (mgr *TransactionManager) applyLogEntry(ctx context.Context, lsn storage.LS
 
 	// Notify the transactions waiting for this log entry to be applied prior to take their
 	// snapshot.
+	mgr.mutex.Lock()
+	mgr.createSnapshotLockIfNeeded(lsn)
 	close(mgr.snapshotLocks[lsn].applied)
+	mgr.mutex.Unlock()
 
 	return nil
 }
 
-// readLogEntry returns the log entry from the given position in the log.
-func (mgr *TransactionManager) readLogEntry(lsn storage.LSN) (*gitalypb.LogEntry, error) {
-	manifestBytes, err := os.ReadFile(manifestPath(mgr.logManager.GetEntryPath(lsn)))
-	if err != nil {
-		return nil, fmt.Errorf("read manifest: %w", err)
-	}
-
-	var logEntry gitalypb.LogEntry
-	if err := proto.Unmarshal(manifestBytes, &logEntry); err != nil {
-		return nil, fmt.Errorf("unmarshal manifest: %w", err)
-	}
-
-	return &logEntry, nil
-}
-
 // storeAppliedLSN stores the partition's applied LSN in the database.
 func (mgr *TransactionManager) storeAppliedLSN(lsn storage.LSN) error {
-	mgr.testHooks.beforeStoreAppliedLSN()
+	mgr.testHooks.beforeStoreAppliedLSN(lsn)
 
 	if err := mgr.setKey(keyAppliedLSN, lsn.ToProto()); err != nil {
 		return err
@@ -3197,4 +3154,10 @@ func (mgr *TransactionManager) cleanCommittedEntry(entry *committedEntry) bool {
 		elm = mgr.committedEntries.Front()
 	}
 	return removedAnyEntry
+}
+
+func (mgr *TransactionManager) createSnapshotLockIfNeeded(lsn storage.LSN) {
+	if _, exist := mgr.snapshotLocks[lsn]; !exist {
+		mgr.snapshotLocks[lsn] = &snapshotLock{applied: make(chan struct{})}
+	}
 }
