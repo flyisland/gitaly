@@ -50,7 +50,7 @@ func (t *NoopTransport) Send(ctx context.Context, pathForLSN func(storage.LSN) s
 			if messages[i].Entries[j].Type != raftpb.EntryNormal {
 				continue
 			}
-			var msg gitalypb.RaftMessageV1
+			var msg gitalypb.RaftEntry
 
 			if err := proto.Unmarshal(messages[i].Entries[j].Data, &msg); err != nil {
 				return fmt.Errorf("unmarshalling entry type: %w", err)
@@ -63,10 +63,7 @@ func (t *NoopTransport) Send(ctx context.Context, pathForLSN func(storage.LSN) s
 			// purpose. A real implementation of Transaction will likely use an optimized method
 			// (such as sidechannel) to deliver the data. It does not necessarily store the data in
 			// the memory.
-			switch msg.GetLogData().(type) {
-			case *gitalypb.RaftMessageV1_Packed:
-				continue
-			case *gitalypb.RaftMessageV1_Referenced:
+			if len(msg.GetData().GetPacked()) == 0 {
 				lsn := storage.LSN(messages[i].Entries[j].Index)
 				path := pathForLSN(lsn)
 				if err := t.packLogData(ctx, lsn, &msg, path); err != nil {
@@ -96,7 +93,7 @@ func (t *NoopTransport) Send(ctx context.Context, pathForLSN func(storage.LSN) s
 	return nil
 }
 
-func (t *NoopTransport) packLogData(ctx context.Context, lsn storage.LSN, message *gitalypb.RaftMessageV1, logEntryPath string) error {
+func (t *NoopTransport) packLogData(ctx context.Context, lsn storage.LSN, message *gitalypb.RaftEntry, logEntryPath string) error {
 	var logData bytes.Buffer
 	if err := archive.WriteTarball(ctx, t.logger.WithFields(log.Fields{
 		"raft.component":      "WAL archiver",
@@ -105,10 +102,9 @@ func (t *NoopTransport) packLogData(ctx context.Context, lsn storage.LSN, messag
 	}), &logData, logEntryPath, "."); err != nil {
 		return fmt.Errorf("archiving WAL log entry")
 	}
-	message.LogData = &gitalypb.RaftMessageV1_Packed{
-		Packed: &gitalypb.RaftMessageV1_PackedLogData{
-			Data: logData.Bytes(),
-		},
+	message.Data = &gitalypb.RaftEntry_LogData{
+		LocalPath: message.GetData().GetLocalPath(),
+		Packed:    logData.Bytes(),
 	}
 	return nil
 }

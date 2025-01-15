@@ -30,18 +30,18 @@ func TestNoopTransport_Send(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		setupFunc func(tempDir string) ([]*gitalypb.LogEntry, []raftpb.Message, testhelper.DirectoryState)
+		setupFunc func(tempDir string) ([]raftpb.Message, testhelper.DirectoryState)
 	}{
 		{
 			name: "No messages",
-			setupFunc: func(tempDir string) ([]*gitalypb.LogEntry, []raftpb.Message, testhelper.DirectoryState) {
-				return nil, []raftpb.Message{}, nil
+			setupFunc: func(tempDir string) ([]raftpb.Message, testhelper.DirectoryState) {
+				return []raftpb.Message{}, nil
 			},
 		},
 		{
 			name: "Empty Entries",
-			setupFunc: func(tempDir string) ([]*gitalypb.LogEntry, []raftpb.Message, testhelper.DirectoryState) {
-				return nil, []raftpb.Message{
+			setupFunc: func(tempDir string) ([]raftpb.Message, testhelper.DirectoryState) {
+				return []raftpb.Message{
 					{
 						Type:    raftpb.MsgApp,
 						From:    2,
@@ -54,27 +54,10 @@ func TestNoopTransport_Send(t *testing.T) {
 		},
 		{
 			name: "Messages with already packed data",
-			setupFunc: func(tempDir string) ([]*gitalypb.LogEntry, []raftpb.Message, testhelper.DirectoryState) {
-				logEntry := &gitalypb.LogEntry{
-					RelativePath: "relative-path",
-					Operations: []*gitalypb.LogEntry_Operation{
-						{
-							Operation: &gitalypb.LogEntry_Operation_CreateHardLink_{
-								CreateHardLink: &gitalypb.LogEntry_Operation_CreateHardLink{
-									SourcePath:      []byte("source"),
-									DestinationPath: []byte("destination"),
-								},
-							},
-						},
-					},
-				}
-				initialMessage := gitalypb.RaftMessageV1{
-					Id:            1,
-					ClusterId:     "44c58f50-0a8b-4849-bf8b-d5a56198ea7c",
-					AuthorityName: "sample-storage",
-					PartitionId:   1,
-					LogEntry:      logEntry,
-					LogData:       &gitalypb.RaftMessageV1_Packed{Packed: &gitalypb.RaftMessageV1_PackedLogData{Data: []byte("already packed data")}},
+			setupFunc: func(tempDir string) ([]raftpb.Message, testhelper.DirectoryState) {
+				initialMessage := gitalypb.RaftEntry{
+					Id:   1,
+					Data: &gitalypb.RaftEntry_LogData{Packed: []byte("already packed data")},
 				}
 				messages := []raftpb.Message{
 					{
@@ -86,12 +69,12 @@ func TestNoopTransport_Send(t *testing.T) {
 						Entries: []raftpb.Entry{{Index: uint64(1), Type: raftpb.EntryNormal, Data: mustMarshalProto(&initialMessage)}},
 					},
 				}
-				return []*gitalypb.LogEntry{logEntry}, messages, nil
+				return messages, nil
 			},
 		},
 		{
 			name: "Messages with referenced data",
-			setupFunc: func(tempDir string) ([]*gitalypb.LogEntry, []raftpb.Message, testhelper.DirectoryState) {
+			setupFunc: func(tempDir string) ([]raftpb.Message, testhelper.DirectoryState) {
 				// Simulate a log entry dir with files
 				fileContents := testhelper.DirectoryState{
 					".": {Mode: archive.TarFileMode | archive.ExecuteMode | fs.ModeDir},
@@ -106,27 +89,9 @@ func TestNoopTransport_Send(t *testing.T) {
 					}
 				}
 
-				// Construct message with ReferencedLogData
-				logEntry := &gitalypb.LogEntry{
-					RelativePath: "relative-path",
-					Operations: []*gitalypb.LogEntry_Operation{
-						{
-							Operation: &gitalypb.LogEntry_Operation_CreateHardLink_{
-								CreateHardLink: &gitalypb.LogEntry_Operation_CreateHardLink{
-									SourcePath:      []byte("source"),
-									DestinationPath: []byte("destination"),
-								},
-							},
-						},
-					},
-				}
-				initialMessage := gitalypb.RaftMessageV1{
-					Id:            1,
-					ClusterId:     "44c58f50-0a8b-4849-bf8b-d5a56198ea7c",
-					AuthorityName: "sample-storage",
-					PartitionId:   1,
-					LogEntry:      logEntry,
-					LogData:       &gitalypb.RaftMessageV1_Referenced{Referenced: &gitalypb.RaftMessageV1_ReferencedLogData{}},
+				initialMessage := gitalypb.RaftEntry{
+					Id:   1,
+					Data: &gitalypb.RaftEntry_LogData{LocalPath: []byte(tempDir)},
 				}
 
 				messages := []raftpb.Message{
@@ -141,7 +106,7 @@ func TestNoopTransport_Send(t *testing.T) {
 						},
 					},
 				}
-				return []*gitalypb.LogEntry{logEntry}, messages, fileContents
+				return messages, fileContents
 			},
 		},
 	}
@@ -154,7 +119,7 @@ func TestNoopTransport_Send(t *testing.T) {
 			tempDir := testhelper.TempDir(t)
 
 			// Execute setup function to prepare messages and any necessary file contents
-			entries, messages, expectedContents := tc.setupFunc(tempDir)
+			messages, expectedContents := tc.setupFunc(tempDir)
 
 			// Setup logger and transport
 			logger := testhelper.SharedLogger(t)
@@ -179,27 +144,17 @@ func TestNoopTransport_Send(t *testing.T) {
 				if len(messages[i].Entries) == 0 {
 					require.Empty(t, recordedMessages[i].Entries)
 				} else {
-					var resultMessage gitalypb.RaftMessageV1
+					var resultMessage gitalypb.RaftEntry
 					require.NoError(t, proto.Unmarshal(recordedMessages[i].Entries[0].Data, &resultMessage))
 
-					testhelper.ProtoEqual(t, entries[i], resultMessage.GetLogEntry())
-
-					packedData, ok := resultMessage.GetLogData().(*gitalypb.RaftMessageV1_Packed)
-					require.True(t, ok)
-
-					tarballData := packedData.Packed.GetData()
+					require.True(t, len(resultMessage.GetData().GetPacked()) > 0, "packed data must have packed type")
+					tarballData := resultMessage.GetData().GetPacked()
 					require.NotEmpty(t, tarballData)
 
 					// Optionally verify packed data if expected
 					if expectedContents != nil {
-						var resultMessage gitalypb.RaftMessageV1
-						require.NoError(t, proto.Unmarshal(recordedMessages[0].Entries[0].Data, &resultMessage))
-
-						packedData, ok := resultMessage.GetLogData().(*gitalypb.RaftMessageV1_Packed)
-						require.True(t, ok, "packed data must have packed type")
-
 						// Verify tarball content matches expectations
-						reader := bytes.NewReader(packedData.Packed.GetData())
+						reader := bytes.NewReader(tarballData)
 						testhelper.RequireTarState(t, reader, expectedContents)
 					}
 				}
