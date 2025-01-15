@@ -107,6 +107,13 @@ ifeq ($(origin PROTOC_BUILD_OPTIONS),undefined)
     PROTOC_BUILD_OPTIONS += -DCMAKE_CXX_STANDARD=14
 endif
 
+# This target is a part of the pipeline because some of Gitaly's protobufs consist of etcd's raftpb.
+RAFTPB_REPO_URL     ?= https://github.com/etcd-io/raft
+RAFTPB_SOURCE_DIR   ?= ${DEPENDENCY_DIR}/raft
+# gogoproto is a dependency of raftpb.
+GOGOPROTO_REPO_URL     ?= https://github.com/gogo/protobuf
+GOGOPROTO_SOURCE_DIR   ?= ${DEPENDENCY_DIR}/gogo-protobuf
+
 # Git target
 GIT_REPO_URL       ?= https://gitlab.com/gitlab-org/git.git
 GIT_QUIET          :=
@@ -478,17 +485,31 @@ clean:
 
 .PHONY: proto
 ## Regenerate protobuf definitions.
-proto: SHARED_PROTOC_OPTS = --plugin=${PROTOC_GEN_GO} --plugin=${PROTOC_GEN_GO_GRPC} --plugin=${PROTOC_GEN_GITALY_PROTOLIST} --go_opt=paths=source_relative --go-grpc_opt=paths=source_relative
-proto: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GO_GRPC} ${PROTOC_GEN_GITALY_PROTOLIST}
+proto: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GO_GRPC} ${PROTOC_GEN_GITALY_PROTOLIST} ${DEPENDENCY_DIR}/raftpb
 	${Q}rm -rf ${PROTO_DEST_DIR} && mkdir -p ${PROTO_DEST_DIR}/gitalypb
-	${Q}${PROTOC} ${SHARED_PROTOC_OPTS} -I ${SOURCE_DIR}/proto -I ${PROTOC_INSTALL_DIR}/include --go_out=${PROTO_DEST_DIR}/gitalypb --gitaly-protolist_out=proto_dir=${SOURCE_DIR}/proto,gitalypb_dir=${PROTO_DEST_DIR}/gitalypb:${SOURCE_DIR} --go-grpc_out=${PROTO_DEST_DIR}/gitalypb ${SOURCE_DIR}/proto/*.proto ${SOURCE_DIR}/proto/testproto/*.proto
+	${Q}${PROTOC} \
+		--plugin=${PROTOC_GEN_GO} \
+		--plugin=${PROTOC_GEN_GO_GRPC} \
+		--plugin=${PROTOC_GEN_GITALY_PROTOLIST} \
+		--go_opt=paths=source_relative \
+		--go_opt=Mraftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb \
+		--go-grpc_opt=paths=source_relative \
+		--go-grpc_opt=Mraftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb \
+		--go_out=${PROTO_DEST_DIR}/gitalypb \
+		--gitaly-protolist_out=proto_dir=${SOURCE_DIR}/proto,gitalypb_dir=${PROTO_DEST_DIR}/gitalypb:${SOURCE_DIR} \
+		--go-grpc_out=${PROTO_DEST_DIR}/gitalypb \
+		-I ${SOURCE_DIR}/proto \
+		-I ${PROTOC_INSTALL_DIR}/include \
+		-I ${RAFTPB_SOURCE_DIR} \
+		-I ${GOGOPROTO_SOURCE_DIR} \
+		${SOURCE_DIR}/proto/*.proto \
+		${SOURCE_DIR}/proto/testproto/*.proto
 
 .PHONY: check-proto
 check-proto: no-proto-changes lint-proto
 
 .PHONY: lint-proto
-lint-proto: ${PROTOC} ${PROTOLINT} ${PROTOC_GEN_GITALY_LINT}
-	${Q}${PROTOC} -I ${SOURCE_DIR}/proto -I ${PROTOC_INSTALL_DIR}/include --plugin=${PROTOC_GEN_GITALY_LINT} --gitaly-lint_out=${SOURCE_DIR} ${SOURCE_DIR}/proto/*.proto
+lint-proto: ${PROTOC} ${PROTOLINT} ${PROTOC_GEN_GITALY_LINT} proto
 	${Q}${PROTOLINT} lint -config_dir_path=${SOURCE_DIR}/proto ${SOURCE_DIR}/proto/*.proto
 
 .PHONY: build-proto-gem
@@ -647,6 +668,20 @@ ${PROTOC_GEN_GITALY_LINT}: proto | ${TOOLS_DIR}
 
 ${PROTOC_GEN_GITALY_PROTOLIST}: | ${TOOLS_DIR}
 	${Q}go build -o $@ ${SOURCE_DIR}/tools/protoc-gen-gitaly-protolist
+
+${DEPENDENCY_DIR}/gogoproto:
+	${Q}${GIT} -c init.defaultBranch=master init ${GIT_QUIET} "${GOGOPROTO_SOURCE_DIR}"
+	${Q}${GIT} -C "${GOGOPROTO_SOURCE_DIR}" config remote.origin.url ${GOGOPROTO_REPO_URL}
+	${Q}${GIT} -C "${GOGOPROTO_SOURCE_DIR}" config remote.origin.tagOpt --no-tags
+	${Q}${GIT} -C "${GOGOPROTO_SOURCE_DIR}" fetch --depth 1 ${GIT_QUIET} origin master
+	${Q}${GIT} -C "${GOGOPROTO_SOURCE_DIR}" checkout ${GIT_QUIET} --detach FETCH_HEAD
+
+${DEPENDENCY_DIR}/raftpb: ${DEPENDENCY_DIR}/gogoproto
+	${Q}${GIT} -c init.defaultBranch=master init ${GIT_QUIET} "${RAFTPB_SOURCE_DIR}"
+	${Q}${GIT} -C "${RAFTPB_SOURCE_DIR}" config remote.origin.url ${RAFTPB_REPO_URL}
+	${Q}${GIT} -C "${RAFTPB_SOURCE_DIR}" config remote.origin.tagOpt --no-tags
+	${Q}${GIT} -C "${RAFTPB_SOURCE_DIR}" fetch --depth 1 ${GIT_QUIET} origin main
+	${Q}${GIT} -C "${RAFTPB_SOURCE_DIR}" checkout ${GIT_QUIET} --detach FETCH_HEAD
 
 ${GIT_FILTER_REPO}: ${DEPENDENCY_DIR}/git-filter-repo.version | ${BUILD_DIR}/bin
 	${Q}${GIT} -c init.defaultBranch=master init ${GIT_QUIET} "${GIT_FILTER_REPO_SOURCE_DIR}"
