@@ -3,6 +3,8 @@ package repository
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +12,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -170,7 +173,9 @@ func TestCreateRepositoryFromBundle_transactional(t *testing.T) {
 	txManager := transaction.NewTrackingManager()
 	cfg, client := setupRepositoryService(t, testserver.WithTransactionManager(txManager))
 
-	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
 
 	// Reset the votes casted while creating the test repository.
 	txManager.Reset()
@@ -228,6 +233,28 @@ func TestCreateRepositoryFromBundle_transactional(t *testing.T) {
 	// set to master and has references packed.
 	gittest.Exec(t, cfg, "-C", repoPath, "symbolic-ref", "HEAD", "refs/heads/master")
 	gittest.Exec(t, cfg, "-C", repoPath, "pack-refs", "--all")
+
+	// When a Git repository is initialized via git-init(1) it knows upfront whether extensions such
+	// as --object-format are used. Consequently, Git can write the config for the repository in a
+	// single go. When a repository gets created via git-clone(1), it does not immediately know what
+	// the object format is for the remote repository so the repository config gets initially
+	// created without this info. Later in the clone process the object format gets discovered and
+	// the config gets updated accordingly. Starting in Git v2.48 this subtle detail causes
+	// potential differences in the ordering of the config entries. While the content is ultimately
+	// the same, transaction votes rely on the content of repository files to be exactly the same.
+	// To avoid config formatting discrepancies between git-init(1) and git-clone(1), just use the
+	// real config when computing the expected vote.
+	configStream, err := client.GetConfig(ctx, &gitalypb.GetConfigRequest{Repository: createdRepo})
+	require.NoError(t, err)
+
+	data := &bytes.Buffer{}
+	_, err = io.Copy(data, streamio.NewReader(func() ([]byte, error) {
+		response, err := configStream.Recv()
+		return response.GetData(), err
+	}))
+	require.NoError(t, err)
+	require.NoError(t, configStream.CloseSend())
+	require.NoError(t, os.WriteFile(filepath.Join(repoPath, "config"), data.Bytes(), mode.File))
 
 	// Compute the vote hash to assert that we really hash exactly the files that we
 	// expect to hash. Furthermore, this is required for cross-platform compatibility given that
