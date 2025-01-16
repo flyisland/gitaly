@@ -2612,22 +2612,27 @@ func TestRepositoryManager_CleanStaleData_unsetConfigurationTransactional(t *tes
 	require.NoError(t, New(cfg.Prometheus, testhelper.SharedLogger(t), txManager, nil).CleanStaleData(ctx, repo, housekeeping.DefaultStaleDataCleanup()))
 	require.Equal(t, 2, len(txManager.Votes()))
 
-	configKeys := gittest.Exec(t, cfg, "-C", repoPath, "config", "--list", "--local", "--name-only")
+	configKeysBytes := gittest.Exec(t, cfg, "-C", repoPath, "config", "--list", "--local", "--name-only")
+	configKeys := bytes.Split(bytes.TrimSuffix(configKeysBytes, []byte("\n")), []byte("\n"))
 
-	expectedConfig := "core.repositoryformatversion\ncore.filemode\ncore.bare\n"
+	expectedConfig := [][]byte{
+		[]byte("core.repositoryformatversion"),
+		[]byte("core.filemode"),
+		[]byte("core.bare"),
+	}
 
 	if runtime.GOOS == "darwin" {
-		expectedConfig = expectedConfig + "core.ignorecase\ncore.precomposeunicode\n"
+		expectedConfig = append(expectedConfig, []byte("core.ignorecase"), []byte("core.precomposeunicode"))
 	}
 	if testhelper.IsReftableEnabled() {
-		expectedConfig = expectedConfig + "extensions.refstorage\n"
+		expectedConfig = append(expectedConfig, []byte("extensions.refstorage"))
 	}
 
 	if gittest.DefaultObjectHash.Format == "sha256" {
-		expectedConfig = expectedConfig + "extensions.objectformat\n"
+		expectedConfig = append(expectedConfig, []byte("extensions.objectformat"))
 	}
 
-	require.Equal(t, expectedConfig, string(configKeys))
+	require.ElementsMatch(t, expectedConfig, configKeys)
 }
 
 func TestRepositoryManager_CleanStaleData_pruneEmptyConfigSections(t *testing.T) {
