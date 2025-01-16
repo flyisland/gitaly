@@ -80,4 +80,4 @@ Please edit this section like a workbook, adding not just the answer but also ho
 
 /confidential
 /assign me
-/cc @andrashorvath @jcaigitlab
+/cc @jcaigitlab
