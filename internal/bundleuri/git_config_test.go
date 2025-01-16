@@ -2,117 +2,88 @@ package bundleuri
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 )
 
-func TestUploadPackGitConfig(t *testing.T) {
-	testhelper.NewFeatureSets(featureflag.BundleURI).
-		Run(t, testUploadPackGitConfig)
+func TestCapabilitiesGitConfig(t *testing.T) {
+	t.Parallel()
+	testhelper.NewFeatureSets(
+		featureflag.BundleURI,
+	).Run(t, testCapabilitiesGitConfig)
 }
 
-func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
-	t.Parallel()
-
-	cfg := testcfg.Build(t)
-	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
-		SkipCreationViaService: true,
-	})
-	repo := localrepo.NewTestRepo(t, cfg, repoProto)
-
-	gittest.WriteCommit(t, cfg, repoPath,
-		gittest.WithTreeEntries(gittest.TreeEntry{Mode: "100644", Path: "README", Content: "much"}),
-		gittest.WithBranch("main"))
-
-	tempDir := testhelper.TempDir(t)
-	keyFile, err := os.Create(filepath.Join(tempDir, "secret.key"))
-	require.NoError(t, err)
-	_, err = keyFile.WriteString("super-secret-key")
-	require.NoError(t, err)
-	require.NoError(t, keyFile.Close())
-
-	type setupData struct {
-		manager *GenerationManager
-	}
-
-	for _, tc := range []struct {
-		desc           string
-		setup          func(t *testing.T) setupData
-		expectedConfig []gitcmd.ConfigPair
-		expectedErr    error
+func testCapabilitiesGitConfig(t *testing.T, ctx context.Context) {
+	tests := []struct {
+		desc     string
+		enabled  bool
+		expected []gitcmd.ConfigPair
 	}{
 		{
-			desc: "no bundle found",
-			setup: func(t *testing.T) setupData {
-				sinkDir := t.TempDir()
-				sink, err := NewSink(ctx, "file://"+sinkDir+"?base_url=http://example.com&secret_key_path="+keyFile.Name())
-				require.NoError(t, err)
-
-				manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 0, nil)
-				require.NoError(t, err)
-
-				return setupData{
-					manager: manager,
-				}
-			},
-			expectedConfig: nil,
-			expectedErr:    structerr.NewNotFound("no bundle available"),
-		},
-		{
-			desc: "not signed",
-			setup: func(t *testing.T) setupData {
-				sinkDir := t.TempDir()
-				sink, err := NewSink(ctx, "file://"+sinkDir)
-				require.NoError(t, err)
-
-				manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 0, nil)
-				require.NoError(t, err)
-
-				require.NoError(t, manager.Generate(ctx, repo))
-
-				return setupData{
-					manager: manager,
-				}
-			},
-			expectedConfig: nil,
-			expectedErr:    fmt.Errorf("signed URL: fileblob.SignedURL: bucket does not have an Options.URLSigner (code=Unimplemented)"),
-		},
-		{
-			desc: "success",
-			setup: func(t *testing.T) setupData {
-				sinkDir := t.TempDir()
-				sink, err := NewSink(ctx, "file://"+sinkDir+"?base_url=http://example.com&secret_key_path="+keyFile.Name())
-				require.NoError(t, err)
-
-				manager, err := NewGenerationManager(sink, testhelper.NewLogger(t), 1, 0, nil)
-				require.NoError(t, err)
-
-				require.NoError(t, manager.Generate(ctx, repo))
-
-				return setupData{
-					manager: manager,
-				}
-			},
-			expectedConfig: []gitcmd.ConfigPair{
+			desc:    "when bundle-uri enabled",
+			enabled: true,
+			expected: []gitcmd.ConfigPair{
 				{
 					Key:   "uploadpack.advertiseBundleURIs",
 					Value: "true",
 				},
+			},
+		},
+		{
+			desc:    "when bundle-uri disabled",
+			enabled: false,
+			expected: []gitcmd.ConfigPair{
+				{
+					Key:   "uploadpack.advertiseBundleURIs",
+					Value: "false",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		got := CapabilitiesGitConfig(ctx, tt.enabled)
+		if featureflag.BundleURI.IsEnabled(ctx) {
+			require.ElementsMatch(t, tt.expected, got)
+		} else {
+			require.ElementsMatch(t, []gitcmd.ConfigPair{
+				{
+					Key:   "uploadpack.advertiseBundleURIs",
+					Value: "false",
+				},
+			}, got)
+		}
+
+	}
+}
+
+func TestUploadPackGitConfig(t *testing.T) {
+	t.Parallel()
+	testhelper.NewFeatureSets(
+		featureflag.BundleURI,
+	).Run(t, testUploadPackGitConfig)
+}
+
+func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
+	tests := []struct {
+		desc     string
+		uri      string
+		expected []gitcmd.ConfigPair
+	}{
+		{
+			desc: "should return all config",
+			uri:  "https://example.com/bundle.git",
+			expected: []gitcmd.ConfigPair{
 				{
 					Key:   "bundle.version",
 					Value: "1",
+				},
+				{
+					Key:   "uploadpack.advertiseBundleURIs",
+					Value: "true",
 				},
 				{
 					Key:   "bundle.mode",
@@ -124,7 +95,7 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 				},
 				{
 					Key:   "bundle.default.uri",
-					Value: "https://example.com/bundle.git?signed=ok",
+					Value: "https://example.com/bundle.git",
 				},
 				{
 					Key:   "bundle.default.creationToken",
@@ -132,35 +103,28 @@ func testUploadPackGitConfig(t *testing.T, ctx context.Context) {
 				},
 			},
 		},
-	} {
-		t.Run(tc.desc, func(t *testing.T) {
-			t.Parallel()
-
-			data := tc.setup(t)
-			require.NoError(t, err)
-
-			actual, err := UploadPackGitConfig(ctx, data.manager, repoProto)
-
-			if featureflag.BundleURI.IsEnabled(ctx) {
-				require.Equal(t, tc.expectedErr, err)
-
-				if tc.expectedConfig != nil {
-					require.Equal(t, len(tc.expectedConfig), len(actual))
-
-					for i, c := range tc.expectedConfig {
-						if strings.HasSuffix(c.Key, ".uri") {
-							// We cannot predict the exact signed URL Value,
-							// so only check the Keys.
-							require.Equal(t, c.Key, actual[i].Key)
-						} else {
-							require.Equal(t, c, actual[i])
-						}
-					}
-				}
-			} else {
-				require.NoError(t, err)
-				require.Empty(t, actual)
-			}
-		})
+		{
+			desc: "empty uri should disable advertising bundle",
+			uri:  "",
+			expected: []gitcmd.ConfigPair{
+				{
+					Key:   "uploadpack.advertiseBundleURIs",
+					Value: "false",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		got := UploadPackGitConfig(ctx, tt.uri)
+		if featureflag.BundleURI.IsEnabled(ctx) {
+			require.ElementsMatch(t, tt.expected, got)
+		} else {
+			require.ElementsMatch(t, []gitcmd.ConfigPair{
+				{
+					Key:   "uploadpack.advertiseBundleURIs",
+					Value: "false",
+				},
+			}, got)
+		}
 	}
 }

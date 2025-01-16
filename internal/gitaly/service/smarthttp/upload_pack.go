@@ -114,15 +114,12 @@ func (s *server) runUploadPack(ctx context.Context, req *gitalypb.PostUploadPack
 		}
 	}()
 
-	gitConfig = append(gitConfig, bundleuri.CapabilitiesGitConfig(ctx)...)
-
-	uploadPackConfig, err := bundleuri.UploadPackGitConfig(ctx, s.bundleURIManager, req.GetRepository())
-	if err != nil {
-	} else {
-		gitConfig = append(gitConfig, uploadPackConfig...)
-	}
-
 	repo := s.localRepoFactory.Build(req.GetRepository())
+	if s.bundleURIManager != nil {
+		gitConfig = append(gitConfig, s.bundleURIManager.UploadPackGitConfig(ctx, req.GetRepository())...)
+	} else {
+		gitConfig = append(gitConfig, bundleuri.CapabilitiesGitConfig(ctx, false)...)
+	}
 
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {

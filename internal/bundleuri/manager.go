@@ -13,11 +13,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var bundleGenerationLatency = prometheus.NewHistogram(
@@ -208,6 +211,20 @@ func (g *GenerationManager) SignedURL(ctx context.Context, repo storage.Reposito
 	}
 
 	return g.sink.signedURL(ctx, relativePath)
+}
+
+// UploadPackGitConfig is a helper function to provide all required, and computed, configurations
+// to inject into the `git-upload-pack` command in order to advertise `bundle-uri` and provide
+// the URI for the bundle for the given repository.
+func (g *GenerationManager) UploadPackGitConfig(ctx context.Context, repo storage.Repository) []gitcmd.ConfigPair {
+	uri, err := g.SignedURL(ctx, repo)
+	if err != nil {
+		if st, ok := status.FromError(err); !ok || st.Code() != codes.NotFound {
+			g.logger.WithField("bundle_uri_error", err)
+		}
+		return CapabilitiesGitConfig(ctx, false)
+	}
+	return UploadPackGitConfig(ctx, uri)
 }
 
 // bundleRelativePath returns a relative path of the bundle-URI bundle inside the bucket.

@@ -12,7 +12,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/stream"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -59,13 +58,10 @@ func (s *server) sshUploadPack(ctx context.Context, req *gitalypb.SSHUploadPackW
 		stats.UpdateMetrics(s.packfileNegotiationMetrics)
 	}()
 
-	config = append(config, bundleuri.CapabilitiesGitConfig(ctx)...)
-
-	uploadPackConfig, err := bundleuri.UploadPackGitConfig(ctx, s.bundleURIManager, req.GetRepository())
-	if err != nil {
-		log.AddFields(ctx, log.Fields{"bundle_uri_error": err})
+	if s.bundleURIManager != nil {
+		config = append(config, s.bundleURIManager.UploadPackGitConfig(ctx, req.GetRepository())...)
 	} else {
-		config = append(config, uploadPackConfig...)
+		config = append(config, bundleuri.CapabilitiesGitConfig(ctx, false)...)
 	}
 
 	objectHash, err := repo.ObjectHash(ctx)
