@@ -255,6 +255,7 @@ test:
       # using bundled Git binaries.
       - GO_VERSION: !reference [.versions, go_supported]
         TEST_TARGET: test
+        USE_MESON: YesPlease
       - TEST_TARGET:
           [test-with-praefect, race-go, test-wal, test-with-praefect-wal]
       # We also verify that things work as expected with a non-bundled Git
