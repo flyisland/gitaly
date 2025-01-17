@@ -56,6 +56,7 @@ func (s *server) sshUploadPack(ctx context.Context, req *gitalypb.SSHUploadPackW
 			return
 		}
 		stats.UpdateMetrics(s.packfileNegotiationMetrics)
+		stats.UpdateLogFields(ctx)
 	}()
 
 	if s.bundleURIManager != nil {

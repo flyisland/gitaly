@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
@@ -21,14 +20,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-)
-
-var bundleGenerationLatency = prometheus.NewHistogram(
-	prometheus.HistogramOpts{
-		Namespace: "gitaly",
-		Name:      "bundle_generation_seconds",
-		Buckets:   []float64{1, 30, 60, 5 * 60, 30 * 60, 60 * 60, 2 * 3600, 5 * 3600, 12 * 3600, 24 * 3600},
-	},
 )
 
 // GenerationManager manages bundle generation. It handles requests to
@@ -46,7 +37,8 @@ type GenerationManager struct {
 	threshold                  uint
 	logger                     log.Logger
 	wg                         sync.WaitGroup
-	metrics                    []prometheus.Collector
+	bundleGenerationLatency    prometheus.Histogram
+	bundleGenerationBytes      prometheus.Counter
 }
 
 // NewGenerationManager creates a new GenerationManager
@@ -71,7 +63,18 @@ func NewGenerationManager(
 		bundleGenerationInProgress: make(map[string]struct{}),
 		inProgressTracker:          inProgressTracker,
 		logger:                     logger,
-		metrics:                    []prometheus.Collector{bundleGenerationLatency},
+		bundleGenerationBytes: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "gitaly_bundle_generation_bytes_total",
+				Help: "Total number of bytes written to cloud storage",
+			},
+		),
+		bundleGenerationLatency: prometheus.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "gitaly_bundle_generation_seconds",
+				Buckets: []float64{1, 30, 60, 5 * 60, 30 * 60, 60 * 60, 2 * 3600, 5 * 3600, 12 * 3600, 24 * 3600},
+			},
+		),
 	}, nil
 }
 
@@ -82,9 +85,8 @@ func (g *GenerationManager) Describe(descs chan<- *prometheus.Desc) {
 
 // Collect is used to collect Prometheus metrics.
 func (g *GenerationManager) Collect(metrics chan<- prometheus.Metric) {
-	for _, metric := range g.metrics {
-		metric.Collect(metrics)
-	}
+	g.bundleGenerationLatency.Collect(metrics)
+	g.bundleGenerationBytes.Collect(metrics)
 }
 
 // StopAll blocks until all of the goroutines that are generating bundles are finished.
@@ -126,7 +128,10 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 		Patterns: strings.NewReader(ref.String()),
 	}
 
+	timer := prometheus.NewTimer(g.bundleGenerationLatency)
 	err = repo.CreateBundle(ctx, writer, &opts)
+
+	// do not register metrics when in error since it would skew measurements
 	switch {
 	case errors.Is(err, localrepo.ErrEmptyBundle):
 		return structerr.NewFailedPrecondition("ref %q does not exist: %w", ref, err)
@@ -134,6 +139,8 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 		return structerr.NewInternal("%w", err)
 	}
 
+	timer.ObserveDuration()
+	g.bundleGenerationBytes.Add(float64(writer.BytesWritten()))
 	return nil
 }
 
@@ -153,7 +160,6 @@ func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *
 		go func() {
 			defer g.wg.Done()
 			if featureflag.BundleGeneration.IsEnabled(ctx) {
-				start := time.Now()
 				shouldGenerate := func() bool {
 					g.mutex.Lock()
 					defer g.mutex.Unlock()
@@ -185,7 +191,6 @@ func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *
 						Error("failed to generate bundle")
 					return
 				}
-				bundleGenerationLatency.Observe(time.Since(start).Seconds())
 			}
 			g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).Info("bundle generation")
 		}()

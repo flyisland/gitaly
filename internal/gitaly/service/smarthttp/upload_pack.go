@@ -76,6 +76,7 @@ func (s *server) runStatsCollector(ctx context.Context, r io.Reader) (io.Reader,
 			return
 		}
 		stats.UpdateMetrics(s.packfileNegotiationMetrics)
+		stats.UpdateLogFields(ctx)
 
 		sc.statsCh <- stats
 	}()
