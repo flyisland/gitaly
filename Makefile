@@ -403,6 +403,11 @@ bench: ${BENCHMARK_REPO} prepare-tests
 test-with-reftable: export GIT_DEFAULT_REF_FORMAT = reftable
 test-with-reftable: test-go
 
+.PHONY: test-with-sha256
+## Run Go tests with SHA256 repositories.
+test-with-sha256: export GITALY_TEST_WITH_SHA256 = YesPlease
+test-with-sha256: test-go
+
 .PHONY: test-with-praefect
 ## Run Go tests with Praefect.
 test-with-praefect: export GITALY_TEST_WITH_PRAEFECT = YesPlease
