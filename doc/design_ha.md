@@ -7,7 +7,7 @@ HA MVC development.
 
 ## Terminology
 
-The following terminology may be used within the context of the Gitaly Cluster project:
+The following terminology may be used in the context of the Gitaly Cluster project:
 
 - Shard - partition of the storage for all repos. Each shard will require redundancy in the form of multiple Gitaly nodes (at least 3 when optimal) to maintain HA.
 - Praefect - a transparent front end to all Gitaly shards. This reverse proxy ensures that all gRPC calls are forwarded to the correct shard by consulting the coordinator. The reverse proxy also ensures that write actions are performed transactionally when needed.
