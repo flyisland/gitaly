@@ -2,6 +2,7 @@ package gitaly
 
 import (
 	"archive/tar"
+	"container/list"
 	"errors"
 	"fmt"
 	"io"
@@ -36,14 +37,13 @@ const (
 )
 
 type recoveryContext struct {
-	appliedLSN    storage.LSN
-	relativePaths []string
-	partition     storage.Partition
-	partitionID   storage.PartitionID
-	storageName   string
-	logWriter     storage.LogWriter
-	logEntryStore backup.LogEntryStore
-	cleanupFuncs  []func() error
+	startTransaction func(func(storage.Transaction)) error
+	partition        storage.Partition
+	partitionID      storage.PartitionID
+	storageName      string
+	logWriter        storage.LogWriter
+	logEntryStore    backup.LogEntryStore
+	cleanupFuncs     *list.List
 }
 
 func newRecoveryCommand() *cli.Command {
@@ -104,12 +104,22 @@ func recoveryStatusAction(ctx *cli.Context) (returnErr error) {
 		returnErr = errors.Join(returnErr, recoveryContext.Cleanup())
 	}()
 
-	fmt.Fprintf(ctx.App.Writer, "Partition ID: %s\n", recoveryContext.partitionID.String())
-	fmt.Fprintf(ctx.App.Writer, "Applied LSN: %s\n", recoveryContext.appliedLSN.String())
+	var appliedLSN storage.LSN
+	var relativePaths []string
 
-	if len(recoveryContext.relativePaths) > 0 {
+	if err := recoveryContext.startTransaction(func(txn storage.Transaction) {
+		appliedLSN = txn.SnapshotLSN()
+		relativePaths = txn.PartitionRelativePaths()
+	}); err != nil {
+		return fmt.Errorf("starting transaction: %w", err)
+	}
+
+	fmt.Fprintf(ctx.App.Writer, "Partition ID: %s\n", recoveryContext.partitionID.String())
+	fmt.Fprintf(ctx.App.Writer, "Applied LSN: %s\n", appliedLSN.String())
+
+	if len(relativePaths) > 0 {
 		fmt.Fprintf(ctx.App.Writer, "Relative paths:\n")
-		for _, relativePath := range recoveryContext.relativePaths {
+		for _, relativePath := range relativePaths {
 			fmt.Fprintf(ctx.App.Writer, " - %s\n", relativePath)
 		}
 	}
@@ -117,7 +127,7 @@ func recoveryStatusAction(ctx *cli.Context) (returnErr error) {
 	entries := recoveryContext.logEntryStore.Query(backup.PartitionInfo{
 		PartitionID: recoveryContext.partitionID,
 		StorageName: recoveryContext.storageName,
-	}, recoveryContext.appliedLSN+1)
+	}, appliedLSN+1)
 
 	fmt.Fprintf(ctx.App.Writer, "Available backup entries:\n")
 
@@ -176,16 +186,23 @@ func recoveryReplayAction(ctx *cli.Context) (returnErr error) {
 		}
 	}()
 
+	var appliedLSN storage.LSN
+	if err := recoveryContext.startTransaction(func(txn storage.Transaction) {
+		appliedLSN = txn.SnapshotLSN()
+	}); err != nil {
+		return fmt.Errorf("starting transaction: %w", err)
+	}
+
 	fmt.Fprintf(ctx.App.Writer, "Partition ID: %s\n", recoveryContext.partitionID.String())
-	fmt.Fprintf(ctx.App.Writer, "Applied LSN: %s\n", recoveryContext.appliedLSN.String())
+	fmt.Fprintf(ctx.App.Writer, "Applied LSN: %s\n", appliedLSN.String())
 	fmt.Fprintf(ctx.App.Writer, "Starting archived log entries import\n")
 
 	partitionInfo := backup.PartitionInfo{
 		PartitionID: recoveryContext.partitionID,
 		StorageName: recoveryContext.storageName,
 	}
-	nextLSN := recoveryContext.appliedLSN + 1
-	finalLSN := recoveryContext.appliedLSN
+	nextLSN := appliedLSN + 1
+	finalLSN := appliedLSN
 
 	iterator := recoveryContext.logEntryStore.Query(backup.PartitionInfo{
 		PartitionID: recoveryContext.partitionID,
@@ -206,6 +223,23 @@ func recoveryReplayAction(ctx *cli.Context) (returnErr error) {
 			return fmt.Errorf("process log entry %s: %w", nextLSN, err)
 		}
 		reader.Close()
+
+		// Wait for the log entry to be applied and verify the result
+		var latestAppliedLSN storage.LSN
+		err = recoveryContext.startTransaction(func(txn storage.Transaction) {
+			latestAppliedLSN = txn.SnapshotLSN()
+		})
+		if err != nil || latestAppliedLSN != nextLSN {
+			// If a log entry cannot be applied for any reason (broken, wrong bucket, etc.), the user will
+			// find out, but it requires an in-depth investigation. Until the reason is exposed, that
+			// partition is always in a broken state. There is nothing this tool can do to resolve the
+			// situation automatically. It's up to the user to decide the next course of actions. At latest,
+			// the malformed log entry is removed. Otherwise, the partition is broken completely.
+			return errors.Join(
+				fmt.Errorf("fail to apply latest log entry: %w", err),
+				recoveryContext.logWriter.DeleteLogEntry(nextLSN),
+			)
+		}
 
 		finalLSN = nextLSN
 		nextLSN++
@@ -231,13 +265,10 @@ func processLogEntry(reader io.Reader, tempDir string, logWriter storage.LogWrit
 		return fmt.Errorf("extract archive: %w", err)
 	}
 
-	appendedLSN, err := logWriter.AppendLogEntry(path)
-	if err != nil {
+	if _, err := logWriter.CompareAndAppendLogEntry(lsn, path); err != nil {
 		return fmt.Errorf("append log entry: %w", err)
 	}
-	if appendedLSN != lsn {
-		return fmt.Errorf("appended LSN %s does not match expected LSN %s", appendedLSN, lsn)
-	}
+	logWriter.NotifyNewEntries()
 
 	return nil
 }
@@ -305,7 +336,9 @@ func extractArchive(path string) error {
 }
 
 func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error) {
-	recoveryContext := recoveryContext{}
+	recoveryContext := recoveryContext{
+		cleanupFuncs: list.New(),
+	}
 	defer func() {
 		if returnErr != nil {
 			returnErr = errors.Join(returnErr, recoveryContext.Cleanup())
@@ -323,7 +356,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("creating runtime dir: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		return os.RemoveAll(runtimeDir)
 	})
 
@@ -345,7 +378,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("new db manager: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		dbMgr.Close()
 		return nil
 	})
@@ -354,13 +387,13 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("creating Git command factory: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		cleanup()
 		return nil
 	})
 
 	catfileCache := catfile.NewCache(cfg)
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		catfileCache.Stop()
 		return nil
 	})
@@ -393,7 +426,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if err != nil {
 		return recoveryContext, fmt.Errorf("new node: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
+	recoveryContext.cleanupFuncs.PushFront(func() error {
 		node.Close()
 		return nil
 	})
@@ -421,27 +454,32 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 		return recoveryContext, fmt.Errorf("invalid partition ID %s", partitionID)
 	}
 
-	partition, err := nodeStorage.GetPartition(ctx.Context, partitionID)
+	ptn, err := nodeStorage.GetPartition(ctx.Context, partitionID)
 	if err != nil {
 		return recoveryContext, fmt.Errorf("get partition: %w", err)
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
-		partition.Close()
+	recoveryContext.cleanupFuncs.PushFront(func() error {
+		ptn.Close()
 		return nil
 	})
 
-	txn, err := partition.Begin(ctx.Context, storage.BeginOptions{
-		RelativePaths: []string{},
-	})
-	if err != nil {
-		return recoveryContext, fmt.Errorf("begin: %w", err)
+	// A transaction is initiated in sub-commands, mostly for fetching the last SnapshotLSN (which is also the last
+	// applied LSN). The transaction is read-only. It is rolled bacck immediately after the callback method is
+	// called.
+	recoveryContext.startTransaction = func(callback func(storage.Transaction)) (returnedErr error) {
+		txn, err := ptn.Begin(ctx.Context, storage.BeginOptions{
+			Write:         false,
+			RelativePaths: []string{},
+		})
+		if err != nil {
+			return fmt.Errorf("begin: %w", err)
+		}
+		defer func() {
+			returnedErr = errors.Join(returnedErr, txn.Rollback(ctx.Context))
+		}()
+		callback(txn)
+		return nil
 	}
-	recoveryContext.cleanupFuncs = append(recoveryContext.cleanupFuncs, func() error {
-		return txn.Rollback(ctx.Context)
-	})
-
-	recoveryContext.appliedLSN = txn.SnapshotLSN()
-	recoveryContext.relativePaths = txn.PartitionRelativePaths()
 
 	if cfg.Backup.WALGoCloudURL == "" {
 		return recoveryContext, fmt.Errorf("write-ahead log backup is not configured")
@@ -451,10 +489,10 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 		return recoveryContext, fmt.Errorf("resolve sink: %w", err)
 	}
 
-	recoveryContext.partition = partition
+	recoveryContext.partition = ptn
 	recoveryContext.partitionID = partitionID
 	recoveryContext.storageName = storageName
-	recoveryContext.logWriter = partition.GetLogWriter()
+	recoveryContext.logWriter = ptn.GetLogWriter()
 	recoveryContext.logEntryStore = backup.NewLogEntryStore(sink)
 
 	return recoveryContext, nil
@@ -481,8 +519,8 @@ func printLSNRange(w io.Writer, start, end storage.LSN) {
 
 func (rc *recoveryContext) Cleanup() error {
 	var err error
-	for _, cleanup := range rc.cleanupFuncs {
-		err = errors.Join(err, cleanup())
+	for i := rc.cleanupFuncs.Front(); i != nil; i = i.Next() {
+		err = errors.Join(err, i.Value.(func() error)())
 	}
 	return err
 }

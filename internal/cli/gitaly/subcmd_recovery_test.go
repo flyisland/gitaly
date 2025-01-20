@@ -342,11 +342,11 @@ func TestRecoveryCLI_replay(t *testing.T) {
 	}
 
 	type setupData struct {
-		storageName    string
-		partitionID    storage.PartitionID
-		expectedErr    error
-		expectedOutput string
-		expectedLSN    storage.LSN
+		storageName     string
+		partitionID     storage.PartitionID
+		expectedErr     error
+		expectedOutputs []string
+		expectedLSN     storage.LSN
 	}
 
 	for _, tc := range []struct {
@@ -357,10 +357,10 @@ func TestRecoveryCLI_replay(t *testing.T) {
 			desc: "unknown storage",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				return setupData{
-					storageName:    "pineapple",
-					expectedErr:    errors.New("exit status 1"),
-					expectedOutput: "get storage: storage name not found\n",
-					expectedLSN:    storage.LSN(0),
+					storageName:     "pineapple",
+					expectedErr:     errors.New("exit status 1"),
+					expectedOutputs: []string{"get storage: storage name not found\n"},
+					expectedLSN:     storage.LSN(0),
 				}
 			},
 		},
@@ -368,11 +368,11 @@ func TestRecoveryCLI_replay(t *testing.T) {
 			desc: "partition 0",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				return setupData{
-					storageName:    opts.cfg.Storages[0].Name,
-					partitionID:    0,
-					expectedErr:    errors.New("exit status 1"),
-					expectedOutput: fmt.Sprintf("invalid partition ID %s\n", storage.PartitionID(0)),
-					expectedLSN:    storage.LSN(0),
+					storageName:     opts.cfg.Storages[0].Name,
+					partitionID:     0,
+					expectedErr:     errors.New("exit status 1"),
+					expectedOutputs: []string{fmt.Sprintf("invalid partition ID %s\n", storage.PartitionID(0))},
+					expectedLSN:     storage.LSN(0),
 				}
 			},
 		},
@@ -385,7 +385,7 @@ func TestRecoveryCLI_replay(t *testing.T) {
 					// TODO: This currently will create arbitrary partitions.
 					// It should return an error instead.
 					// https://gitlab.com/gitlab-org/gitaly/-/issues/6478
-					expectedOutput: fmt.Sprintf(`Partition ID: %s
+					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
 Applied LSN: %s
 Starting archived log entries import
 Successfully processed log entries up to LSN %s
@@ -393,7 +393,7 @@ Successfully processed log entries up to LSN %s
 						storage.PartitionID(42),
 						storage.LSN(0),
 						storage.LSN(0),
-					),
+					)},
 					expectedLSN: storage.LSN(0),
 				}
 			},
@@ -433,7 +433,7 @@ Successfully processed log entries up to LSN %s
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutput: fmt.Sprintf(`Partition ID: %s
+					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
 Applied LSN: %s
 Starting archived log entries import
 Successfully processed log entries up to LSN %s
@@ -441,7 +441,7 @@ Successfully processed log entries up to LSN %s
 						storage.PartitionID(2),
 						storage.LSN(1),
 						storage.LSN(1),
-					),
+					)},
 					expectedLSN: storage.LSN(1),
 				}
 			},
@@ -488,7 +488,7 @@ Successfully processed log entries up to LSN %s
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutput: fmt.Sprintf(`Partition ID: %s
+					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
 Applied LSN: %s
 Starting archived log entries import
 Successfully processed log entries up to LSN %s
@@ -496,7 +496,7 @@ Successfully processed log entries up to LSN %s
 						storage.PartitionID(2),
 						storage.LSN(1),
 						storage.LSN(3),
-					),
+					)},
 					expectedLSN: storage.LSN(3),
 				}
 			},
@@ -541,11 +541,78 @@ Successfully processed log entries up to LSN %s
 				})
 
 				return setupData{
-					storageName:    repo.GetStorageName(),
-					partitionID:    2,
-					expectedErr:    errors.New("exit status 1"),
-					expectedOutput: "there is discontinuity in the WAL entries. Expected: 3, Got: 4\n",
-					expectedLSN:    storage.LSN(2),
+					storageName: repo.GetStorageName(),
+					partitionID: 2,
+					expectedErr: errors.New("exit status 1"),
+					expectedOutputs: []string{
+						fmt.Sprintf(`Partition ID: %s
+Applied LSN: %s
+Starting archived log entries import
+`,
+							storage.PartitionID(2),
+							storage.LSN(1),
+						),
+						"there is discontinuity in the WAL entries. Expected: 3, Got: 4\n",
+					},
+					expectedLSN: storage.LSN(2),
+				}
+			},
+		},
+		{
+			desc: "fail to apply a log entry",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				logger := testhelper.SharedLogger(t)
+				repo := &gitalypb.Repository{
+					StorageName:  opts.cfg.Storages[0].Name,
+					RelativePath: gittest.NewRepositoryName(t),
+				}
+
+				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
+					RelativePath: repo.GetRelativePath(),
+					AllowPartitionAssignmentWithoutRepository: true,
+				})
+				require.NoError(t, err)
+
+				err = repoutil.Create(
+					storage.ContextWithTransaction(ctx, txn),
+					logger,
+					opts.locator,
+					opts.gitCmdFactory,
+					opts.catfileCache,
+					transaction.NewTrackingManager(),
+					counter.NewRepositoryCounter(opts.cfg.Storages),
+					txn.RewriteRepository(repo),
+					func(repo *gitalypb.Repository) error {
+						return nil
+					},
+				)
+				require.NoError(t, err)
+
+				require.NoError(t, txn.Commit(ctx))
+
+				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createInvalidLogEntryArchive(t, repo.GetRelativePath()),
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
+				})
+
+				return setupData{
+					storageName: repo.GetStorageName(),
+					partitionID: 2,
+					expectedErr: errors.New("exit status 1"),
+					expectedOutputs: []string{
+						fmt.Sprintf(`Partition ID: %s
+Applied LSN: %s
+Starting archived log entries import
+`,
+							storage.PartitionID(2),
+							storage.LSN(1),
+						),
+						`msg="partition failed" error="apply log entry: update: apply operations`,
+						`fail to apply latest log entry`,
+					},
+					expectedLSN: storage.LSN(1),
 				}
 			},
 		},
@@ -606,9 +673,13 @@ Successfully processed log entries up to LSN %s
 			cmd := exec.Command(cfg.BinaryPath("gitaly"), "recovery", "-config", configPath, "replay", "-storage", data.storageName, "-partition", data.partitionID.String())
 
 			output, err := cmd.CombinedOutput()
+			if err != nil && data.expectedErr == nil {
+				t.Log(string(output))
+			}
 			testhelper.RequireGrpcError(t, data.expectedErr, err)
-
-			require.Contains(t, string(output), data.expectedOutput)
+			for _, expectedOutput := range data.expectedOutputs {
+				require.Contains(t, string(output), expectedOutput)
+			}
 
 			// Creating storage manager again as we had to close it previously to run the command in offline mode
 			dbMgr, err = databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
@@ -654,6 +725,43 @@ func createValidLogEntryArchive(t *testing.T, repoRelativePath string) []byte {
 	manifest := &gitalypb.LogEntry{
 		RelativePath: repoRelativePath,
 		Operations:   []*gitalypb.LogEntry_Operation{},
+	}
+	manifestBytes, err := proto.Marshal(manifest)
+	require.NoError(t, err)
+
+	err = tw.WriteHeader(&tar.Header{
+		Name: "MANIFEST",
+		Mode: 0o644,
+		Size: int64(len(manifestBytes)),
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(manifestBytes)
+	require.NoError(t, err)
+
+	require.NoError(t, tw.Close())
+
+	return buf.Bytes()
+}
+
+func createInvalidLogEntryArchive(t *testing.T, repoRelativePath string) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	// Create a dummy MANIFEST file
+	manifest := &gitalypb.LogEntry{
+		RelativePath: repoRelativePath,
+		Operations: []*gitalypb.LogEntry_Operation{
+			{
+				Operation: &gitalypb.LogEntry_Operation_CreateHardLink_{
+					CreateHardLink: &gitalypb.LogEntry_Operation_CreateHardLink{
+						SourcePath:      []byte("please-do-not-exist"),
+						DestinationPath: []byte("destination"),
+					},
+				},
+			},
+		},
 	}
 	manifestBytes, err := proto.Marshal(manifest)
 	require.NoError(t, err)

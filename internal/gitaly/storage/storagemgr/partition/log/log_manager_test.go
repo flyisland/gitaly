@@ -1073,3 +1073,72 @@ func TestLogManager_Close(t *testing.T) {
 		require.Equal(t, storage.LSN(3), logManager.oldestLSN)
 	})
 }
+
+func TestLogManager_NotifyNewEntries(t *testing.T) {
+	t.Parallel()
+
+	t.Run("notification channel is empty by default", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		stateDir := testhelper.TempDir(t)
+
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
+		require.NoError(t, logManager.Initialize(ctx, 0))
+
+		select {
+		case <-logManager.GetNotificationQueue():
+			require.Fail(t, "notification must be empty by default")
+		default:
+		}
+	})
+
+	t.Run("notify new entries sequentially via the notification channel", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		stateDir := testhelper.TempDir(t)
+
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
+		require.NoError(t, logManager.Initialize(ctx, 0))
+
+		for i := 0; i < 10; i++ {
+			logManager.NotifyNewEntries()
+			select {
+			case s := <-logManager.GetNotificationQueue():
+				require.Nilf(t, s, "new entry signal must be a nil")
+			default:
+				require.Fail(t, "notification is empty")
+			}
+		}
+	})
+
+	t.Run("notify multiple entries at once via the notification channel", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		stateDir := testhelper.TempDir(t)
+
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
+		require.NoError(t, logManager.Initialize(ctx, 0))
+
+		for i := 0; i < 10; i++ {
+			logManager.NotifyNewEntries()
+		}
+
+		// After notifying, the listener of notification queue receives only one signal
+		select {
+		case s := <-logManager.GetNotificationQueue():
+			require.Nilf(t, s, "new entry signal must be a nil")
+		default:
+			require.Fail(t, "notification is empty")
+		}
+
+		// Now the queue is empty
+		select {
+		case <-logManager.GetNotificationQueue():
+			require.Fail(t, "notification must be empty now")
+		default:
+		}
+	})
+}
