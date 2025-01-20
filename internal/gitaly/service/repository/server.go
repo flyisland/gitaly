@@ -40,7 +40,7 @@ type server struct {
 	repositoryCounter   *counter.RepositoryCounter
 	localRepoFactory    localrepo.Factory
 	licenseCache        *unarycache.Cache[git.ObjectID, *gitalypb.FindLicenseResponse]
-	bundleManager       *bundleuri.GenerationManager
+	bundleURIManager    *bundleuri.GenerationManager
 }
 
 // NewServer creates a new instance of a gRPC repo server
@@ -61,7 +61,7 @@ func NewServer(deps *service.Dependencies) gitalypb.RepositoryServiceServer {
 		repositoryCounter:   deps.GetRepositoryCounter(),
 		localRepoFactory:    deps.GetRepositoryFactory(),
 		licenseCache:        newLicenseCache(),
-		bundleManager:       deps.GetBundleManager(),
+		bundleURIManager:    deps.GetBundleURIManager(),
 	}
 }
 

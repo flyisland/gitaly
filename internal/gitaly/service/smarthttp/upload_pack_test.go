@@ -492,7 +492,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 			}
 
 			server := startSmartHTTPServerWithOptions(t, cfg, nil, []testserver.GitalyServerOpt{
-				testserver.WithBundleGenerationManager(bundleManager),
+				testserver.WithBundleURIManager(bundleManager),
 				testserver.WithLogger(logger),
 			})
 

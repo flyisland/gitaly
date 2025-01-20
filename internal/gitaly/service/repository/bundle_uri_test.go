@@ -36,7 +36,7 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 			desc: "no bundle manager",
 			setup: func(t *testing.T, ctx context.Context, tempDir string) setupData {
 				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleGenerationManager(nil),
+					testserver.WithBundleURIManager(nil),
 				)
 
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
@@ -60,7 +60,7 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 				require.NoError(t, err)
 
 				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleGenerationManager(manager),
+					testserver.WithBundleURIManager(manager),
 				)
 
 				return setupData{
@@ -81,7 +81,7 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 				require.NoError(t, err)
 
 				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleGenerationManager(manager),
+					testserver.WithBundleURIManager(manager),
 				)
 
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
@@ -105,7 +105,7 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 				require.NoError(t, err)
 
 				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleGenerationManager(manager),
+					testserver.WithBundleURIManager(manager),
 				)
 
 				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)

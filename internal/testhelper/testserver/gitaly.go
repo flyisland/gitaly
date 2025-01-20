@@ -294,7 +294,7 @@ type gitalyServerDeps struct {
 	signingKey          string
 	transactionRegistry *storagemgr.TransactionRegistry
 	procReceiveRegistry *hook.ProcReceiveRegistry
-	bundleGenerationMgr *bundleuri.GenerationManager
+	bundleURIManager    *bundleuri.GenerationManager
 	localRepoFactory    localrepo.Factory
 }
 
@@ -434,30 +434,30 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 	gsd.localRepoFactory = localrepo.NewFactory(gsd.logger, gsd.locator, gsd.gitCmdFactory, gsd.catfileCache)
 
 	return &service.Dependencies{
-		Logger:                  gsd.logger,
-		Cfg:                     cfg,
-		ClientPool:              gsd.conns,
-		StorageLocator:          gsd.locator,
-		TransactionManager:      gsd.txMgr,
-		GitalyHookManager:       gsd.hookMgr,
-		GitCmdFactory:           gsd.gitCmdFactory,
-		BackchannelRegistry:     gsd.backchannelReg,
-		GitlabClient:            gsd.gitlabClient,
-		CatfileCache:            gsd.catfileCache,
-		DiskCache:               gsd.diskCache,
-		PackObjectsCache:        gsd.packObjectsCache,
-		PackObjectsLimiter:      gsd.packObjectsLimiter,
-		LimitHandler:            gsd.limitHandler,
-		RepositoryCounter:       gsd.repositoryCounter,
-		UpdaterWithHooks:        gsd.updaterWithHooks,
-		HousekeepingManager:     gsd.housekeepingManager,
-		TransactionRegistry:     gsd.transactionRegistry,
-		Node:                    node,
-		BackupSink:              gsd.backupSink,
-		BackupLocator:           gsd.backupLocator,
-		ProcReceiveRegistry:     gsd.procReceiveRegistry,
-		BundleGenerationManager: gsd.bundleGenerationMgr,
-		LocalRepositoryFactory:  gsd.localRepoFactory,
+		Logger:                 gsd.logger,
+		Cfg:                    cfg,
+		ClientPool:             gsd.conns,
+		StorageLocator:         gsd.locator,
+		TransactionManager:     gsd.txMgr,
+		GitalyHookManager:      gsd.hookMgr,
+		GitCmdFactory:          gsd.gitCmdFactory,
+		BackchannelRegistry:    gsd.backchannelReg,
+		GitlabClient:           gsd.gitlabClient,
+		CatfileCache:           gsd.catfileCache,
+		DiskCache:              gsd.diskCache,
+		PackObjectsCache:       gsd.packObjectsCache,
+		PackObjectsLimiter:     gsd.packObjectsLimiter,
+		LimitHandler:           gsd.limitHandler,
+		RepositoryCounter:      gsd.repositoryCounter,
+		UpdaterWithHooks:       gsd.updaterWithHooks,
+		HousekeepingManager:    gsd.housekeepingManager,
+		TransactionRegistry:    gsd.transactionRegistry,
+		Node:                   node,
+		BackupSink:             gsd.backupSink,
+		BackupLocator:          gsd.backupLocator,
+		ProcReceiveRegistry:    gsd.procReceiveRegistry,
+		BundleURIManager:       gsd.bundleURIManager,
+		LocalRepositoryFactory: gsd.localRepoFactory,
 	}
 }
 
@@ -588,10 +588,10 @@ func WithBackupLocator(backupLocator backup.Locator) GitalyServerOpt {
 	}
 }
 
-// WithBundleGenerationManager sets the bundleuri.Sink that will be used for Gitaly services
-func WithBundleGenerationManager(mgr *bundleuri.GenerationManager) GitalyServerOpt {
+// WithBundleURIManager sets the bundleuri.Sink that will be used for Gitaly services
+func WithBundleURIManager(mgr *bundleuri.GenerationManager) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
-		deps.bundleGenerationMgr = mgr
+		deps.bundleURIManager = mgr
 		return deps
 	}
 }
