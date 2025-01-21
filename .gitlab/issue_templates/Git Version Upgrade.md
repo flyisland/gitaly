@@ -17,7 +17,7 @@ Would be really nice to point out contributions made by the Gitaly team, if any.
 - [ ] Introduce the new bundled Git execution environment in the [Git package](/internal/git/execution_environment.go) behind a feature flag.
   - [ ] Create an issue for the rollout of the feature flag ([Reference](https://gitlab.com/gitlab-org/gitaly/-/issues/5030)).
   - [ ] Optional: Create a [change request](https://about.gitlab.com/handbook/engineering/infrastructure/change-management/#change-request-workflows) in case the new Git version contains changes that may cause issues.
-  - [ ] Roll out the feature flag.
+  - [ ] Roll out the feature flag (Announce to #g_gitaly and #g_git).
   - [ ] Default enable the feature flag once the upgrade is deemed stable. You can do this in same release that added the feature flag initially.
   - [ ] Remove the feature flag after there has been at least one release with the feature flag default enabled. This is not a requirement since we bundle Git with Gitaly, but more of a safety precaution taken to ensure there is sufficient time for rollbacks/reverts.
 
