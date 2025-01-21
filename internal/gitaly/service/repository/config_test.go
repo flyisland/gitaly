@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -85,7 +85,7 @@ func TestGetConfig(t *testing.T) {
 
 		// In Git 2.48.0, the order of config entries after repository initialization is different.
 		// The config "extension" entries are now listed before "core" entries.
-		if featureflag.GitV248.IsDisabled(ctx) {
+		if gittest.IsGitVersionLessThan(t, ctx, cfg, git.NewVersion(2, 48, 0, 0)) {
 			expectedConfig = gittest.ObjectHashDependent(t, map[string]string{
 				"sha1": fmt.Sprintf(
 					"[core]\n\trepositoryformatversion = %d\n\tfilemode = true\n\tbare = true\n%s%s",
