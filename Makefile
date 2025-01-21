@@ -315,6 +315,12 @@ install: build
 ## Build bundled Git binaries.
 build-bundled-git: build-bundled-git-v2.47 build-bundled-git-v2.48
 build-bundled-git-v2.47: $(patsubst %,${BUILD_DIR}/bin/gitaly-%-v2.47,${GIT_EXECUTABLES})
+# Use non-collision-detecting SHA1 implementation in non-cryptographic scenarios
+# to improve performance. For now, this is only enabled for Git version 2.48 on
+# Linux platforms.
+ifeq ($(OS), Linux)
+build-bundled-git-v2.48: override GIT_BUILD_OPTIONS += OPENSSL_SHA1_UNSAFE=YesPlease
+endif
 build-bundled-git-v2.48: $(patsubst %,${BUILD_DIR}/bin/gitaly-%-v2.48,${GIT_EXECUTABLES})
 
 .PHONY: install-bundled-git
