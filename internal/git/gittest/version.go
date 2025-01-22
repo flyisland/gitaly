@@ -11,6 +11,18 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
 
+// IsGitVersionLessThan checks if the Git version in use is less than then specified version.
+func IsGitVersionLessThan(tb testing.TB, ctx context.Context, cfg config.Cfg, version git.Version) bool {
+	cmdFactory, clean, err := gitcmd.NewExecCommandFactory(cfg, testhelper.SharedLogger(tb))
+	require.NoError(tb, err)
+	defer clean()
+
+	actual, err := cmdFactory.GitVersion(ctx)
+	require.NoError(tb, err)
+
+	return actual.LessThan(version)
+}
+
 // SkipIfGitVersionLessThan skips the test if the Git version in use is less than
 // expected. The reason is printed out when skipping the test
 func SkipIfGitVersionLessThan(tb testing.TB, ctx context.Context, cfg config.Cfg, expected git.Version, reason string) {
