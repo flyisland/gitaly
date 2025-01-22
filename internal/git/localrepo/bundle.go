@@ -106,6 +106,13 @@ func (repo *Repo) CloneBundle(ctx context.Context, reader io.Reader) error {
 		},
 		gitcmd.WithStderr(&cloneErr),
 		gitcmd.WithDisabledHooks(),
+		// Starting in Git version 2.46.0, executing git-fetch(1) on a bundle performs fsck
+		// checks when `transfer.fsckObjects` is enabled. Prior to this, this configuration was
+		// always ignored and fsck checks were not run. Unfortunately, fsck message severity
+		// configuration is ignored by Git only for bundle fetches. Until this is supported by
+		// Git, disable `transfer.fsckObjects` so bundles containing fsck errors can continue to
+		// be fetched. This matches behavior prior to Git version 2.46.0.
+		gitcmd.WithConfig(gitcmd.ConfigPair{Key: "transfer.fsckObjects", Value: "false"}),
 	)
 	if err != nil {
 		return fmt.Errorf("spawning git-clone: %w", err)
