@@ -189,6 +189,28 @@ func TestRepo_CloneBundle(t *testing.T) {
 				}
 			},
 		},
+		{
+			desc: "bundle contains fsck error",
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData {
+				_, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				// Write a tree object that has the same path twice. When git-clone(1) executes with
+				// `transfer.fsckObjects=true`, it is expected that this objects causes the fetch to fail.
+				treeID := gittest.WriteTree(t, cfg, sourceRepoPath, []gittest.TreeEntry{
+					{Path: "duplicate", Mode: "100644", Content: "foo"},
+					{Path: "duplicate", Mode: "100644", Content: "bar"},
+				})
+
+				gittest.WriteCommit(t, cfg, sourceRepoPath, gittest.WithBranch(git.DefaultBranch), gittest.WithTree(treeID))
+
+				return setupData{
+					reader:      createBundle(t, cfg, sourceRepoPath),
+					expectedErr: structerr.New("waiting for git-clone: exit status 128"),
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
