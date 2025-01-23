@@ -137,6 +137,7 @@ func TestRepo_CloneBundle(t *testing.T) {
 		reader          io.Reader
 		expectedHeadRef git.ReferenceName
 		expectedRefs    []git.Reference
+		skipFsck        bool
 		expectedErr     error
 	}
 
@@ -189,6 +190,35 @@ func TestRepo_CloneBundle(t *testing.T) {
 				}
 			},
 		},
+		{
+			desc: "bundle contains fsck error",
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData {
+				_, sourceRepoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				// Write a tree object that has the same path twice. When git-clone(1) executes with
+				// `transfer.fsckObjects=true`, it is expected that this objects causes the fetch to fail.
+				//
+				// The git-clone(1) performed when fetching bundles is configured to override
+				// `transfer.fsckObjects` to `false`. Therefore, fsck errors are ignored.
+				treeID := gittest.WriteTree(t, cfg, sourceRepoPath, []gittest.TreeEntry{
+					{Path: "duplicate", Mode: "100644", Content: "foo"},
+					{Path: "duplicate", Mode: "100644", Content: "bar"},
+				})
+
+				mainOid := gittest.WriteCommit(t, cfg, sourceRepoPath, gittest.WithBranch(git.DefaultBranch), gittest.WithTree(treeID))
+
+				return setupData{
+					reader:          createBundle(t, cfg, sourceRepoPath),
+					expectedHeadRef: git.DefaultRef,
+					expectedRefs: []git.Reference{
+						git.NewReference(git.DefaultRef, mainOid),
+					},
+					skipFsck: true,
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
@@ -217,8 +247,10 @@ func TestRepo_CloneBundle(t *testing.T) {
 			repoPath, err := repo.Path(ctx)
 			require.NoError(t, err)
 
-			// Verify connectivity and validity of the repository objects.
-			gittest.Exec(t, cfg, "-C", repoPath, "fsck")
+			if !data.skipFsck {
+				// Verify connectivity and validity of the repository objects.
+				gittest.Exec(t, cfg, "-C", repoPath, "fsck")
+			}
 
 			// Verify HEAD has been set correctly.
 			headRef, err := repo.HeadReference(ctx)
