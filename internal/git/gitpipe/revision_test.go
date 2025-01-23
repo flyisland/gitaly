@@ -426,9 +426,7 @@ func TestRevlist(t *testing.T) {
 				"refs/heads/does-not-exist",
 			},
 			expectedErr: errors.New("rev-list pipeline command: exit status 128, stderr: " +
-				"\"fatal: ambiguous argument 'refs/heads/does-not-exist': unknown revision or path not in the working tree.\\n" +
-				"Use '--' to separate paths from revisions, like this:\\n" +
-				"'git <command> [<revision>...] -- [<file>...]'\\n\""),
+				"\"fatal: bad revision 'refs/heads/does-not-exist'\\n\""),
 		},
 		{
 			desc: "mixed valid and invalid revision",
@@ -437,9 +435,7 @@ func TestRevlist(t *testing.T) {
 				"refs/heads/does-not-exist",
 			},
 			expectedErr: errors.New("rev-list pipeline command: exit status 128, stderr: " +
-				"\"fatal: ambiguous argument 'refs/heads/does-not-exist': unknown revision or path not in the working tree.\\n" +
-				"Use '--' to separate paths from revisions, like this:\\n" +
-				"'git <command> [<revision>...] -- [<file>...]'\\n\""),
+				"\"fatal: bad revision 'refs/heads/does-not-exist'\\n\""),
 		},
 		{
 			desc: "skip everything",
