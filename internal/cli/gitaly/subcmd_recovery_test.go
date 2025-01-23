@@ -480,9 +480,9 @@ Successfully processed log entries up to LSN %s
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
-					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
-					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
-					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(1)),
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(2)),
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(3)),
 				})
 
 				return setupData{
@@ -535,9 +535,9 @@ Successfully processed log entries up to LSN %s
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
-					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
-					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
-					filepath.Join(partitionPath, storage.LSN(4).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(1)),
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(2)),
+					filepath.Join(partitionPath, storage.LSN(4).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(4)),
 				})
 
 				return setupData{
@@ -592,9 +592,9 @@ Starting archived log entries import
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
-					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
-					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createInvalidLogEntryArchive(t, repo.GetRelativePath()),
-					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath()),
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(1)),
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createInvalidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(2)),
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(3)),
 				})
 
 				return setupData{
@@ -715,11 +715,19 @@ Starting archived log entries import
 	}
 }
 
-func createValidLogEntryArchive(t *testing.T, repoRelativePath string) []byte {
+func createValidLogEntryArchive(t *testing.T, repoRelativePath string, lsn storage.LSN) []byte {
 	t.Helper()
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
+
+	// First create the directory entry
+	err := tw.WriteHeader(&tar.Header{
+		Name:     lsn.String() + "/", // Add trailing slash for directory
+		Mode:     0o755,
+		Typeflag: tar.TypeDir,
+	})
+	require.NoError(t, err)
 
 	// Create a dummy MANIFEST file
 	manifest := &gitalypb.LogEntry{
@@ -730,7 +738,7 @@ func createValidLogEntryArchive(t *testing.T, repoRelativePath string) []byte {
 	require.NoError(t, err)
 
 	err = tw.WriteHeader(&tar.Header{
-		Name: "MANIFEST",
+		Name: lsn.String() + "/MANIFEST",
 		Mode: 0o644,
 		Size: int64(len(manifestBytes)),
 	})
@@ -743,11 +751,19 @@ func createValidLogEntryArchive(t *testing.T, repoRelativePath string) []byte {
 	return buf.Bytes()
 }
 
-func createInvalidLogEntryArchive(t *testing.T, repoRelativePath string) []byte {
+func createInvalidLogEntryArchive(t *testing.T, repoRelativePath string, lsn storage.LSN) []byte {
 	t.Helper()
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
+
+	// First create the directory entry
+	err := tw.WriteHeader(&tar.Header{
+		Name:     lsn.String() + "/", // Add trailing slash for directory
+		Mode:     0o755,
+		Typeflag: tar.TypeDir,
+	})
+	require.NoError(t, err)
 
 	// Create a dummy MANIFEST file
 	manifest := &gitalypb.LogEntry{
@@ -767,7 +783,7 @@ func createInvalidLogEntryArchive(t *testing.T, repoRelativePath string) []byte 
 	require.NoError(t, err)
 
 	err = tw.WriteHeader(&tar.Header{
-		Name: "MANIFEST",
+		Name: lsn.String() + "/MANIFEST",
 		Mode: 0o644,
 		Size: int64(len(manifestBytes)),
 	})

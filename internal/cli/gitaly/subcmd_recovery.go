@@ -255,17 +255,35 @@ func recoveryReplayAction(ctx *cli.Context) (returnErr error) {
 }
 
 func processLogEntry(reader io.Reader, tempDir string, logWriter storage.LogWriter, lsn storage.LSN) (returnErr error) {
-	path := filepath.Join(tempDir, lsn.String())
+	stagingDir, err := os.MkdirTemp(tempDir, "staging-*")
+	if err != nil {
+		return fmt.Errorf("create staging dir: %w", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(stagingDir); err != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("removing temp staging dir: %w", err))
+		}
+	}()
 
-	if err := downloadArchive(reader, path); err != nil {
+	if err := downloadArchive(reader, stagingDir); err != nil {
 		return fmt.Errorf("download archive: %w", err)
 	}
 
-	if err := extractArchive(path); err != nil {
+	if err := extractArchive(stagingDir); err != nil {
 		return fmt.Errorf("extract archive: %w", err)
 	}
 
-	if _, err := logWriter.CompareAndAppendLogEntry(lsn, path); err != nil {
+	// Validate that WAL entry was extracted correctly to its own directory
+	entryPath := filepath.Join(stagingDir, lsn.String())
+	info, err := os.Stat(entryPath)
+	if err != nil {
+		return fmt.Errorf("WAL entry not found after archive extraction: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("expected WAL entry path %s to be a directory", entryPath)
+	}
+
+	if _, err := logWriter.CompareAndAppendLogEntry(lsn, entryPath); err != nil {
 		return fmt.Errorf("append log entry: %w", err)
 	}
 	logWriter.NotifyNewEntries()
