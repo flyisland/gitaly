@@ -413,3 +413,37 @@ func getRangeDiffs(tb testing.TB, rawRangeDiff string) []*CommitPair {
 	}
 	return commitPairs
 }
+
+func TestRangeDiffLineRegexPatternMatch(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		data string
+	}{
+		{
+			data: ` 1:  156e29b0b2ba70686da42145c873018a8e271f2f =  2:  156e29b0b2ba70686da42145c873018a8e271f2f test2
+ 2:  f833b6c737282260ce6b61d14ca4b08fca4ae21e =  2:  f833b6c737282260ce6b61d14ca4b08fca4ae21e test
+ 3:  fc9d7fda1156b930db08091762cef465a40d6a4f =  3:  fc9d7fda1156b930db08091762cef465a40d6a4f modify
+ 4:  94cd1fa3d6bbc58fd0f1dd927b7f298b832d7746 =  4:  94cd1fa3d6bbc58fd0f1dd927b7f298b832d7746 modify
+ 5:  bfde311237ecd39ca1a8d9cb2252d2099937960b =  5:  bfde311237ecd39ca1a8d9cb2252d2099937960b modify
+ 6:  c3cc52ab44ac391de0ed6da2109da7ea312aa059 =  6:  c3cc52ab44ac391de0ed6da2109da7ea312aa059 modify
+ 7:  fa9772605014817353e7a6c69a43bba948f5598f =  7:  fa9772605014817353e7a6c69a43bba948f5598f modify
+ 8:  82aab4810ffd2afd77d5f50f16bd13435bc606eb =  8:  82aab4810ffd2afd77d5f50f16bd13435bc606eb modify
+ 9:  43a62d881e8a59549b99f013b6825bd5ee043690 =  9:  43a62d881e8a59549b99f013b6825bd5ee043690 modify
+10:  c420977f56056c8066f0ebe811e4a33de8a4e7ed = 10:  c420977f56056c8066f0ebe811e4a33de8a4e7ed modify
+11:  a04a0c7464954c20ef624f558be922958135cfd0 = 11:  a04a0c7464954c20ef624f558be922958135cfd0 modify
+ -:  ---------------------------------------- > 12:  90a3c07f4be6ff0394f41a08a65c4f616515c037 merge master`,
+		},
+		{
+			data: `1:  f4171fbe < -:  -------- fix(merge): don't update ref when merge with empty content
+2:  9ab23e1b < -:  -------- feat(operation): add version argument to merge/rebase... operation rpc`,
+		},
+	}
+
+	for _, tc := range testCases {
+		lines := strings.Split(tc.data, "\n")
+		for _, line := range lines {
+			require.True(t, commitPairRegex.MatchString(line))
+		}
+	}
+}

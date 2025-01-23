@@ -12,7 +12,7 @@ import (
 
 const (
 	// RangeDiffCommitPairRegex is the regex to match a commit pair line in the range-diff output
-	RangeDiffCommitPairRegex = `^(-|(\d+)): +(-+|([a-f0-9]+)) ([>=!<]) (-|(\d+)): +(-+|([a-f0-9]+)) (.*)$`
+	RangeDiffCommitPairRegex = `^ *(-|(\d+)): +(-+|([a-f0-9]+)) ([>=!<]) +(-|(\d+)): +(-+|([a-f0-9]+)) (.*)$`
 	// PatchDataPrefixWhiteSpaceLength is the length of the prefix white spaces in the patch data line
 	PatchDataPrefixWhiteSpaceLength = 4
 )
