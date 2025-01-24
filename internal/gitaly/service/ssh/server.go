@@ -58,7 +58,7 @@ func NewServer(deps *service.Dependencies, serverOpts ...ServerOpt) gitalypb.SSH
 		backupLocator:    deps.GetBackupLocator(),
 		backupSink:       deps.GetBackupSink(),
 		localRepoFactory: deps.GetRepositoryFactory(),
-		bundleURIManager: deps.GetBundleManager(),
+		bundleURIManager: deps.GetBundleURIManager(),
 	}
 
 	for _, serverOpt := range serverOpts {

@@ -26,30 +26,30 @@ import (
 
 // Dependencies assembles set of components required by different kinds of services.
 type Dependencies struct {
-	Logger                  log.Logger
-	Cfg                     config.Cfg
-	GitalyHookManager       gitalyhook.Manager
-	TransactionManager      transaction.Manager
-	StorageLocator          storage.Locator
-	ClientPool              *client.Pool
-	GitCmdFactory           gitcmd.CommandFactory
-	BackchannelRegistry     *backchannel.Registry
-	GitlabClient            gitlab.Client
-	CatfileCache            catfile.Cache
-	DiskCache               cache.Cache
-	PackObjectsCache        streamcache.Cache
-	PackObjectsLimiter      limiter.Limiter
-	LimitHandler            *limithandler.LimiterMiddleware
-	RepositoryCounter       *counter.RepositoryCounter
-	UpdaterWithHooks        *updateref.UpdaterWithHooks
-	HousekeepingManager     housekeepingmgr.Manager
-	TransactionRegistry     *storagemgr.TransactionRegistry
-	Node                    storage.Node
-	BackupSink              *backup.Sink
-	BackupLocator           backup.Locator
-	ProcReceiveRegistry     *gitalyhook.ProcReceiveRegistry
-	BundleGenerationManager *bundleuri.GenerationManager
-	LocalRepositoryFactory  localrepo.Factory
+	Logger                 log.Logger
+	Cfg                    config.Cfg
+	GitalyHookManager      gitalyhook.Manager
+	TransactionManager     transaction.Manager
+	StorageLocator         storage.Locator
+	ClientPool             *client.Pool
+	GitCmdFactory          gitcmd.CommandFactory
+	BackchannelRegistry    *backchannel.Registry
+	GitlabClient           gitlab.Client
+	CatfileCache           catfile.Cache
+	DiskCache              cache.Cache
+	PackObjectsCache       streamcache.Cache
+	PackObjectsLimiter     limiter.Limiter
+	LimitHandler           *limithandler.LimiterMiddleware
+	RepositoryCounter      *counter.RepositoryCounter
+	UpdaterWithHooks       *updateref.UpdaterWithHooks
+	HousekeepingManager    housekeepingmgr.Manager
+	TransactionRegistry    *storagemgr.TransactionRegistry
+	Node                   storage.Node
+	BackupSink             *backup.Sink
+	BackupLocator          backup.Locator
+	ProcReceiveRegistry    *gitalyhook.ProcReceiveRegistry
+	BundleURIManager       *bundleuri.GenerationManager
+	LocalRepositoryFactory localrepo.Factory
 }
 
 // GetLogger returns the logger.
@@ -167,7 +167,7 @@ func (dc *Dependencies) GetRepositoryFactory() localrepo.Factory {
 	return dc.LocalRepositoryFactory
 }
 
-// GetBundleManager returns the RepositoryFactory
-func (dc *Dependencies) GetBundleManager() *bundleuri.GenerationManager {
-	return dc.BundleGenerationManager
+// GetBundleURIManager returns the RepositoryFactory
+func (dc *Dependencies) GetBundleURIManager() *bundleuri.GenerationManager {
+	return dc.BundleURIManager
 }
