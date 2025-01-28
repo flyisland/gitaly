@@ -530,7 +530,6 @@ func testUploadPackValidation(t *testing.T, ctx context.Context) {
 
 func TestUploadPack_successful(t *testing.T) {
 	t.Parallel()
-
 	runTestWithAndWithoutConfigOptions(t, func(t *testing.T, ctx context.Context, opts ...testcfg.Option) {
 		testUploadPackSuccessful(t, ctx, opts...)
 	})

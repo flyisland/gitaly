@@ -417,6 +417,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 	ctx := testhelper.Context(t)
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.BundleURI, true)
 
+	// Create secret key for bundle-uri sink
 	tempDir := testhelper.TempDir(t)
 	keyFile, err := os.Create(filepath.Join(tempDir, "secret.key"))
 	require.NoError(t, err)
@@ -433,27 +434,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 		expectBundleURI bool
 	}{
 		{
-			desc:    "no manager",
-			sinkURI: "",
-		},
-		{
-			desc:    "no bundle",
-			sinkURI: "mem://bundleuri",
-		},
-		{
-			desc:    "broken URL signing",
-			sinkURI: "mem://bundleuri",
-			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg, manager *bundleuri.GenerationManager, repoProto *gitalypb.Repository, repoPath string) {
-				gittest.WriteCommit(t, cfg, repoPath,
-					gittest.WithTreeEntries(gittest.TreeEntry{Mode: "100644", Path: "README", Content: "much"}),
-					gittest.WithBranch("main"))
-
-				repo := localrepo.NewTestRepo(t, cfg, repoProto)
-				require.NoError(t, manager.Generate(ctx, repo))
-			},
-		},
-		{
-			desc:    "valid bundle",
+			desc:    "bundle exists",
 			sinkURI: "file://" + testhelper.TempDir(t) + "?base_url=" + baseURL + "&no_tmp_dir=true&secret_key_path=" + keyFile.Name(),
 			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg, manager *bundleuri.GenerationManager, repoProto *gitalypb.Repository, repoPath string) {
 				gittest.WriteCommit(t, cfg, repoPath,
@@ -464,6 +445,20 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 				require.NoError(t, manager.Generate(ctx, repo))
 			},
 			expectBundleURI: true,
+		},
+		{
+			desc:    "bundle does not exist",
+			sinkURI: "file://" + testhelper.TempDir(t) + "?base_url=" + baseURL + "&no_tmp_dir=true&secret_key_path=" + keyFile.Name(),
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg, manager *bundleuri.GenerationManager, repoProto *gitalypb.Repository, repoPath string) {
+				gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithTreeEntries(gittest.TreeEntry{Mode: "100644", Path: "README", Content: "much"}),
+					gittest.WithBranch("main"))
+			},
+			expectBundleURI: false,
+		},
+		{
+			desc:            "manager is nil",
+			expectBundleURI: false,
 		},
 	}
 
@@ -482,6 +477,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 			hook := testhelper.AddLoggerHook(logger)
 			require.NoError(t, err)
 
+			// create bundle manager if sinkURI is defined
 			var bundleManager *bundleuri.GenerationManager
 			if tc.sinkURI != "" {
 				sink, err := bundleuri.NewSink(ctx, tc.sinkURI)
@@ -491,28 +487,40 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 				require.NoError(t, err)
 			}
 
+			// create server
 			server := startSmartHTTPServerWithOptions(t, cfg, nil, []testserver.GitalyServerOpt{
 				testserver.WithBundleURIManager(bundleManager),
 				testserver.WithLogger(logger),
 			})
-
 			cfg.SocketPath = server.Address()
+
+			// create repo
 			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
 			if tc.setup != nil {
 				tc.setup(t, ctx, cfg, bundleManager, repoProto, repoPath)
 			}
 
+			// prepare request
 			requestBody := &bytes.Buffer{}
 			gittest.WritePktlineString(t, requestBody, "command=bundle-uri\n")
 			gittest.WritePktlineString(t, requestBody, fmt.Sprintf("object-format=%s\n", gittest.DefaultObjectHash.Format))
 			gittest.WritePktlineFlush(t, requestBody)
 
 			hook.Reset()
+
+			// make actual request
 			req := &gitalypb.PostUploadPackWithSidechannelRequest{Repository: repoProto, GitProtocol: gitcmd.ProtocolV2}
 			responseBuffer, err := makePostUploadPackWithSidechannelRequest(t, ctx, cfg.SocketPath, cfg.Auth.Token, req, requestBody)
-			require.NoError(t, err)
 
 			server.Shutdown()
+
+			// Git should not advertise bundle-uri when no bundle exist
+			// Hence, here we are making sure that if no bundle exist sending
+			// a `command=bundle-uri` causes an error on the Git server
+			if !tc.expectBundleURI {
+				require.Contains(t, err.Error(), "rpc error: code = FailedPrecondition desc = running upload-pack: waiting for upload-pack: exit status 128")
+				return
+			}
 
 			var logEntry *logrus.Entry
 			for _, e := range hook.AllEntries() {
@@ -523,17 +531,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 			}
 			require.NotNil(t, logEntry)
 			require.Equal(t, "finished unary call with code OK", logEntry.Message)
-
-			bundleURI, ok := logEntry.Data["bundle_uri"]
-
-			if tc.expectBundleURI {
-				require.Contains(t, responseBuffer.String(), "bundle.default.uri="+baseURL)
-				require.True(t, ok)
-				require.True(t, bundleURI.(bool))
-			} else {
-				require.False(t, ok)
-				require.NotContains(t, responseBuffer.String(), "bundle.default.uri")
-			}
+			require.Contains(t, responseBuffer.String(), "bundle.default.uri="+baseURL)
 		})
 	}
 }

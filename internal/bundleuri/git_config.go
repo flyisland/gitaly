@@ -2,61 +2,45 @@ package bundleuri
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strconv"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
 
 // CapabilitiesGitConfig returns a slice of gitcmd.ConfigPairs that can be injected
-// into the Git config to make it aware the bundle-URI capabilities are
-// supported.
-// This can be used when spawning git-upload-pack(1) --advertise-refs in
+// into the Git config to enable or disable bundle-uri capability.
+//
+// If the feature flag is OFF, this config disables bundle-uri regardless of the `enable` parameter.
+//
+// Explicitly disabling bundle-uri capability is used during calls to git-upload-pack(1)
+// when no bundle exists for the given repository. This prevents the client
+// from requesting a non-existing URI.
+//
+// This function is also used when spawning git-upload-pack(1) --advertise-refs in
 // response to the GET /info/refs request.
-func CapabilitiesGitConfig(ctx context.Context) []gitcmd.ConfigPair {
-	if featureflag.BundleURI.IsDisabled(ctx) {
-		return []gitcmd.ConfigPair{}
+func CapabilitiesGitConfig(ctx context.Context, enable bool) []gitcmd.ConfigPair {
+	cfg := gitcmd.ConfigPair{
+		Key:   "uploadpack.advertiseBundleURIs",
+		Value: strconv.FormatBool(enable),
 	}
 
-	return []gitcmd.ConfigPair{
-		{
-			Key:   "uploadpack.advertiseBundleURIs",
-			Value: "true",
-		},
+	if featureflag.BundleURI.IsDisabled(ctx) {
+		cfg.Value = strconv.FormatBool(false)
 	}
+	return []gitcmd.ConfigPair{cfg}
 }
 
 // UploadPackGitConfig return a slice of gitcmd.ConfigPairs you can inject into the
 // call to git-upload-pack(1) to advertise the available bundle to the client
 // who clones/fetches from the repository.
-func UploadPackGitConfig(
-	ctx context.Context,
-	manager *GenerationManager,
-	repo storage.Repository,
-) ([]gitcmd.ConfigPair, error) {
-	if featureflag.BundleURI.IsDisabled(ctx) {
-		return []gitcmd.ConfigPair{}, nil
+func UploadPackGitConfig(ctx context.Context, signedURL string) []gitcmd.ConfigPair {
+	if featureflag.BundleURI.IsDisabled(ctx) || signedURL == "" {
+		return CapabilitiesGitConfig(ctx, false)
 	}
 
-	if manager == nil || manager.sink == nil {
-		return CapabilitiesGitConfig(ctx), errors.New("bundle-URI sink missing")
-	}
-
-	uri, err := manager.SignedURL(ctx, repo)
-	if err != nil {
-		return nil, err
-	}
-
-	log.AddFields(ctx, log.Fields{"bundle_uri": true})
-
-	return []gitcmd.ConfigPair{
-		{
-			Key:   "uploadpack.advertiseBundleURIs",
-			Value: "true",
-		},
+	config := []gitcmd.ConfigPair{
 		{
 			Key:   "bundle.version",
 			Value: "1",
@@ -71,7 +55,7 @@ func UploadPackGitConfig(
 		},
 		{
 			Key:   fmt.Sprintf("bundle.%s.uri", defaultBundle),
-			Value: uri,
+			Value: signedURL,
 		},
 		{
 			// Gitaly uses only one bundle URI bundle, and it's a
@@ -91,5 +75,6 @@ func UploadPackGitConfig(
 			Key:   fmt.Sprintf("bundle.%s.creationToken", defaultBundle),
 			Value: "1",
 		},
-	}, nil
+	}
+	return append(config, CapabilitiesGitConfig(ctx, true)...)
 }
