@@ -200,7 +200,6 @@ func (s *OccurrenceStrategy) Start(ctx context.Context) (stop func()) {
 			fn(s.doneCtx)
 		}()
 	}
-
 	return func() {
 		s.doneCancel()
 		s.wg.Wait()
