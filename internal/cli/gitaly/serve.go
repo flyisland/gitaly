@@ -37,6 +37,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mdfile"
 	nodeimpl "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/node"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
@@ -539,6 +540,12 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			return fmt.Errorf("resolve backup locator: %w", err)
 		}
 	}
+	raftTransport := &raftmgr.GrpcTransport{}
+	if cfg.Raft.Enabled {
+		raftManagerRegistry := raftmgr.NewRaftManagerRegistry()
+		routingTable := raftmgr.NewStaticRaftRoutingTable()
+		raftTransport = raftmgr.NewGrpcTransport(logger, cfg, routingTable, raftManagerRegistry, conns)
+	}
 
 	var bundleURISink *bundleuri.Sink
 	var bundleURIManager *bundleuri.GenerationManager
@@ -587,6 +594,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			Logger:                 logger,
 			Cfg:                    cfg,
 			GitalyHookManager:      hookManager,
+			RaftGrpcTransport:      raftTransport,
 			TransactionManager:     transactionManager,
 			StorageLocator:         locator,
 			ClientPool:             conns,

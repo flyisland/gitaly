@@ -13,6 +13,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook/updateref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
@@ -29,6 +30,7 @@ type Dependencies struct {
 	Logger                 log.Logger
 	Cfg                    config.Cfg
 	GitalyHookManager      gitalyhook.Manager
+	RaftGrpcTransport      raftmgr.Transport
 	TransactionManager     transaction.Manager
 	StorageLocator         storage.Locator
 	ClientPool             *client.Pool
@@ -70,6 +72,11 @@ func (dc *Dependencies) GetHookManager() gitalyhook.Manager {
 // GetTxManager returns transaction manager.
 func (dc *Dependencies) GetTxManager() transaction.Manager {
 	return dc.TransactionManager
+}
+
+// GetRaftGrpcTransport returns raft transport.
+func (dc *Dependencies) GetRaftGrpcTransport() raftmgr.Transport {
+	return dc.RaftGrpcTransport
 }
 
 // GetLocator returns storage locator.

@@ -17,6 +17,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/objectpool"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/operations"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/partition"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/raft"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/ref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/remote"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/repository"
@@ -56,6 +57,7 @@ var (
 func RegisterAll(srv *grpc.Server, deps *service.Dependencies) {
 	gitalypb.RegisterAnalysisServiceServer(srv, analysis.NewServer(deps))
 	gitalypb.RegisterBlobServiceServer(srv, blob.NewServer(deps))
+	gitalypb.RegisterRaftServiceServer(srv, raft.NewServer(deps))
 	gitalypb.RegisterCleanupServiceServer(srv, cleanup.NewServer(deps))
 	gitalypb.RegisterCommitServiceServer(srv, commit.NewServer(deps))
 	gitalypb.RegisterDiffServiceServer(srv, diff.NewServer(deps))
