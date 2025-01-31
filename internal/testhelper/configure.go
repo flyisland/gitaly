@@ -123,6 +123,12 @@ func configure() (_ func(), returnedErr error) {
 		}
 	}
 
+	if refFormat := os.Getenv("GITALY_TEST_REF_FORMAT"); len(refFormat) > 0 {
+		if err := os.Setenv("GIT_DEFAULT_REF_FORMAT", refFormat); err != nil {
+			return nil, fmt.Errorf("setting default ref format: %w", err)
+		}
+	}
+
 	// We need to make sure that we're gitconfig-clean: Git should not pick up
 	// gitconfig files from anywhere but the repository itself in case they're configured to
 	// ignore them. We set that configuration by default in our tests to have a known-good
