@@ -65,9 +65,7 @@ func (s *Server) UserMergeToRef(ctx context.Context, request *gitalypb.UserMerge
 			return nil, structerr.NewInvalidArgument("invalid expected old object ID: %w", err).WithMetadata("old_object_id", expectedOldOID)
 		}
 
-		oldTargetOID, err = repo.ResolveRevision(
-			ctx, git.Revision(fmt.Sprintf("%s^{object}", oldTargetOID)),
-		)
+		oldTargetOID, err = resolveRevision(ctx, repo, oldTargetOID)
 		if err != nil {
 			return nil, structerr.NewInvalidArgument("cannot resolve expected old object ID: %w", err).
 				WithMetadata("old_object_id", expectedOldOID)

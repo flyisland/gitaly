@@ -195,9 +195,7 @@ func (s *Server) userApplyPatch(ctx context.Context, header *gitalypb.UserApplyP
 			return fmt.Errorf("expected old object id not expected SHA format: %w", err)
 		}
 
-		currentCommit, err = repo.ResolveRevision(
-			ctx, git.Revision(fmt.Sprintf("%s^{object}", currentCommit)),
-		)
+		currentCommit, err = resolveRevision(ctx, repo, currentCommit)
 		if err != nil {
 			return fmt.Errorf("expected old object cannot be resolved: %w", err)
 		}

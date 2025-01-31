@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -53,31 +54,61 @@ func testUserRebaseToRefSuccessful(t *testing.T, ctx context.Context) {
 		gittest.WithTree(firstParentRefTreeID),
 	)
 
-	targetRef := "refs/merge-requests/1234/train"
-
-	request := &gitalypb.UserRebaseToRefRequest{
-		Repository:     repoProto,
-		User:           gittest.TestUser,
-		SourceSha:      sourceOID.String(),
-		FirstParentRef: []byte(firstParentRef),
-		TargetRef:      []byte(targetRef),
-		Timestamp:      &timestamppb.Timestamp{Seconds: 100000000},
+	testCases := []struct {
+		desc           string
+		repo           *gitalypb.Repository
+		user           *gitalypb.User
+		targetRef      string
+		sourceSha      string
+		firstParentRef string
+		expectedOldOID string
+	}{
+		{
+			desc:           "valid ref",
+			repo:           repoProto,
+			user:           gittest.TestUser,
+			targetRef:      "refs/merge-requests/1234/train",
+			sourceSha:      sourceOID.String(),
+			firstParentRef: firstParentRef,
+		},
+		{
+			desc:           "expectedOldOID set to zero",
+			repo:           repoProto,
+			user:           gittest.TestUser,
+			targetRef:      "refs/merge-requests/1234/train-2",
+			sourceSha:      sourceOID.String(),
+			firstParentRef: firstParentRef,
+			expectedOldOID: gittest.DefaultObjectHash.ZeroOID.String(),
+		},
 	}
 
-	response, err := client.UserRebaseToRef(ctx, request)
-	require.NoError(t, err, "rebase error")
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			request := &gitalypb.UserRebaseToRefRequest{
+				Repository:     tc.repo,
+				User:           tc.user,
+				SourceSha:      tc.sourceSha,
+				FirstParentRef: []byte(tc.firstParentRef),
+				TargetRef:      []byte(tc.targetRef),
+				Timestamp:      &timestamppb.Timestamp{Seconds: 100000000},
+			}
 
-	rebasedCommitID := gittest.ResolveRevision(t, cfg, repoPath, response.GetCommitId())
-	require.NotEqual(t, rebasedCommitID, firstParentRefOID.String(), "no rebase occurred")
+			response, err := client.UserRebaseToRef(ctx, request)
+			require.NoError(t, err, "rebase error")
 
-	currentTargetRefOID := gittest.ResolveRevision(t, cfg, repoPath, targetRef)
-	require.Equal(t, currentTargetRefOID.String(), response.GetCommitId(), "target ref does not point to rebased commit")
+			rebasedCommitID := gittest.ResolveRevision(t, cfg, repoPath, response.GetCommitId())
+			require.NotEqual(t, rebasedCommitID, firstParentRefOID.String(), "no rebase occurred")
 
-	_, err = repo.ReadCommit(ctx, git.Revision(response.GetCommitId()))
-	require.NoError(t, err, "rebased commit is unreadable")
+			currentTargetRefOID := gittest.ResolveRevision(t, cfg, repoPath, tc.targetRef)
+			require.Equal(t, currentTargetRefOID.String(), response.GetCommitId(), "target ref does not point to rebased commit")
 
-	currentParentRefOID := gittest.ResolveRevision(t, cfg, repoPath, firstParentRef)
-	require.Equal(t, currentParentRefOID, firstParentRefOID, "first parent ref got mutated")
+			_, err = repo.ReadCommit(ctx, git.Revision(response.GetCommitId()))
+			require.NoError(t, err, "rebased commit is unreadable")
+
+			currentParentRefOID := gittest.ResolveRevision(t, cfg, repoPath, tc.firstParentRef)
+			require.Equal(t, currentParentRefOID, firstParentRefOID, "first parent ref got mutated")
+		})
+	}
 }
 
 func TestUserRebaseToRef_failure(t *testing.T) {
@@ -101,6 +132,9 @@ func testUserRebaseToRefFailure(t *testing.T, ctx context.Context) {
 	validSourceSha := validSourceOID.String()
 	validFirstParentRef := []byte("refs/heads/main")
 	gittest.WriteCommit(t, cfg, repoPath, gittest.WithMessage("first parent ref commit"), gittest.WithReference(string(validFirstParentRef)), gittest.WithParents(mergeBaseOID))
+
+	unavailableOID, err := gittest.DefaultObjectHash.FromHex(strings.Repeat("1", gittest.DefaultObjectHash.EncodedLen()))
+	require.NoError(t, err)
 
 	testCases := []struct {
 		desc           string
@@ -180,6 +214,30 @@ func testUserRebaseToRefFailure(t *testing.T, ctx context.Context) {
 			firstParentRef: validFirstParentRef,
 			expectedOldOID: validSourceSha, // arbitrary valid SHA
 			expectedError:  structerr.NewFailedPrecondition("could not update %s. Please refresh and try again", validTargetRef),
+		},
+		{
+			desc:           "non-existing expected_old_oid",
+			repo:           repo,
+			user:           gittest.TestUser,
+			targetRef:      validTargetRef,
+			sourceSha:      validSourceSha,
+			firstParentRef: validFirstParentRef,
+			expectedOldOID: unavailableOID.String(),
+			expectedError: testhelper.WithInterceptedMetadata(
+				structerr.NewInvalidArgument("cannot resolve expected old object ID: reference not found"),
+				"old_object_id",
+				unavailableOID,
+			),
+		},
+		{
+			desc:           "zero target reference",
+			repo:           repo,
+			user:           gittest.TestUser,
+			targetRef:      validTargetRef,
+			sourceSha:      validSourceSha,
+			firstParentRef: validFirstParentRef,
+			expectedOldOID: gittest.DefaultObjectHash.ZeroOID.String(),
+			expectedError:  structerr.NewFailedPrecondition("could not update refs/merge-requests/x/merge. Please refresh and try again"),
 		},
 		{
 			desc:           "ambiguous target reference",

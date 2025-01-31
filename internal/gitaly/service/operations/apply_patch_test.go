@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -400,9 +401,57 @@ func TestUserApplyPatch(t *testing.T) {
 				},
 			},
 			expected: func(t *testing.T, repoPath string) expected {
+				unavailableOID, err := gittest.DefaultObjectHash.FromHex(strings.Repeat("1", gittest.DefaultObjectHash.EncodedLen()))
+				require.NoError(t, err)
+
+				return expected{
+					oldOID: unavailableOID.String(),
+					err:    structerr.NewInternal("expected old object cannot be resolved: reference not found"),
+				}
+			},
+		},
+		{
+			desc: "existing branch + expectedOldOID set to ZeroOID",
+			baseTree: []gittest.TreeEntry{
+				{Path: "file", Mode: "100644", Content: "base-content"},
+			},
+			baseReference: git.DefaultRef,
+			targetBranch:  git.DefaultBranch,
+			patches: []patchDescription{
+				{
+					newTree: []gittest.TreeEntry{
+						{Path: "file", Mode: "100644", Content: "patch 1"},
+					},
+				},
+			},
+			expected: func(t *testing.T, repoPath string) expected {
 				return expected{
 					oldOID: gittest.DefaultObjectHash.ZeroOID.String(),
-					err:    structerr.NewInternal("expected old object cannot be resolved: reference not found"),
+					err:    structerr.NewInternal("update reference: reference update: reference already exists"),
+				}
+			},
+		},
+		{
+			desc: "creating branch + expectedOldOID set to ZeroOID",
+			baseTree: []gittest.TreeEntry{
+				{Path: "file", Mode: "100644", Content: "base-content"},
+			},
+			baseReference: "HEAD",
+			targetBranch:  "new-branch",
+			patches: []patchDescription{
+				{
+					newTree: []gittest.TreeEntry{
+						{Path: "file", Mode: "100644", Content: "patch 1"},
+					},
+				},
+			},
+			expected: func(t *testing.T, repoPath string) expected {
+				return expected{
+					branchCreation: true,
+					oldOID:         gittest.DefaultObjectHash.ZeroOID.String(),
+					tree: []gittest.TreeEntry{
+						{Mode: "100644", Path: "file", Content: "patch 1"},
+					},
 				}
 			},
 		},
