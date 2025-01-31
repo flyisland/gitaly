@@ -434,7 +434,9 @@ func testWriteCommit(t *testing.T, ctx context.Context) {
 					CommitterDate:  commitDate,
 					Message:        "my custom message",
 					GitConfig: config.Git{
-						SigningKey: filepath.Join(testhelper.TestdataAbsolutePath(t), "signing_gpg_key"),
+						SigningKey:     filepath.Join(testhelper.TestdataAbsolutePath(t), "signing_gpg_key"),
+						CommitterName:  "GitLab",
+						CommitterEmail: "noreply@gitlab.com",
 					},
 					Sign: tc.sign,
 				}

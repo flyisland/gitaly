@@ -166,7 +166,7 @@ func (repo *Repo) WriteCommit(ctx context.Context, cfg WriteCommitConfig) (git.O
 		fmt.Sprintf("GIT_COMMITTER_DATE=%s", git.FormatTime(cfg.CommitterDate)),
 	)
 
-	if featureflag.GPGSigning.IsEnabled(ctx) && cfg.Sign && cfg.GitConfig.CommitterName != "" && cfg.GitConfig.CommitterEmail != "" {
+	if featureflag.GPGSigning.IsEnabled(ctx) && cfg.Sign {
 		env = append(env,
 			fmt.Sprintf("GIT_COMMITTER_NAME=%s", cfg.GitConfig.CommitterName),
 			fmt.Sprintf("GIT_COMMITTER_EMAIL=%s", cfg.GitConfig.CommitterEmail),

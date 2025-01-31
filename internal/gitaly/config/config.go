@@ -918,6 +918,14 @@ func (cfg *Cfg) Sanitize() error {
 		cfg.Logging.Config.Level = "info"
 	}
 
+	if cfg.Git.CommitterName == "" {
+		cfg.Git.CommitterName = "GitLab"
+	}
+
+	if cfg.Git.CommitterEmail == "" {
+		cfg.Git.CommitterEmail = "noreply@gitlab.com"
+	}
+
 	return nil
 }
 
