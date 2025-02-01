@@ -712,9 +712,17 @@ func (pi *partitionIterator) Next() bool {
 		pi.it.Seek(pi.seek)
 		pi.seek = nil
 	} else {
+		// We need to check if the iterator is still valid before calling the Next, because
+		// Next might get called on an exhausted iterator, which would then panic.
+		if !pi.it.Valid() {
+			return false
+		}
 		pi.it.Next()
 	}
 
+	// Even if the iterator is valid, it may still return the same partition id as the previous
+	// iteration due to the way we are storing keys in the badger database. Therefore, we are
+	// advancing the iterator until we get a greater partition ID or the iterator is exhausted.
 	for ; pi.it.Valid(); pi.it.Next() {
 		last := pi.current
 
