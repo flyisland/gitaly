@@ -10,15 +10,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
 
-// dryRunMigrations are a set of migrations which we want to dry-run.
-//
-// Dry-run migrations are not committed.
-//
-// While we don't write the migration IDs to the KV, we do read from the
-// KV to get the last migration ID. To ensure that all dry-run migrations
-// are run, migrations will have to use IDs > target live migration ID.
-var dryRunMigrations []Migration
-
 // dryRunTransaction stubs the actual transaction to ensure that the `Commit()`
 // method doesn't apply. We simply call `Rollback()` instead.
 type dryRunTransaction struct {
@@ -57,7 +48,13 @@ type combinedMigrationPartition struct {
 	dryRun storagemgr.Partition
 }
 
-func newCombinedMigrationPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics) storagemgr.Partition {
+func newCombinedMigrationPartition(
+	partition storagemgr.Partition,
+	logger log.Logger,
+	metrics Metrics,
+	migrations []Migration,
+	dryRunMigrations []Migration,
+) storagemgr.Partition {
 	return &combinedMigrationPartition{
 		Partition: newPartition(partition, logger, metrics, migrations),
 		logger:    logger,

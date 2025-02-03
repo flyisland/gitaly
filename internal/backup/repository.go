@@ -535,13 +535,14 @@ func (rr *remoteRepository) newRefClient() gitalypb.RefServiceClient {
 }
 
 type localRepository struct {
-	logger        log.Logger
-	locator       storage.Locator
-	gitCmdFactory gitcmd.CommandFactory
-	txManager     transaction.Manager
-	repoCounter   *counter.RepositoryCounter
-	catfileCache  catfile.Cache
-	repo          *localrepo.Repo
+	logger                log.Logger
+	locator               storage.Locator
+	gitCmdFactory         gitcmd.CommandFactory
+	txManager             transaction.Manager
+	repoCounter           *counter.RepositoryCounter
+	catfileCache          catfile.Cache
+	repo                  *localrepo.Repo
+	migrationStateManager migration.StateManager
 }
 
 // NewLocalRepository returns a repository accessor that operates on a local
@@ -554,15 +555,17 @@ func NewLocalRepository(
 	repoCounter *counter.RepositoryCounter,
 	catfileCache catfile.Cache,
 	repo *localrepo.Repo,
+	migrationStateManager migration.StateManager,
 ) *localRepository {
 	return &localRepository{
-		logger:        logger,
-		locator:       locator,
-		gitCmdFactory: gitCmdFactory,
-		txManager:     txManager,
-		repoCounter:   repoCounter,
-		catfileCache:  catfileCache,
-		repo:          repo,
+		logger:                logger,
+		locator:               locator,
+		gitCmdFactory:         gitCmdFactory,
+		txManager:             txManager,
+		repoCounter:           repoCounter,
+		catfileCache:          catfileCache,
+		repo:                  repo,
+		migrationStateManager: migrationStateManager,
 	}
 }
 
@@ -718,7 +721,10 @@ func (r *localRepository) Create(ctx context.Context, hash git.ObjectHash, defau
 			RelativePath: r.repo.GetRelativePath(),
 		}
 
-		if err := migration.RecordKeyCreation(tx, tx.OriginalRepository(repo).GetRelativePath()); err != nil {
+		if err := r.migrationStateManager.RecordKeyCreation(
+			tx,
+			tx.OriginalRepository(repo).GetRelativePath(),
+		); err != nil {
 			return fmt.Errorf("recording migration key: %w", err)
 		}
 	}

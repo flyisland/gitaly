@@ -28,6 +28,7 @@ func (s *server) RestoreRepository(ctx context.Context, in *gitalypb.RestoreRepo
 		s.catfileCache,
 		s.txManager,
 		s.repositoryCounter,
+		s.migrationStateManager,
 	)
 
 	err := manager.Restore(ctx, &backup.RestoreRequest{

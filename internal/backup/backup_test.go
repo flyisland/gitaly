@@ -19,6 +19,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -68,8 +69,19 @@ func TestManager_Create(t *testing.T) {
 				catfileCache := catfile.NewCache(cfg)
 				tb.Cleanup(catfileCache.Stop)
 				txManager := transaction.NewTrackingManager()
+				migrationStateManager := migration.NewStateManager([]migration.Migration{})
 
-				return backup.NewManagerLocal(sink, testhelper.SharedLogger(t), locator, storageLocator, gitCmdFactory, catfileCache, txManager, repoCounter)
+				return backup.NewManagerLocal(
+					sink,
+					testhelper.SharedLogger(t),
+					locator,
+					storageLocator,
+					gitCmdFactory,
+					catfileCache,
+					txManager,
+					repoCounter,
+					migrationStateManager,
+				)
 			},
 		},
 	} {
@@ -317,8 +329,9 @@ func TestManager_Create_incremental(t *testing.T) {
 				catfileCache := catfile.NewCache(cfg)
 				tb.Cleanup(catfileCache.Stop)
 				txManager := transaction.NewTrackingManager()
+				migrationStateManager := migration.NewStateManager([]migration.Migration{})
 
-				return backup.NewManagerLocal(sink, testhelper.SharedLogger(t), locator, storageLocator, gitCmdFactory, catfileCache, txManager, repoCounter)
+				return backup.NewManagerLocal(sink, testhelper.SharedLogger(t), locator, storageLocator, gitCmdFactory, catfileCache, txManager, repoCounter, migrationStateManager)
 			},
 		},
 	} {
@@ -460,8 +473,9 @@ func TestManager_Restore_latest(t *testing.T) {
 				catfileCache := catfile.NewCache(cfg)
 				tb.Cleanup(catfileCache.Stop)
 				txManager := transaction.NewTrackingManager()
+				migrationStateManager := migration.NewStateManager([]migration.Migration{})
 
-				return backup.NewManagerLocal(sink, logger, locator, storageLocator, gitCmdFactory, catfileCache, txManager, repoCounter)
+				return backup.NewManagerLocal(sink, logger, locator, storageLocator, gitCmdFactory, catfileCache, txManager, repoCounter, migrationStateManager)
 			},
 		},
 	} {
@@ -824,8 +838,9 @@ func TestManager_Restore_specific(t *testing.T) {
 				catfileCache := catfile.NewCache(cfg)
 				tb.Cleanup(catfileCache.Stop)
 				txManager := transaction.NewTrackingManager()
+				migrationStateManager := migration.NewStateManager([]migration.Migration{})
 
-				return backup.NewManagerLocal(sink, logger, locator, storageLocator, gitCmdFactory, catfileCache, txManager, repoCounter)
+				return backup.NewManagerLocal(sink, logger, locator, storageLocator, gitCmdFactory, catfileCache, txManager, repoCounter, migrationStateManager)
 			},
 		},
 	} {

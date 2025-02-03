@@ -17,6 +17,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
@@ -145,6 +146,7 @@ func TestLocalRepository_ResetRefs(t *testing.T) {
 	locator := config.NewLocator(cfg)
 	catfileCache := catfile.NewCache(cfg)
 	t.Cleanup(catfileCache.Stop)
+	migrationStateManager := migration.NewStateManager([]migration.Migration{})
 
 	lr := localrepo.New(testhelper.SharedLogger(t), locator, gitCmdFactory, catfileCache, repo)
 	localRepo := backup.NewLocalRepository(
@@ -154,7 +156,9 @@ func TestLocalRepository_ResetRefs(t *testing.T) {
 		txManager,
 		repoCounter,
 		catfileCache,
-		lr)
+		lr,
+		migrationStateManager,
+	)
 
 	// Create some commits
 	c0 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
@@ -249,6 +253,7 @@ func TestLocalRepository_SetHeadReference(t *testing.T) {
 	locator := config.NewLocator(cfg)
 	catfileCache := catfile.NewCache(cfg)
 	t.Cleanup(catfileCache.Stop)
+	migrationStateManager := migration.NewStateManager([]migration.Migration{})
 
 	localRepo := backup.NewLocalRepository(
 		testhelper.SharedLogger(t),
@@ -257,7 +262,9 @@ func TestLocalRepository_SetHeadReference(t *testing.T) {
 		txManager,
 		repoCounter,
 		catfileCache,
-		localrepo.New(testhelper.SharedLogger(t), locator, gitCmdFactory, catfileCache, repo))
+		localrepo.New(testhelper.SharedLogger(t), locator, gitCmdFactory, catfileCache, repo),
+		migrationStateManager,
+	)
 
 	c0 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch))
 

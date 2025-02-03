@@ -46,32 +46,6 @@ func (m Migration) recordID(txn storage.Transaction, relativePath string) error 
 	return txn.KV().Set(migrationKey(relativePath), val)
 }
 
-// RecordKeyCreation initializes the migration key for a new repository.
-func RecordKeyCreation(txn storage.Transaction, relativePath string) error {
-	// Generally, migration keys should be initialized to the latest migration because we should not
-	// be created repositories with outdated state. The ID of the latest configured migration is
-	// recorded in the transaction. If no migrations are configured, the ID is set to zero.
-	var migr Migration
-	if len(migrations) > 0 {
-		migr = migrations[len(migrations)-1]
-	}
-
-	if err := migr.recordID(txn, relativePath); err != nil {
-		return fmt.Errorf("initializing key: %w", err)
-	}
-
-	return nil
-}
-
-// RecordKeyDeletion records in the provided transaction a migration key deletion.
-func RecordKeyDeletion(txn storage.Transaction, relativePath string) error {
-	if err := txn.KV().Delete(migrationKey(relativePath)); err != nil {
-		return fmt.Errorf("deleting key: %w", err)
-	}
-
-	return nil
-}
-
 // uint64ToBytes marshals the provided uint64 into a slice of bytes.
 func uint64ToBytes(i uint64) []byte {
 	val := make([]byte, binary.Size(i))
