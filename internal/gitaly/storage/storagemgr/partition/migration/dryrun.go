@@ -17,7 +17,7 @@ import (
 // While we don't write the migration IDs to the KV, we do read from the
 // KV to get the last migration ID. To ensure that all dry-run migrations
 // are run, migrations will have to use IDs > target live migration ID.
-var dryRunMigrations []migration
+var dryRunMigrations []Migration
 
 // dryRunTransaction stubs the actual transaction to ensure that the `Commit()`
 // method doesn't apply. We simply call `Rollback()` instead.

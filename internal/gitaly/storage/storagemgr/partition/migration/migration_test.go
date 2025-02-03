@@ -20,28 +20,28 @@ func TestMigration_Run(t *testing.T) {
 
 	for _, tc := range []struct {
 		desc         string
-		migration    migration
+		migration    Migration
 		relativePath string
 		expectedKV   map[string][]byte
 		expectedErr  error
 	}{
 		{
 			desc:        "migration misconfigured",
-			migration:   migration{fn: nil},
+			migration:   Migration{Fn: nil},
 			expectedErr: errInvalidMigration,
 		},
 		{
 			desc: "migration returns error",
-			migration: migration{fn: func(context.Context, storage.Transaction) error {
+			migration: Migration{Fn: func(context.Context, storage.Transaction) error {
 				return migrationErr
 			}},
 			expectedErr: fmt.Errorf("migrate repository: %w", migrationErr),
 		},
 		{
 			desc: "migration modifies transaction",
-			migration: migration{
-				id: 1,
-				fn: func(_ context.Context, txn storage.Transaction) error {
+			migration: Migration{
+				ID: 1,
+				Fn: func(_ context.Context, txn storage.Transaction) error {
 					return txn.KV().Set([]byte("foo"), []byte("bar"))
 				},
 			},

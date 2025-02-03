@@ -38,14 +38,14 @@ type migrationManager struct {
 	metrics  Metrics
 	// migrations defines all migration jobs that are expected to be performed on a repository
 	// before it can process incoming transactions.
-	migrations []migration
+	migrations []Migration
 	// migrationStates defines the state of a repository migration and is used to block concurrent
 	// transactions on the same repository while a migration is pending.
 	migrationStates map[string]*migrationState
 }
 
 // newPartition creates a migration manager that wraps the provided partition.
-func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, migrations []migration) storagemgr.Partition {
+func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, migrations []Migration) storagemgr.Partition {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &migrationManager{
@@ -133,7 +133,7 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 
 	// If the repository is already up-to-date, there is no need to start a transaction and perform
 	// migrations.
-	maxID := m.migrations[len(m.migrations)-1].id
+	maxID := m.migrations[len(m.migrations)-1].ID
 	if id == maxID {
 		return nil
 	} else if id > maxID {
@@ -158,16 +158,16 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 
 	for _, migration := range m.migrations {
 		timer := prometheus.NewTimer(m.metrics.latencyMetric.With(prometheus.Labels{
-			"migration_name": migration.name,
+			"migration_name": migration.Name,
 		}))
 
-		if id >= migration.id {
+		if id >= migration.ID {
 			continue
 		}
 
 		logger := m.logger.WithFields(log.Fields{
-			"migration_name": migration.name,
-			"migration_id":   migration.id,
+			"migration_name": migration.Name,
+			"migration_id":   migration.ID,
 			"relative_path":  relativePath,
 		})
 
@@ -179,7 +179,7 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 		//
 		// Since the manager's context won't have the featureflag information, we use the request
 		// cotext. The request context here should be devoid of cancellation.
-		if migration.isDisabled != nil && migration.isDisabled(reqCtx) {
+		if migration.IsDisabled != nil && migration.IsDisabled(reqCtx) {
 			break
 		}
 

@@ -8,7 +8,7 @@ import (
 )
 
 // migrations is a list of configured migrations that must be performed on repositories.
-var migrations []migration
+var migrations []Migration
 
 // migrationFactory defines a partition factory that wraps another partition factory.
 type migrationFactory struct {
