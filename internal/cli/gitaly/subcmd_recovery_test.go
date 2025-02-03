@@ -33,24 +33,26 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type setupOptions struct {
+	cfg           config.Cfg
+	storageMgr    node.Storage
+	locator       storage.Locator
+	gitCmdFactory gitcmd.CommandFactory
+	catfileCache  catfile.Cache
+	backupRoot    string
+}
+
+type setupData struct {
+	storageName     string
+	partitionID     storage.PartitionID
+	all             bool
+	expectedErr     error
+	expectedOutputs []string
+	expectedLSN     map[storage.PartitionID]storage.LSN
+}
+
 func TestRecoveryCLI_status(t *testing.T) {
 	t.Parallel()
-
-	type setupOptions struct {
-		cfg           config.Cfg
-		storageMgr    node.Storage
-		locator       storage.Locator
-		gitCmdFactory gitcmd.CommandFactory
-		catfileCache  catfile.Cache
-		backupRoot    string
-	}
-
-	type setupData struct {
-		storageName    string
-		partitionID    storage.PartitionID
-		expectedErr    error
-		expectedOutput string
-	}
 
 	for _, tc := range []struct {
 		desc  string
@@ -60,9 +62,9 @@ func TestRecoveryCLI_status(t *testing.T) {
 			desc: "unknown storage",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				return setupData{
-					storageName:    "pineapple",
-					expectedErr:    errors.New("exit status 1"),
-					expectedOutput: "get storage: storage name not found\n",
+					storageName:     "pineapple",
+					expectedErr:     errors.New("exit status 1"),
+					expectedOutputs: []string{"get storage: storage name not found\n"},
 				}
 			},
 		},
@@ -70,10 +72,10 @@ func TestRecoveryCLI_status(t *testing.T) {
 			desc: "partition 0",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				return setupData{
-					storageName:    opts.cfg.Storages[0].Name,
-					partitionID:    0,
-					expectedErr:    errors.New("exit status 1"),
-					expectedOutput: fmt.Sprintf("invalid partition ID %s\n", storage.PartitionID(0)),
+					storageName:     opts.cfg.Storages[0].Name,
+					partitionID:     0,
+					expectedErr:     errors.New("exit status 1"),
+					expectedOutputs: []string{fmt.Sprintf("invalid partition ID %s\n", storage.PartitionID(0))},
 				}
 			},
 		},
@@ -86,51 +88,25 @@ func TestRecoveryCLI_status(t *testing.T) {
 					// TODO: This currently will create arbitrary partitions.
 					// It should return an error instead.
 					// https://gitlab.com/gitlab-org/gitaly/-/issues/6478
-					expectedOutput: fmt.Sprintf(`Partition ID: %s
+					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
 Applied LSN: %s
 `,
 						storage.PartitionID(42),
 						storage.LSN(0),
-					),
+					)},
 				}
 			},
 		},
 		{
 			desc: "success, no backups",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
-				logger := testhelper.SharedLogger(t)
-				repo := &gitalypb.Repository{
-					StorageName:  opts.cfg.Storages[0].Name,
-					RelativePath: gittest.NewRepositoryName(t),
-				}
-
-				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
-					RelativePath: repo.GetRelativePath(),
-					AllowPartitionAssignmentWithoutRepository: true,
-				})
+				repo, err := createRepository(t, ctx, opts)
 				require.NoError(t, err)
-
-				err = repoutil.Create(
-					storage.ContextWithTransaction(ctx, txn),
-					logger,
-					opts.locator,
-					opts.gitCmdFactory,
-					opts.catfileCache,
-					transaction.NewTrackingManager(),
-					counter.NewRepositoryCounter(opts.cfg.Storages),
-					txn.RewriteRepository(repo),
-					func(repo *gitalypb.Repository) error {
-						return nil
-					},
-				)
-				require.NoError(t, err)
-
-				require.NoError(t, txn.Commit(ctx))
 
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutput: fmt.Sprintf(`Partition ID: %s
+					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
 Applied LSN: %s
 Relative paths:
  - %s
@@ -138,41 +114,15 @@ Relative paths:
 						storage.PartitionID(2),
 						storage.LSN(1),
 						repo.GetRelativePath(),
-					),
+					)},
 				}
 			},
 		},
 		{
 			desc: "success, backups",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
-				logger := testhelper.SharedLogger(t)
-				repo := &gitalypb.Repository{
-					StorageName:  opts.cfg.Storages[0].Name,
-					RelativePath: gittest.NewRepositoryName(t),
-				}
-
-				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
-					RelativePath: repo.GetRelativePath(),
-					AllowPartitionAssignmentWithoutRepository: true,
-				})
+				repo, err := createRepository(t, ctx, opts)
 				require.NoError(t, err)
-
-				err = repoutil.Create(
-					storage.ContextWithTransaction(ctx, txn),
-					logger,
-					opts.locator,
-					opts.gitCmdFactory,
-					opts.catfileCache,
-					transaction.NewTrackingManager(),
-					counter.NewRepositoryCounter(opts.cfg.Storages),
-					txn.RewriteRepository(repo),
-					func(repo *gitalypb.Repository) error {
-						return nil
-					},
-				)
-				require.NoError(t, err)
-
-				require.NoError(t, txn.Commit(ctx))
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
@@ -184,7 +134,7 @@ Relative paths:
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutput: fmt.Sprintf(`Partition ID: %s
+					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
 Applied LSN: %s
 Relative paths:
  - %s
@@ -196,41 +146,15 @@ Available backup entries:
 						repo.GetRelativePath(),
 						storage.LSN(2),
 						storage.LSN(3),
-					),
+					)},
 				}
 			},
 		},
 		{
 			desc: "success, non-contiguous backups",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
-				logger := testhelper.SharedLogger(t)
-				repo := &gitalypb.Repository{
-					StorageName:  opts.cfg.Storages[0].Name,
-					RelativePath: gittest.NewRepositoryName(t),
-				}
-
-				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
-					RelativePath: repo.GetRelativePath(),
-					AllowPartitionAssignmentWithoutRepository: true,
-				})
+				repo, err := createRepository(t, ctx, opts)
 				require.NoError(t, err)
-
-				err = repoutil.Create(
-					storage.ContextWithTransaction(ctx, txn),
-					logger,
-					opts.locator,
-					opts.gitCmdFactory,
-					opts.catfileCache,
-					transaction.NewTrackingManager(),
-					counter.NewRepositoryCounter(opts.cfg.Storages),
-					txn.RewriteRepository(repo),
-					func(repo *gitalypb.Repository) error {
-						return nil
-					},
-				)
-				require.NoError(t, err)
-
-				require.NoError(t, txn.Commit(ctx))
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
@@ -247,7 +171,7 @@ Available backup entries:
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutput: fmt.Sprintf(`Partition ID: %s
+					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
 Applied LSN: %s
 Relative paths:
  - %s
@@ -264,7 +188,61 @@ Available backup entries:
 						storage.LSN(5),
 						storage.LSN(8),
 						storage.LSN(10),
-					),
+					)},
+				}
+			},
+		},
+		{
+			desc: "success with all flag and multiple partitions",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				repo1, err := createRepository(t, ctx, opts)
+				require.NoError(t, err)
+				partitionPath := filepath.Join(repo1.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): "",
+				})
+
+				repo2, err := createRepository(t, ctx, opts)
+				require.NoError(t, err)
+				partitionPath = filepath.Join(repo2.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(3)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(4).String()+".tar"): "",
+				})
+
+				return setupData{
+					storageName: opts.cfg.Storages[0].Name,
+					all:         true,
+					expectedOutputs: []string{
+						fmt.Sprintf(`Partition ID: %s
+Applied LSN: %s
+Relative paths:
+ - %s
+Available backup entries:
+ - from %s to %s
+`,
+							storage.PartitionID(2),
+							storage.LSN(1),
+							repo1.GetRelativePath(),
+							storage.LSN(2),
+							storage.LSN(3)),
+						fmt.Sprintf(`Partition ID: %s
+Applied LSN: %s
+Relative paths:
+ - %s
+Available backup entries:
+ - from %s to %s
+`,
+							storage.PartitionID(3),
+							storage.LSN(1),
+							repo2.GetRelativePath(),
+							storage.LSN(2),
+							storage.LSN(4)),
+					},
 				}
 			},
 		},
@@ -319,35 +297,27 @@ Available backup entries:
 			storageMgr.Close()
 			dbMgr.Close()
 
-			cmd := exec.Command(cfg.BinaryPath("gitaly"), "recovery", "-config", configPath, "status", "-storage", data.storageName, "-partition", data.partitionID.String())
+			args := []string{"recovery", "-config", configPath, "status", "-storage", data.storageName}
+			if data.all {
+				args = append(args, "-all")
+			} else {
+				args = append(args, "-partition")
+				args = append(args, data.partitionID.String())
+			}
 
+			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
 			output, err := cmd.CombinedOutput()
 			testhelper.RequireGrpcError(t, data.expectedErr, err)
 
-			require.Contains(t, string(output), data.expectedOutput)
+			for _, expectedOutput := range data.expectedOutputs {
+				require.Contains(t, string(output), expectedOutput)
+			}
 		})
 	}
 }
 
 func TestRecoveryCLI_replay(t *testing.T) {
 	t.Parallel()
-
-	type setupOptions struct {
-		cfg           config.Cfg
-		storageMgr    node.Storage
-		locator       storage.Locator
-		gitCmdFactory gitcmd.CommandFactory
-		catfileCache  catfile.Cache
-		backupRoot    string
-	}
-
-	type setupData struct {
-		storageName     string
-		partitionID     storage.PartitionID
-		expectedErr     error
-		expectedOutputs []string
-		expectedLSN     storage.LSN
-	}
 
 	for _, tc := range []struct {
 		desc  string
@@ -360,7 +330,7 @@ func TestRecoveryCLI_replay(t *testing.T) {
 					storageName:     "pineapple",
 					expectedErr:     errors.New("exit status 1"),
 					expectedOutputs: []string{"get storage: storage name not found\n"},
-					expectedLSN:     storage.LSN(0),
+					expectedLSN:     nil,
 				}
 			},
 		},
@@ -372,7 +342,7 @@ func TestRecoveryCLI_replay(t *testing.T) {
 					partitionID:     0,
 					expectedErr:     errors.New("exit status 1"),
 					expectedOutputs: []string{fmt.Sprintf("invalid partition ID %s\n", storage.PartitionID(0))},
-					expectedLSN:     storage.LSN(0),
+					expectedLSN:     nil,
 				}
 			},
 		},
@@ -394,41 +364,15 @@ Successfully processed log entries up to LSN %s
 						storage.LSN(0),
 						storage.LSN(0),
 					)},
-					expectedLSN: storage.LSN(0),
+					expectedLSN: nil,
 				}
 			},
 		},
 		{
 			desc: "success, no backups",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
-				logger := testhelper.SharedLogger(t)
-				repo := &gitalypb.Repository{
-					StorageName:  opts.cfg.Storages[0].Name,
-					RelativePath: gittest.NewRepositoryName(t),
-				}
-
-				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
-					RelativePath: repo.GetRelativePath(),
-					AllowPartitionAssignmentWithoutRepository: true,
-				})
+				repo, err := createRepository(t, ctx, opts)
 				require.NoError(t, err)
-
-				err = repoutil.Create(
-					storage.ContextWithTransaction(ctx, txn),
-					logger,
-					opts.locator,
-					opts.gitCmdFactory,
-					opts.catfileCache,
-					transaction.NewTrackingManager(),
-					counter.NewRepositoryCounter(opts.cfg.Storages),
-					txn.RewriteRepository(repo),
-					func(repo *gitalypb.Repository) error {
-						return nil
-					},
-				)
-				require.NoError(t, err)
-
-				require.NoError(t, txn.Commit(ctx))
 
 				return setupData{
 					storageName: repo.GetStorageName(),
@@ -442,41 +386,15 @@ Successfully processed log entries up to LSN %s
 						storage.LSN(1),
 						storage.LSN(1),
 					)},
-					expectedLSN: storage.LSN(1),
+					expectedLSN: map[storage.PartitionID]storage.LSN{2: 1},
 				}
 			},
 		},
 		{
 			desc: "success, contiguous backups",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
-				logger := testhelper.SharedLogger(t)
-				repo := &gitalypb.Repository{
-					StorageName:  opts.cfg.Storages[0].Name,
-					RelativePath: gittest.NewRepositoryName(t),
-				}
-
-				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
-					RelativePath: repo.GetRelativePath(),
-					AllowPartitionAssignmentWithoutRepository: true,
-				})
+				repo, err := createRepository(t, ctx, opts)
 				require.NoError(t, err)
-
-				err = repoutil.Create(
-					storage.ContextWithTransaction(ctx, txn),
-					logger,
-					opts.locator,
-					opts.gitCmdFactory,
-					opts.catfileCache,
-					transaction.NewTrackingManager(),
-					counter.NewRepositoryCounter(opts.cfg.Storages),
-					txn.RewriteRepository(repo),
-					func(repo *gitalypb.Repository) error {
-						return nil
-					},
-				)
-				require.NoError(t, err)
-
-				require.NoError(t, txn.Commit(ctx))
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
@@ -497,41 +415,15 @@ Successfully processed log entries up to LSN %s
 						storage.LSN(1),
 						storage.LSN(3),
 					)},
-					expectedLSN: storage.LSN(3),
+					expectedLSN: map[storage.PartitionID]storage.LSN{2: 3},
 				}
 			},
 		},
 		{
 			desc: "non-contiguous backups",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
-				logger := testhelper.SharedLogger(t)
-				repo := &gitalypb.Repository{
-					StorageName:  opts.cfg.Storages[0].Name,
-					RelativePath: gittest.NewRepositoryName(t),
-				}
-
-				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
-					RelativePath: repo.GetRelativePath(),
-					AllowPartitionAssignmentWithoutRepository: true,
-				})
+				repo, err := createRepository(t, ctx, opts)
 				require.NoError(t, err)
-
-				err = repoutil.Create(
-					storage.ContextWithTransaction(ctx, txn),
-					logger,
-					opts.locator,
-					opts.gitCmdFactory,
-					opts.catfileCache,
-					transaction.NewTrackingManager(),
-					counter.NewRepositoryCounter(opts.cfg.Storages),
-					txn.RewriteRepository(repo),
-					func(repo *gitalypb.Repository) error {
-						return nil
-					},
-				)
-				require.NoError(t, err)
-
-				require.NoError(t, txn.Commit(ctx))
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
@@ -554,41 +446,15 @@ Starting archived log entries import
 						),
 						"there is discontinuity in the WAL entries. Expected: 3, Got: 4\n",
 					},
-					expectedLSN: storage.LSN(2),
+					expectedLSN: map[storage.PartitionID]storage.LSN{2: 2},
 				}
 			},
 		},
 		{
 			desc: "fail to apply a log entry",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
-				logger := testhelper.SharedLogger(t)
-				repo := &gitalypb.Repository{
-					StorageName:  opts.cfg.Storages[0].Name,
-					RelativePath: gittest.NewRepositoryName(t),
-				}
-
-				txn, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
-					RelativePath: repo.GetRelativePath(),
-					AllowPartitionAssignmentWithoutRepository: true,
-				})
+				repo, err := createRepository(t, ctx, opts)
 				require.NoError(t, err)
-
-				err = repoutil.Create(
-					storage.ContextWithTransaction(ctx, txn),
-					logger,
-					opts.locator,
-					opts.gitCmdFactory,
-					opts.catfileCache,
-					transaction.NewTrackingManager(),
-					counter.NewRepositoryCounter(opts.cfg.Storages),
-					txn.RewriteRepository(repo),
-					func(repo *gitalypb.Repository) error {
-						return nil
-					},
-				)
-				require.NoError(t, err)
-
-				require.NoError(t, txn.Commit(ctx))
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
@@ -612,7 +478,55 @@ Starting archived log entries import
 						`msg="partition failed" error="apply log entry: update: apply operations`,
 						`fail to apply latest log entry`,
 					},
-					expectedLSN: storage.LSN(1),
+					expectedLSN: map[storage.PartitionID]storage.LSN{2: 1},
+				}
+			},
+		},
+		{
+			desc: "success with all flag and multiple partitions",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				repo1, err := createRepository(t, ctx, opts)
+				require.NoError(t, err)
+				partitionPath := filepath.Join(repo1.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo1.GetRelativePath(), storage.LSN(1)),
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createValidLogEntryArchive(t, repo1.GetRelativePath(), storage.LSN(2)),
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): createValidLogEntryArchive(t, repo1.GetRelativePath(), storage.LSN(3)),
+				})
+
+				repo2, err := createRepository(t, ctx, opts)
+				require.NoError(t, err)
+				partitionPath = filepath.Join(repo2.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(3)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo1.GetRelativePath(), storage.LSN(1)),
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createValidLogEntryArchive(t, repo1.GetRelativePath(), storage.LSN(2)),
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): createValidLogEntryArchive(t, repo1.GetRelativePath(), storage.LSN(3)),
+					filepath.Join(partitionPath, storage.LSN(4).String()+".tar"): createValidLogEntryArchive(t, repo1.GetRelativePath(), storage.LSN(4)),
+				})
+				return setupData{
+					storageName: opts.cfg.Storages[0].Name,
+					all:         true,
+					expectedOutputs: []string{
+						fmt.Sprintf(`Partition ID: %s
+Applied LSN: %s
+Starting archived log entries import
+Successfully processed log entries up to LSN %s
+`,
+							storage.PartitionID(2),
+							storage.LSN(1),
+							storage.LSN(3),
+						),
+						fmt.Sprintf(`Partition ID: %s
+Applied LSN: %s
+Starting archived log entries import
+Successfully processed log entries up to LSN %s
+`,
+							storage.PartitionID(3),
+							storage.LSN(1),
+							storage.LSN(4),
+						),
+					},
+					expectedLSN: map[storage.PartitionID]storage.LSN{2: 3, 3: 4},
 				}
 			},
 		},
@@ -670,7 +584,14 @@ Starting archived log entries import
 			storageMgr.Close()
 			dbMgr.Close()
 
-			cmd := exec.Command(cfg.BinaryPath("gitaly"), "recovery", "-config", configPath, "replay", "-storage", data.storageName, "-partition", data.partitionID.String())
+			args := []string{"recovery", "-config", configPath, "replay", "-storage", data.storageName}
+			if data.all {
+				args = append(args, "-all")
+			} else {
+				args = append(args, "-partition")
+				args = append(args, data.partitionID.String())
+			}
+			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
 
 			output, err := cmd.CombinedOutput()
 			if err != nil && data.expectedErr == nil {
@@ -703,14 +624,16 @@ Starting archived log entries import
 			require.NoError(t, err)
 			defer storageMgr.Close()
 
-			partition, err := storageMgr.GetPartition(ctx, data.partitionID)
-			require.NoError(t, err)
+			for partitionID, lsn := range data.expectedLSN {
+				partition, err := storageMgr.GetPartition(ctx, partitionID)
+				require.NoError(t, err)
 
-			tr, err := partition.Begin(ctx, storage.BeginOptions{})
-			require.NoError(t, err)
-			appliedLSN := tr.SnapshotLSN()
-			require.NoError(t, tr.Rollback(ctx))
-			require.Equal(t, data.expectedLSN, appliedLSN)
+				tr, err := partition.Begin(ctx, storage.BeginOptions{})
+				require.NoError(t, err)
+				appliedLSN := tr.SnapshotLSN()
+				require.NoError(t, tr.Rollback(ctx))
+				require.Equal(t, lsn, appliedLSN)
+			}
 		})
 	}
 }
@@ -794,4 +717,38 @@ func createInvalidLogEntryArchive(t *testing.T, repoRelativePath string, lsn sto
 	require.NoError(t, tw.Close())
 
 	return buf.Bytes()
+}
+
+func createRepository(t *testing.T, ctx context.Context, opts setupOptions) (*gitalypb.Repository, error) {
+	repo := &gitalypb.Repository{
+		StorageName:  opts.cfg.Storages[0].Name,
+		RelativePath: gittest.NewRepositoryName(t),
+	}
+
+	txn1, err := opts.storageMgr.Begin(ctx, storage.TransactionOptions{
+		RelativePath: repo.GetRelativePath(),
+		AllowPartitionAssignmentWithoutRepository: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = repoutil.Create(
+		storage.ContextWithTransaction(ctx, txn1),
+		testhelper.SharedLogger(t),
+		opts.locator,
+		opts.gitCmdFactory,
+		opts.catfileCache,
+		transaction.NewTrackingManager(),
+		counter.NewRepositoryCounter(opts.cfg.Storages),
+		txn1.RewriteRepository(repo),
+		func(repo *gitalypb.Repository) error {
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return repo, txn1.Commit(ctx)
 }
