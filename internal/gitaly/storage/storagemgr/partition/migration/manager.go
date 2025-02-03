@@ -42,10 +42,12 @@ type migrationManager struct {
 	// migrationStates defines the state of a repository migration and is used to block concurrent
 	// transactions on the same repository while a migration is pending.
 	migrationStates map[string]*migrationState
+	// storageName is the name of the storage the Manager's partition is a member of.
+	storageName string
 }
 
 // newPartition creates a migration manager that wraps the provided partition.
-func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, migrations []Migration) storagemgr.Partition {
+func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, storageName string, migrations []Migration) storagemgr.Partition {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &migrationManager{
@@ -54,6 +56,7 @@ func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Met
 		Partition:       partition,
 		logger:          logger,
 		metrics:         metrics,
+		storageName:     storageName,
 		migrations:      migrations,
 		migrationStates: map[string]*migrationState{},
 	}
@@ -185,7 +188,7 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 
 		logger.Info("running migration")
 
-		if err := migration.run(m.ctx, txn, relativePath); err != nil {
+		if err := migration.run(m.ctx, txn, m.storageName, relativePath); err != nil {
 			return fmt.Errorf("run migration: %w", err)
 		}
 

@@ -22,18 +22,18 @@ type Migration struct {
 	// Name is a human-readable description for the migration to be used in logs/tracing.
 	Name string
 	// Fn is the function executed to modify the WAL entry during transaction commit.
-	Fn func(context.Context, storage.Transaction) error
+	Fn func(ctx context.Context, tx storage.Transaction, storageName string, relativePath string) error
 	// IsDisabled defines an optional check to prevent a migration from being executed.
 	IsDisabled func(ctx context.Context) bool
 }
 
 // run performs the migration job on the provided transaction.
-func (m Migration) run(ctx context.Context, txn storage.Transaction, relativePath string) error {
+func (m Migration) run(ctx context.Context, txn storage.Transaction, storageName string, relativePath string) error {
 	if m.Fn == nil {
 		return errInvalidMigration
 	}
 
-	if err := m.Fn(ctx, txn); err != nil {
+	if err := m.Fn(ctx, txn, storageName, relativePath); err != nil {
 		return fmt.Errorf("migrate repository: %w", err)
 	}
 

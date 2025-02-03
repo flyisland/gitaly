@@ -52,13 +52,14 @@ func newCombinedMigrationPartition(
 	partition storagemgr.Partition,
 	logger log.Logger,
 	metrics Metrics,
+	storageName string,
 	migrations []Migration,
 	dryRunMigrations []Migration,
 ) storagemgr.Partition {
 	return &combinedMigrationPartition{
-		Partition: newPartition(partition, logger, metrics, migrations),
+		Partition: newPartition(partition, logger, metrics, storageName, migrations),
 		logger:    logger,
-		dryRun:    newPartition(dryRunPartition{partition}, logger, metrics, dryRunMigrations),
+		dryRun:    newPartition(dryRunPartition{partition}, logger, metrics, storageName, dryRunMigrations),
 	}
 }
 

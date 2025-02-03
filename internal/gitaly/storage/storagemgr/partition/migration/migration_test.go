@@ -32,7 +32,7 @@ func TestMigration_Run(t *testing.T) {
 		},
 		{
 			desc: "migration returns error",
-			migration: Migration{Fn: func(context.Context, storage.Transaction) error {
+			migration: Migration{Fn: func(context.Context, storage.Transaction, string, string) error {
 				return migrationErr
 			}},
 			expectedErr: fmt.Errorf("migrate repository: %w", migrationErr),
@@ -41,7 +41,7 @@ func TestMigration_Run(t *testing.T) {
 			desc: "migration modifies transaction",
 			migration: Migration{
 				ID: 1,
-				Fn: func(_ context.Context, txn storage.Transaction) error {
+				Fn: func(_ context.Context, txn storage.Transaction, _ string, _ string) error {
 					return txn.KV().Set([]byte("foo"), []byte("bar"))
 				},
 			},
@@ -66,7 +66,7 @@ func TestMigration_Run(t *testing.T) {
 				},
 			}
 
-			err := tc.migration.run(ctx, txn, "foobar")
+			err := tc.migration.run(ctx, txn, "sample-storage", "foobar")
 			if tc.expectedErr != nil {
 				require.Equal(t, tc.expectedErr, err)
 				return

@@ -30,9 +30,9 @@ func TestMigrationManager_Begin(t *testing.T) {
 	disabledFn := func(context.Context) bool { return true }
 	migrationErr := errors.New("migration error")
 
-	errFn := func(context.Context, storage.Transaction) error { return migrationErr }
-	recordingFn := func(id uint64) func(_ context.Context, txn storage.Transaction) error {
-		return func(_ context.Context, txn storage.Transaction) error {
+	errFn := func(context.Context, storage.Transaction, string, string) error { return migrationErr }
+	recordingFn := func(id uint64) func(context.Context, storage.Transaction, string, string) error {
+		return func(_ context.Context, txn storage.Transaction, _ string, _ string) error {
 			return txn.KV().Set(uint64ToBytes(id), nil)
 		}
 	}
@@ -249,7 +249,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 func TestMigrationManager_Concurrent(t *testing.T) {
 	t.Parallel()
 	ctx := testhelper.Context(t)
-	noopFn := func(context.Context, storage.Transaction) error { return nil }
+	noopFn := func(context.Context, storage.Transaction, string, string) error { return nil }
 
 	setupMockPartition := func(firstTransactionFn func(context.Context) error) *mockPartition {
 		kvFn := func() keyvalue.ReadWriter {
@@ -423,7 +423,8 @@ func TestMigrationManager_Context(t *testing.T) {
 		},
 		testhelper.NewLogger(t),
 		NewMetrics(),
-		[]Migration{{ID: 1, Fn: func(ctx context.Context, tx storage.Transaction) error {
+		"sample-storage",
+		[]Migration{{ID: 1, Fn: func(ctx context.Context, tx storage.Transaction, _ string, _ string) error {
 			// Canceling the context of the request that started this migraiton
 			// should not lead to canceling the migration.
 			requestCancel()
