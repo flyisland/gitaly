@@ -31,10 +31,6 @@ func NewRaftManagerRegistry() *raftManagerRegistry {
 
 // GetManager returns the manager for a given partitionKey.
 func (r *raftManagerRegistry) GetManager(key PartitionKey) (RaftManager, error) {
-	r.managers.Range(func(k, v any) bool {
-		fmt.Printf("key %+v value %+v\n", k, v)
-		return true
-	})
 	if mgr, ok := r.managers.Load(key); ok {
 		return mgr.(RaftManager), nil
 	}
