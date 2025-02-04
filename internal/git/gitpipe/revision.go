@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -215,7 +216,9 @@ func Revlist(
 	go func() {
 		defer close(resultChan)
 
-		flags := []gitcmd.Option{}
+		flags := []gitcmd.Option{
+			gitcmd.Flag{Name: "--stdin"},
+		}
 
 		if cfg.objects {
 			flags = append(flags,
@@ -306,10 +309,10 @@ func Revlist(
 			gitcmd.Command{
 				Name:  "rev-list",
 				Flags: flags,
-				Args:  revisions,
 			},
 			gitcmd.WithStderr(&stderr),
 			gitcmd.WithSetupStdout(),
+			gitcmd.WithStdin(strings.NewReader(strings.Join(revisions, "\n"))),
 		)
 		if err != nil {
 			sendRevisionResult(ctx, resultChan, RevisionResult{
@@ -317,6 +320,19 @@ func Revlist(
 			})
 			return
 		}
+
+		var execErrors error
+		defer func() {
+			if err := revlist.Wait(); err != nil {
+				execErrors = errors.Join(execErrors, fmt.Errorf("rev-list pipeline command: %w, stderr: %q", err, stderr.String()))
+			}
+
+			if execErrors != nil {
+				sendRevisionResult(ctx, resultChan, RevisionResult{
+					err: execErrors,
+				})
+			}
+		}()
 
 		scanner := bufio.NewScanner(revlist)
 		for scanner.Scan() {
@@ -344,17 +360,7 @@ func Revlist(
 		}
 
 		if err := scanner.Err(); err != nil {
-			sendRevisionResult(ctx, resultChan, RevisionResult{
-				err: fmt.Errorf("scanning rev-list output: %w", err),
-			})
-			return
-		}
-
-		if err := revlist.Wait(); err != nil {
-			sendRevisionResult(ctx, resultChan, RevisionResult{
-				err: fmt.Errorf("rev-list pipeline command: %w, stderr: %q", err, stderr.String()),
-			})
-			return
+			execErrors = errors.Join(execErrors, fmt.Errorf("scanning rev-list output: %w", err))
 		}
 	}()
 

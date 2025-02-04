@@ -198,9 +198,7 @@ func TestPipeline_revlist(t *testing.T) {
 				"doesnotexist",
 			},
 			expectedErr: errors.New("rev-list pipeline command: exit status 128, stderr: " +
-				"\"fatal: ambiguous argument 'doesnotexist': unknown revision or path not in the working tree.\\n" +
-				"Use '--' to separate paths from revisions, like this:\\n" +
-				"'git <command> [<revision>...] -- [<file>...]'\\n\""),
+				"\"fatal: bad revision 'doesnotexist'\\n\""),
 		},
 		{
 			desc: "mixed valid and invalid revision",
@@ -210,9 +208,7 @@ func TestPipeline_revlist(t *testing.T) {
 				blobB.String(),
 			},
 			expectedErr: errors.New("rev-list pipeline command: exit status 128, stderr: " +
-				"\"fatal: ambiguous argument 'doesnotexist': unknown revision or path not in the working tree.\\n" +
-				"Use '--' to separate paths from revisions, like this:\\n" +
-				"'git <command> [<revision>...] -- [<file>...]'\\n\""),
+				"\"fatal: bad revision 'doesnotexist'\\n\""),
 		},
 		{
 			desc: "invalid revision with all filters",
@@ -232,9 +228,7 @@ func TestPipeline_revlist(t *testing.T) {
 				}),
 			},
 			expectedErr: errors.New("rev-list pipeline command: exit status 128, stderr: " +
-				"\"fatal: ambiguous argument 'doesnotexist': unknown revision or path not in the working tree.\\n" +
-				"Use '--' to separate paths from revisions, like this:\\n" +
-				"'git <command> [<revision>...] -- [<file>...]'\\n\""),
+				"\"fatal: bad revision 'doesnotexist'\\n\""),
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
