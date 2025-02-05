@@ -558,11 +558,9 @@ func TestRepackObjects(t *testing.T) {
 			},
 			stateAfterRepack: objectsState{
 				packfiles: 1,
-				// Ideally, the full repack would include this unreachable object
-				// into the packfile. It doesn't though, and git-repack(1) does not
-				// give us a way to make it do so. So we need to accept this
-				// behaviour for now.
-				looseObjects: 1,
+				// git-repack(1) in the `next` branch incorporates the unreachable object into the
+				// packfile.
+				looseObjects: testhelper.GitVersionOrNot[uint64]("next", 0, 1),
 			},
 		},
 		{
