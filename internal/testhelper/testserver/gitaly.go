@@ -272,30 +272,31 @@ func registerHealthServerIfNotRegistered(srv *grpc.Server) {
 }
 
 type gitalyServerDeps struct {
-	disablePraefect     bool
-	logger              log.Logger
-	conns               *client.Pool
-	locator             storage.Locator
-	txMgr               transaction.Manager
-	hookMgr             hook.Manager
-	gitlabClient        gitlab.Client
-	gitCmdFactory       gitcmd.CommandFactory
-	backchannelReg      *backchannel.Registry
-	catfileCache        catfile.Cache
-	diskCache           cache.Cache
-	packObjectsCache    streamcache.Cache
-	packObjectsLimiter  limiter.Limiter
-	limitHandler        *limithandler.LimiterMiddleware
-	repositoryCounter   *counter.RepositoryCounter
-	updaterWithHooks    *updateref.UpdaterWithHooks
-	housekeepingManager housekeepingmgr.Manager
-	backupSink          *backup.Sink
-	backupLocator       backup.Locator
-	signingKey          string
-	transactionRegistry *storagemgr.TransactionRegistry
-	procReceiveRegistry *hook.ProcReceiveRegistry
-	bundleURIManager    *bundleuri.GenerationManager
-	localRepoFactory    localrepo.Factory
+	disablePraefect       bool
+	logger                log.Logger
+	conns                 *client.Pool
+	locator               storage.Locator
+	txMgr                 transaction.Manager
+	hookMgr               hook.Manager
+	gitlabClient          gitlab.Client
+	gitCmdFactory         gitcmd.CommandFactory
+	backchannelReg        *backchannel.Registry
+	catfileCache          catfile.Cache
+	diskCache             cache.Cache
+	packObjectsCache      streamcache.Cache
+	packObjectsLimiter    limiter.Limiter
+	limitHandler          *limithandler.LimiterMiddleware
+	repositoryCounter     *counter.RepositoryCounter
+	updaterWithHooks      *updateref.UpdaterWithHooks
+	housekeepingManager   housekeepingmgr.Manager
+	backupSink            *backup.Sink
+	backupLocator         backup.Locator
+	signingKey            string
+	transactionRegistry   *storagemgr.TransactionRegistry
+	procReceiveRegistry   *hook.ProcReceiveRegistry
+	bundleURIManager      *bundleuri.GenerationManager
+	localRepoFactory      localrepo.Factory
+	MigrationStateManager migration.StateManager
 }
 
 func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Context, cfg config.Cfg) *service.Dependencies {
@@ -337,6 +338,13 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		gsd.procReceiveRegistry = hook.NewProcReceiveRegistry()
 	}
 
+	migrations := []migration.Migration{}
+	dryRunMigrations := []migration.Migration{}
+
+	if gsd.MigrationStateManager == nil {
+		gsd.MigrationStateManager = migration.NewStateManager(migrations)
+	}
+
 	var node storage.Node
 	if testhelper.IsWALEnabled() {
 		dbMgr, err := databasemgr.NewDBManager(
@@ -362,6 +370,8 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 						nil,
 					),
 					migration.NewMetrics(),
+					migrations,
+					dryRunMigrations,
 				),
 				storagemgr.DefaultMaxInactivePartitions,
 				storagemgr.NewMetrics(cfg.Prometheus),
@@ -458,6 +468,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		ProcReceiveRegistry:    gsd.procReceiveRegistry,
 		BundleURIManager:       gsd.bundleURIManager,
 		LocalRepositoryFactory: gsd.localRepoFactory,
+		MigrationStateManager:  gsd.MigrationStateManager,
 	}
 }
 

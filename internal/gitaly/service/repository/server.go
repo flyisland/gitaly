@@ -15,6 +15,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -25,43 +26,45 @@ import (
 
 type server struct {
 	gitalypb.UnimplementedRepositoryServiceServer
-	logger              log.Logger
-	conns               *client.Pool
-	locator             storage.Locator
-	txManager           transaction.Manager
-	node                storage.Node
-	gitCmdFactory       gitcmd.CommandFactory
-	cfg                 config.Cfg
-	loggingCfg          config.Logging
-	catfileCache        catfile.Cache
-	housekeepingManager housekeepingmgr.Manager
-	backupSink          *backup.Sink
-	backupLocator       backup.Locator
-	repositoryCounter   *counter.RepositoryCounter
-	localRepoFactory    localrepo.Factory
-	licenseCache        *unarycache.Cache[git.ObjectID, *gitalypb.FindLicenseResponse]
-	bundleURIManager    *bundleuri.GenerationManager
+	logger                log.Logger
+	conns                 *client.Pool
+	locator               storage.Locator
+	txManager             transaction.Manager
+	node                  storage.Node
+	gitCmdFactory         gitcmd.CommandFactory
+	cfg                   config.Cfg
+	loggingCfg            config.Logging
+	catfileCache          catfile.Cache
+	housekeepingManager   housekeepingmgr.Manager
+	backupSink            *backup.Sink
+	backupLocator         backup.Locator
+	repositoryCounter     *counter.RepositoryCounter
+	localRepoFactory      localrepo.Factory
+	licenseCache          *unarycache.Cache[git.ObjectID, *gitalypb.FindLicenseResponse]
+	bundleURIManager      *bundleuri.GenerationManager
+	migrationStateManager migration.StateManager
 }
 
 // NewServer creates a new instance of a gRPC repo server
 func NewServer(deps *service.Dependencies) gitalypb.RepositoryServiceServer {
 	return &server{
-		logger:              deps.GetLogger(),
-		locator:             deps.GetLocator(),
-		txManager:           deps.GetTxManager(),
-		node:                deps.GetNode(),
-		gitCmdFactory:       deps.GetGitCmdFactory(),
-		conns:               deps.GetConnsPool(),
-		cfg:                 deps.GetCfg(),
-		loggingCfg:          deps.GetCfg().Logging,
-		catfileCache:        deps.GetCatfileCache(),
-		housekeepingManager: deps.GetHousekeepingManager(),
-		backupSink:          deps.GetBackupSink(),
-		backupLocator:       deps.GetBackupLocator(),
-		repositoryCounter:   deps.GetRepositoryCounter(),
-		localRepoFactory:    deps.GetRepositoryFactory(),
-		licenseCache:        newLicenseCache(),
-		bundleURIManager:    deps.GetBundleURIManager(),
+		logger:                deps.GetLogger(),
+		locator:               deps.GetLocator(),
+		txManager:             deps.GetTxManager(),
+		node:                  deps.GetNode(),
+		gitCmdFactory:         deps.GetGitCmdFactory(),
+		conns:                 deps.GetConnsPool(),
+		cfg:                   deps.GetCfg(),
+		loggingCfg:            deps.GetCfg().Logging,
+		catfileCache:          deps.GetCatfileCache(),
+		housekeepingManager:   deps.GetHousekeepingManager(),
+		backupSink:            deps.GetBackupSink(),
+		backupLocator:         deps.GetBackupLocator(),
+		repositoryCounter:     deps.GetRepositoryCounter(),
+		localRepoFactory:      deps.GetRepositoryFactory(),
+		licenseCache:          newLicenseCache(),
+		bundleURIManager:      deps.GetBundleURIManager(),
+		migrationStateManager: deps.GetMigrationStateManager(),
 	}
 }
 

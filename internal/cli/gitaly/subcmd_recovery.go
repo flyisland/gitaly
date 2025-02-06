@@ -490,6 +490,8 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 					nil,
 				),
 				migration.NewMetrics(),
+				[]migration.Migration{},
+				[]migration.Migration{},
 			),
 			1,
 			storagemgr.NewMetrics(cfg.Prometheus),

@@ -30,24 +30,24 @@ func TestMigrationManager_Begin(t *testing.T) {
 	disabledFn := func(context.Context) bool { return true }
 	migrationErr := errors.New("migration error")
 
-	errFn := func(context.Context, storage.Transaction) error { return migrationErr }
-	recordingFn := func(id uint64) func(_ context.Context, txn storage.Transaction) error {
-		return func(_ context.Context, txn storage.Transaction) error {
+	errFn := func(context.Context, storage.Transaction, string, string) error { return migrationErr }
+	recordingFn := func(id uint64) func(context.Context, storage.Transaction, string, string) error {
+		return func(_ context.Context, txn storage.Transaction, _ string, _ string) error {
 			return txn.KV().Set(uint64ToBytes(id), nil)
 		}
 	}
 
-	migrationFn := func(id uint64) migration {
-		return migration{
-			id: id,
-			fn: recordingFn(id),
+	migrationFn := func(id uint64) Migration {
+		return Migration{
+			ID: id,
+			Fn: recordingFn(id),
 		}
 	}
 
 	for _, tc := range []struct {
 		desc                 string
-		migrations           []migration
-		startingMigration    *migration
+		migrations           []Migration
+		startingMigration    *Migration
 		noRepository         bool
 		expectedState        *migrationState
 		expectedMigrationIDs map[uint64]struct{}
@@ -62,7 +62,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 		},
 		{
 			desc:                 "repository does not exist",
-			migrations:           []migration{migrationFn(1)},
+			migrations:           []Migration{migrationFn(1)},
 			startingMigration:    nil,
 			noRepository:         true,
 			expectedState:        &migrationState{},
@@ -70,7 +70,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 		},
 		{
 			desc:                 "no migration key in preexisting repository",
-			migrations:           []migration{migrationFn(1), migrationFn(2)},
+			migrations:           []Migration{migrationFn(1), migrationFn(2)},
 			startingMigration:    nil,
 			noRepository:         false,
 			expectedState:        &migrationState{},
@@ -79,40 +79,40 @@ func TestMigrationManager_Begin(t *testing.T) {
 		},
 		{
 			desc:                 "no outstanding migrations",
-			migrations:           []migration{migrationFn(1), migrationFn(2)},
-			startingMigration:    &migration{id: 2},
+			migrations:           []Migration{migrationFn(1), migrationFn(2)},
+			startingMigration:    &Migration{ID: 2},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: nil,
 			expectedLastID:       2,
 		},
 		{
 			desc:                 "single outstanding migration applied",
-			migrations:           []migration{migrationFn(1), migrationFn(2)},
-			startingMigration:    &migration{id: 1},
+			migrations:           []Migration{migrationFn(1), migrationFn(2)},
+			startingMigration:    &Migration{ID: 1},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{2: {}},
 			expectedLastID:       2,
 		},
 		{
 			desc:                 "multiple outstanding migration applied",
-			migrations:           []migration{migrationFn(1), migrationFn(2), migrationFn(3)},
-			startingMigration:    &migration{id: 1},
+			migrations:           []Migration{migrationFn(1), migrationFn(2), migrationFn(3)},
+			startingMigration:    &Migration{ID: 1},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{2: {}, 3: {}},
 			expectedLastID:       3,
 		},
 		{
 			desc:                 "disabled migration",
-			migrations:           []migration{migrationFn(1), {id: 2, isDisabled: disabledFn, fn: recordingFn(2)}, migrationFn(3)},
-			startingMigration:    &migration{id: 0},
+			migrations:           []Migration{migrationFn(1), {ID: 2, IsDisabled: disabledFn, Fn: recordingFn(2)}, migrationFn(3)},
+			startingMigration:    &Migration{ID: 0},
 			expectedState:        &migrationState{},
 			expectedMigrationIDs: map[uint64]struct{}{1: {}},
 			expectedLastID:       1,
 		},
 		{
 			desc:              "error returned during migrations",
-			migrations:        []migration{migrationFn(1), {id: 2, fn: errFn}, migrationFn(3)},
-			startingMigration: &migration{id: 1},
+			migrations:        []Migration{migrationFn(1), {ID: 2, Fn: errFn}, migrationFn(3)},
+			startingMigration: &Migration{ID: 1},
 			expectedState: &migrationState{
 				err: migrationErr,
 			},
@@ -122,8 +122,8 @@ func TestMigrationManager_Begin(t *testing.T) {
 		},
 		{
 			desc:              "starting migration key invalid",
-			migrations:        []migration{migrationFn(1), migrationFn(2), migrationFn(3)},
-			startingMigration: &migration{id: 4},
+			migrations:        []Migration{migrationFn(1), migrationFn(2), migrationFn(3)},
+			startingMigration: &Migration{ID: 4},
 			expectedState: &migrationState{
 				err: errors.New("repository has invalid migration key: 4"),
 			},
@@ -194,7 +194,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 				})
 				require.NoError(t, err)
 
-				require.NoError(t, txn.KV().Set(migrationKey(relativePath), uint64ToBytes(tc.startingMigration.id)))
+				require.NoError(t, txn.KV().Set(migrationKey(relativePath), uint64ToBytes(tc.startingMigration.ID)))
 				require.NoError(t, txn.Commit(ctx))
 			}
 
@@ -210,8 +210,8 @@ func TestMigrationManager_Begin(t *testing.T) {
 				// In this test, each executed migration records its ID in the KV store. Validate
 				// that the expected migrations were performed.
 				for _, m := range tc.migrations {
-					_, expected := tc.expectedMigrationIDs[m.id]
-					if _, err := txn.KV().Get(uint64ToBytes(m.id)); err != nil {
+					_, expected := tc.expectedMigrationIDs[m.ID]
+					if _, err := txn.KV().Get(uint64ToBytes(m.ID)); err != nil {
 						require.ErrorIs(t, err, badger.ErrKeyNotFound)
 						require.False(t, expected)
 					} else {
@@ -249,7 +249,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 func TestMigrationManager_Concurrent(t *testing.T) {
 	t.Parallel()
 	ctx := testhelper.Context(t)
-	noopFn := func(context.Context, storage.Transaction) error { return nil }
+	noopFn := func(context.Context, storage.Transaction, string, string) error { return nil }
 
 	setupMockPartition := func(firstTransactionFn func(context.Context) error) *mockPartition {
 		kvFn := func() keyvalue.ReadWriter {
@@ -333,7 +333,7 @@ func TestMigrationManager_Concurrent(t *testing.T) {
 				Partition:       mockPartition,
 				logger:          testhelper.NewLogger(t),
 				metrics:         NewMetrics(),
-				migrations:      []migration{{id: 1, fn: noopFn}},
+				migrations:      []Migration{{ID: 1, Fn: noopFn}},
 				migrationStates: map[string]*migrationState{},
 			}
 
@@ -423,7 +423,8 @@ func TestMigrationManager_Context(t *testing.T) {
 		},
 		testhelper.NewLogger(t),
 		NewMetrics(),
-		[]migration{{id: 1, fn: func(ctx context.Context, tx storage.Transaction) error {
+		"sample-storage",
+		[]Migration{{ID: 1, Fn: func(ctx context.Context, tx storage.Transaction, _ string, _ string) error {
 			// Canceling the context of the request that started this migraiton
 			// should not lead to canceling the migration.
 			requestCancel()

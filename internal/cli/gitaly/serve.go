@@ -375,6 +375,9 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 	migrationMetrics := migration.NewMetrics()
 	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics, migrationMetrics)
 
+	migrations := []migration.Migration{}
+	dryRunMigrations := []migration.Migration{}
+
 	var txMiddleware server.TransactionMiddleware
 	var node storage.Node
 	if cfg.Transactions.Enabled {
@@ -420,6 +423,8 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 						logConsumer,
 					),
 					migrationMetrics,
+					migrations,
+					dryRunMigrations,
 				),
 				2,
 				storageMetrics,
@@ -612,6 +617,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			BackupLocator:          backupLocator,
 			LocalRepositoryFactory: localrepoFactory,
 			BundleURIManager:       bundleURIManager,
+			MigrationStateManager:  migration.NewStateManager(migrations),
 		})
 		b.RegisterStarter(starter.New(c, srv, logger))
 	}

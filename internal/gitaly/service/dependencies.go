@@ -15,6 +15,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
@@ -52,6 +53,7 @@ type Dependencies struct {
 	ProcReceiveRegistry    *gitalyhook.ProcReceiveRegistry
 	BundleURIManager       *bundleuri.GenerationManager
 	LocalRepositoryFactory localrepo.Factory
+	MigrationStateManager  migration.StateManager
 }
 
 // GetLogger returns the logger.
@@ -174,7 +176,12 @@ func (dc *Dependencies) GetRepositoryFactory() localrepo.Factory {
 	return dc.LocalRepositoryFactory
 }
 
-// GetBundleURIManager returns the RepositoryFactory
+// GetBundleURIManager returns the bundleuri.GenerationManager
 func (dc *Dependencies) GetBundleURIManager() *bundleuri.GenerationManager {
 	return dc.BundleURIManager
+}
+
+// GetMigrationStateManager returns the migration.StateManager
+func (dc *Dependencies) GetMigrationStateManager() migration.StateManager {
+	return dc.MigrationStateManager
 }

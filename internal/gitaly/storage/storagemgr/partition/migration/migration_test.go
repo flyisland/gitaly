@@ -10,6 +10,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
 func TestMigration_Run(t *testing.T) {
@@ -20,28 +21,28 @@ func TestMigration_Run(t *testing.T) {
 
 	for _, tc := range []struct {
 		desc         string
-		migration    migration
+		migration    Migration
 		relativePath string
 		expectedKV   map[string][]byte
 		expectedErr  error
 	}{
 		{
 			desc:        "migration misconfigured",
-			migration:   migration{fn: nil},
+			migration:   Migration{Fn: nil},
 			expectedErr: errInvalidMigration,
 		},
 		{
 			desc: "migration returns error",
-			migration: migration{fn: func(context.Context, storage.Transaction) error {
+			migration: Migration{Fn: func(context.Context, storage.Transaction, string, string) error {
 				return migrationErr
 			}},
 			expectedErr: fmt.Errorf("migrate repository: %w", migrationErr),
 		},
 		{
 			desc: "migration modifies transaction",
-			migration: migration{
-				id: 1,
-				fn: func(_ context.Context, txn storage.Transaction) error {
+			migration: Migration{
+				ID: 1,
+				Fn: func(_ context.Context, txn storage.Transaction, _ string, _ string) error {
 					return txn.KV().Set([]byte("foo"), []byte("bar"))
 				},
 			},
@@ -66,7 +67,7 @@ func TestMigration_Run(t *testing.T) {
 				},
 			}
 
-			err := tc.migration.run(ctx, txn, "foobar")
+			err := tc.migration.run(ctx, txn, "sample-storage", "foobar")
 			if tc.expectedErr != nil {
 				require.Equal(t, tc.expectedErr, err)
 				return
@@ -83,6 +84,7 @@ type mockTransaction struct {
 	commitFn   func(context.Context) error
 	rollbackFn func(context.Context) error
 	rootFn     func() string
+	fs         storage.FS
 }
 
 func (m mockTransaction) KV() keyvalue.ReadWriter {
@@ -111,6 +113,14 @@ func (m mockTransaction) Root() string {
 		return m.rootFn()
 	}
 	return ""
+}
+
+func (m mockTransaction) FS() storage.FS {
+	return m.fs
+}
+
+func (m mockTransaction) RewriteRepository(repo *gitalypb.Repository) *gitalypb.Repository {
+	return repo
 }
 
 type mockReadWriter struct {
