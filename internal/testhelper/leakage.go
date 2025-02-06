@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"reflect"
 	"strings"
 	"syscall"
 	"time"
@@ -84,8 +85,8 @@ func mustFindNoRunningChildProcess() error {
 
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
-		//nolint:gitaly-linters,errorlint
-		return fmt.Errorf("expected ExitError, got %T", err)
+		//nolint:gitaly-linters
+		return fmt.Errorf("expected ExitError, got %s", reflect.TypeOf(err).String())
 	}
 
 	if exitErr.ExitCode() == 1 {
