@@ -16,7 +16,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
-func newReftableMigration(id uint64, localRepoFactory localrepo.Factory) Migration {
+// NewReftableMigration provides a new reftable migration.
+func NewReftableMigration(id uint64, localRepoFactory localrepo.Factory) Migration {
 	return Migration{
 		ID:   id,
 		Name: "reftable_migration",

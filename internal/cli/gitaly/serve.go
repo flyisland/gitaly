@@ -376,7 +376,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics, migrationMetrics)
 
 	migrations := []migration.Migration{}
-	dryRunMigrations := []migration.Migration{}
+	dryRunMigrations := []migration.Migration{migration.NewReftableMigration(99, localrepoFactory)}
 
 	var txMiddleware server.TransactionMiddleware
 	var node storage.Node

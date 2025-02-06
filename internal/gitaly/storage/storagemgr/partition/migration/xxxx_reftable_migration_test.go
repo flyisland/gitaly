@@ -161,7 +161,7 @@ func testReftableMigration(t *testing.T, ctx context.Context) {
 				logger,
 				NewMetrics(),
 				storageName,
-				[]Migration{newReftableMigration(1, localRepoFactory)},
+				[]Migration{NewReftableMigration(1, localRepoFactory)},
 			)
 
 			done := make(chan struct{})
