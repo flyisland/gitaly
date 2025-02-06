@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
@@ -155,4 +157,12 @@ func (n *PackfileNegotiation) UpdateMetrics(metrics *prometheus.CounterVec) {
 		metrics.WithLabelValues("have").Inc()
 	}
 	metrics.WithLabelValues("total").Inc()
+}
+
+// UpdateLogFields add fields on the logger instance to provide
+// details about the command that was used during packfile negotiation.
+func (n *PackfileNegotiation) UpdateLogFields(ctx context.Context) {
+	if n.Command != "" {
+		log.CustomFieldsFromContext(ctx).RecordMetadata("command", n.Command)
+	}
 }

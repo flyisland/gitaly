@@ -570,6 +570,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		if err != nil {
 			return fmt.Errorf("error creating bundle manager: %w", err)
 		}
+		prometheus.MustRegister(bundleURIManager)
 	}
 
 	for _, c := range []starter.Config{
