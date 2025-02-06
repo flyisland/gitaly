@@ -80,6 +80,7 @@ ifdef FIPS_MODE
     # requested. Note that we explicitly don't do the same for SHA1: we
     # instead use SHA1DC to protect users against the SHAttered attack.
     GIT_FIPS_BUILD_OPTIONS := OPENSSL_SHA256=YesPlease
+    GIT_FIPS_MESON_BUILD_OPTIONS := -Dsha256_backend=openssl
 
     # Go 1.19+ now requires GOEXPERIMENT=boringcrypto for FIPS compilation.
     # See https://github.com/golang/go/issues/51940 for more details.
@@ -181,6 +182,19 @@ ifeq ($(origin GIT_BUILD_OPTIONS),undefined)
     ifeq ($(shell pkg-config --exists ${PCRE_PC} && echo exists),exists)
 	    GIT_BUILD_OPTIONS += LIBPCREDIR=$(shell pkg-config ${PCRE_PC} --variable prefix)
     endif
+    ## Build options used for Git when building with Meson.
+    GIT_MESON_BUILD_OPTIONS ?=
+    GIT_MESON_BUILD_OPTIONS += -Dbuildtype=debugoptimized
+    GIT_MESON_BUILD_OPTIONS += -Dcurl=enabled
+    GIT_MESON_BUILD_OPTIONS += -Dexpat=disabled
+    GIT_MESON_BUILD_OPTIONS += -Dgettext=disabled
+    GIT_MESON_BUILD_OPTIONS += -Dgitweb=disabled
+    GIT_MESON_BUILD_OPTIONS += -Diconv=enabled
+    GIT_MESON_BUILD_OPTIONS += -Dpcre2=enabled
+    GIT_MESON_BUILD_OPTIONS += -Dperl=disabled
+    GIT_MESON_BUILD_OPTIONS += -Dpython=disabled
+    GIT_MESON_BUILD_OPTIONS += -Dtests=false
+    GIT_MESON_BUILD_OPTIONS += -Dwrap_mode=nofallback
 endif
 
 ifdef GIT_APPEND_BUILD_OPTIONS
@@ -189,6 +203,7 @@ endif
 
 ifdef GIT_FIPS_BUILD_OPTIONS
 	GIT_BUILD_OPTIONS += ${GIT_FIPS_BUILD_OPTIONS}
+	GIT_MESON_BUILD_OPTIONS += ${GIT_FIPS_MESON_BUILD_OPTIONS}
 endif
 
 # git-filter-repo target
@@ -608,11 +623,18 @@ ${BUILD_DIR}/bin/gitaly-%-v2.48: override GIT_VERSION = ${GIT_VERSION_2_48}
 # Use non-collision-detecting SHA1 implementation in non-cryptographic scenarios
 # to improve performance. For now, this is only enabled for Git version 2.48 on
 # Linux platforms.
-ifeq ($(OS), Linux)
+ifeq ($(OS),Linux)
+${BUILD_DIR}/bin/gitaly-%-v2.48: override GIT_MESON_BUILD_OPTIONS += -Dsha1_unsafe_backend=openssl
 ${BUILD_DIR}/bin/gitaly-%-v2.48: override GIT_BUILD_OPTIONS += OPENSSL_SHA1_UNSAFE=YesPlease
 endif
+
+ifdef USE_MESON
+${BUILD_DIR}/bin/gitaly-%-v2.48: ${DEPENDENCY_DIR}/git-v2.48/build/% | ${BUILD_DIR}/bin
+	${Q}install $< $@
+else
 ${BUILD_DIR}/bin/gitaly-%-v2.48: ${DEPENDENCY_DIR}/git-v2.48/% | ${BUILD_DIR}/bin
 	${Q}install $< $@
+endif
 
 # clear-go-build-cache-if-needed cleans the Go build cache if it exceeds the maximum size as
 # configured in GOCACHE_MAX_SIZE_KB.
@@ -634,7 +656,7 @@ ${GITALY_EXECUTABLES}: ${BUILD_DIR}/bin/%: clear-go-build-cache-if-needed .FORCE
 # these targets.
 .PHONY: dependency-version
 ${DEPENDENCY_DIR}/git-%.version: dependency-version | ${DEPENDENCY_DIR}
-	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${GIT_VERSION} ${GIT_BUILD_OPTIONS}" ] || >$@ echo -n "${GIT_VERSION} ${GIT_BUILD_OPTIONS}"
+	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${GIT_VERSION} ${GIT_BUILD_OPTIONS} ${GIT_MESON_BUILD_OPTIONS} ${USE_MESON}" ] || >$@ echo -n "${GIT_VERSION} ${GIT_BUILD_OPTIONS} ${GIT_MESON_BUILD_OPTIONS} ${USE_MESON}"
 ${DEPENDENCY_DIR}/protoc.version: dependency-version | ${DEPENDENCY_DIR}
 	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${PROTOC_VERSION} ${PROTOC_BUILD_OPTIONS}" ] || >$@ echo -n "${PROTOC_VERSION} ${PROTOC_BUILD_OPTIONS}"
 ${DEPENDENCY_DIR}/git-filter-repo.version: dependency-version | ${DEPENDENCY_DIR}
@@ -664,6 +686,12 @@ endif
 
 $(patsubst %,${DEPENDENCY_DIR}/git-\%/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
 	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${@D}" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} ${GIT_EXECUTABLES}
+	${Q}touch $@
+
+$(patsubst %,${DEPENDENCY_DIR}/git-\%/build/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
+	${Q}rm -rf "$(dir ${@D})"/build
+	${Q}meson setup "$(dir ${@D})" "$(dir ${@D})"/build -Dprefix="${GIT_PREFIX}" ${GIT_MESON_BUILD_OPTIONS}
+	${Q}meson compile -C "$(dir ${@D})/build" $(patsubst %,%:executable,${GIT_EXECUTABLES})
 	${Q}touch $@
 
 ${INSTALL_DEST_DIR}/gitaly-%: ${BUILD_DIR}/bin/gitaly-%
