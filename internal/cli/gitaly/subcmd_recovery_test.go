@@ -44,8 +44,7 @@ type setupOptions struct {
 
 type setupData struct {
 	storageName     string
-	partitionID     storage.PartitionID
-	all             bool
+	args            []string
 	expectedErr     error
 	expectedOutputs []string
 	expectedLSN     map[storage.PartitionID]storage.LSN
@@ -73,7 +72,7 @@ func TestRecoveryCLI_status(t *testing.T) {
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				return setupData{
 					storageName:     opts.cfg.Storages[0].Name,
-					partitionID:     0,
+					args:            []string{"-partition", storage.PartitionID(0).String()},
 					expectedErr:     errors.New("exit status 1"),
 					expectedOutputs: []string{fmt.Sprintf("invalid partition ID %s\n", storage.PartitionID(0))},
 				}
@@ -84,7 +83,7 @@ func TestRecoveryCLI_status(t *testing.T) {
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				return setupData{
 					storageName: opts.cfg.Storages[0].Name,
-					partitionID: 42,
+					args:        []string{"-partition", storage.PartitionID(42).String()},
 					// TODO: This currently will create arbitrary partitions.
 					// It should return an error instead.
 					// https://gitlab.com/gitlab-org/gitaly/-/issues/6478
@@ -99,6 +98,52 @@ recovery status completed: 1 succeeded, 0 failed`,
 			},
 		},
 		{
+			desc: "not all necessary flags provided",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				repo, err := createRepository(t, ctx, opts)
+				require.NoError(t, err)
+
+				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): "",
+				})
+
+				return setupData{
+					storageName: repo.GetStorageName(),
+					args:        []string{},
+					expectedErr: errors.New("exit status 1"),
+					expectedOutputs: []string{
+						"this command requires one of --all, --partition or --repository flags",
+					},
+				}
+			},
+		},
+		{
+			desc: "both partition ID and relative path provided",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				repo, err := createRepository(t, ctx, opts)
+				require.NoError(t, err)
+
+				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): "",
+				})
+
+				return setupData{
+					storageName: repo.GetStorageName(),
+					args:        []string{"-partition", storage.PartitionID(2).String(), "-repository", repo.GetRelativePath()},
+					expectedErr: errors.New("exit status 1"),
+					expectedOutputs: []string{
+						"--partition and --repository flags can not be provided at the same time",
+					},
+				}
+			},
+		},
+		{
 			desc: "success, no backups",
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				repo, err := createRepository(t, ctx, opts)
@@ -106,7 +151,7 @@ recovery status completed: 1 succeeded, 0 failed`,
 
 				return setupData{
 					storageName: repo.GetStorageName(),
-					partitionID: 2,
+					args:        []string{"-partition", storage.PartitionID(2).String()},
 					expectedOutputs: []string{fmt.Sprintf(`---------------------------------------------
 Partition ID: %s - Applied LSN: %s
 Relative paths:
@@ -135,7 +180,37 @@ recovery status completed: 1 succeeded, 0 failed`,
 
 				return setupData{
 					storageName: repo.GetStorageName(),
-					partitionID: 2,
+					args:        []string{"-partition", storage.PartitionID(2).String()},
+					expectedOutputs: []string{fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
+Relative paths:
+ - %s
+Available WAL backup entries: up to LSN: %s
+recovery status completed: 1 succeeded, 0 failed`,
+						storage.PartitionID(2),
+						storage.LSN(1),
+						repo.GetRelativePath(),
+						storage.LSN(3),
+					)},
+				}
+			},
+		},
+		{
+			desc: "success using relative path",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				repo, err := createRepository(t, ctx, opts)
+				require.NoError(t, err)
+
+				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): "",
+				})
+
+				return setupData{
+					storageName: repo.GetStorageName(),
+					args:        []string{"-repository", repo.GetRelativePath()},
 					expectedOutputs: []string{fmt.Sprintf(`---------------------------------------------
 Partition ID: %s - Applied LSN: %s
 Relative paths:
@@ -169,7 +244,7 @@ recovery status completed: 1 succeeded, 0 failed`,
 
 				return setupData{
 					storageName: repo.GetStorageName(),
-					partitionID: 2,
+					args:        []string{"-partition", storage.PartitionID(2).String()},
 					expectedOutputs: []string{fmt.Sprintf(`---------------------------------------------
 Partition ID: %s - Applied LSN: %s
 Relative paths:
@@ -210,7 +285,7 @@ recovery status completed: 1 succeeded, 0 failed`,
 
 				return setupData{
 					storageName: opts.cfg.Storages[0].Name,
-					all:         true,
+					args:        []string{"-all", "-parallel", "2"},
 					expectedOutputs: []string{
 						fmt.Sprintf(`---------------------------------------------
 Partition ID: %s - Applied LSN: %s
@@ -287,13 +362,7 @@ Available WAL backup entries: up to LSN: %s`,
 			dbMgr.Close()
 
 			args := []string{"recovery", "-config", configPath, "status", "-storage", data.storageName}
-			if data.all {
-				args = append(args, "-all", "-parallel", "2")
-			} else {
-				args = append(args, "-partition")
-				args = append(args, data.partitionID.String())
-			}
-
+			args = append(args, data.args...)
 			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
 			output, err := cmd.CombinedOutput()
 			testhelper.RequireGrpcError(t, data.expectedErr, err)
@@ -328,7 +397,7 @@ func TestRecoveryCLI_replay(t *testing.T) {
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				return setupData{
 					storageName:     opts.cfg.Storages[0].Name,
-					partitionID:     0,
+					args:            []string{"-partition", storage.PartitionID(0).String()},
 					expectedErr:     errors.New("exit status 1"),
 					expectedOutputs: []string{fmt.Sprintf("invalid partition ID %s\n", storage.PartitionID(0))},
 					expectedLSN:     nil,
@@ -340,7 +409,7 @@ func TestRecoveryCLI_replay(t *testing.T) {
 			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
 				return setupData{
 					storageName: opts.cfg.Storages[0].Name,
-					partitionID: 42,
+					args:        []string{"-partition", storage.PartitionID(42).String()},
 					// TODO: This currently will create arbitrary partitions.
 					// It should return an error instead.
 					// https://gitlab.com/gitlab-org/gitaly/-/issues/6478
@@ -367,7 +436,7 @@ recovery replay completed: 1 succeeded, 0 failed`,
 
 				return setupData{
 					storageName: repo.GetStorageName(),
-					partitionID: 2,
+					args:        []string{"-partition", storage.PartitionID(2).String()},
 					expectedOutputs: []string{
 						"started processing partition 2",
 						fmt.Sprintf(`---------------------------------------------
@@ -398,7 +467,38 @@ recovery replay completed: 1 succeeded, 0 failed`,
 
 				return setupData{
 					storageName: repo.GetStorageName(),
-					partitionID: 2,
+					args:        []string{"-partition", storage.PartitionID(2).String()},
+					expectedOutputs: []string{
+						"started processing partition 2",
+						fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
+Successfully processed log entries up to LSN: %s
+recovery replay completed: 1 succeeded, 0 failed`,
+							storage.PartitionID(2),
+							storage.LSN(1),
+							storage.LSN(3),
+						),
+					},
+					expectedLSN: map[storage.PartitionID]storage.LSN{2: 3},
+				}
+			},
+		},
+		{
+			desc: "success using relative path, contiguous backups",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				repo, err := createRepository(t, ctx, opts)
+				require.NoError(t, err)
+
+				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
+				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(1)),
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(2)),
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): createValidLogEntryArchive(t, repo.GetRelativePath(), storage.LSN(3)),
+				})
+
+				return setupData{
+					storageName: repo.GetStorageName(),
+					args:        []string{"-repository", repo.GetRelativePath()},
 					expectedOutputs: []string{
 						"started processing partition 2",
 						fmt.Sprintf(`---------------------------------------------
@@ -429,7 +529,7 @@ recovery replay completed: 1 succeeded, 0 failed`,
 
 				return setupData{
 					storageName: repo.GetStorageName(),
-					partitionID: 2,
+					args:        []string{"-partition", storage.PartitionID(2).String()},
 					expectedErr: errors.New("exit status 1"),
 					expectedOutputs: []string{
 						"started processing partition 2",
@@ -456,7 +556,7 @@ recovery replay completed: 1 succeeded, 0 failed`,
 
 				return setupData{
 					storageName: repo.GetStorageName(),
-					partitionID: 2,
+					args:        []string{"-partition", storage.PartitionID(2).String()},
 					expectedErr: errors.New("exit status 1"),
 					expectedOutputs: []string{
 						"started processing partition 2",
@@ -491,7 +591,7 @@ recovery replay completed: 1 succeeded, 0 failed`,
 				})
 				return setupData{
 					storageName: opts.cfg.Storages[0].Name,
-					all:         true,
+					args:        []string{"-all", "-parallel", "2"},
 					expectedOutputs: []string{
 						"started processing partition 2",
 						fmt.Sprintf(`---------------------------------------------
@@ -570,12 +670,7 @@ Successfully processed log entries up to LSN: %s`,
 			dbMgr.Close()
 
 			args := []string{"recovery", "-config", configPath, "replay", "-storage", data.storageName}
-			if data.all {
-				args = append(args, "-all", "-parallel", "2")
-			} else {
-				args = append(args, "-partition")
-				args = append(args, data.partitionID.String())
-			}
+			args = append(args, data.args...)
 			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
 
 			output, err := cmd.CombinedOutput()
