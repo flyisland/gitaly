@@ -26,6 +26,9 @@ var (
 		"GO-2025-3408": {
 			GitLabIssueURL: "https://gitlab.com/gitlab-org/gitaly/-/issues/6613",
 		},
+		"GO-2025-3447": {
+			GitLabIssueURL: "https://gitlab.com/gitlab-org/gitaly/-/issues/6625",
+		},
 	}
 
 	outputPrologue = `
