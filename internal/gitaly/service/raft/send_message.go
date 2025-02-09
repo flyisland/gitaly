@@ -40,7 +40,7 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 
 		raftMsg := req.GetMessage()
 
-		if err := s.transport.Receive(stream.Context(), req.GetAuthorityName(), req.GetPartitionId(), *raftMsg); err != nil {
+		if err := s.transport.Receive(stream.Context(), req.GetPartitionId(), req.GetAuthorityName(), *raftMsg); err != nil {
 			return structerr.NewInternal("receive error: %w", err)
 		}
 	}
