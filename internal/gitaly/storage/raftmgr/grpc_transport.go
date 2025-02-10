@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
@@ -41,6 +42,7 @@ type GrpcTransport struct {
 	routingTable   RoutingTable
 	registry       ManagerRegistry
 	connectionPool *client.Pool
+	mutex          sync.Mutex
 }
 
 // NewGrpcTransport creates a new GrpcTransport instance.
@@ -56,31 +58,104 @@ func NewGrpcTransport(logger log.Logger, cfg config.Cfg, routingTable RoutingTab
 
 // Send sends Raft messages to the appropriate nodes.
 func (t *GrpcTransport) Send(ctx context.Context, walDirForLSN func(storage.LSN) string, partitionID uint64, authorityName string, messages []raftpb.Message) error {
-	// Group by destination node
-	messagesByNode := make(map[uint64][]raftpb.Message)
-	for i := range messages {
-		nodeID := messages[i].To
-		messagesByNode[nodeID] = append(messagesByNode[nodeID], messages[i])
+	messagesByNode, err := t.prepareRaftMessageRequests(ctx, walDirForLSN, partitionID, authorityName, messages)
+	if err != nil {
+		return fmt.Errorf("preparing raft messages: %w", err)
 	}
 
 	g := &errgroup.Group{}
+	errCh := make(chan error, len(messagesByNode))
 
-	for nodeID, msgs := range messagesByNode {
+	for nodeID, reqs := range messagesByNode {
 		g.Go(func() error {
-			err := t.sendToNode(ctx, walDirForLSN, nodeID, authorityName, partitionID, msgs)
-			if err != nil {
+			if err := t.sendToNode(ctx, nodeID, reqs); err != nil {
+				errCh <- fmt.Errorf("node %d: %w", nodeID, err)
 				return err
 			}
 			return nil
 		})
 	}
 
-	return g.Wait()
+	_ = g.Wait() // we are collecting errors in the errCh
+	close(errCh)
+
+	var errs []error
+	for err := range errCh {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	return nil
 }
 
-func (t *GrpcTransport) sendToNode(ctx context.Context, walDirForLSN func(storage.LSN) string, nodeID uint64, authorityName string, partitionID uint64, msgs []raftpb.Message) error {
+func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, walDirForLSN func(storage.LSN) string, partitionID uint64, authorityName string, msgs []raftpb.Message) (map[uint64][]*gitalypb.RaftMessageRequest, error) {
+	requests := make([]*gitalypb.RaftMessageRequest, len(msgs))
+	g := &errgroup.Group{}
+
+	for i, msg := range msgs {
+		g.Go(func() error {
+			for j := range msg.Entries {
+				if msg.Entries[j].Type != raftpb.EntryNormal {
+					continue
+				}
+				var raftMsg gitalypb.RaftEntry
+				t.mutex.Lock()
+				err := proto.Unmarshal(msg.Entries[j].Data, &raftMsg)
+				t.mutex.Unlock()
+				if err != nil {
+					return fmt.Errorf("unmarshalling entry type: %w", err)
+				}
+
+				if raftMsg.GetData().GetPacked() == nil {
+					lsn := storage.LSN(msg.Entries[j].Index)
+					path := walDirForLSN(lsn)
+					if err := t.packLogData(ctx, lsn, &raftMsg, path); err != nil {
+						return fmt.Errorf("packing log data: %w", err)
+					}
+				}
+
+				data, err := proto.Marshal(&raftMsg)
+				if err != nil {
+					return fmt.Errorf("marshal entry: %w", err)
+				}
+
+				t.mutex.Lock()
+				msg.Entries[j].Data = data
+				t.mutex.Unlock()
+
+			}
+			requests[i] = &gitalypb.RaftMessageRequest{
+				ClusterId:     t.cfg.Raft.ClusterID,
+				AuthorityName: authorityName,
+				PartitionId:   partitionID,
+				Message:       &msg,
+			}
+
+			return nil
+		})
+	}
+
+	err := g.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	messagesByNode := make(map[uint64][]*gitalypb.RaftMessageRequest)
+	for _, req := range requests {
+		nodeID := req.GetMessage().To
+		messagesByNode[nodeID] = append(messagesByNode[nodeID], req)
+	}
+
+	return messagesByNode, nil
+}
+
+func (t *GrpcTransport) sendToNode(ctx context.Context, nodeID uint64, reqs []*gitalypb.RaftMessageRequest) error {
 	// For now, we are using a static routing table that contains mapping of nodeID to address. In future, the routing
 	// table can become dynamic so that storage addresses are propagated through gossiping.
+	authorityName, partitionID := reqs[0].GetAuthorityName(), reqs[0].GetPartitionId()
 	addr, err := t.routingTable.Translate(RoutingKey{
 		partitionKey: PartitionKey{
 			authorityName: authorityName,
@@ -104,41 +179,9 @@ func (t *GrpcTransport) sendToNode(ctx context.Context, walDirForLSN func(storag
 		return fmt.Errorf("create stream to node %d: %w", nodeID, err)
 	}
 
-	for _, msg := range msgs {
-		for i := range msg.Entries {
-			if msg.Entries[i].Type != raftpb.EntryNormal {
-				continue
-			}
-
-			var raftMsg gitalypb.RaftEntry
-			if err := proto.Unmarshal(msg.Entries[i].Data, &raftMsg); err != nil {
-				return fmt.Errorf("unmarshalling entry type: %w", err)
-			}
-
-			// Pack the log data if needed
-			if raftMsg.GetData().GetPacked() == nil {
-				lsn := storage.LSN(msg.Entries[i].Index)
-				path := walDirForLSN(lsn)
-				if err := t.packLogData(ctx, lsn, &raftMsg, path); err != nil {
-					return fmt.Errorf("packing log data: %w", err)
-				}
-
-				// Marshal back into entry
-				data, err := proto.Marshal(&raftMsg)
-				if err != nil {
-					return fmt.Errorf("marshal entry: %w", err)
-				}
-				msg.Entries[i].Data = data
-			}
-		}
-
-		if err := stream.Send(&gitalypb.RaftMessageRequest{
-			ClusterId:     t.cfg.Raft.ClusterID,
-			AuthorityName: authorityName,
-			PartitionId:   partitionID,
-			Message:       &msg,
-		}); err != nil {
-			return fmt.Errorf("send batch to node %d: %w", nodeID, err)
+	for _, req := range reqs {
+		if err := stream.Send(req); err != nil {
+			return fmt.Errorf("send request to node %d: %w", nodeID, err)
 		}
 	}
 
