@@ -30,7 +30,7 @@ type Transport interface {
 	// Send dispatches a batch of Raft messages. It returns an error if the sending fails. This function receives a
 	// context, the list of messages to send and a function that returns the path of WAL directory of a particular
 	// log entry. The implementation must respect input context's cancellation.
-	Send(ctx context.Context, walDirForLSN func(storage.LSN) string, partitionID uint64, authorityName string, messages []raftpb.Message) error
+	Send(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, messages []raftpb.Message) error
 	// Receive receives a Raft message and processes it.
 	Receive(ctx context.Context, partitionID uint64, authorityName string, raftMsg raftpb.Message) error
 }
@@ -57,8 +57,8 @@ func NewGrpcTransport(logger log.Logger, cfg config.Cfg, routingTable RoutingTab
 }
 
 // Send sends Raft messages to the appropriate nodes.
-func (t *GrpcTransport) Send(ctx context.Context, walDirForLSN func(storage.LSN) string, partitionID uint64, authorityName string, messages []raftpb.Message) error {
-	messagesByNode, err := t.prepareRaftMessageRequests(ctx, walDirForLSN, partitionID, authorityName, messages)
+func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, messages []raftpb.Message) error {
+	messagesByNode, err := t.prepareRaftMessageRequests(ctx, logReader, partitionID, authorityName, messages)
 	if err != nil {
 		return fmt.Errorf("preparing raft messages: %w", err)
 	}
@@ -91,7 +91,7 @@ func (t *GrpcTransport) Send(ctx context.Context, walDirForLSN func(storage.LSN)
 	return nil
 }
 
-func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, walDirForLSN func(storage.LSN) string, partitionID uint64, authorityName string, msgs []raftpb.Message) (map[uint64][]*gitalypb.RaftMessageRequest, error) {
+func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, msgs []raftpb.Message) (map[uint64][]*gitalypb.RaftMessageRequest, error) {
 	requests := make([]*gitalypb.RaftMessageRequest, len(msgs))
 	g := &errgroup.Group{}
 
@@ -111,7 +111,7 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, walDirFo
 
 				if raftMsg.GetData().GetPacked() == nil {
 					lsn := storage.LSN(msg.Entries[j].Index)
-					path := walDirForLSN(lsn)
+					path := logReader.GetEntryPath(lsn)
 					if err := t.packLogData(ctx, lsn, &raftMsg, path); err != nil {
 						return fmt.Errorf("packing log data: %w", err)
 					}

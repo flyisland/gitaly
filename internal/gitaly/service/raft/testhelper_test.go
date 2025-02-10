@@ -27,6 +27,6 @@ func (m *mockTransport) Receive(ctx context.Context, partitionID uint64, authori
 	return nil
 }
 
-func (m *mockTransport) Send(ctx context.Context, getPath func(lsn storage.LSN) string, partitionID uint64, authorityName string, msgs []raftpb.Message) error {
+func (m *mockTransport) Send(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, msgs []raftpb.Message) error {
 	return nil
 }
