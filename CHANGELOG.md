@@ -38,6 +38,10 @@ No changes.
 
 - [gitaly: Query available archived WAL entries in recovery status](gitlab-org/gitaly@a8b11d9ce0a46d5d3a170bca355d665b373f1f9e) ([merge request](gitlab-org/gitaly!7404))
 
+## 17.6.5 (2025-02-11)
+
+No changes.
+
 ## 17.6.4 (2025-01-22)
 
 No changes.
