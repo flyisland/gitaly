@@ -24,7 +24,7 @@ import (
 // The storage engine is chosen based on the provided uri.
 // It is the caller's responsibility to provide all required environment
 // variables in order to get properly initialized storage engine driver.
-func ResolveSink(ctx context.Context, uri string) (*Sink, error) {
+func ResolveSink(ctx context.Context, uri string, opts ...SinkOption) (*Sink, error) {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return nil, err
@@ -36,22 +36,43 @@ func ResolveSink(ctx context.Context, uri string) (*Sink, error) {
 		// a full set of variations. Instead we trim it up to the service option only.
 		scheme = scheme[i+1:]
 	}
-
+	var sink *Sink
 	switch scheme {
 	case s3blob.Scheme, azureblob.Scheme, gcsblob.Scheme, memblob.Scheme:
-		return newSink(ctx, uri)
+		sink, err = newSink(ctx, uri)
 	case fileblob.Scheme, "":
 		// fileblob.OpenBucket requires a bare path without 'file://'.
-		return newFileblobSink(parsed.Path)
+		sink, err = newFileblobSink(parsed.Path)
 	default:
 		return nil, fmt.Errorf("unsupported sink URI scheme: %q", scheme)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create object storage sink: %w", err)
+	}
+
+	for _, opt := range opts {
+		opt(sink)
+	}
+
+	return sink, nil
+}
+
+// WithBufferSize sets the buffer size for the sink.
+func WithBufferSize(size int) SinkOption {
+	return func(s *Sink) {
+		s.bufferSize = size
 	}
 }
 
 // Sink uses a storage engine that can be defined by the construction url on creation.
 type Sink struct {
-	bucket *blob.Bucket
+	bucket     *blob.Bucket
+	bufferSize int
 }
+
+// SinkOption is a function that configures a Sink.
+type SinkOption func(*Sink)
 
 // newSink returns initialized instance of Sink instance.
 func newSink(ctx context.Context, url string) (*Sink, error) {
@@ -98,6 +119,7 @@ func (s Sink) Close() error {
 // bucket. It is the callers responsibility to Close the reader after usage.
 func (s Sink) GetWriter(ctx context.Context, relativePath string) (io.WriteCloser, error) {
 	writer, err := s.bucket.NewWriter(ctx, relativePath, &blob.WriterOptions{
+		BufferSize: s.bufferSize,
 		// 'no-store' - we don't want the backup to be cached as the content could be changed,
 		// so we always want a fresh and up to date data
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#cacheability
