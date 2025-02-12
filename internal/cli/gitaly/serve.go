@@ -536,7 +536,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 	var backupLocator backup.Locator
 	if cfg.Backup.GoCloudURL != "" {
 		var err error
-		backupSink, err = backup.ResolveSink(ctx, cfg.Backup.GoCloudURL)
+		backupSink, err = backup.ResolveSink(ctx, cfg.Backup.GoCloudURL, backup.WithBufferSize(cfg.Backup.BufferSize))
 		if err != nil {
 			return fmt.Errorf("resolve backup sink: %w", err)
 		}

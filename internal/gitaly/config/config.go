@@ -608,6 +608,8 @@ type BackupConfig struct {
 	WALWorkerCount uint `json:"wal_backup_worker_count,omitempty" toml:"wal_backup_worker_count,omitempty"`
 	// Layout determines how backup files are located.
 	Layout string `json:"layout,omitempty" toml:"layout,omitempty"`
+	// BufferSize specifies the size of the buffer used when uploading backup parts to object storage.
+	BufferSize int `json:"buffer_size,omitempty" toml:"buffer_size,omitempty"`
 }
 
 // Validate runs validation on all fields and returns any errors found.
