@@ -88,9 +88,10 @@ func TestRecoveryCLI_status(t *testing.T) {
 					// TODO: This currently will create arbitrary partitions.
 					// It should return an error instead.
 					// https://gitlab.com/gitlab-org/gitaly/-/issues/6478
-					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
-`,
+					expectedOutputs: []string{fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
+Available WAL backup entries: No entries found
+recovery status completed: 1 succeeded, 0 failed`,
 						storage.PartitionID(42),
 						storage.LSN(0),
 					)},
@@ -106,11 +107,12 @@ Applied LSN: %s
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
+					expectedOutputs: []string{fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
 Relative paths:
  - %s
-`,
+Available WAL backup entries: No entries found
+recovery status completed: 1 succeeded, 0 failed`,
 						storage.PartitionID(2),
 						storage.LSN(1),
 						repo.GetRelativePath(),
@@ -134,17 +136,15 @@ Relative paths:
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
+					expectedOutputs: []string{fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
 Relative paths:
  - %s
-Available backup entries:
- - from %s to %s
-`,
+Available WAL backup entries: up to LSN: %s
+recovery status completed: 1 succeeded, 0 failed`,
 						storage.PartitionID(2),
 						storage.LSN(1),
 						repo.GetRelativePath(),
-						storage.LSN(2),
 						storage.LSN(3),
 					)},
 				}
@@ -158,36 +158,30 @@ Available backup entries:
 
 				partitionPath := filepath.Join(repo.GetStorageName(), fmt.Sprintf("%d", storage.PartitionID(2)))
 				testhelper.WriteFiles(t, opts.backupRoot, map[string]any{
-					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"):  "",
-					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"):  "",
-					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"):  "",
-					filepath.Join(partitionPath, storage.LSN(5).String()+".tar"):  "",
-					filepath.Join(partitionPath, storage.LSN(6).String()+".tar"):  "",
-					filepath.Join(partitionPath, storage.LSN(7).String()+".tar"):  "",
-					filepath.Join(partitionPath, storage.LSN(8).String()+".tar"):  "",
-					filepath.Join(partitionPath, storage.LSN(10).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(1).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(2).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(3).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(4).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(5).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(7).String()+".tar"): "",
+					filepath.Join(partitionPath, storage.LSN(8).String()+".tar"): "",
 				})
 
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
+					expectedOutputs: []string{fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
 Relative paths:
  - %s
-Available backup entries:
- - from %s to %s
- - from %s to %s
- - %s
-`,
+Available WAL backup entries: up to LSN: %s
+There is a gap in WAL archive after LSN: %s
+recovery status completed: 1 succeeded, 0 failed`,
 						storage.PartitionID(2),
 						storage.LSN(1),
 						repo.GetRelativePath(),
-						storage.LSN(2),
-						storage.LSN(3),
 						storage.LSN(5),
-						storage.LSN(8),
-						storage.LSN(10),
+						storage.LSN(5),
 					)},
 				}
 			},
@@ -218,30 +212,25 @@ Available backup entries:
 					storageName: opts.cfg.Storages[0].Name,
 					all:         true,
 					expectedOutputs: []string{
-						fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
+						fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
 Relative paths:
  - %s
-Available backup entries:
- - from %s to %s
-`,
+Available WAL backup entries: up to LSN: %s`,
 							storage.PartitionID(2),
 							storage.LSN(1),
 							repo1.GetRelativePath(),
-							storage.LSN(2),
 							storage.LSN(3)),
-						fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
+						fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
 Relative paths:
  - %s
-Available backup entries:
- - from %s to %s
-`,
+Available WAL backup entries: up to LSN: %s`,
 							storage.PartitionID(3),
 							storage.LSN(1),
 							repo2.GetRelativePath(),
-							storage.LSN(2),
 							storage.LSN(4)),
+						"recovery status completed: 2 succeeded, 0 failed",
 					},
 				}
 			},
@@ -299,7 +288,7 @@ Available backup entries:
 
 			args := []string{"recovery", "-config", configPath, "status", "-storage", data.storageName}
 			if data.all {
-				args = append(args, "-all")
+				args = append(args, "-all", "-parallel", "2")
 			} else {
 				args = append(args, "-partition")
 				args = append(args, data.partitionID.String())
@@ -355,15 +344,17 @@ func TestRecoveryCLI_replay(t *testing.T) {
 					// TODO: This currently will create arbitrary partitions.
 					// It should return an error instead.
 					// https://gitlab.com/gitlab-org/gitaly/-/issues/6478
-					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
-Starting archived log entries import
-Successfully processed log entries up to LSN %s
-`,
-						storage.PartitionID(42),
-						storage.LSN(0),
-						storage.LSN(0),
-					)},
+					expectedOutputs: []string{
+						"started processing partition 42",
+						fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
+Successfully processed log entries up to LSN: %s
+recovery replay completed: 1 succeeded, 0 failed`,
+							storage.PartitionID(42),
+							storage.LSN(0),
+							storage.LSN(0),
+						),
+					},
 					expectedLSN: nil,
 				}
 			},
@@ -377,15 +368,17 @@ Successfully processed log entries up to LSN %s
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
-Starting archived log entries import
-Successfully processed log entries up to LSN %s
-`,
-						storage.PartitionID(2),
-						storage.LSN(1),
-						storage.LSN(1),
-					)},
+					expectedOutputs: []string{
+						"started processing partition 2",
+						fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
+Successfully processed log entries up to LSN: %s
+recovery replay completed: 1 succeeded, 0 failed`,
+							storage.PartitionID(2),
+							storage.LSN(1),
+							storage.LSN(1),
+						),
+					},
 					expectedLSN: map[storage.PartitionID]storage.LSN{2: 1},
 				}
 			},
@@ -406,15 +399,17 @@ Successfully processed log entries up to LSN %s
 				return setupData{
 					storageName: repo.GetStorageName(),
 					partitionID: 2,
-					expectedOutputs: []string{fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
-Starting archived log entries import
-Successfully processed log entries up to LSN %s
-`,
-						storage.PartitionID(2),
-						storage.LSN(1),
-						storage.LSN(3),
-					)},
+					expectedOutputs: []string{
+						"started processing partition 2",
+						fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
+Successfully processed log entries up to LSN: %s
+recovery replay completed: 1 succeeded, 0 failed`,
+							storage.PartitionID(2),
+							storage.LSN(1),
+							storage.LSN(3),
+						),
+					},
 					expectedLSN: map[storage.PartitionID]storage.LSN{2: 3},
 				}
 			},
@@ -437,14 +432,10 @@ Successfully processed log entries up to LSN %s
 					partitionID: 2,
 					expectedErr: errors.New("exit status 1"),
 					expectedOutputs: []string{
-						fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
-Starting archived log entries import
-`,
-							storage.PartitionID(2),
-							storage.LSN(1),
-						),
-						"there is discontinuity in the WAL entries. Expected: 3, Got: 4\n",
+						"started processing partition 2",
+						"restore replay for partition 2 failed: there is discontinuity in the WAL entries. Expected LSN: 0000000000003, Got: 0000000000004",
+						"recovery replay completed: 0 succeeded, 1 failed",
+						"recovery replay failed for 1 out of 1 partition(s)",
 					},
 					expectedLSN: map[storage.PartitionID]storage.LSN{2: 2},
 				}
@@ -468,15 +459,10 @@ Starting archived log entries import
 					partitionID: 2,
 					expectedErr: errors.New("exit status 1"),
 					expectedOutputs: []string{
-						fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
-Starting archived log entries import
-`,
-							storage.PartitionID(2),
-							storage.LSN(1),
-						),
+						"started processing partition 2",
+						"restore replay for partition 2 failed: failed to apply latest log entry: transaction processing stopped",
+						"ecovery replay completed: 0 succeeded, 1 failed",
 						`msg="partition failed" error="apply log entry: update: apply operations`,
-						`fail to apply latest log entry`,
 					},
 					expectedLSN: map[storage.PartitionID]storage.LSN{2: 1},
 				}
@@ -507,24 +493,23 @@ Starting archived log entries import
 					storageName: opts.cfg.Storages[0].Name,
 					all:         true,
 					expectedOutputs: []string{
-						fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
-Starting archived log entries import
-Successfully processed log entries up to LSN %s
-`,
+						"started processing partition 2",
+						fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
+Successfully processed log entries up to LSN: %s`,
 							storage.PartitionID(2),
 							storage.LSN(1),
 							storage.LSN(3),
 						),
-						fmt.Sprintf(`Partition ID: %s
-Applied LSN: %s
-Starting archived log entries import
-Successfully processed log entries up to LSN %s
-`,
+						"started processing partition 3",
+						fmt.Sprintf(`---------------------------------------------
+Partition ID: %s - Applied LSN: %s
+Successfully processed log entries up to LSN: %s`,
 							storage.PartitionID(3),
 							storage.LSN(1),
 							storage.LSN(4),
 						),
+						"recovery replay completed: 2 succeeded, 0 failed",
 					},
 					expectedLSN: map[storage.PartitionID]storage.LSN{2: 3, 3: 4},
 				}
@@ -586,7 +571,7 @@ Successfully processed log entries up to LSN %s
 
 			args := []string{"recovery", "-config", configPath, "replay", "-storage", data.storageName}
 			if data.all {
-				args = append(args, "-all")
+				args = append(args, "-all", "-parallel", "2")
 			} else {
 				args = append(args, "-partition")
 				args = append(args, data.partitionID.String())
