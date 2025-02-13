@@ -17,7 +17,7 @@ require (
 	github.com/dgraph-io/badger/v4 v4.5.1
 	github.com/getsentry/sentry-go v0.29.0
 	github.com/git-lfs/git-lfs/v3 v3.6.1
-	github.com/go-enry/go-enry/v2 v2.9.1
+	github.com/go-enry/go-enry/v2 v2.9.2
 	github.com/go-enry/go-license-detector/v4 v4.3.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/go-cmp v0.6.0
