@@ -684,14 +684,14 @@ else
 endif
 	${Q}touch $@
 
-$(patsubst %,${DEPENDENCY_DIR}/git-\%/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
-	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${@D}" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} ${GIT_EXECUTABLES}
-	${Q}touch $@
-
 $(patsubst %,${DEPENDENCY_DIR}/git-\%/build/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
 	${Q}rm -rf "$(dir ${@D})"/build
 	${Q}meson setup "$(dir ${@D})" "$(dir ${@D})"/build -Dprefix="${GIT_PREFIX}" ${GIT_MESON_BUILD_OPTIONS}
 	${Q}meson compile -C "$(dir ${@D})/build" $(patsubst %,%:executable,${GIT_EXECUTABLES})
+	${Q}touch $@
+
+$(patsubst %,${DEPENDENCY_DIR}/git-\%/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
+	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${@D}" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} ${GIT_EXECUTABLES}
 	${Q}touch $@
 
 ${INSTALL_DEST_DIR}/gitaly-%: ${BUILD_DIR}/bin/gitaly-%
