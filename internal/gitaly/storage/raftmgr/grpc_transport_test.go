@@ -45,8 +45,9 @@ type walEntry struct {
 }
 
 const (
-	walFile   = "wal-file"
-	clusterID = "44c58f50-0a8b-4849-bf8b-d5a56198ea7c"
+	walFile     = "wal-file"
+	storageName = "storage-1"
+	clusterID   = "44c58f50-0a8b-4849-bf8b-d5a56198ea7c"
 )
 
 type mockRaftServer struct {
@@ -66,7 +67,7 @@ func (s *mockRaftServer) SendMessage(stream gitalypb.RaftService_SendMessageServ
 
 		raftMsg := req.GetMessage()
 
-		if err := s.transport.Receive(stream.Context(), req.GetAuthorityName(), req.GetPartitionId(), *raftMsg); err != nil {
+		if err := s.transport.Receive(stream.Context(), req.GetPartitionId(), req.GetAuthorityName(), *raftMsg); err != nil {
 			return status.Errorf(codes.Internal, "receive error: %v", err)
 		}
 	}
@@ -116,7 +117,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 			logger := testhelper.NewLogger(t)
 
 			require.Greater(t, tc.numNodes, 1)
-			testCluster, routingTable := setupCluster(t, logger, tc.numNodes, tc.partitionID)
+			testCluster := setupCluster(t, logger, tc.numNodes, tc.partitionID)
 			leader := testCluster.leader
 
 			if tc.removeConn {
@@ -131,20 +132,17 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 				require.NoError(t, leader.transport.connectionPool.Close())
 			})
 
-			leaderStorageName, err := routingTable.GetStorageName(leader.id)
-			require.NoError(t, err)
-
 			mgr, err := leader.managerRegistry.GetManager(PartitionKey{
 				partitionID:   uint64(tc.partitionID),
-				authorityName: leaderStorageName,
+				authorityName: storageName,
 			})
 			require.NoError(t, err)
 
 			// Create test messages
-			msgs := createTestMessages(t, testCluster, mgr.GetEntryPath, tc.walEntries)
+			msgs := createTestMessages(t, testCluster, mgr.GetLogReader(), tc.walEntries)
 
 			// Send Message from leader to all followers
-			err = leader.transport.Send(ctx, mgr.GetEntryPath, 1, msgs)
+			err = leader.transport.Send(ctx, mgr.GetLogReader(), 1, storageName, msgs)
 			if tc.expectedError != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectedError)
@@ -154,12 +152,9 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 
 			// Verify WAL replication
 			for i, follower := range testCluster.followers {
-				followerStorageName, err := routingTable.GetStorageName(follower.id)
-				require.NoError(t, err)
-
 				mgr, err := follower.managerRegistry.GetManager(PartitionKey{
 					partitionID:   uint64(tc.partitionID),
-					authorityName: followerStorageName,
+					authorityName: storageName,
 				})
 				require.NoError(t, err)
 
@@ -181,7 +176,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 	}
 }
 
-func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partitionID int) (*cluster, *staticRaftRoutingTable) {
+func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partitionID int) *cluster {
 	routingTable := NewStaticRaftRoutingTable()
 	var servers []*grpc.Server
 	var listeners []net.Listener
@@ -207,10 +202,8 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	}
 
 	registries := []ManagerRegistry{}
-	storageNames := []string{}
 	for i := 0; i < numNodes; i++ {
 		registries = append(registries, NewRaftManagerRegistry())
-		storageNames = append(storageNames, fmt.Sprintf("storage-%d", i+1))
 	}
 
 	cluster := &cluster{}
@@ -220,7 +213,13 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	// First set up all servers and fill routing table
 	for i := range numNodes {
 		srv, listener, addr := runServer(t)
-		require.NoError(t, routingTable.AddMember(uint64(i+1), addr, storageNames[i]))
+		require.NoError(t, routingTable.AddMember(RoutingKey{
+			partitionKey: PartitionKey{
+				authorityName: storageName,
+				partitionID:   uint64(partitionID),
+			},
+			nodeID: uint64(i + 1),
+		}, addr))
 		servers = append(servers, srv)
 		listeners = append(listeners, listener)
 		addresses = append(addresses, addr)
@@ -245,7 +244,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		// Register the manager with the registry
 		require.NoError(t, registries[i].RegisterManager(PartitionKey{
 			partitionID:   uint64(partitionID),
-			authorityName: storageNames[i],
+			authorityName: storageName,
 		}, manager))
 
 		if i == 0 {
@@ -255,16 +254,16 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		}
 	}
 
-	return cluster, routingTable
+	return cluster
 }
 
 func newManager(logger logger.LogrusLogger, transport Transport, cfg config.Cfg) RaftManager {
 	walManager := log.NewManager("default", 1, cfg.Storages[0].Path, cfg.Storages[0].Path, nil, nil)
 
 	return &mockRaftManager{
-		logger:    logger,
-		wal:       walManager,
-		transport: transport,
+		logger:     logger,
+		logManager: walManager,
+		transport:  transport,
 	}
 }
 
@@ -278,11 +277,11 @@ func runServer(t *testing.T) (*grpc.Server, net.Listener, string) {
 	return srv, listener, "unix://" + socketPath
 }
 
-func createTestMessages(t *testing.T, cluster *cluster, getEntryPath func(storage.LSN) string, entries []walEntry) []raftpb.Message {
+func createTestMessages(t *testing.T, cluster *cluster, logReader storage.LogReader, entries []walEntry) []raftpb.Message {
 	var raftEntries []raftpb.Entry
 	for _, entry := range entries {
 		// Create WAL directory and file
-		walDir := getEntryPath(entry.lsn)
+		walDir := logReader.GetEntryPath(entry.lsn)
 		require.NoError(t, os.MkdirAll(walDir, mode.Directory))
 		walPath := filepath.Join(walDir, walFile)
 		require.NoError(t, os.WriteFile(walPath, []byte(entry.content), mode.File))

@@ -15,14 +15,18 @@ func TestMain(m *testing.M) {
 }
 
 type mockRaftManager struct {
-	logger    logger.LogrusLogger
-	transport Transport
-	wal       storage.LogManager
+	logger     logger.LogrusLogger
+	transport  Transport
+	logManager storage.LogManager
 }
 
 // EntryPath returns an absolute path to a given log entry's WAL files.
 func (m *mockRaftManager) GetEntryPath(lsn storage.LSN) string {
-	return m.wal.GetEntryPath(lsn)
+	return m.logManager.GetEntryPath(lsn)
+}
+
+func (m *mockRaftManager) GetLogReader() storage.LogReader {
+	return m.logManager
 }
 
 // Step is a mock implementation of the raft.Node.Step method.

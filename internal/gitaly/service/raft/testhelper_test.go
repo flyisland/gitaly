@@ -22,11 +22,11 @@ func newMockTransport(t *testing.T) *mockTransport {
 	return &mockTransport{t: t}
 }
 
-func (m *mockTransport) Receive(ctx context.Context, authorityName string, partitionID uint64, raftMsg raftpb.Message) error {
+func (m *mockTransport) Receive(ctx context.Context, partitionID uint64, authorityName string, raftMsg raftpb.Message) error {
 	m.receivedMessage = &raftMsg
 	return nil
 }
 
-func (m *mockTransport) Send(ctx context.Context, getPath func(lsn storage.LSN) string, partitionID uint64, msgs []raftpb.Message) error {
+func (m *mockTransport) Send(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, msgs []raftpb.Message) error {
 	return nil
 }
