@@ -177,6 +177,9 @@ func (gc *GitalyCfgBuilder) Build(tb testing.TB) config.Cfg {
 	// against a custom version of Git.
 	cfg.Git.UseBundledBinaries = os.Getenv("GITALY_TESTING_GIT_BINARY") == ""
 
+	cfg.Git.CommitterName = "Jane Doe"
+	cfg.Git.CommitterEmail = "janedoe@gitlab.com"
+
 	require.NoError(tb, cfg.Sanitize())
 	require.NoError(tb, cfg.ValidateV2())
 
