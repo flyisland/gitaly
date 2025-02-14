@@ -5,3 +5,7 @@ ruby 3.3.7
 # For linting documentation
 nodejs 20.18.0 # Dependency for markdownlint-cli2
 markdownlint-cli2 0.17.1
+
+# For building Git
+meson 1.7.0
+ninja 1.12.1
