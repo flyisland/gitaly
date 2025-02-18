@@ -3,13 +3,24 @@ package migration
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 )
 
 func TestDryRunPartition(t *testing.T) {
@@ -213,4 +224,74 @@ func testCombinedMigrations(t *testing.T, ctx context.Context) {
 			}
 		})
 	}
+}
+
+func TestCombinedMigrationClosesPartition(t *testing.T) {
+	t.Parallel()
+
+	testhelper.NewFeatureSets(featureflag.DryRunMigrations).
+		Run(t, testCombinedMigrationClosesPartition)
+}
+
+func testCombinedMigrationClosesPartition(t *testing.T, ctx context.Context) {
+	cfg := testcfg.Build(t)
+
+	gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+
+	testPartitionID := storage.PartitionID(1)
+	logger := testhelper.NewLogger(t)
+	database, err := keyvalue.NewBadgerStore(testhelper.SharedLogger(t), t.TempDir())
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, database)
+
+	storageName := cfg.Storages[0].Name
+	storagePath := cfg.Storages[0].Path
+
+	stateDir := filepath.Join(storagePath, "state")
+	require.NoError(t, os.MkdirAll(stateDir, mode.Directory))
+
+	stagingDir := filepath.Join(storagePath, "staging")
+	require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
+
+	cmdFactory := gittest.NewCommandFactory(t, cfg)
+	cache := catfile.NewCache(cfg)
+	defer cache.Stop()
+
+	repositoryFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, cache)
+
+	m := partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))
+
+	factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil)
+	tm := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
+
+	combinedPartiton := newCombinedMigrationPartition(tm, logger, NewMetrics(), storageName, []Migration{}, []Migration{
+		{
+			ID:   100,
+			Name: "foo",
+			Fn: func(ctx context.Context, _ storage.Transaction, _, _ string) error {
+				// When the partition is cancelled, the context cancellation should
+				// also be propagated to the migrations.
+				<-ctx.Done()
+
+				return nil
+			},
+		},
+	})
+
+	done := make(chan struct{})
+	go func() {
+		if err := combinedPartiton.Run(); err != nil {
+			t.Errorf("expected nil, got %s", err)
+		}
+		done <- struct{}{}
+	}()
+
+	_, err = combinedPartiton.Begin(ctx, storage.BeginOptions{})
+	require.NoError(t, err)
+
+	// Closing the main partition and check if the `Run()` function also returns.
+	combinedPartiton.Close()
+	<-done
 }
