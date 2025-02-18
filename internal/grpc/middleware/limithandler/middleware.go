@@ -135,7 +135,7 @@ func (w *wrappedStream) RecvMsg(m interface{}) error {
 	}
 
 	ready := make(chan struct{})
-	errs := make(chan error)
+	errs := make(chan error, 1)
 	go func() {
 		if _, err := limiter.Limit(ctx, lockKey, func() (interface{}, error) {
 			close(ready)
