@@ -768,9 +768,6 @@ func TestLoadGit(t *testing.T) {
 bin_path = "/my/git/path"
 catfile_cache_size = 50
 
-committer_name = "quxbaz"
-committer_email = "foo@bar"
-
 [[git.config]]
 key = "first.key"
 value = "first-value"
@@ -786,8 +783,6 @@ value = "second-value"
 	require.Equal(t, Git{
 		BinPath:          "/my/git/path",
 		CatfileCacheSize: 50,
-		CommitterName:    "quxbaz",
-		CommitterEmail:   "foo@bar",
 		Config: []GitConfig{
 			{Key: "first.key", Value: "first-value"},
 			{Key: "second.key", Value: "second-value"},
@@ -2945,16 +2940,4 @@ initial_members = {1 = "localhost:4001", 2 = "localhost:4002", 3 = "localhost:40
 	}
 	require.NoError(t, expectedCfg.Sanitize())
 	require.Equal(t, expectedCfg.Raft, cfg.Raft)
-}
-
-func TestDefaultGitCommitterInfo(t *testing.T) {
-	cfg := Cfg{}
-	expectedCfg := Cfg{
-		Git: Git{
-			CommitterEmail: "noreply@gitlab.com",
-			CommitterName:  "GitLab",
-		},
-	}
-	require.NoError(t, cfg.Sanitize())
-	require.Equal(t, expectedCfg.Git, cfg.Git)
 }

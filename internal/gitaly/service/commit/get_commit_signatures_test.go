@@ -300,8 +300,6 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 				}
 				require.NoError(t, tree.Write(ctx, repo))
 
-				data.cfg.Git.CommitterName = gittest.DefaultCommitterName
-				data.cfg.Git.CommitterEmail = gittest.DefaultCommitterMail
 				commitID, err := repo.WriteCommit(ctx, localrepo.WriteCommitConfig{
 					TreeID:         tree.OID,
 					AuthorName:     gittest.DefaultCommitterName,
@@ -326,9 +324,7 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 					CommitterDate:  gittest.DefaultCommitTime,
 					Message:        "rotated key commit message",
 					GitConfig: config.Git{
-						SigningKey:     data.cfg.Git.RotatedSigningKeys[0],
-						CommitterName:  gittest.DefaultCommitterName,
-						CommitterEmail: gittest.DefaultCommitterMail,
+						SigningKey: data.cfg.Git.RotatedSigningKeys[0],
 					},
 					Sign: featureflag.GPGSigning.IsEnabled(ctx),
 				})
@@ -498,8 +494,6 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 			testcfg.BuildGitalyGPG(t, cfg)
 
 			cfg.Git.SigningKey = filepath.Join(testhelper.TestdataAbsolutePath(t), "signing_ssh_key_ed25519")
-			cfg.Git.CommitterName = gittest.DefaultCommitterName
-			cfg.Git.CommitterEmail = gittest.DefaultCommitterMail
 			cfg.Git.RotatedSigningKeys = []string{filepath.Join(testhelper.TestdataAbsolutePath(t), "signing_ssh_key_rsa")}
 			cfg.SocketPath = startTestServices(t, cfg)
 			client := newCommitServiceClient(t, cfg.SocketPath)
