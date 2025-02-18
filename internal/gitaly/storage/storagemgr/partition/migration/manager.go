@@ -16,6 +16,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"google.golang.org/grpc/metadata"
 )
 
 // migrationState defines the state of a migration for a repository.
@@ -110,9 +111,15 @@ func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) 
 		}
 	}
 
-	// To avoid migration failures due to request context cancellation, a copy that is not canceled
-	// when parent is canceled is used.
-	if err := m.performMigrations(context.WithoutCancel(ctx), relativePaths); err != nil {
+	// Capture the metadata from the request's context and append it to the manager's context.
+	// This allows us to use feature flags with the manager's context too.
+	mCtx := m.ctx
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		mCtx = metadata.NewIncomingContext(mCtx, md)
+	}
+
+	if err := m.performMigrations(mCtx, relativePaths); err != nil {
 		// Record the error as part of the migration state so concurrent transactions are notified.
 		state.err = err
 		return fmt.Errorf("performing migrations: %w", err)
@@ -122,10 +129,10 @@ func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) 
 }
 
 // performMigrations performs any missing migrations on a repository.
-func (m *migrationManager) performMigrations(reqCtx context.Context, relativePaths []string) (returnedErr error) {
+func (m *migrationManager) performMigrations(ctx context.Context, relativePaths []string) (returnedErr error) {
 	relativePath := relativePaths[0]
 
-	id, err := m.getLastMigrationID(m.ctx, relativePath)
+	id, err := m.getLastMigrationID(ctx, relativePath)
 	if errors.Is(err, storage.ErrRepositoryNotFound) {
 		// If the repository is not found pretend the repository is up-to-date with migrations and
 		// let the downstream transaction set the migration key during repository creation.
@@ -144,7 +151,7 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 	}
 
 	// Start a single transaction that records all outstanding migrations that get executed.
-	txn, err := m.Partition.Begin(m.ctx, storage.BeginOptions{
+	txn, err := m.Partition.Begin(ctx, storage.BeginOptions{
 		Write:         true,
 		RelativePaths: relativePaths,
 	})
@@ -153,7 +160,7 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 	}
 	defer func() {
 		if returnedErr != nil {
-			if err := txn.Rollback(m.ctx); err != nil {
+			if err := txn.Rollback(ctx); err != nil {
 				returnedErr = errors.Join(err, fmt.Errorf("rollback: %w", err))
 			}
 		}
@@ -179,16 +186,13 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 		// also not executed. Since repository migrations are currently only attempted once for a
 		// repository during the partition lifetime, a previously disabled migration may not
 		// immediately be executed in the next transaction. Migration state must first be reset.
-		//
-		// Since the manager's context won't have the featureflag information, we use the request
-		// cotext. The request context here should be devoid of cancellation.
-		if migration.IsDisabled != nil && migration.IsDisabled(reqCtx) {
+		if migration.IsDisabled != nil && migration.IsDisabled(ctx) {
 			break
 		}
 
 		logger.Info("running migration")
 
-		if err := migration.run(m.ctx, txn, m.storageName, relativePath); err != nil {
+		if err := migration.run(ctx, txn, m.storageName, relativePath); err != nil {
 			return fmt.Errorf("run migration: %w", err)
 		}
 
@@ -202,7 +206,7 @@ func (m *migrationManager) performMigrations(reqCtx context.Context, relativePat
 		logger.WithField("duration", duration).Info("migration successful")
 	}
 
-	if err := txn.Commit(m.ctx); err != nil {
+	if err := txn.Commit(ctx); err != nil {
 		return fmt.Errorf("commit migration update: %w", err)
 	}
 
