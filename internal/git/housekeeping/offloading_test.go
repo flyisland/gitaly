@@ -14,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/packfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
@@ -205,6 +206,147 @@ func TestPerformRepackingForOffloading(t *testing.T) {
 	})
 }
 
+func TestAddCacheAlternateEntry(t *testing.T) {
+	t.Parallel()
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+	cacheRoot := testhelper.TempDir(t)
+	cacheDir := filepath.Join(cacheRoot, "offloading_cache", "my_cache_dir")
+
+	for _, tc := range []struct {
+		desc             string
+		alternateEntries []string
+		expectedErr      error
+	}{
+		{
+			desc:             "alternate file not exist",
+			alternateEntries: []string{},
+			expectedErr:      nil,
+		},
+		{
+			desc:             "alternate file exists without offloading_cache",
+			alternateEntries: []string{filepath.Join(cacheRoot, "old", "alt")},
+			expectedErr:      nil,
+		},
+		{
+			desc: "alternate file exists with offloading_cache",
+			alternateEntries: []string{
+				filepath.Join(cacheRoot, "old", "alt"),
+				filepath.Join(cacheRoot, offloadingCacheDir, "existing_cache"),
+			},
+			expectedErr: fmt.Errorf("offloading cache entry is already added"),
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			require.NoError(t, os.MkdirAll(cacheDir, mode.Directory))
+			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg,
+				gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+			repo := localrepo.NewTestRepo(t, cfg, repoProto)
+			require.DirExists(t, repoPath)
+
+			if len(tc.alternateEntries) > 0 {
+				addAlternateToRepo(t, ctx, tc.alternateEntries, repo)
+			}
+
+			cacheEntry, err := filepath.Rel(filepath.Join(repoPath, "objects"), cacheDir)
+			require.NoError(t, err)
+			alternateFile, err := repo.InfoAlternatesPath(ctx)
+			require.NoError(t, err)
+
+			err = AddCacheAlternateEntry(alternateFile, cacheEntry)
+			if tc.expectedErr == nil {
+				require.NoError(t, err)
+				// Use `git count-objects -v` to verify alternate object databases.
+				// This command outputs absolute paths of alternates, allowing us to confirm
+				// if the repository correctly recognizes them.
+				// Ref: https://git-scm.com/docs/git-count-objects
+				output := gittest.Exec(t, cfg, "-C", repoPath, "count-objects", "-v")
+				for _, entry := range tc.alternateEntries {
+					require.Contains(t, text.ChompBytes(output), entry)
+				}
+				require.Contains(t, text.ChompBytes(output), cacheDir)
+			} else {
+				require.Equal(t, err, tc.expectedErr)
+			}
+		})
+	}
+}
+
+func TestRemoveCacheAlternateEntry(t *testing.T) {
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+	cacheRoot := testhelper.TempDir(t)
+	cacheDir := filepath.Join(cacheRoot, "offloading_cache", "my_repo")
+
+	for _, tc := range []struct {
+		desc             string
+		alternateEntries []string
+	}{
+		{
+			desc:             "alternate file does not exist",
+			alternateEntries: []string{},
+		},
+		{
+			desc: "alternate file exists with cache entry",
+			alternateEntries: []string{
+				cacheDir, // always put cache dir first, since we have logic to compare other entries.
+				filepath.Join(cacheRoot, "old", "alt1"),
+				filepath.Join(cacheRoot, "old", "alt2"),
+			},
+		},
+		{
+			desc: "alternate file exists without cache entry",
+			alternateEntries: []string{
+				filepath.Join(cacheRoot, "old", "alt1"),
+				filepath.Join(cacheRoot, "old", "alt2"),
+			},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg,
+				gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+			repo := localrepo.NewTestRepo(t, cfg, repoProto)
+			require.DirExists(t, repoPath)
+
+			alternateFile, err := repo.InfoAlternatesPath(ctx)
+			require.NoError(t, err)
+
+			if len(tc.alternateEntries) == 0 {
+				err = RemoveCacheAlternateEntry(alternateFile)
+				require.ErrorIs(t, err, os.ErrNotExist)
+			} else {
+
+				addAlternateToRepo(t, ctx, tc.alternateEntries, repo)
+				err = RemoveCacheAlternateEntry(alternateFile)
+				require.NoError(t, err)
+
+				output := gittest.Exec(t, cfg, "-C", repoPath, "count-objects", "-v")
+
+				// Use `git count-objects -v` to verify alternate object databases.
+				// This command outputs absolute paths of alternates, allowing us to confirm
+				// if the repository correctly recognizes them.
+				// Ref: https://git-scm.com/docs/git-count-objects
+				for _, entry := range tc.alternateEntries[1:] {
+					require.Contains(t, text.ChompBytes(output), entry)
+				}
+
+				// Ensure no offloading_cache entry remains after RemoveCacheAlternateEntry execution,
+				// regardless of the initial state.
+				require.NotContains(t, text.ChompBytes(output), "offloading_cache")
+
+			}
+		})
+	}
+}
+
 func setUpRepoForOffloading(t *testing.T, ctx context.Context, cfg config.Cfg) (
 	repo *localrepo.Repo,
 	commits []git.ObjectID,
@@ -273,4 +415,20 @@ func readObjectsFromPackFile(t *testing.T, ctx context.Context, cfg config.Cfg, 
 		objectOIDs = append(objectOIDs, git.ObjectID(obj.OID))
 	}
 	return objectOIDs
+}
+
+func addAlternateToRepo(t *testing.T, ctx context.Context, alternatePaths []string, repo *localrepo.Repo) {
+	repoPath, _ := repo.Path(ctx)
+	alternateFile, err := repo.InfoAlternatesPath(ctx)
+	require.NoError(t, err)
+	altFile, err := os.Create(alternateFile)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, altFile.Close()) }()
+	for _, path := range alternatePaths {
+		require.NoError(t, os.MkdirAll(path, mode.Directory))
+		alternateEntry, err := filepath.Rel(filepath.Join(repoPath, "objects"), path)
+		require.NoError(t, err)
+		_, err = altFile.WriteString(alternateEntry + "\n")
+		require.NoError(t, err)
+	}
 }
