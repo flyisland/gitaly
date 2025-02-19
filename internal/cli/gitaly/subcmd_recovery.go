@@ -36,9 +36,9 @@ import (
 )
 
 const (
-	flagPartition = "partition"
 	flagAll       = "all"
 	flagParallel  = "parallel"
+	flagPartition = "partition"
 )
 
 type recoveryContext struct {
@@ -76,13 +76,17 @@ Example: gitaly recovery --config gitaly.config.toml status --storage default --
 						Name:  flagPartition,
 						Usage: "partition ID",
 					},
+					&cli.StringFlag{
+						Name:  flagRepository,
+						Usage: "relative path to the repository",
+					},
 					&cli.BoolFlag{
 						Name:  flagAll,
 						Usage: "runs the command for all partitions in the storage",
 					},
 					&cli.IntFlag{
 						Name:  flagParallel,
-						Usage: "maximum number of parallel restores per storage",
+						Usage: "maximum number of parallel queries per storage",
 						Value: 2,
 					},
 				},
@@ -102,6 +106,10 @@ Example: gitaly recovery --config gitaly.config.toml status --storage default --
 					&cli.StringFlag{
 						Name:  flagPartition,
 						Usage: "partition ID",
+					},
+					&cli.StringFlag{
+						Name:  flagRepository,
+						Usage: "relative path to the repository",
 					},
 					&cli.BoolFlag{
 						Name:  flagAll,
@@ -601,11 +609,31 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 			return recoveryContext, fmt.Errorf("partition iterator: %w", err)
 		}
 	} else {
-		var partitionID storage.PartitionID
-		if err := parsePartitionID(&partitionID, ctx.String(flagPartition)); err != nil {
-			return recoveryContext, fmt.Errorf("parse partition ID: %w", err)
+		partitionString := ctx.String(flagPartition)
+		repositoryPath := ctx.String(flagRepository)
+
+		if partitionString != "" && repositoryPath != "" {
+			return recoveryContext, fmt.Errorf("--partition and --repository flags can not be provided at the same time")
 		}
-		if partitionID == 0 {
+
+		if partitionString == "" && repositoryPath == "" {
+			return recoveryContext, fmt.Errorf("this command requires one of --all, --partition or --repository flags")
+		}
+
+		var err error
+		var partitionID storage.PartitionID
+		if partitionString != "" {
+			if err = parsePartitionID(&partitionID, partitionString); err != nil {
+				return recoveryContext, fmt.Errorf("parse partition ID: %w", err)
+			}
+		} else {
+			partitionID, err = nodeStorage.GetAssignedPartitionID(repositoryPath)
+			if err != nil {
+				return recoveryContext, fmt.Errorf("partition ID not found for the given relative path: %w", err)
+			}
+		}
+
+		if partitionID == storage.PartitionID(0) {
 			return recoveryContext, fmt.Errorf("invalid partition ID %s", partitionID)
 		}
 
