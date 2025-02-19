@@ -1,7 +1,9 @@
 package housekeeping
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,8 +17,13 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 )
 
-// OffloadingPromisorRemote is the name of the Git remote used for offloading.
-const OffloadingPromisorRemote = "offload"
+const (
+	// OffloadingPromisorRemote is the name of the Git remote used for offloading.
+	OffloadingPromisorRemote = "offload"
+
+	// offloadingCacheDir represents the directory where offloading cache are stored.
+	offloadingCacheDir = "offloading_cache"
+)
 
 // SetOffloadingGitConfig updates the Git configuration file to enable a repository for offloading by configuring
 // settings specific to establishing a promisor remote.
@@ -141,6 +148,110 @@ func PerformRepackingForOffloading(ctx context.Context, repo *localrepo.Repo, fi
 	err = os.WriteFile(filepath.Join(repoPath, "objects", "pack", packFile[0]+".promisor"), []byte{}, mode.File)
 	if err != nil {
 		return fmt.Errorf("create promisor file: %w", err)
+	}
+
+	return nil
+}
+
+// AddCacheAlternateEntry adds the cacheEntry to the `.git/objects/info/alternates` file at alternateFile.
+// The caller is responsible to provide a valid cacheEntry which should be a relative path from the cache dir to the
+// original offloaded repo's object directory.
+func AddCacheAlternateEntry(alternateFile, cacheEntry string) (returnedErr error) {
+	cacheEntry = "\n" + cacheEntry + "\n"
+	tempFilePath := alternateFile + ".tmp"
+	tempFile, err := os.OpenFile(tempFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, mode.File)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer func() {
+		if err := tempFile.Close(); err != nil {
+			returnedErr = errors.Join(returnedErr, fmt.Errorf("close file: %w", err))
+		}
+	}()
+
+	if _, err := os.Stat(alternateFile); os.IsNotExist(err) {
+		// When alternate not exist, just append cacheEntry to temp file. And later rename the temp file.
+		if _, err := tempFile.WriteString(cacheEntry); err != nil {
+			return fmt.Errorf("write file: %w", err)
+		}
+	} else {
+		// When alternate exist. Copy the content in alternate file to temp file, then append cacheEntry
+		// to temp file. And later rename the temp file.
+
+		alternateContent, err := os.ReadFile(alternateFile)
+		if err != nil {
+			return fmt.Errorf("read file: %w", err)
+		}
+
+		// Already has an offloading cache dir entry, no need to add another.
+		if strings.Contains(string(alternateContent), offloadingCacheDir) {
+			return fmt.Errorf("offloading cache entry is already added")
+		}
+
+		alternateContent = append(alternateContent, []byte(cacheEntry)...)
+		if _, err := tempFile.Write(alternateContent); err != nil {
+			return fmt.Errorf("write file: %w", err)
+		}
+
+	}
+
+	if err := os.Rename(tempFilePath, alternateFile); err != nil {
+		return fmt.Errorf("rename file: %w", err)
+	}
+	return nil
+}
+
+// RemoveCacheAlternateEntry removes any line in the alternates file that contains the string "offloading_cache".
+func RemoveCacheAlternateEntry(alternateFile string) (returnedErr error) {
+	file, err := os.Open(alternateFile)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			returnedErr = errors.Join(returnedErr, fmt.Errorf("close: %w", err))
+		}
+	}()
+
+	var lines []string
+	var hasOffloadingCacheEntry bool
+	scanner := bufio.NewScanner(file)
+
+	// Since the alternate file is not likely big, we can read the entire alternate file into memory.
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.Contains(line, offloadingCacheDir) {
+			lines = append(lines, scanner.Text())
+		} else {
+			hasOffloadingCacheEntry = true
+		}
+	}
+
+	if !hasOffloadingCacheEntry {
+		// We don't need to modify alternates file since
+		// no entry contains the string "offloading_cache".
+		return nil
+	}
+
+	tempFilePath := alternateFile + ".tmp"
+	tempFile, err := os.Create(tempFilePath)
+	if err != nil {
+		return fmt.Errorf("create file: %w", err)
+	}
+	defer func() {
+		if err := tempFile.Close(); err != nil {
+			returnedErr = errors.Join(returnedErr, fmt.Errorf("close: %w", err))
+		}
+	}()
+
+	// Write the updated lines to the temp file
+	for _, line := range lines {
+		if _, err := tempFile.WriteString(line + "\n"); err != nil {
+			return fmt.Errorf("write file: %w", err)
+		}
+	}
+	if err := os.Rename(tempFilePath, alternateFile); err != nil {
+		return fmt.Errorf("rename file: %w", err)
 	}
 
 	return nil
