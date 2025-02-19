@@ -1,5 +1,15 @@
 # Gitaly changelog
 
+## 17.9.0 (2025-02-19)
+
+### Added (1 change)
+
+- [Enable verbatim_patch_id feature flag by default](gitlab-org/gitaly@fff4e1fee492ab4f9d7fd6c397f67c167f9efd6f) ([merge request](gitlab.com/gitlab-org/gitaly/-/merge_requests/7587))
+
+### Changed (1 change)
+
+- [Provide a default Git Committer Name and Email with GPGSigning](gitlab-org/gitaly@48ba03b542f2c9f2c631ff68d2bc94290ecc2ea8) ([merge request](gitlab-org/gitaly!7620))
+
 ## 17.8.2 (2025-02-11)
 
 No changes.
