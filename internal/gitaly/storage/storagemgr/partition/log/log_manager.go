@@ -403,6 +403,63 @@ func (mgr *Manager) DeleteLogEntry(lsn storage.LSN) error {
 	return nil
 }
 
+// DeleteTrailingLogEntries removes all log entries starting from the given LSN (inclusive) until the end of the WAL. It
+// refuses to delete entries if the requested starting LSN is below the low water mark.
+func (mgr *Manager) DeleteTrailingLogEntries(from storage.LSN) (returnedErr error) {
+	// Use the LowWaterMark() helper. If the requested LSN is below the low water mark, do not proceed.
+	lowWaterMark := mgr.LowWaterMark()
+	if from < lowWaterMark {
+		return fmt.Errorf("requested LSN is below the low water mark")
+	}
+
+	// Acquire the pruning mutex first to ensure no concurrent pruning activity
+	mgr.pruningMutex.Lock()
+	defer mgr.pruningMutex.Unlock()
+
+	// Protect critical state with the main mutex.
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
+
+	// If the starting LSN is above the last appended log entry, there's nothing to delete.
+	if from > mgr.appendedLSN {
+		return nil
+	}
+
+	// Determine the WAL directory path.
+	walDir := StatePath(mgr.stateDirectory)
+
+	// Create a temporary directory to batch-remove log entries.
+	tmpDir, err := os.MkdirTemp(mgr.tmpDirectory, "")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	defer func() {
+		// Remove the temporary directory.
+		if err := os.RemoveAll(tmpDir); err != nil {
+			returnedErr = errors.Join(returnedErr, fmt.Errorf("remove files: %w", err))
+		}
+	}()
+
+	// Instead of calling DeleteLogEntry (which triggers an fsync per deletion),
+	// move each target log entry from 'from' up to the appendedLSN into the temporary directory.
+	for lsn := mgr.appendedLSN; lsn >= from; lsn-- {
+		source := EntryPath(mgr.stateDirectory, lsn)
+		destination := filepath.Join(tmpDir, fmt.Sprintf("%s.%s", lsn.String(), "to_delete"))
+		if err := os.Rename(source, destination); err != nil {
+			return fmt.Errorf("rename: %w", err)
+		}
+		// Lower the appendedLSN gradually to prevent partial failure.
+		mgr.appendedLSN = lsn - 1
+	}
+
+	// Perform one fsync on the WAL's parent directory to persist changes.
+	if err := safe.NewSyncer().SyncParent(mgr.ctx, walDir); err != nil {
+		return fmt.Errorf("failed to sync state directory: %w", err)
+	}
+
+	return nil
+}
+
 // LowWaterMark returns the earliest LSN of log entries which should be kept in the database. Any log entries LESS than
 // this mark are removed.
 func (mgr *Manager) LowWaterMark() storage.LSN {
