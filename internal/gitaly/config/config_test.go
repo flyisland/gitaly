@@ -1651,6 +1651,38 @@ dir = "foobar"
 `,
 			err: errPackObjectsCacheRelativePath,
 		},
+		{
+			desc: "enabled with same dir as storage path",
+			in: storageConfig + `[pack_objects_cache]
+enabled = true
+dir = "/foobar"
+`,
+			err: errPackObjectsCacheSetToStorageDir,
+		},
+		{
+			desc: "enabled with same dir as storage path, with multiple storages",
+			in: storageConfig + `[[storage]]
+name="storage2"
+path="/my/storage/2/path"
+
+[pack_objects_cache]
+enabled = true
+dir = "/my/storage/2/path"
+`,
+			err: errPackObjectsCacheSetToStorageDir,
+		},
+		{
+			desc: "enabled with parent dir of a storage path",
+			in: `[[storage]]
+name="default"
+path="/my/nested/default/storage"
+
+[pack_objects_cache]
+enabled = true
+dir = "/my/nested"
+`,
+			err: errPackObjectsCacheSetToStorageDir,
+		},
 	}
 
 	for _, tc := range testCases {
