@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
@@ -22,6 +23,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestMigrationManager_Begin(t *testing.T) {
@@ -29,10 +31,16 @@ func TestMigrationManager_Begin(t *testing.T) {
 	ctx := testhelper.Context(t)
 	disabledFn := func(context.Context) bool { return true }
 	migrationErr := errors.New("migration error")
+	md := metadata.MD{"foo": []string{"bar"}}
 
 	errFn := func(context.Context, storage.Transaction, string, string) error { return migrationErr }
 	recordingFn := func(id uint64) func(context.Context, storage.Transaction, string, string) error {
-		return func(_ context.Context, txn storage.Transaction, _ string, _ string) error {
+		return func(ctx context.Context, txn storage.Transaction, _ string, _ string) error {
+			// Ensure that the context is carrying over metadata
+			// from the request's context.
+			actualMD, _ := metadata.FromIncomingContext(ctx)
+			assert.Equal(t, md, actualMD)
+
 			return txn.KV().Set(uint64ToBytes(id), nil)
 		}
 	}
@@ -197,6 +205,8 @@ func TestMigrationManager_Begin(t *testing.T) {
 				require.NoError(t, txn.KV().Set(migrationKey(relativePath), uint64ToBytes(tc.startingMigration.ID)))
 				require.NoError(t, txn.Commit(ctx))
 			}
+
+			ctx = metadata.NewIncomingContext(ctx, md)
 
 			// Begin and commit transaction through the migration manager to exercise the migration logic.
 			if txn, err := mm.Begin(ctx, storage.BeginOptions{

@@ -95,3 +95,10 @@ func (c *combinedMigrationPartition) Run() error {
 	defer c.wg.Wait()
 	return c.Partition.Run()
 }
+
+// Close implements the storage.Partition interface. If the combined parititon is
+// being closed, we need to ensure that the dry-run is also being closed.
+func (c *combinedMigrationPartition) Close() {
+	c.dryRun.Close()
+	c.Partition.Close()
+}
