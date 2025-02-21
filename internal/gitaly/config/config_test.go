@@ -2837,6 +2837,7 @@ func TestRaftConfig_Validate(t *testing.T) {
 				RTTMilliseconds: 200,
 				ElectionTicks:   20,
 				HeartbeatTicks:  2,
+				SnapshotDir:     testhelper.TempDir(t),
 			},
 			cfgTransactions: Transactions{Enabled: true},
 		},
@@ -2848,6 +2849,7 @@ func TestRaftConfig_Validate(t *testing.T) {
 				RTTMilliseconds: 200,
 				ElectionTicks:   20,
 				HeartbeatTicks:  2,
+				SnapshotDir:     testhelper.TempDir(t),
 			},
 			cfgTransactions: Transactions{Enabled: true},
 			expectedErr: cfgerror.ValidationErrors{
@@ -2865,6 +2867,7 @@ func TestRaftConfig_Validate(t *testing.T) {
 				RTTMilliseconds: 200,
 				ElectionTicks:   20,
 				HeartbeatTicks:  2,
+				SnapshotDir:     testhelper.TempDir(t),
 			},
 			cfgTransactions: Transactions{Enabled: true},
 			expectedErr: cfgerror.ValidationErrors{
@@ -2882,6 +2885,7 @@ func TestRaftConfig_Validate(t *testing.T) {
 				RTTMilliseconds: 0,
 				ElectionTicks:   20,
 				HeartbeatTicks:  2,
+				SnapshotDir:     testhelper.TempDir(t),
 			},
 			cfgTransactions: Transactions{Enabled: true},
 			expectedErr: cfgerror.ValidationErrors{
@@ -2899,6 +2903,7 @@ func TestRaftConfig_Validate(t *testing.T) {
 				RTTMilliseconds: 200,
 				ElectionTicks:   0,
 				HeartbeatTicks:  2,
+				SnapshotDir:     testhelper.TempDir(t),
 			},
 			cfgTransactions: Transactions{Enabled: true},
 			expectedErr: cfgerror.ValidationErrors{
@@ -2916,6 +2921,7 @@ func TestRaftConfig_Validate(t *testing.T) {
 				RTTMilliseconds: 200,
 				ElectionTicks:   20,
 				HeartbeatTicks:  0,
+				SnapshotDir:     testhelper.TempDir(t),
 			},
 			cfgTransactions: Transactions{Enabled: true},
 			expectedErr: cfgerror.ValidationErrors{
@@ -2933,6 +2939,7 @@ func TestRaftConfig_Validate(t *testing.T) {
 				RTTMilliseconds: 200,
 				ElectionTicks:   20,
 				HeartbeatTicks:  2,
+				SnapshotDir:     testhelper.TempDir(t),
 			},
 			cfgTransactions: Transactions{Enabled: false},
 			expectedErr: cfgerror.ValidationErrors{

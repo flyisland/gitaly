@@ -910,6 +910,9 @@ func (cfg *Cfg) Sanitize() error {
 
 	if cfg.Raft.Enabled {
 		cfg.Raft = cfg.Raft.fulfillDefaults()
+		if cfg.Raft.SnapshotDir == "" && len(cfg.Storages) > 0 {
+			cfg.Raft.SnapshotDir = filepath.Join(cfg.Storages[0].Path, GitalyDataPrefix, "raft/snapshots")
+		}
 	}
 
 	if cfg.Logging.Config.Format == "" {
@@ -1261,6 +1264,8 @@ type Raft struct {
 	ElectionTicks uint64 `json:"election_rtt" toml:"election_rtt"`
 	// HeartbeatTicks is the number of message RTT between heartbeats
 	HeartbeatTicks uint64 `json:"heartbeat_rtt" toml:"heartbeat_rtt"`
+	// SnapshotDir is the directory where raft snapshots are stored.
+	SnapshotDir string `json:"snapshot_dir" toml:"snapshot_dir"` // Default: <FIRST STORAGE PATH>/+gitaly/raft/snapshots
 }
 
 const (
@@ -1312,7 +1317,9 @@ func (r Raft) Validate(transactions Transactions) error {
 		Append(cfgerror.NotEmpty(r.ClusterID), "cluster_id").
 		Append(cfgerror.Comparable(r.RTTMilliseconds).GreaterThan(0), "rtt_millisecond").
 		Append(cfgerror.Comparable(r.ElectionTicks).GreaterThan(0), "election_rtt").
-		Append(cfgerror.Comparable(r.HeartbeatTicks).GreaterThan(0), "heartbeat_rtt")
+		Append(cfgerror.Comparable(r.HeartbeatTicks).GreaterThan(0), "heartbeat_rtt").
+		Append(cfgerror.PathIsAbs(r.SnapshotDir), "snapshot_dir").
+		Append(cfgerror.DirExists(r.SnapshotDir))
 
 	// Validate UUID format of ClusterID
 	if r.ClusterID != "" {
