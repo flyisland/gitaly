@@ -550,6 +550,8 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		raftManagerRegistry := raftmgr.NewRaftManagerRegistry()
 		routingTable := raftmgr.NewStaticRaftRoutingTable()
 		raftTransport = raftmgr.NewGrpcTransport(logger, cfg, routingTable, raftManagerRegistry, conns)
+		raftSnapshotterMetrics := raftmgr.NewMetrics()
+		prometheus.MustRegister(raftSnapshotterMetrics)
 	}
 
 	var bundleURIManager *bundleuri.GenerationManager
