@@ -70,3 +70,10 @@ func WithPackfileNegotiationMetrics(c *prometheus.CounterVec) ServerOpt {
 		s.packfileNegotiationMetrics = c
 	}
 }
+
+//nolint:revive // This is unintentionally missing documentation.
+func WithBundleURIManager(m *bundleuri.GenerationManager) ServerOpt {
+	return func(s *server) {
+		s.bundleURIManager = m
+	}
+}

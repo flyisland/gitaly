@@ -8,15 +8,18 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/bundleuri"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/cache"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -243,27 +246,120 @@ func testInfoRefsUploadPackGitConfigOptions(t *testing.T, ctx context.Context) {
 
 func TestInfoRefsUploadPack_bundleURI(t *testing.T) {
 	t.Parallel()
+	testhelper.NewFeatureSets(
+		featureflag.BundleURI,
+	).Run(t, testInfoRefsUploadPackBundleURI)
+}
 
-	ctx := testhelper.Context(t)
-	ctx = featureflag.OutgoingCtxWithFeatureFlag(ctx, featureflag.BundleURI, true)
+func testInfoRefsUploadPackBundleURI(t *testing.T, ctx context.Context) {
+	t.Parallel()
+	logger := testhelper.NewLogger(t)
 
-	cfg := testcfg.Build(t)
-	cfg.SocketPath = runSmartHTTPServer(t, cfg)
-
-	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
-
-	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"), gittest.WithParents())
-
-	rpcRequest := &gitalypb.InfoRefsRequest{
-		Repository:       repo,
-		GitProtocol:      gitcmd.ProtocolV2,
-		GitConfigOptions: []string{"transfer.bundleURI=true"},
+	type testData struct {
+		bundleManager *bundleuri.GenerationManager
 	}
-	response, err := makeInfoRefsUploadPackRequest(t, ctx, cfg.SocketPath, cfg.Auth.Token, rpcRequest)
-	require.NoError(t, err)
-	requireAdvertisedCapabilitiesV2(t, string(response), "git-upload-pack", []string{
-		"bundle-uri",
-	})
+
+	testCases := []struct {
+		name            string
+		setup           func(cfg config.Cfg, sink *bundleuri.Sink) testData
+		generateBundle  bool
+		shouldAdvertise bool
+	}{
+		{
+			name: "when a bundle exists bundle-uri capability is advertised",
+			setup: func(cfg config.Cfg, sink *bundleuri.Sink) testData {
+				ctx = testhelper.Context(t)
+				ctx = featureflag.OutgoingCtxWithFeatureFlag(ctx, featureflag.BundleURI, true)
+
+				// Create the bundle manager
+				bundleManager, err := bundleuri.NewGenerationManager(ctx, sink, logger, nil, bundleuri.NewSimpleStrategy(true))
+				require.NoError(t, err)
+
+				return testData{
+					bundleManager: bundleManager,
+				}
+			},
+			generateBundle:  true,
+			shouldAdvertise: true,
+		},
+		{
+			name: "when a bundle does not exist, bundle-uri capability is not advertised",
+			setup: func(cfg config.Cfg, sink *bundleuri.Sink) testData {
+				ctx = testhelper.Context(t)
+				ctx = featureflag.OutgoingCtxWithFeatureFlag(ctx, featureflag.BundleURI, true)
+
+				// Create the bundle manager
+				bundleManager, err := bundleuri.NewGenerationManager(ctx, sink, logger, nil, bundleuri.NewSimpleStrategy(true))
+				require.NoError(t, err)
+
+				return testData{
+					bundleManager: bundleManager,
+				}
+			},
+			generateBundle:  false,
+			shouldAdvertise: false,
+		},
+		{
+			name: "when bundle manager is nil, bundle-uri capability is not advertised",
+			setup: func(cfg config.Cfg, sink *bundleuri.Sink) testData {
+				ctx = testhelper.Context(t)
+				ctx = featureflag.OutgoingCtxWithFeatureFlag(ctx, featureflag.BundleURI, true)
+
+				return testData{
+					bundleManager: nil,
+				}
+			},
+			generateBundle:  false,
+			shouldAdvertise: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create secret key for bundle-uri sink
+			tempDir := testhelper.TempDir(t)
+
+			keyFile, err := os.Create(filepath.Join(tempDir, "secret.key"))
+			require.NoError(t, err)
+			_, err = keyFile.WriteString("super-secret-key")
+			require.NoError(t, err)
+			require.NoError(t, keyFile.Close())
+
+			// Create the bundle sink
+			baseURL := "https://example.com"
+			sinkURI := "file://" + testhelper.TempDir(t) + "?base_url=" + baseURL + "&no_tmp_dir=true&secret_key_path=" + keyFile.Name()
+			sink, err := bundleuri.NewSink(ctx, sinkURI)
+			require.NoError(t, err)
+
+			cfg := testcfg.Build(t)
+			td := tc.setup(cfg, sink)
+			cfg.SocketPath = runSmartHTTPServer(t, cfg, WithBundleURIManager(td.bundleManager))
+			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+			gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"), gittest.WithParents())
+
+			if tc.generateBundle {
+				repo := localrepo.NewTestRepo(t, cfg, repoProto)
+				err = td.bundleManager.Generate(ctx, repo)
+				require.NoError(t, err)
+			}
+
+			rpcRequest := &gitalypb.InfoRefsRequest{
+				Repository:       repoProto,
+				GitProtocol:      gitcmd.ProtocolV2,
+				GitConfigOptions: []string{"transfer.bundleURI=true"},
+			}
+			response, err := makeInfoRefsUploadPackRequest(t, ctx, cfg.SocketPath, cfg.Auth.Token, rpcRequest)
+			require.NoError(t, err)
+
+			rs := string(response)
+			bundleURICapability := []string{"bundle-uri"}
+			if tc.shouldAdvertise {
+				requireAdvertisedCapabilitiesV2(t, rs, "git-upload-pack", bundleURICapability)
+			} else {
+				requireNotAdvertisedCapabilitiesV2(t, rs, "git-upload-pack", bundleURICapability)
+			}
+		})
+	}
 }
 
 func TestInfoRefsUploadPack_gitProtocol(t *testing.T) {
@@ -500,7 +596,7 @@ func makeInfoRefsReceivePackRequest(t *testing.T, ctx context.Context, serverSoc
 	return response, err
 }
 
-func requireAdvertisedCapabilitiesV2(t *testing.T, responseBody, expectedService string, expectedCapabilities []string) {
+func requireParseCapabilitiesV2(t *testing.T, responseBody string, expectedService string) []string {
 	t.Helper()
 
 	responseLines := strings.SplitAfter(responseBody, "\n")
@@ -512,10 +608,33 @@ func requireAdvertisedCapabilitiesV2(t *testing.T, responseBody, expectedService
 	// The second line contains the protocol version
 	require.Equal(t, "0000"+gittest.Pktlinef(t, "version %d\n", 2), responseLines[1])
 
+	return responseLines
+}
+
+func requireAdvertisedCapabilitiesV2(t *testing.T, responseBody, expectedService string, expectedCapabilities []string) {
+	t.Helper()
+
+	responseLines := requireParseCapabilitiesV2(t, responseBody, expectedService)
+
 	// The third line and following lines contain capabilities
 	for _, expectedCap := range expectedCapabilities {
 		require.Contains(t, responseLines[2:], gittest.Pktlinef(t, "%s\n", expectedCap))
 	}
+}
+
+func requireNotAdvertisedCapabilitiesV2(t *testing.T, responseBody, expectedService string, expectedCapabilities []string) {
+	t.Helper()
+
+	responseLines := requireParseCapabilitiesV2(t, responseBody, expectedService)
+
+	// The third line and following lines contain capabilities
+	advertised := false
+	for _, expectedCap := range expectedCapabilities {
+		if slices.Contains(responseLines[2:], gittest.Pktlinef(t, "%s\n", expectedCap)) {
+			advertised = true
+		}
+	}
+	require.False(t, advertised)
 }
 
 func requireAdvertisedRefs(t *testing.T, responseBody, expectedService string, expectedRefs []string) {

@@ -385,7 +385,10 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		node = nodeMgr
 	}
 
-	if gsd.bundleURISink != nil {
+	// This is to allow building a bundle generation from a Sink
+	// without having to create one beforehand.
+	// If bundleURIManager is defined though, we use that one.
+	if gsd.bundleURIManager == nil && gsd.bundleURISink != nil {
 		var strategy bundleuri.GenerationStrategy
 		if gsd.bundleURIStrategy != nil {
 			strategy = gsd.bundleURIStrategy
@@ -627,6 +630,14 @@ func WithBundleURIStrategy(strategy bundleuri.GenerationStrategy) GitalyServerOp
 func WithBundleURISink(sink *bundleuri.Sink) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
 		deps.bundleURISink = sink
+		return deps
+	}
+}
+
+// WithBundleURIManager sets the *bundleuri.GenerationManager that will be used by the bundleuri.GenerationManager
+func WithBundleURIManager(manager *bundleuri.GenerationManager) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.bundleURIManager = manager
 		return deps
 	}
 }

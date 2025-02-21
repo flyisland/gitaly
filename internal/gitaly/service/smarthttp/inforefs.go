@@ -72,7 +72,11 @@ func (s *server) handleInfoRefs(ctx context.Context, service, repoPath string, r
 	if err != nil {
 		return err
 	}
-	gitConfig = append(gitConfig, bundleuri.CapabilitiesGitConfig(ctx, true)...)
+	if s.bundleURIManager != nil {
+		gitConfig = append(gitConfig, s.bundleURIManager.UploadPackGitConfig(ctx, req.GetRepository())...)
+	} else {
+		gitConfig = append(gitConfig, bundleuri.CapabilitiesGitConfig(ctx, false)...)
+	}
 
 	cmdOpts = append(cmdOpts, gitcmd.WithConfig(gitConfig...))
 
