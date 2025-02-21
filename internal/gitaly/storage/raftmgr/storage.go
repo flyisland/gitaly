@@ -9,12 +9,15 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
+	lg "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -111,6 +114,7 @@ type Storage struct {
 	lastTerm     uint64
 	consumer     storage.LogConsumer
 	stagingDir   string
+	snapshotter  Snapshotter
 }
 
 // raftManifestPath returns the path to the manifest file within a log entry directory. The manifest file contains
@@ -124,6 +128,8 @@ func raftManifestPath(logEntryPath string) string {
 
 // NewStorage creates and initializes a new Storage instance.
 func NewStorage(
+	cfg config.Raft,
+	logger lg.Logger,
 	storageName string,
 	partitionID storage.PartitionID,
 	db keyvalue.Transactioner,
@@ -131,6 +137,7 @@ func NewStorage(
 	stateDirectory string,
 	consumer storage.LogConsumer,
 	positionTracker *log.PositionTracker,
+	snapshotterMetrics *Metrics,
 ) (*Storage, error) {
 	if err := positionTracker.Register(RaftCommittedPosition); err != nil {
 		return nil, fmt.Errorf("registering committed position: %w", err)
@@ -150,6 +157,16 @@ func NewStorage(
 		positionTracker,
 	)
 
+	logger = logger.WithFields(lg.Fields{
+		"partition_id": partitionID,
+		"storage_name": storageName,
+	})
+
+	snapshotter, err := NewRaftSnapshotter(cfg, logger, snapshotterMetrics.Scope(storageName))
+	if err != nil {
+		return nil, fmt.Errorf("create raft snapshotter: %w", err)
+	}
+
 	return &Storage{
 		database:    db,
 		storageName: storageName,
@@ -157,6 +174,7 @@ func NewStorage(
 		localLog:    localLog,
 		consumer:    consumer,
 		stagingDir:  stagingDirectory,
+		snapshotter: snapshotter,
 	}, nil
 }
 
@@ -272,6 +290,27 @@ func (s *Storage) FirstIndex() (uint64, error) {
 // For more information: https://gitlab.com/gitlab-org/gitaly/-/issues/6463
 func (s *Storage) Snapshot() (raftpb.Snapshot, error) {
 	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+}
+
+// TriggerSnapshot starts the process of taking a snapshot of the partition's disk
+func (s *Storage) TriggerSnapshot(ctx context.Context, appliedLSN storage.LSN, lastTerm uint64) (*Snapshot, error) {
+	// prevent multiple snapshotters from running at the same time
+	s.snapshotter.Lock()
+	defer s.snapshotter.Unlock()
+
+	// get the transaction from context to reuse the same snapshot
+	tx := storage.ExtractTransaction(ctx)
+	if tx == nil {
+		return nil, structerr.NewInternal("raft snapshotter: transaction not initialized")
+	}
+
+	// snapshot metadata are important to track what logs should be applied after snapshot restoration
+	snapshot, err := s.snapshotter.materializeSnapshot(SnapshotMetadata{index: appliedLSN, term: lastTerm}, tx)
+	if err != nil {
+		return nil, fmt.Errorf("materialize snapshot: %w", err)
+	}
+
+	return snapshot, nil
 }
 
 // Term returns the term of the entry at a given index.
