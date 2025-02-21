@@ -345,7 +345,7 @@ prepare-tests: build-bundled-git
 install: install-bundled-git
 
 else
-prepare-tests: build-git
+prepare-tests: ${DEPENDENCY_DIR}/git-distribution/git
 
 export GITALY_TESTING_GIT_BINARY ?= ${DEPENDENCY_DIR}/git-distribution/bin-wrappers/git
 endif
@@ -585,7 +585,7 @@ git: install-git
 
 .PHONY: build-git
 ## Build Git distribution.
-build-git: ${DEPENDENCY_DIR}/git-distribution/.built
+build-git: ${DEPENDENCY_DIR}/git-distribution/git
 
 .PHONY: install-git
 ## Install Git distribution.
@@ -610,14 +610,14 @@ ${DEPENDENCY_DIR}: | ${BUILD_DIR}
 	${Q}mkdir -p ${DEPENDENCY_DIR}
 
 # This target builds a full Git distribution.
-${DEPENDENCY_DIR}/git-distribution/.built: ${DEPENDENCY_DIR}/git-distribution/Makefile
+${DEPENDENCY_DIR}/git-distribution/git: ${DEPENDENCY_DIR}/git-distribution/Makefile
 	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "$(<D)" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS}
 	${Q}touch $@
 
 # These targets build specific releases of Git.
 ${BUILD_DIR}/bin/gitaly-%-v2.47: override GIT_VERSION = ${GIT_VERSION_2_47}
-${BUILD_DIR}/bin/gitaly-%-v2.47: ${DEPENDENCY_DIR}/git-v2.47/.built | ${BUILD_DIR}/bin
-	${Q}install "$(<D)"/$* $@
+${BUILD_DIR}/bin/gitaly-%-v2.47: ${DEPENDENCY_DIR}/git-v2.47/% | ${BUILD_DIR}/bin
+	${Q}install $< $@
 
 ${BUILD_DIR}/bin/gitaly-%-v2.48: override GIT_VERSION = ${GIT_VERSION_2_48}
 # Use non-collision-detecting SHA1 implementation in non-cryptographic scenarios
@@ -629,11 +629,11 @@ ${BUILD_DIR}/bin/gitaly-%-v2.48: override GIT_BUILD_OPTIONS += OPENSSL_SHA1_UNSA
 endif
 
 ifdef USE_MESON
-${BUILD_DIR}/bin/gitaly-%-v2.48: ${DEPENDENCY_DIR}/git-v2.48/build/.built | ${BUILD_DIR}/bin
-	${Q}install "$(<D)"/$* $@
+${BUILD_DIR}/bin/gitaly-%-v2.48: ${DEPENDENCY_DIR}/git-v2.48/build/% | ${BUILD_DIR}/bin
+	${Q}install $< $@
 else
-${BUILD_DIR}/bin/gitaly-%-v2.48: ${DEPENDENCY_DIR}/git-v2.48/.built | ${BUILD_DIR}/bin
-	${Q}install "$(<D)"/$* $@
+${BUILD_DIR}/bin/gitaly-%-v2.48: ${DEPENDENCY_DIR}/git-v2.48/% | ${BUILD_DIR}/bin
+	${Q}install $< $@
 endif
 
 # clear-go-build-cache-if-needed cleans the Go build cache if it exceeds the maximum size as
@@ -656,7 +656,7 @@ ${GITALY_EXECUTABLES}: ${BUILD_DIR}/bin/%: clear-go-build-cache-if-needed .FORCE
 # these targets.
 .PHONY: dependency-version
 ${DEPENDENCY_DIR}/git-%.version: dependency-version | ${DEPENDENCY_DIR}
-	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${GIT_VERSION} ${GIT_BUILD_OPTIONS} ${GIT_MESON_BUILD_OPTIONS} ${USE_MESON} ${GIT_EXECUTABLES}" ] || >$@ echo -n "${GIT_VERSION} ${GIT_BUILD_OPTIONS} ${GIT_MESON_BUILD_OPTIONS} ${USE_MESON} ${GIT_EXECUTABLES}"
+	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${GIT_VERSION} ${GIT_BUILD_OPTIONS} ${GIT_MESON_BUILD_OPTIONS} ${USE_MESON}" ] || >$@ echo -n "${GIT_VERSION} ${GIT_BUILD_OPTIONS} ${GIT_MESON_BUILD_OPTIONS} ${USE_MESON}"
 ${DEPENDENCY_DIR}/protoc.version: dependency-version | ${DEPENDENCY_DIR}
 	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${PROTOC_VERSION} ${PROTOC_BUILD_OPTIONS}" ] || >$@ echo -n "${PROTOC_VERSION} ${PROTOC_BUILD_OPTIONS}"
 ${DEPENDENCY_DIR}/git-filter-repo.version: dependency-version | ${DEPENDENCY_DIR}
@@ -684,14 +684,14 @@ else
 endif
 	${Q}touch $@
 
-${DEPENDENCY_DIR}/git-%/.built: ${DEPENDENCY_DIR}/git-%/Makefile
-	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${@D}" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} ${GIT_EXECUTABLES}
-	${Q}touch $@
-
-${DEPENDENCY_DIR}/git-%/build/.built: ${DEPENDENCY_DIR}/git-%/Makefile
+$(patsubst %,${DEPENDENCY_DIR}/git-\%/build/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
 	${Q}rm -rf "$(dir ${@D})"/build
 	${Q}meson setup "$(dir ${@D})" "$(dir ${@D})"/build -Dprefix="${GIT_PREFIX}" ${GIT_MESON_BUILD_OPTIONS}
 	${Q}meson compile -C "$(dir ${@D})/build" $(patsubst %,%:executable,${GIT_EXECUTABLES})
+	${Q}touch $@
+
+$(patsubst %,${DEPENDENCY_DIR}/git-\%/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
+	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${@D}" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} ${GIT_EXECUTABLES}
 	${Q}touch $@
 
 ${INSTALL_DEST_DIR}/gitaly-%: ${BUILD_DIR}/bin/gitaly-%
