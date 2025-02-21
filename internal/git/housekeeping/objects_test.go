@@ -558,9 +558,15 @@ func TestRepackObjects(t *testing.T) {
 			},
 			stateAfterRepack: objectsState{
 				packfiles: 1,
-				// git-repack(1) in the `next` branch incorporates the unreachable object into the
-				// packfile.
-				looseObjects: testhelper.GitVersionOrNot[uint64]("next", 0, 1),
+				// git-repack(1) in the `next` and `master` branches incorporate the unreachable object
+				// into the packfile.
+				looseObjects: func() uint64 {
+					version := os.Getenv("GIT_VERSION")
+					if version == "next" || version == "master" {
+						return 0
+					}
+					return 1
+				}(),
 			},
 		},
 		{

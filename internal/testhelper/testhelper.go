@@ -461,12 +461,3 @@ func SourceRoot(tb testing.TB) string {
 	require.NoError(tb, err, output)
 	return filepath.Dir(string(output))
 }
-
-// GitVersionOrNot checks if the GIT_VERSION environment variable matches version. It returns
-// yes if it matches, and no otherwise.
-func GitVersionOrNot[T any](version string, yes, no T) T {
-	if os.Getenv("GIT_VERSION") == version {
-		return yes
-	}
-	return no
-}
