@@ -1111,9 +1111,10 @@ func (cfg *Cfg) validateCgroups() error {
 }
 
 var (
-	errPackObjectsCacheNegativeMaxAge = errors.New("pack_objects_cache.max_age cannot be negative")
-	errPackObjectsCacheNoStorages     = errors.New("pack_objects_cache: cannot pick default cache directory: no storages")
-	errPackObjectsCacheRelativePath   = errors.New("pack_objects_cache: storage directory must be absolute path")
+	errPackObjectsCacheNegativeMaxAge  = errors.New("pack_objects_cache.max_age cannot be negative")
+	errPackObjectsCacheNoStorages      = errors.New("pack_objects_cache: cannot pick default cache directory: no storages")
+	errPackObjectsCacheRelativePath    = errors.New("pack_objects_cache: storage directory must be absolute path")
+	errPackObjectsCacheSetToStorageDir = errors.New("pack_objects_cache: the specified cache directory cannot be the same or a parent of the storage path")
 )
 
 func (cfg *Cfg) configurePackObjectsCache() error {
@@ -1132,6 +1133,22 @@ func (cfg *Cfg) configurePackObjectsCache() error {
 
 	if !filepath.IsAbs(poc.Dir) {
 		return errPackObjectsCacheRelativePath
+	}
+
+	absCachePath, err := filepath.Abs(cfg.PackObjectsCache.Dir)
+	if err != nil {
+		return err
+	}
+
+	for _, storage := range cfg.Storages {
+		absStoragePath, err := filepath.Abs(storage.Path)
+		if err != nil {
+			return err
+		}
+
+		if strings.HasPrefix(absStoragePath, absCachePath) {
+			return errPackObjectsCacheSetToStorageDir
+		}
 	}
 
 	return nil
