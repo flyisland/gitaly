@@ -267,7 +267,7 @@ message RawDiffResponse {
   bytes data = 1;
 }
 
-// RawPatchRequest is a response for the RawPatch RPC.
+// RawPatchRequest is a request for the RawPatch RPC.
 message RawPatchRequest {
   // repository is the one to get the patch from.
   Repository repository = 1 [(target_repository)=true];

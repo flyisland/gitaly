@@ -1139,7 +1139,7 @@ func (x *RawDiffResponse) GetData() []byte {
 	return nil
 }
 
-// RawPatchRequest is a response for the RawPatch RPC.
+// RawPatchRequest is a request for the RawPatch RPC.
 type RawPatchRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// repository is the one to get the patch from.
