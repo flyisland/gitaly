@@ -76,6 +76,8 @@ func (s *mockRaftServer) SendMessage(stream gitalypb.RaftService_SendMessageServ
 }
 
 func TestGrpcTransport_SendAndReceive(t *testing.T) {
+	testhelper.SkipWithPraefect(t, "There isn't any reason for Raft and Praefect to co-exist at the same time")
+
 	t.Parallel()
 
 	type setup struct {
