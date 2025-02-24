@@ -115,6 +115,13 @@ RAFTPB_SOURCE_DIR   ?= ${DEPENDENCY_DIR}/raft
 GOGOPROTO_REPO_URL     ?= https://github.com/gogo/protobuf
 GOGOPROTO_SOURCE_DIR   ?= ${DEPENDENCY_DIR}/gogo-protobuf
 
+# Factorize all protobuf includes in a single variable
+PROTOC_INCLUDE ?=
+PROTOC_INCLUDE += -I ${SOURCE_DIR}/proto
+PROTOC_INCLUDE += -I ${PROTOC_INSTALL_DIR}/include
+PROTOC_INCLUDE += -I ${RAFTPB_SOURCE_DIR}
+PROTOC_INCLUDE += -I ${GOGOPROTO_SOURCE_DIR}
+
 # Git target
 GIT_REPO_URL       ?= https://gitlab.com/gitlab-org/git.git
 GIT_QUIET          :=
@@ -522,10 +529,7 @@ proto: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GO_GRPC} ${PROTOC_GEN_GITALY_PROT
 		--go_out=${PROTO_DEST_DIR}/gitalypb \
 		--gitaly-protolist_out=proto_dir=${SOURCE_DIR}/proto,gitalypb_dir=${PROTO_DEST_DIR}/gitalypb:${SOURCE_DIR} \
 		--go-grpc_out=${PROTO_DEST_DIR}/gitalypb \
-		-I ${SOURCE_DIR}/proto \
-		-I ${PROTOC_INSTALL_DIR}/include \
-		-I ${RAFTPB_SOURCE_DIR} \
-		-I ${GOGOPROTO_SOURCE_DIR} \
+		${PROTOC_INCLUDE} \
 		${SOURCE_DIR}/proto/*.proto \
 		${SOURCE_DIR}/proto/testproto/*.proto
 
@@ -551,9 +555,9 @@ publish-proto-gem: build-proto-gem
 
 .PHONY: build-proto-docs
 ## Build HTML documentation for Gitaly Protobuf definitions.
-build-proto-docs: ${PROTOC} ${PROTOC_GEN_DOC}
+build-proto-docs: ${PROTOC} ${DEPENDENCY_DIR}/raftpb ${PROTOC_GEN_DOC}
 	${Q}rm -rf ${BUILD_DIR}/proto-docs && mkdir -p ${BUILD_DIR}/proto-docs
-	${Q}${PROTOC} -I ${SOURCE_DIR}/proto -I ${PROTOC_INSTALL_DIR}/include --doc_out=${BUILD_DIR}/proto-docs --doc_opt=html,index.html --plugin=protoc-gen-doc=${PROTOC_GEN_DOC} ${SOURCE_DIR}/proto/*.proto
+	${Q}${PROTOC} ${PROTOC_INCLUDE} --doc_out=${BUILD_DIR}/proto-docs --doc_opt=html,index.html --plugin=protoc-gen-doc=${PROTOC_GEN_DOC} ${SOURCE_DIR}/proto/*.proto
 
 .PHONY: govulncheck
 ## pipefail is set in the SHELL config, but we don't care about govulncheck's exit code here.
