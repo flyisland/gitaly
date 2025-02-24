@@ -7,7 +7,6 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
@@ -27,42 +26,33 @@ import (
 // bundle generation per repo at any given time as well as a global limit across
 // all repositories.
 type GenerationManager struct {
-	sink                       *Sink
-	bundleGenerationInProgress map[string]struct{}
-	mutex                      sync.Mutex
-	ctx                        context.Context
-	cancel                     context.CancelFunc
-	concurrencyLimit           int
-	inProgressTracker          InProgressTracker
-	threshold                  uint
-	logger                     log.Logger
-	wg                         sync.WaitGroup
-	bundleGenerationLatency    prometheus.Histogram
-	bundleGenerationBytes      prometheus.Counter
+	ctx                     context.Context
+	sink                    *Sink
+	logger                  log.Logger
+	strategy                GenerationStrategy
+	nodeManager             storage.Node
+	bundleGenerationLatency prometheus.Histogram
+	bundleGenerationBytes   prometheus.Counter
 }
 
 // NewGenerationManager creates a new GenerationManager
-func NewGenerationManager(
-	sink *Sink,
-	logger log.Logger,
-	concurrencyLimit int,
-	threshold uint,
-	inProgressTracker InProgressTracker,
-) (*GenerationManager, error) {
+// ctx must be a cancellable context. It will be passed to the function
+// generating bundles and writing bundles to storage. If ctx gets cancelled,
+// all bundles currently being generated at that moment will also be cancelled.
+func NewGenerationManager(ctx context.Context, sink *Sink, logger log.Logger, nodeManager storage.Node, strategy GenerationStrategy) (*GenerationManager, error) {
 	if sink == nil {
 		return nil, structerr.NewInvalidArgument("cannot create bundle manager: missing sink")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	return &GenerationManager{
-		sink:                       sink,
-		ctx:                        ctx,
-		cancel:                     cancel,
-		concurrencyLimit:           concurrencyLimit,
-		threshold:                  threshold,
-		bundleGenerationInProgress: make(map[string]struct{}),
-		inProgressTracker:          inProgressTracker,
-		logger:                     logger,
+		// we keep a reference to the context passed in the constructor
+		// because we want to be able to abort bundle generation if this
+		// context gets cancelled.
+		ctx:         ctx,
+		sink:        sink,
+		strategy:    strategy,
+		logger:      logger,
+		nodeManager: nodeManager,
 		bundleGenerationBytes: prometheus.NewCounter(
 			prometheus.CounterOpts{
 				Name: "gitaly_bundle_generation_bytes_total",
@@ -89,17 +79,18 @@ func (g *GenerationManager) Collect(metrics chan<- prometheus.Metric) {
 	g.bundleGenerationBytes.Collect(metrics)
 }
 
-// StopAll blocks until all of the goroutines that are generating bundles are finished.
-func (g *GenerationManager) StopAll() {
-	g.cancel()
-	g.wg.Wait()
+// GenerateWithStrategy runs the strategy within the manager to determine if a bundle must
+// be generated.
+func (g *GenerationManager) GenerateWithStrategy(ctx context.Context, repo *localrepo.Repo) error {
+	if featureflag.BundleGeneration.IsEnabled(ctx) {
+		return g.strategy.Evaluate(ctx, repo, g.Generate)
+	}
+	return nil
 }
 
 // Generate will generate a bundle for the given `repo`. This method does not attempt to
 // verify any feature flag or conditions. Calling this method WILL generate a bundle.
 func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) (returnErr error) {
-	bundlePath := bundleRelativePath(repo, defaultBundle)
-
 	ref, err := repo.HeadReference(ctx)
 	if err != nil {
 		return fmt.Errorf("resolve HEAD ref: %w", err)
@@ -110,13 +101,49 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 		return fmt.Errorf("unexpected repository type %t", repo.Repository)
 	}
 
+	// We need a distinct context from the request's context (ctx).
+	// This is because if we use the request's context during bundle generation,
+	// and if this request runs inside a transaction, the snapshot that holds a
+	// copy of the repo will be deleted at the end of the transaction, but the bundle
+	// might not have finished generating yet. So we need a new context, and a new
+	// transaction inside that context, so we can have a snapshot that holds for
+	// the duration of the bundle generation. We also want this new context to be
+	// `from` the manager's context to inherit its cancellation.
+	gCtx, cancel := context.WithCancel(g.ctx)
+	defer cancel()
+
+	bundlePath := bundleRelativePath(repo, defaultBundle)
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		origRepo := tx.OriginalRepository(repoProto)
-		bundlePath = bundleRelativePath(origRepo, defaultBundle)
+		if g.nodeManager == nil {
+			g.logger.WithError(err).Error("generate bundle: nil node manager within transaction")
+			return nil
+		}
+
+		originalRepo := tx.OriginalRepository(repoProto)
+		strg, err := g.nodeManager.GetStorage(originalRepo.GetStorageName())
+		if err != nil {
+			g.logger.WithError(err).Error("generate bundle: error getting storage")
+			return nil
+		}
+		// Create the transaction on the new context created above
+		ntx, err := strg.Begin(gCtx, storage.TransactionOptions{
+			ReadOnly:     true,
+			RelativePath: originalRepo.GetRelativePath(),
+		})
+		if err != nil {
+			g.logger.WithError(err).Error("generate bundle: no transaction found")
+			return nil
+		}
+
+		// We only create a new transaction to have a dedicated snapshot during
+		// bundle generation. So once the bundle is generated, we must abort
+		// to free the snapshot.
+		defer func() { _ = ntx.Rollback(gCtx) }()
+		bundlePath = bundleRelativePath(originalRepo, defaultBundle)
 	}
 
 	writer := backup.NewLazyWriter(func() (io.WriteCloser, error) {
-		return g.sink.getWriter(ctx, bundlePath)
+		return g.sink.getWriter(gCtx, bundlePath)
 	})
 	defer func() {
 		if err := writer.Close(); err != nil && returnErr == nil {
@@ -129,75 +156,18 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 	}
 
 	timer := prometheus.NewTimer(g.bundleGenerationLatency)
-	err = repo.CreateBundle(ctx, writer, &opts)
-
-	// do not register metrics when in error since it would skew measurements
+	err = repo.CreateBundle(gCtx, writer, &opts)
 	switch {
 	case errors.Is(err, localrepo.ErrEmptyBundle):
 		return structerr.NewFailedPrecondition("ref %q does not exist: %w", ref, err)
 	case err != nil:
+		g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).
+			WithError(err).
+			Error("failed to generate bundle")
 		return structerr.NewInternal("%w", err)
 	}
-
 	timer.ObserveDuration()
 	g.bundleGenerationBytes.Add(float64(writer.BytesWritten()))
-	return nil
-}
-
-// GenerateIfAboveThreshold runs given function f(). While that function is running it
-// has incremented an "in progress" counter. When there are multiple concurrent
-// calls making the counter for the given repository reach the threshold, a
-// background goroutine to generate a bundle is started.
-func (g *GenerationManager) GenerateIfAboveThreshold(ctx context.Context, repo *localrepo.Repo, f func() error) error {
-	repoPath := repo.GetRelativePath()
-	bundlePath := bundleRelativePath(repo, defaultBundle)
-
-	g.inProgressTracker.IncrementInProgress(repoPath)
-	defer g.inProgressTracker.DecrementInProgress(repoPath)
-
-	if g.inProgressTracker.GetInProgress(repoPath) > g.threshold {
-		g.wg.Add(1)
-		go func() {
-			defer g.wg.Done()
-			if featureflag.BundleGeneration.IsEnabled(ctx) {
-				shouldGenerate := func() bool {
-					g.mutex.Lock()
-					defer g.mutex.Unlock()
-
-					if _, ok := g.bundleGenerationInProgress[bundlePath]; ok {
-						return false
-					}
-					if len(g.bundleGenerationInProgress) >= g.concurrencyLimit {
-						return false
-					}
-
-					g.bundleGenerationInProgress[bundlePath] = struct{}{}
-
-					return true
-				}
-
-				if !shouldGenerate() {
-					return
-				}
-
-				defer func() {
-					g.mutex.Lock()
-					defer g.mutex.Unlock()
-					delete(g.bundleGenerationInProgress, bundlePath)
-				}()
-				if err := g.Generate(g.ctx, repo); err != nil {
-					g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).
-						WithError(err).
-						Error("failed to generate bundle")
-					return
-				}
-			}
-			g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).Info("bundle generation")
-		}()
-	}
-	if f != nil {
-		return f()
-	}
 	return nil
 }
 

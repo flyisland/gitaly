@@ -552,21 +552,33 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		raftTransport = raftmgr.NewGrpcTransport(logger, cfg, routingTable, raftManagerRegistry, conns)
 	}
 
-	var bundleURISink *bundleuri.Sink
 	var bundleURIManager *bundleuri.GenerationManager
 	if cfg.BundleURI.GoCloudURL != "" {
-		bundleURISink, err = bundleuri.NewSink(ctx, cfg.BundleURI.GoCloudURL)
+		bundleURISink, err := bundleuri.NewSink(ctx, cfg.BundleURI.GoCloudURL)
 		if err != nil {
 			return fmt.Errorf("create bundle-URI sink: %w", err)
 		}
 
 		// The manager created here merely to have a non-nil manager in order to use
 		// the SignedURL() method on it. It is not used, yet, to generate bundles
-		// based on this configuration (concurrencyLimit: 3, threshold: 1).
+		// based on this configuration.
 		// Further tests and analysis would be required to come up with the
 		// appropriate configuration. This will be done once we are ready to use this manager
-		// to generate bundles based on this configuration (ie: calling GenerateIfAboveThreshold(...))
-		bundleURIManager, err = bundleuri.NewGenerationManager(bundleURISink, logger, 3, 1, bundleuri.NewInProgressTracker())
+		// to generate bundles.
+		maxBundleAge := time.Minute * 30
+		interval := 30 * time.Second
+		maxConcurrent := 3
+		threshold := 5
+		bundleGenerationStrategy, err := bundleuri.NewOccurrenceStrategy(logger, threshold, interval, maxConcurrent, maxBundleAge)
+		if err != nil {
+			return fmt.Errorf("error creating bundle generation strategy: %w", err)
+		}
+
+		prometheus.MustRegister(bundleGenerationStrategy)
+		stop := bundleGenerationStrategy.Start(ctx)
+		defer stop()
+
+		bundleURIManager, err = bundleuri.NewGenerationManager(ctx, bundleURISink, logger, node, bundleGenerationStrategy)
 		if err != nil {
 			return fmt.Errorf("error creating bundle manager: %w", err)
 		}

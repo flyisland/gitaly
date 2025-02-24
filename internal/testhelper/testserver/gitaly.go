@@ -295,6 +295,8 @@ type gitalyServerDeps struct {
 	transactionRegistry   *storagemgr.TransactionRegistry
 	procReceiveRegistry   *hook.ProcReceiveRegistry
 	bundleURIManager      *bundleuri.GenerationManager
+	bundleURISink         *bundleuri.Sink
+	bundleURIStrategy     bundleuri.GenerationStrategy
 	localRepoFactory      localrepo.Factory
 	MigrationStateManager migration.StateManager
 }
@@ -381,6 +383,19 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		tb.Cleanup(nodeMgr.Close)
 
 		node = nodeMgr
+	}
+
+	if gsd.bundleURISink != nil {
+		var strategy bundleuri.GenerationStrategy
+		if gsd.bundleURIStrategy != nil {
+			strategy = gsd.bundleURIStrategy
+		} else {
+			strategy = bundleuri.NewSimpleStrategy(true)
+		}
+		manager, err := bundleuri.NewGenerationManager(ctx, gsd.bundleURISink, gsd.logger, node, strategy)
+		require.NoError(tb, err)
+
+		gsd.bundleURIManager = manager
 	}
 
 	if gsd.hookMgr == nil {
@@ -599,10 +614,19 @@ func WithBackupLocator(backupLocator backup.Locator) GitalyServerOpt {
 	}
 }
 
-// WithBundleURIManager sets the bundleuri.Sink that will be used for Gitaly services
-func WithBundleURIManager(mgr *bundleuri.GenerationManager) GitalyServerOpt {
+// WithBundleURIStrategy sets the bundleuri.GenerationStrategy that will be used by the bundleuri.GenerationManager
+// The default value is bundleuri.NewSimpleStrategy(true)
+func WithBundleURIStrategy(strategy bundleuri.GenerationStrategy) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
-		deps.bundleURIManager = mgr
+		deps.bundleURIStrategy = strategy
+		return deps
+	}
+}
+
+// WithBundleURISink sets the *bundleuri.Sink that will be used by the bundleuri.GenerationManager
+func WithBundleURISink(sink *bundleuri.Sink) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.bundleURISink = sink
 		return deps
 	}
 }

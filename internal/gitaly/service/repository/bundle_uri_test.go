@@ -22,110 +22,73 @@ func TestServer_GenerateBundleURI(t *testing.T) {
 	ctx := testhelper.Context(t)
 
 	type setupData struct {
-		cfg    config.Cfg
-		client gitalypb.RepositoryServiceClient
-		repo   *gitalypb.Repository
+		repo *gitalypb.Repository
 	}
 
 	for _, tc := range []struct {
-		desc        string
-		setup       func(t *testing.T, ctx context.Context, tempDir string) setupData
-		expectedErr error
+		desc              string
+		setup             func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData
+		withBundleManager bool
+		expectedErr       error
 	}{
 		{
 			desc: "no bundle manager",
-			setup: func(t *testing.T, ctx context.Context, tempDir string) setupData {
-				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleURIManager(nil),
-				)
-
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData {
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
-
 				return setupData{
-					cfg:    cfg,
-					client: client,
-					repo:   repo,
+					repo: repo,
 				}
 			},
-			expectedErr: structerr.NewFailedPrecondition("no bundle-generation manager available"),
+			withBundleManager: false,
+			expectedErr:       structerr.NewFailedPrecondition("no bundle-generation manager available"),
 		},
 		{
 			desc: "no valid repo",
-			setup: func(t *testing.T, ctx context.Context, tempDir string) setupData {
-				sink, err := bundleuri.NewSink(ctx, "file://"+tempDir)
-				require.NoError(t, err)
-
-				logger := testhelper.NewLogger(t)
-				manager, err := bundleuri.NewGenerationManager(sink, logger, 3, 1, bundleuri.NewInProgressTracker())
-				require.NoError(t, err)
-
-				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleURIManager(manager),
-				)
-
-				return setupData{
-					cfg:    cfg,
-					client: client,
-				}
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData {
+				return setupData{}
 			},
-			expectedErr: structerr.NewInvalidArgument("repository not set"),
+			withBundleManager: true,
+			expectedErr:       structerr.NewInvalidArgument("repository not set"),
 		},
 		{
 			desc: "empty repo",
-			setup: func(t *testing.T, ctx context.Context, tempDir string) setupData {
-				sink, err := bundleuri.NewSink(ctx, "file://"+tempDir)
-				require.NoError(t, err)
-
-				logger := testhelper.NewLogger(t)
-				manager, err := bundleuri.NewGenerationManager(sink, logger, 3, 1, bundleuri.NewInProgressTracker())
-				require.NoError(t, err)
-
-				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleURIManager(manager),
-				)
-
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData {
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
-
 				return setupData{
-					cfg:    cfg,
-					client: client,
-					repo:   repo,
+					repo: repo,
 				}
 			},
-			expectedErr: structerr.NewFailedPrecondition("generate bundle: ref %q does not exist: create bundle: refusing to create empty bundle", "refs/heads/main"),
+			withBundleManager: true,
+			expectedErr:       structerr.NewFailedPrecondition("generate bundle: ref %q does not exist: create bundle: refusing to create empty bundle", "refs/heads/main"),
 		},
 		{
 			desc: "success",
-			setup: func(t *testing.T, ctx context.Context, tempDir string) setupData {
-				sink, err := bundleuri.NewSink(ctx, "file://"+tempDir)
-				require.NoError(t, err)
-
-				logger := testhelper.NewLogger(t)
-				manager, err := bundleuri.NewGenerationManager(sink, logger, 3, 1, bundleuri.NewInProgressTracker())
-				require.NoError(t, err)
-
-				cfg, client := setupRepositoryService(t,
-					testserver.WithBundleURIManager(manager),
-				)
-
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData {
 				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch))
-
 				return setupData{
-					cfg:    cfg,
-					client: client,
-					repo:   repo,
+					repo: repo,
 				}
 			},
+			withBundleManager: true,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
-
 			tempDir := testhelper.TempDir(t)
-			data := tc.setup(t, ctx, tempDir)
 
-			_, err := data.client.GenerateBundleURI(ctx, &gitalypb.GenerateBundleURIRequest{
+			var opts []testserver.GitalyServerOpt
+			if tc.withBundleManager {
+				sink, err := bundleuri.NewSink(ctx, "file://"+tempDir)
+				require.NoError(t, err)
+				opts = append(opts, testserver.WithBundleURISink(sink))
+				opts = append(opts, testserver.WithBundleURIStrategy(bundleuri.NewSimpleStrategy(true)))
+			}
+
+			cfg, client := setupRepositoryService(t, opts...)
+			data := tc.setup(t, ctx, cfg)
+
+			_, err := client.GenerateBundleURI(ctx, &gitalypb.GenerateBundleURIRequest{
 				Repository: data.repo,
 			})
 			if tc.expectedErr == nil {

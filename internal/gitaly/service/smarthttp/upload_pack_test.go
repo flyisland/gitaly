@@ -414,9 +414,6 @@ func testServerPostUploadPackSidechannelValidation(t *testing.T, ctx context.Con
 func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 	t.Parallel()
 
-	ctx := testhelper.Context(t)
-	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.BundleURI, true)
-
 	// Create secret key for bundle-uri sink
 	tempDir := testhelper.TempDir(t)
 	keyFile, err := os.Create(filepath.Join(tempDir, "secret.key"))
@@ -430,8 +427,8 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 	testCases := []struct {
 		desc            string
 		sinkURI         string
-		setup           func(t *testing.T, ctx context.Context, cfg config.Cfg, manager *bundleuri.GenerationManager, repoProto *gitalypb.Repository, repoPath string)
 		expectBundleURI bool
+		setup           func(t *testing.T, ctx context.Context, cfg config.Cfg, manager *bundleuri.GenerationManager, repoProto *gitalypb.Repository, repoPath string)
 	}{
 		{
 			desc:    "bundle exists",
@@ -440,7 +437,6 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 				gittest.WriteCommit(t, cfg, repoPath,
 					gittest.WithTreeEntries(gittest.TreeEntry{Mode: "100644", Path: "README", Content: "much"}),
 					gittest.WithBranch("main"))
-
 				repo := localrepo.NewTestRepo(t, cfg, repoProto)
 				require.NoError(t, manager.Generate(ctx, repo))
 			},
@@ -464,13 +460,14 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			ctx := testhelper.Context(t)
+			ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.BundleURI, true)
+
 			testhelper.SkipQuarantinedTest(
 				t,
 				"https://gitlab.com/gitlab-org/gitaly/-/issues/5982",
 				"TestServer_PostUploadPackWithBundleURI/backup_without_bundle_path",
 			)
-
-			t.Parallel()
 
 			cfg := testcfg.Build(t)
 			logger := testhelper.NewLogger(t)
@@ -479,23 +476,29 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 
 			// create bundle manager if sinkURI is defined
 			var bundleManager *bundleuri.GenerationManager
+
+			var bundleURISink *bundleuri.Sink
+			var bundleURIStrategy bundleuri.GenerationStrategy
 			if tc.sinkURI != "" {
-				sink, err := bundleuri.NewSink(ctx, tc.sinkURI)
+				bundleURISink, err = bundleuri.NewSink(ctx, tc.sinkURI)
 				require.NoError(t, err)
 
-				bundleManager, err = bundleuri.NewGenerationManager(sink, logger, 2, 0, bundleuri.NewInProgressTracker())
+				bundleURIStrategy = bundleuri.NewSimpleStrategy(tc.expectBundleURI)
+				bundleManager, err = bundleuri.NewGenerationManager(ctx, bundleURISink, logger, nil, bundleURIStrategy)
 				require.NoError(t, err)
 			}
 
 			// create server
-			server := startSmartHTTPServerWithOptions(t, cfg, nil, []testserver.GitalyServerOpt{
-				testserver.WithBundleURIManager(bundleManager),
+			testServer := startSmartHTTPServerWithOptions(t, cfg, nil, []testserver.GitalyServerOpt{
+				testserver.WithBundleURIStrategy(bundleURIStrategy),
+				testserver.WithBundleURISink(bundleURISink),
 				testserver.WithLogger(logger),
 			})
-			cfg.SocketPath = server.Address()
+			cfg.SocketPath = testServer.Address()
 
 			// create repo
 			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
 			if tc.setup != nil {
 				tc.setup(t, ctx, cfg, bundleManager, repoProto, repoPath)
 			}
@@ -512,7 +515,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 			req := &gitalypb.PostUploadPackWithSidechannelRequest{Repository: repoProto, GitProtocol: gitcmd.ProtocolV2}
 			responseBuffer, err := makePostUploadPackWithSidechannelRequest(t, ctx, cfg.SocketPath, cfg.Auth.Token, req, requestBody)
 
-			server.Shutdown()
+			testServer.Shutdown()
 
 			// Git should not advertise bundle-uri when no bundle exist
 			// Hence, here we are making sure that if no bundle exist sending
