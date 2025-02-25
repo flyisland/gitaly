@@ -1,6 +1,7 @@
 package raftmgr
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -54,7 +55,7 @@ func TestRegistry_Untrack(t *testing.T) {
 			action: func(t *testing.T, r *Registry) []*Waiter {
 				require.False(t, r.Untrack(1234), "event should not be tracked")
 
-				c := make(chan struct{})
+				c := make(chan error, 1)
 				close(c)
 				return []*Waiter{{ID: 99999, C: c}} // Non-existent event
 			},
@@ -113,7 +114,7 @@ func TestRegistry_UntrackSince(t *testing.T) {
 	registry.AssignLSN(waiter3.ID, 12)
 
 	// Call UntrackSince with threshold LSN
-	registry.UntrackSince(11)
+	registry.UntrackSince(11, fmt.Errorf("a random error"))
 
 	// Waiters with LSN > 10 should be obsoleted
 	select {
@@ -123,17 +124,17 @@ func TestRegistry_UntrackSince(t *testing.T) {
 		// Waiter1 should not be closed
 	}
 	select {
-	case <-waiter2.C:
+	case err := <-waiter2.C:
 		// Expected behavior, channel closed
-		require.Equal(t, ErrObsoleted, waiter2.Err)
+		require.Equal(t, fmt.Errorf("a random error"), err)
 	default:
 		t.Fatalf("Expected channel for event %d to be closed", waiter2.ID)
 	}
 
 	select {
-	case <-waiter3.C:
+	case err := <-waiter3.C:
 		// Expected behavior, channel closed
-		require.Equal(t, ErrObsoleted, waiter3.Err)
+		require.Equal(t, fmt.Errorf("a random error"), err)
 	default:
 		t.Fatalf("Expected channel for event %d to be closed", waiter3.ID)
 	}
@@ -141,6 +142,38 @@ func TestRegistry_UntrackSince(t *testing.T) {
 	// Waiter1 should still be tracked
 	require.True(t, registry.Untrack(waiter1.ID))
 	// Waiter2 and Waiter3 should not be tracked anymore
+	require.False(t, registry.Untrack(waiter2.ID))
+	require.False(t, registry.Untrack(waiter3.ID))
+}
+
+func TestRegistry_UntrackAll(t *testing.T) {
+	t.Parallel()
+	registry := NewRegistry()
+
+	waiter1 := registry.Register()
+	waiter2 := registry.Register()
+	waiter3 := registry.Register()
+
+	// Assign LSNs
+	registry.AssignLSN(waiter1.ID, 10)
+	registry.AssignLSN(waiter2.ID, 11)
+	registry.AssignLSN(waiter3.ID, 12)
+
+	// Call UntrackSince with threshold LSN
+	registry.UntrackAll(fmt.Errorf("a random error"))
+
+	for _, w := range []*Waiter{waiter1, waiter2, waiter3} {
+		select {
+		case err := <-w.C:
+			// Expected behavior, channel closed
+			require.Equal(t, fmt.Errorf("a random error"), err)
+		default:
+			t.Fatalf("Expected channel for event %d to be closed", w.ID)
+		}
+	}
+
+	// All waiters should not be tracked
+	require.False(t, registry.Untrack(waiter1.ID))
 	require.False(t, registry.Untrack(waiter2.ID))
 	require.False(t, registry.Untrack(waiter3.ID))
 }
