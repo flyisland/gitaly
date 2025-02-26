@@ -163,6 +163,6 @@ func (n *PackfileNegotiation) UpdateMetrics(metrics *prometheus.CounterVec) {
 // details about the command that was used during packfile negotiation.
 func (n *PackfileNegotiation) UpdateLogFields(ctx context.Context) {
 	if n.Command != "" {
-		log.CustomFieldsFromContext(ctx).RecordMetadata("command", n.Command)
+		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.command", n.Command)
 	}
 }

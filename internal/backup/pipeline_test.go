@@ -170,7 +170,7 @@ func testPipeline(t *testing.T, init func() *Pipeline) {
 			command: NewCreateCommand(strategy, CreateRequest{Repository: &gitalypb.Repository{RelativePath: "a.git", StorageName: "normal"}}),
 			level:   logrus.InfoLevel,
 			expectedFields: log.Fields{
-				"command":         "create",
+				"command.name":    "create",
 				"gl_project_path": "",
 				"relative_path":   "a.git",
 				"storage_name":    "normal",
@@ -181,7 +181,7 @@ func testPipeline(t *testing.T, init func() *Pipeline) {
 			command: NewCreateCommand(strategy, CreateRequest{Repository: &gitalypb.Repository{RelativePath: "b.git", StorageName: "skip"}}),
 			level:   logrus.WarnLevel,
 			expectedFields: log.Fields{
-				"command":         "create",
+				"command.name":    "create",
 				"gl_project_path": "",
 				"relative_path":   "b.git",
 				"storage_name":    "skip",
@@ -192,7 +192,7 @@ func testPipeline(t *testing.T, init func() *Pipeline) {
 			command: NewCreateCommand(strategy, CreateRequest{Repository: &gitalypb.Repository{RelativePath: "c.git", StorageName: "error"}}),
 			level:   logrus.ErrorLevel,
 			expectedFields: log.Fields{
-				"command":         "create",
+				"command.name":    "create",
 				"gl_project_path": "",
 				"relative_path":   "c.git",
 				"storage_name":    "error",

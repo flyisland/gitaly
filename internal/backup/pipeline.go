@@ -349,7 +349,7 @@ func (p *Pipeline) addError(repo *gitalypb.Repository, err error) {
 
 func (p *Pipeline) cmdLogger(cmd Command) log.Logger {
 	return p.log.WithFields(log.Fields{
-		"command":         cmd.Name(),
+		"command.name":    cmd.Name(),
 		"storage_name":    cmd.Repository().GetStorageName(),
 		"relative_path":   cmd.Repository().GetRelativePath(),
 		"gl_project_path": cmd.Repository().GetGlProjectPath(),
