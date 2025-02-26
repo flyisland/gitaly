@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 17.9.1 (2025-02-26)
+
+No changes.
+
 ## 17.9.0 (2025-02-19)
 
 ### Added (1 change)
