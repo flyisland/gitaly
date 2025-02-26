@@ -115,6 +115,9 @@ type Storage struct {
 	consumer     storage.LogConsumer
 	stagingDir   string
 	snapshotter  Snapshotter
+
+	// hooks is a collection of hooks, used in test environment to intercept critical events
+	hooks testHooks
 }
 
 // raftManifestPath returns the path to the manifest file within a log entry directory. The manifest file contains
@@ -175,6 +178,7 @@ func NewStorage(
 		consumer:    consumer,
 		stagingDir:  stagingDirectory,
 		snapshotter: snapshotter,
+		hooks:       noopHooks(),
 	}, nil
 }
 
@@ -375,6 +379,8 @@ func (s *Storage) saveHardState(hardState raftpb.HardState) error {
 	committedLSN := storage.LSN(hardState.Commit)
 
 	if err := func() error {
+		s.hooks.BeforeSaveHardState()
+
 		s.mutex.Lock()
 		defer s.mutex.Unlock()
 
@@ -497,6 +503,8 @@ func (s *Storage) draftLogEntry(raftEntry raftpb.Entry, callback func(*wal.Entry
 
 // insertLogEntry inserts a log entry to WAL at a certain position with respective Raft metadata.
 func (s *Storage) insertLogEntry(raftEntry raftpb.Entry, logEntryPath string) error {
+	s.hooks.BeforeInsertLogEntry(raftEntry.Index)
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 

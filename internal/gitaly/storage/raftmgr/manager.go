@@ -131,6 +131,9 @@ type Manager struct {
 
 	// EntryRecorder stores Raft log entries for testing
 	EntryRecorder *EntryRecorder
+
+	// hooks is a collection of hooks, used in test environment to intercept critical events
+	hooks testHooks
 }
 
 // applyOptions creates and validates manager options by applying provided option functions
@@ -192,6 +195,7 @@ func NewManager(
 		ready:         &ready{c: make(chan error, 1)},
 		notifyQueue:   make(chan error, 1),
 		EntryRecorder: options.entryRecorder,
+		hooks:         noopHooks(),
 	}, nil
 }
 
@@ -304,6 +308,7 @@ func (mgr *Manager) run(bootstrapped bool) {
 				if err := mgr.handleReady(&rd); err != nil {
 					return err
 				}
+				mgr.hooks.BeforeNodeAdvance()
 				mgr.node.Advance()
 				return nil
 			}); err != nil {
@@ -444,6 +449,7 @@ func (mgr *Manager) AppendLogEntry(logEntryPath string) (storage.LSN, error) {
 		defer cancel()
 	}
 
+	mgr.hooks.BeforePropose(logEntryPath)
 	if err := mgr.node.Propose(ctx, data); err != nil {
 		return 0, fmt.Errorf("proposing Raft message: %w", err)
 	}
@@ -481,6 +487,8 @@ func (mgr *Manager) NotifyNewEntries() {
 // 3. Process committed entries (entries acknowledged by the majority)
 // See: https://pkg.go.dev/go.etcd.io/etcd/raft/v3#section-readme
 func (mgr *Manager) handleReady(rd *raft.Ready) error {
+	mgr.hooks.BeforeHandleReady()
+
 	// Handle volatile state updates for leadership tracking and observability
 	if err := mgr.handleSoftState(rd); err != nil {
 		return fmt.Errorf("handling soft state: %w", err)
@@ -601,6 +609,8 @@ func (mgr *Manager) saveEntries(rd *raft.Ready) error {
 // processCommitEntries processes entries that have been committed by the Raft consensus
 // and updates the system state accordingly.
 func (mgr *Manager) processCommitEntries(rd *raft.Ready) error {
+	mgr.hooks.BeforeProcessCommittedEntries()
+
 	for i := range rd.CommittedEntries {
 		var shouldNotify bool
 
@@ -670,6 +680,7 @@ func (mgr *Manager) processConfChange(entry raftpb.Entry) error {
 
 // sendMessages delivers pending Raft messages to other members via the transport layer.
 func (mgr *Manager) sendMessages(rd *raft.Ready) error {
+	mgr.hooks.BeforeSendMessages()
 	if len(rd.Messages) > 0 {
 		// This code path will be properly implemented when network communication is added
 		// See https://gitlab.com/gitlab-org/gitaly/-/issues/6304
