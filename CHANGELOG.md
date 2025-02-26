@@ -14,6 +14,10 @@ No changes.
 
 - [Provide a default Git Committer Name and Email with GPGSigning](gitlab-org/gitaly@48ba03b542f2c9f2c631ff68d2bc94290ecc2ea8) ([merge request](gitlab-org/gitaly!7620))
 
+## 17.8.4 (2025-02-26)
+
+No changes.
+
 ## 17.8.3 (2025-02-21)
 
 No changes.
