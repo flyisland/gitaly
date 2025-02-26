@@ -21,6 +21,7 @@ func TestMain(m *testing.M) {
 }
 
 type mockRaftManager struct {
+	RaftManager
 	logger     logger.LogrusLogger
 	transport  Transport
 	logManager storage.LogManager
