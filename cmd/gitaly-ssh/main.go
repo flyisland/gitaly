@@ -78,7 +78,7 @@ func main() {
 
 	code, err := cmd.run(logger)
 	if err != nil {
-		logger.WithField("command", command).WithError(err).Info("command returned error")
+		logger.WithField("command.name", command).WithError(err).Info("command returned error")
 		os.Exit(1)
 	}
 
