@@ -117,6 +117,14 @@ func (s *server) runUploadPack(ctx context.Context, req *gitalypb.PostUploadPack
 
 	repo := s.localRepoFactory.Build(req.GetRepository())
 	if s.bundleURIManager != nil {
+		// Bundle generation is an optimization that is transparent to users.
+		// If it fails, we log the error but continue with the regular upload-pack
+		// operation without the bundle optimization.
+		// If successful, a goroutine is spawned to generate the bundle, in which case
+		// the bundle generation becomes independent of the RPC request.
+		if err := s.bundleURIManager.GenerateWithStrategy(ctx, repo); err != nil {
+			s.logger.WithError(err).Error("failed generating bundle URI manager")
+		}
 		gitConfig = append(gitConfig, s.bundleURIManager.UploadPackGitConfig(ctx, req.GetRepository())...)
 	} else {
 		gitConfig = append(gitConfig, bundleuri.CapabilitiesGitConfig(ctx, false)...)
