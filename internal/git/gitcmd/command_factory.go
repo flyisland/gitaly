@@ -586,10 +586,7 @@ func (cf *ExecCommandFactory) combineArgs(ctx context.Context, sc Command, cc cm
 	combinedGlobals = append(combinedGlobals, commandOpts...)
 	combinedGlobals = append(combinedGlobals, cc.globals...)
 	for _, configPair := range cf.cfg.Git.Config {
-		combinedGlobals = append(combinedGlobals, ConfigPair{
-			Key:   configPair.Key,
-			Value: configPair.Value,
-		})
+		combinedGlobals = append(combinedGlobals, configPair)
 	}
 
 	for _, global := range combinedGlobals {
