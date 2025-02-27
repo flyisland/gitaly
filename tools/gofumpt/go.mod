@@ -1,8 +1,8 @@
 module gitlab.com/gitlab-org/gitaly/tools/gofumpt
 
-go 1.22
+go 1.23
 
-toolchain go1.22.6
+toolchain go1.23.6
 
 require mvdan.cc/gofumpt v0.7.0
 
