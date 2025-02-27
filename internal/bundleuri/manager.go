@@ -168,6 +168,8 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 	}
 	timer.ObserveDuration()
 	g.bundleGenerationBytes.Add(float64(writer.BytesWritten()))
+	g.logger.WithField("gl_project_path", repo.GetGlProjectPath()).
+		Info("bundle generated successfully")
 	return nil
 }
 
