@@ -224,8 +224,14 @@ func (s *OccurrenceStrategy) process(request evaluateRequest) {
 		select {
 		// if a worker is ready to pick a job from the channel then send it through
 		case s.generateQueue <- request:
+			s.logger.
+				WithField("gl_project_path", request.repo.GetGlProjectPath()).
+				Info("bundle-uri strategy: request added to generate queue")
 		// else abort the generation and reverse the `generating` boolean
 		default:
+			s.logger.
+				WithField("gl_project_path", request.repo.GetGlProjectPath()).
+				Info("bundle-uri strategy: generate queue full; ignoring request")
 			s.stateMu.Lock()
 			defer s.stateMu.Unlock()
 			state := s.loadState(request)
