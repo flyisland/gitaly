@@ -40,7 +40,7 @@ type RaftSnapshotter struct {
 	sync.Mutex
 	logger  logging.Logger
 	dir     string
-	metrics SnapshotterMetrics
+	metrics RaftMetrics
 }
 
 // Snapshotter is an interface to implement snapshotting in raft
@@ -50,7 +50,7 @@ type Snapshotter interface {
 }
 
 // NewRaftSnapshotter creates a new Snapshotter
-func NewRaftSnapshotter(cfg config.Raft, logger logging.Logger, metrics SnapshotterMetrics) (Snapshotter, error) {
+func NewRaftSnapshotter(cfg config.Raft, logger logging.Logger, metrics RaftMetrics) (Snapshotter, error) {
 	logger = logger.WithField("component", "raft.snapshotter")
 	logger.Info("Initializing Raft Snapshotter")
 
