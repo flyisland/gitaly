@@ -496,6 +496,12 @@ func (s *Storage) draftLogEntry(raftEntry raftpb.Entry, callback func(*wal.Entry
 	}); err != nil {
 		return fmt.Errorf("writing manifest file: %w", err)
 	}
+	// The fsync is essential to flush the content of the manifest file itself. We also need to fsync the parent to
+	// ensure the creation of the file is flushed. That part will be covered in insertLogEntry after the Raft
+	// artifact file is created.
+	if err := safe.NewSyncer().Sync(s.ctx, wal.ManifestPath(walEntry.Directory())); err != nil {
+		return fmt.Errorf("sync raft manifest file: %w", err)
+	}
 
 	// Finally, insert it to WAL.
 	return s.insertLogEntry(raftEntry, logEntryPath)
