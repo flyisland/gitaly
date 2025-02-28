@@ -14,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
+	lg "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -50,10 +51,8 @@ func (mc *mockConsumer) GetNotifications() []mockNotification {
 	return mc.notifications
 }
 
-func getTestDBManager(t *testing.T, ctx context.Context, cfg config.Cfg) keyvalue.Transactioner {
+func getTestDBManager(t *testing.T, ctx context.Context, cfg config.Cfg, logger lg.Logger) keyvalue.Transactioner {
 	t.Helper()
-
-	logger := testhelper.NewLogger(t)
 
 	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
 	require.NoError(t, err)
@@ -68,9 +67,10 @@ func getTestDBManager(t *testing.T, ctx context.Context, cfg config.Cfg) keyvalu
 func setupStorage(t *testing.T, ctx context.Context, cfg config.Cfg) *Storage {
 	stagingDir := testhelper.TempDir(t)
 	stateDir := testhelper.TempDir(t)
-	db := getTestDBManager(t, ctx, cfg)
+	logger := testhelper.NewLogger(t)
+	db := getTestDBManager(t, ctx, cfg, logger)
 	posTracker := log.NewPositionTracker()
-	rs, err := NewStorage("test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker)
+	rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 	require.NoError(t, err)
 
 	bootstrapped, err := rs.initialize(ctx, 0)
@@ -99,13 +99,14 @@ func TestStorage_Initialize(t *testing.T) {
 	prepopulateStorage := func(t *testing.T, ctx context.Context, cfg config.Cfg, appended int, committed uint64) (keyvalue.Transactioner, string) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
-		db := getTestDBManager(t, ctx, cfg)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
 		// Pre-populate n entries
 		prepopulateEntries(t, ctx, cfg, stagingDir, stateDir, appended)
 
-		rs, err := NewStorage("test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker)
+		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
 		_, err = rs.initialize(ctx, 0)
@@ -121,14 +122,17 @@ func TestStorage_Initialize(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
-		db := getTestDBManager(t, ctx, cfg)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
-		rs, err := NewStorage("test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker)
+		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
 		bootstrapped, err := rs.initialize(ctx, 0)
@@ -152,13 +156,16 @@ func TestStorage_Initialize(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
+		logger := testhelper.NewLogger(t)
 
 		// Simulate a prior session
 		db, stateDir := prepopulateStorage(t, ctx, cfg, 3, 3)
 
 		// Restart the storage using the same state dir
-		rs, err := NewStorage("test-storage", 1, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker())
+		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
 		require.NoError(t, err)
 
 		// Initialize
@@ -197,12 +204,15 @@ func TestStorage_Initialize(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
+		logger := testhelper.NewLogger(t)
 
 		// Simulate a prior session
 		db, stateDir := prepopulateStorage(t, ctx, cfg, 5, 3)
 
-		rs, err := NewStorage("test-storage", 1, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker())
+		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
 		require.NoError(t, err)
 
 		// Initialize with applied LSN 3
@@ -242,13 +252,17 @@ func TestStorage_InitialState(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
+		cfg.Raft.SnapshotDir = testhelper.TempDir(t)
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
-		db := getTestDBManager(t, ctx, cfg)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
-		rs, err := NewStorage("test-storage", 1, db, stagingDir, stateDir, nil, posTracker)
+		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, nil, posTracker, NewMetrics())
 		require.NoError(t, err)
 
 		hs, cs, err := rs.InitialState()
@@ -263,15 +277,18 @@ func TestStorage_InitialState(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
-		db := getTestDBManager(t, ctx, cfg)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
 		prepopulateEntries(t, ctx, cfg, stagingDir, stateDir, 10)
 
-		rs, err := NewStorage("test-storage", 1, db, stagingDir, stateDir, nil, posTracker)
+		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, nil, posTracker, NewMetrics())
 		require.NoError(t, err)
 
 		_, err = rs.initialize(ctx, 0)
@@ -339,7 +356,10 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
+		cfg.Raft.SnapshotDir = testhelper.TempDir(t)
 
 		rs := setupStorage(t, ctx, cfg)
 
@@ -358,7 +378,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -384,7 +406,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -408,7 +432,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -434,7 +460,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -460,7 +488,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -478,7 +508,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -495,7 +527,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -509,7 +543,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		// No entries available
@@ -523,7 +559,9 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -566,7 +604,9 @@ func TestStorage_Term(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 
@@ -582,7 +622,9 @@ func TestStorage_Term(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -604,7 +646,9 @@ func TestStorage_Term(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -617,7 +661,9 @@ func TestStorage_Term(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		rs := setupStorage(t, ctx, cfg)
 		setupEntries(t, ctx, rs)
@@ -630,13 +676,16 @@ func TestStorage_Term(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
-		db := getTestDBManager(t, ctx, cfg)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
 
-		rs, err := NewStorage("test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker())
+		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
 		require.NoError(t, err)
 
 		_, err = rs.initialize(ctx, 0)
@@ -649,7 +698,7 @@ func TestStorage_Term(t *testing.T) {
 		require.NoError(t, rs.close())
 
 		// Now restart the storage
-		rs, err = NewStorage("test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker())
+		rs, err = NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
 		require.NoError(t, err)
 
 		_, err = rs.initialize(ctx, 4)
@@ -759,7 +808,9 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		raftEntry := raftpb.Entry{
@@ -789,7 +840,9 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		entries := []raftpb.Entry{
@@ -820,7 +873,9 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		originalEntry := raftpb.Entry{Term: 1, Index: 1, Type: raftpb.EntryNormal, Data: []byte("original")}
@@ -847,7 +902,9 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		entriesBatches := []raftpb.Entry{
@@ -893,7 +950,9 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		largeData := make([]byte, 10*1024*1024) // 10MB payload
@@ -919,7 +978,9 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		raftEntry := raftpb.Entry{Term: 1, Index: 5, Type: raftpb.EntryNormal, Data: []byte("entry out of range")}
@@ -941,16 +1002,19 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
-		db := getTestDBManager(t, ctx, cfg)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
 		prepopulateEntries(t, ctx, cfg, stagingDir, stateDir, 10)
 
-		rs, err := NewStorage("test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker)
+		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 		_, err = rs.initialize(ctx, 0)
 		require.NoError(t, err)
@@ -985,7 +1049,9 @@ func TestStorage_SaveHardState(t *testing.T) {
 	t.Run("advance committed LSN successfully", func(t *testing.T) {
 		t.Parallel()
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		// Pre-populate the log with entries
@@ -1065,7 +1131,9 @@ func TestStorage_SaveHardState(t *testing.T) {
 	t.Run("notify consumer since the low water mark", func(t *testing.T) {
 		t.Parallel()
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		// Pre-populate the log with entries
@@ -1156,7 +1224,9 @@ func TestStorage_SaveHardState(t *testing.T) {
 	t.Run("reject LSN beyond appendedLSN", func(t *testing.T) {
 		t.Parallel()
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
 		rs := setupStorage(t, ctx, cfg)
 
 		entries := []raftpb.Entry{

@@ -13,10 +13,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"google.golang.org/protobuf/encoding/protodelim"
 )
 
 const kvStateFileName = "kv-state"
@@ -60,40 +58,15 @@ func (s *server) BackupPartition(ctx context.Context, in *gitalypb.BackupPartiti
 		}
 	}()
 
-	kvFile, err := os.CreateTemp("", kvStateFileName)
+	kvFile, err := storage.CreateKvFile(tx)
 	if err != nil {
-		return nil, fmt.Errorf("create temp file for KV entries: %w", err)
+		return nil, fmt.Errorf("write kv file: %w", err)
 	}
 	defer func() {
 		if err := kvFile.Close(); err != nil {
 			returnErr = errors.Join(returnErr, fmt.Errorf("close temp KV file: %w", err))
 		}
 	}()
-
-	if err := os.Remove(kvFile.Name()); err != nil {
-		returnErr = errors.Join(returnErr, fmt.Errorf("remove temp KV file: %w", err))
-	}
-
-	kvIter := tx.KV().NewIterator(keyvalue.IteratorOptions{})
-	defer kvIter.Close()
-	for kvIter.Rewind(); kvIter.Valid(); kvIter.Next() {
-		item := kvIter.Item()
-
-		if err := item.Value(func(v []byte) error {
-			if _, err := protodelim.MarshalTo(kvFile, &gitalypb.KVPair{Key: item.Key(), Value: v}); err != nil {
-				return fmt.Errorf("write KV entry to temp file: %w", err)
-			}
-
-			return nil
-		}); err != nil {
-			return nil, fmt.Errorf("get KV value: %w", err)
-		}
-	}
-
-	// Rewind the temp file to the beginning before reading from it.
-	if _, err := kvFile.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("rewind KV entries file: %w", err)
-	}
 
 	if err := writeTarball(tx.FS().Root(), kvFile, w); err != nil {
 		return nil, fmt.Errorf("write tarball: %w", err)
