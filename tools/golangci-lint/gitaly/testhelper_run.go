@@ -48,7 +48,7 @@ func runTesthelperRunAnalyzer(rules []string) func(*analysis.Pass) (interface{},
 		var hasTestMain, hasTests bool
 		var fact testmainFact
 
-		// Don't lint tools, they can't import `testhelper`.
+		// Don't lint tools; they can't import `testhelper`.
 		if toolPrefixPattern.MatchString(pass.Pkg.Path()) {
 			return nil, nil
 		}
@@ -59,11 +59,11 @@ func runTesthelperRunAnalyzer(rules []string) func(*analysis.Pass) (interface{},
 			}
 
 			// Blackbox test packages ending with `_test` are considered to be
-			// part of the primary package for compilation, but are scanned in a
+			// part of the primary package for compilation but are scanned in a
 			// separate pass by the analyzer. The primary and test packages cannot
 			// both define `TestMain`.
 			if isTestPkg(pass) && primaryPkgHasTestMain(pass, file) {
-				// Primary package has already defined `TestMain`, no need to check
+				// Primary package has already defined `TestMain`; no need to check
 				// `_test` package.
 				break
 			}
@@ -80,14 +80,14 @@ func runTesthelperRunAnalyzer(rules []string) func(*analysis.Pass) (interface{},
 						analyzeFilename(pass, file, decl)
 					}
 
-					// Actual tests must start with `Test`, helpers could take a `testing.TB`.
+					// Actual tests must start with `Test`; helpers could take a `*testing.T` or `*testing.B`.
 					if strings.HasPrefix(declName, "Test") {
 						params := decl.Type.Params
 						for _, field := range params.List {
 							fieldType := pass.TypesInfo.TypeOf(field.Type)
 
 							// Do we have any tests in this package?
-							if types.Implements(fieldType, testingTB) {
+							if isTestingParam(fieldType) {
 								hasTests = true
 							}
 						}
@@ -103,10 +103,9 @@ func runTesthelperRunAnalyzer(rules []string) func(*analysis.Pass) (interface{},
 			// in its first file and provide the name in the error text. This list is sorted lexically by
 			// filename, so the location of `nolint` directives may not be stable when new files are added.
 			pass.Report(analysis.Diagnostic{
-				Pos:            pass.Files[0].Name.Pos(),
-				End:            pass.Files[0].Name.End(),
-				Message:        fmt.Sprintf("no TestMain in package %v", pass.Pkg.Path()),
-				SuggestedFixes: nil,
+				Pos:     pass.Files[0].Name.Pos(),
+				End:     pass.Files[0].Name.End(),
+				Message: fmt.Sprintf("no TestMain in package %v", pass.Pkg.Path()),
 			})
 		}
 
@@ -123,10 +122,9 @@ func analyzeFilename(pass *analysis.Pass, file *ast.File, decl *ast.FuncDecl) {
 
 	if filename != "testhelper_test.go" {
 		pass.Report(analysis.Diagnostic{
-			Pos:            decl.Pos(),
-			End:            decl.End(),
-			Message:        "TestMain should be placed in file 'testhelper_test.go'",
-			SuggestedFixes: nil,
+			Pos:     decl.Pos(),
+			End:     decl.End(),
+			Message: "TestMain should be placed in file 'testhelper_test.go'",
 		})
 	}
 }
@@ -146,10 +144,9 @@ func analyzeTestMain(pass *analysis.Pass, decl *ast.FuncDecl, rules []string) {
 
 	if !hasRun {
 		pass.Report(analysis.Diagnostic{
-			Pos:            decl.Pos(),
-			End:            decl.End(),
-			Message:        "testhelper.Run not called in TestMain",
-			SuggestedFixes: nil,
+			Pos:     decl.Pos(),
+			End:     decl.End(),
+			Message: "testhelper.Run not called in TestMain",
 		})
 	}
 }
