@@ -295,8 +295,6 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Enable reftable backend, if env variable set
 	newRepoReftableEnabled := env.GetString("GIT_DEFAULT_REF_FORMAT", "files")
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.NewRepoReftableBackend, newRepoReftableEnabled == "reftable")
-	// Randomly enable dry-run migrations
-	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.DryRunMigrations, rnd.Int()%2 == 0)
 	// Randomly enable either Git version 2.47 or 2.48.
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.GitV248, rnd.Int()%2 == 0)
 
