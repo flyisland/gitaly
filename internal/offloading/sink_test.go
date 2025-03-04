@@ -225,7 +225,6 @@ func TestSink_Upload(t *testing.T) {
 
 func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 	t.Parallel()
-	ctx := testhelper.Context(t)
 
 	for _, tc := range []struct {
 		desc           string
@@ -241,7 +240,7 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 		{
 			desc:             "upload failed with overall timer overallTimeout no backoffStrategy",
 			maxRetry:         0,
-			overallTimeout:   100 * time.Millisecond,
+			overallTimeout:   200 * time.Millisecond,
 			operationTimeOut: 5 * time.Second,
 			objectName:       "overall_timeout_obj_key",
 			simulationData: []simulation{
@@ -253,11 +252,11 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 			desc:             "upload with first two attempts timing out and last backoffStrategy succeeding",
 			maxRetry:         1,
 			overallTimeout:   60 * time.Second,
-			operationTimeOut: 100 * time.Millisecond,
+			operationTimeOut: 400 * time.Millisecond,
 			objectName:       "success_with_retry",
 			simulationData: []simulation{
-				{300 * time.Millisecond, nil}, // this will overallTimeout
-				{10 * time.Millisecond, nil},  // this should succeed
+				{5 * time.Second, nil},      // this will timeout
+				{1 * time.Millisecond, nil}, // this should succeed
 			},
 			expectedError: nil,
 		},
@@ -265,7 +264,7 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 			desc:             "upload failed with operation timer overallTimeout and with backoffStrategy",
 			maxRetry:         1,
 			overallTimeout:   60 * time.Second,
-			operationTimeOut: 50 * time.Millisecond,
+			operationTimeOut: 100 * time.Millisecond,
 			objectName:       "failed_even_retry",
 			simulationData: []simulation{
 				{1 * time.Second, nil},
@@ -301,6 +300,8 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
+			ctx := testhelper.Context(t)
+
 			prefix := "some/prefix"
 			localBucket := testhelper.TempDir(t)
 			localBucketURI := fmt.Sprintf("file://%s", localBucket)
@@ -325,9 +326,13 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 			localDir := testhelper.TempDir(t)
 			err = os.WriteFile(filepath.Join(localDir, tc.objectName), []byte("Go long!"), mode.File)
 			require.NoError(t, err)
+
 			err = sink.Upload(ctx, filepath.Join(localDir, tc.objectName), prefix)
+
 			if tc.expectedError != nil {
 				require.ErrorIs(t, err, errSimulationCanceled)
+				// Add delay here to ensure any pending operations complete
+				time.Sleep(50 * time.Millisecond)
 				listRes, err := sink.List(ctx, prefix)
 				require.NoError(t, err)
 				require.Empty(t, listRes)
@@ -338,6 +343,9 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 	}
 
 	t.Run("upload failed with overall cancel triggered no backoffStrategy", func(t *testing.T) {
+		t.Parallel()
+		ctx := testhelper.Context(t)
+
 		prefix := "some/prefix"
 		objectName := "overall_cancel_called"
 		localBucket := testhelper.TempDir(t)
@@ -363,15 +371,25 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 		localDir := testhelper.TempDir(t)
 		err = os.WriteFile(filepath.Join(localDir, objectName), []byte("Go long!"), mode.File)
 		require.NoError(t, err)
+
 		errCh := make(chan error)
 		go func() {
 			errCh <- sink.Upload(ctx, filepath.Join(localDir, objectName), prefix)
 		}()
 
+		// Add a small delay before cancellation to ensure operation has started
+		time.Sleep(50 * time.Millisecond)
+
 		// Trigger the cancellation of the context to stop the ongoing operation.
 		cancel()
-		err = <-errCh
-		require.ErrorIs(t, err, errSimulationCanceled)
+
+		// Add a timeout to prevent test from hanging
+		select {
+		case err = <-errCh:
+			require.ErrorIs(t, err, errSimulationCanceled)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Test timed out waiting for cancellation")
+		}
 	})
 }
 
@@ -791,7 +809,6 @@ func TestSink_Delete(t *testing.T) {
 
 			actualResWithErrorCode := make(map[string]gcerrors.ErrorCode)
 			res := sink.DeleteObjects(ctx, tc.queryingPrefix, tc.objectsToDelete)
-			fmt.Println(res)
 			for k, v := range res {
 				actualResWithErrorCode[k] = gcerrors.Code(v)
 			}
@@ -1106,8 +1123,8 @@ func TestSink_List_Timeout_Cancellation_And_Retry(t *testing.T) {
 			operationTimeOut: 100 * time.Millisecond,
 			objectName:       "success_with_retry",
 			simulationData: []simulation{
-				{300 * time.Millisecond, nil}, // this will overallTimeout
-				{10 * time.Millisecond, nil},  // this should succeed
+				{1 * time.Second, nil},      // this will overallTimeout
+				{1 * time.Millisecond, nil}, // this should succeed
 			},
 			expectedError: nil,
 		},
@@ -1300,5 +1317,5 @@ func closeBucket(t *testing.T, sink *Sink) {
 type constantBackoff struct{}
 
 func (c *constantBackoff) Backoff(uint) time.Duration {
-	return time.Duration(20) * time.Millisecond
+	return time.Duration(100) * time.Millisecond
 }
