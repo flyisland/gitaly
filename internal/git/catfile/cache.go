@@ -57,7 +57,7 @@ type ProcessCache struct {
 	ttl time.Duration
 	// monitorTicker is the ticker used for the monitoring Goroutine.
 	monitorTicker helper.Ticker
-	monitorDone   chan interface{}
+	monitorDone   chan struct{}
 
 	objectReaders               processes
 	objectReadersWithoutMailmap processes
@@ -121,7 +121,7 @@ func newCache(ttl time.Duration, maxLen int, monitorTicker helper.Ticker) *Proce
 			[]string{"type"},
 		),
 		monitorTicker: monitorTicker,
-		monitorDone:   make(chan interface{}),
+		monitorDone:   make(chan struct{}),
 	}
 
 	go processCache.monitor()
@@ -152,7 +152,6 @@ func (c *ProcessCache) monitor() {
 			c.objectReadersWithoutMailmap.EnforceTTL(time.Now())
 			c.monitorTicker.Reset()
 		case <-c.monitorDone:
-			close(c.monitorDone)
 			return
 		}
 
@@ -164,8 +163,7 @@ func (c *ProcessCache) monitor() {
 // once.
 func (c *ProcessCache) Stop() {
 	c.monitorTicker.Stop()
-	c.monitorDone <- struct{}{}
-	<-c.monitorDone
+	close(c.monitorDone)
 	c.Evict()
 }
 
