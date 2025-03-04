@@ -3,6 +3,7 @@ package catfile
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -501,5 +502,5 @@ func (p *processes) delete(i int, wantClose bool) {
 		ent.value.close()
 	}
 
-	p.entries = append(p.entries[:i], p.entries[i+1:]...)
+	p.entries = slices.Delete(p.entries, i, i+1)
 }
