@@ -1151,6 +1151,11 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 	transaction.manifest.Operations = transaction.walEntry.Operations()
 
 	if err := wal.WriteManifest(ctx, transaction.walEntry.Directory(), transaction.manifest); err != nil {
+		return fmt.Errorf("writing manifest file: %w", err)
+	}
+
+	// Sync the log entry completely.
+	if err := safe.NewSyncer().SyncRecursive(ctx, transaction.walEntry.Directory()); err != nil {
 		return fmt.Errorf("flush log entry: %w", err)
 	}
 
@@ -2133,7 +2138,16 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 					// Operations working on the staging snapshot add more files into the log entry,
 					// and modify the manifest.
 					if err := wal.WriteManifest(ctx, transaction.walEntry.Directory(), transaction.manifest); err != nil {
-						return fmt.Errorf("flush log entry: %w", err)
+						return fmt.Errorf("writing manifest file: %w", err)
+					}
+
+					// Fsync only the file itself and the parent directory.
+					syncer := safe.NewSyncer()
+					if err := syncer.Sync(ctx, wal.ManifestPath(transaction.walEntry.Directory())); err != nil {
+						return fmt.Errorf("flush updated maninest file: %w", err)
+					}
+					if err := syncer.Sync(ctx, transaction.walEntry.Directory()); err != nil {
+						return fmt.Errorf("flush parent dir of updated manifest file: %w", err)
 					}
 				}
 			}
@@ -2663,12 +2677,20 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) 
 	finalTableList := append(tables, newTableList[len(tablesBefore):]...)
 
 	// Write the updated tables.list so we can add the required operations.
+	finalTableListPath := filepath.Join(snapshotRepoPath, "reftable", "tables.list")
 	if err := os.WriteFile(
-		filepath.Join(snapshotRepoPath, "reftable", "tables.list"),
+		finalTableListPath,
 		[]byte(strings.Join(finalTableList, "\n")),
 		mode.File,
 	); err != nil {
 		return nil, fmt.Errorf("writing tables.list: %w", err)
+	}
+
+	if err := safe.NewSyncer().Sync(mgr.ctx, finalTableListPath); err != nil {
+		return nil, fmt.Errorf("flush final table list: %w", err)
+	}
+	if err := safe.NewSyncer().SyncParent(mgr.ctx, finalTableListPath); err != nil {
+		return nil, fmt.Errorf("flush final table list: %w", err)
 	}
 
 	tablesListRelativePath := filepath.Join(transaction.relativePath, "reftable", "tables.list")
