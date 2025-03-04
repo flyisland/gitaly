@@ -26,9 +26,6 @@ const (
 
 	// The default maximum number of cache entries
 	defaultMaxLen = 100
-
-	// SessionIDField is the gRPC metadata field we use to store the gitaly session ID.
-	SessionIDField = "gitaly-session-id"
 )
 
 // Cache is a cache for git-cat-file(1) processes.

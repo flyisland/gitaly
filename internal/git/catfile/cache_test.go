@@ -17,8 +17,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
-	"gitlab.com/gitlab-org/labkit/correlation"
-	"google.golang.org/grpc/metadata"
 )
 
 func TestProcesses_add(t *testing.T) {
@@ -324,11 +322,6 @@ func TestCache_ObjectReader(t *testing.T) {
 	t.Run("cached", func(t *testing.T) {
 		defer cache.Evict()
 
-		ctx := correlation.ContextWithCorrelation(ctx, "1")
-		ctx = testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
-
 		reader, cancel, err := cache.ObjectReader(ctx, repoExecutor)
 		require.NoError(t, err)
 
@@ -353,10 +346,6 @@ func TestCache_ObjectReader(t *testing.T) {
 	t.Run("dirty process does not get cached", func(t *testing.T) {
 		defer cache.Evict()
 
-		ctx := testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
-
 		reader, cancel, err := cache.ObjectReader(ctx, repoExecutor)
 		require.NoError(t, err)
 
@@ -377,10 +366,6 @@ func TestCache_ObjectReader(t *testing.T) {
 
 	t.Run("closed process does not get cached", func(t *testing.T) {
 		defer cache.Evict()
-
-		ctx := testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
 
 		reader, cancel, err := cache.ObjectReader(ctx, repoExecutor)
 		require.NoError(t, err)
@@ -415,11 +400,6 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 	t.Run("cached", func(t *testing.T) {
 		defer cache.Evict()
 
-		ctx := correlation.ContextWithCorrelation(ctx, "1")
-		ctx = testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
-
 		reader, cancel, err := cache.ObjectReaderWithoutMailmap(ctx, repoExecutor)
 		require.NoError(t, err)
 
@@ -445,10 +425,6 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 	t.Run("dirty process does not get cached", func(t *testing.T) {
 		defer cache.Evict()
 
-		ctx := testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
-
 		reader, cancel, err := cache.ObjectReaderWithoutMailmap(ctx, repoExecutor)
 		require.NoError(t, err)
 
@@ -469,10 +445,6 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 
 	t.Run("closed process does not get cached", func(t *testing.T) {
 		defer cache.Evict()
-
-		ctx := testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
 
 		reader, cancel, err := cache.ObjectReaderWithoutMailmap(ctx, repoExecutor)
 		require.NoError(t, err)

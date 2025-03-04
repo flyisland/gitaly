@@ -14,7 +14,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
-	"google.golang.org/grpc/metadata"
 )
 
 func TestCatfileObject(t *testing.T) {
@@ -167,9 +166,6 @@ func TestCatfileObject(t *testing.T) {
 
 	t.Run("context cancellation with cached process", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(testhelper.Context(t))
-		ctx = testhelper.MergeIncomingMetadata(ctx, metadata.Pairs(
-			catfile.SessionIDField, "1",
-		))
 
 		catfileCache := catfile.NewCache(cfg)
 		defer catfileCache.Stop()

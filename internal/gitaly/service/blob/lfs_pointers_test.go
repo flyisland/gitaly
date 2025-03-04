@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
@@ -31,10 +30,6 @@ func TestListLFSPointers(t *testing.T) {
 	ctx := testhelper.Context(t)
 	cfg, client := setup(t, ctx)
 	repo, _, repoInfo := setupRepoWithLFS(t, ctx, cfg)
-
-	ctx = testhelper.MergeOutgoingMetadata(ctx,
-		metadata.Pairs(catfile.SessionIDField, "1"),
-	)
 
 	for _, tc := range []struct {
 		desc             string
