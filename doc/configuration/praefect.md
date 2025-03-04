@@ -4,7 +4,7 @@ This document describes how to configure the Praefect server.
 
 Praefect is configured via a [TOML](https://github.com/toml-lang/toml)
 configuration file. The TOML file contents and location depends on how you
-installed GitLab. See: <https://docs.gitlab.com/ee/administration/gitaly/>
+installed GitLab. See: <https://docs.gitlab.com/administration/gitaly/>
 
 The configuration file is passed as an argument to the `praefect`
 executable. This is usually done by either `omnibus-gitlab` or your init

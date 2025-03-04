@@ -65,9 +65,9 @@ After your merge request has been approved according to our [approval guidelines
 [security process for developers]: https://gitlab.com/gitlab-org/release/docs/blob/master/general/security/developer.md
 [secpick documentation]: https://gitlab.com/gitlab-org/release/docs/-/blob/master/general/security/utilities/secpick_script.md
 [security Release merge request template]: https://gitlab.com/gitlab-org/security/gitaly/blob/master/.gitlab/merge_request_templates/Security%20Release.md
-[code review process]: https://docs.gitlab.com/ee/development/code_review.html
-[approval guidelines]: https://docs.gitlab.com/ee/development/code_review.html#approval-guidelines
-[issue as related]: https://docs.gitlab.com/ee/user/project/issues/related_issues.html#adding-a-related-issue
+[code review process]: https://docs.gitlab.com/development/code_review/
+[approval guidelines]: https://docs.gitlab.com/development/code_review/#approval-guidelines
+[issue as related]: https://docs.gitlab.com/user/project/issues/related_issues/#add-a-linked-issue
 [Security Release Tracking Issue]: https://gitlab.com/gitlab-org/gitlab/-/issues/?label_name%5B%5D=upcoming%20security%20release
 
 /label ~"devops::systems" ~"group::gitaly" ~"security" ~"security-notifications"

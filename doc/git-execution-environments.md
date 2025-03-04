@@ -86,7 +86,7 @@ binaries, Gitaly tries to resolve a Git executable automatically using the
 warning on start up.
 
 External Git distributions must meet a minimum required version (for example,
-for [GitLab 13.11.0](https://docs.gitlab.com/ee/update/#13110)) which can change
+for [GitLab 17.8.0](https://docs.gitlab.com/update/versions/gitlab_17_changes/#1780)) which can change
 when upgrading Gitaly. Gitaly refuses to boot if the external Git distribution
 does not fulfill this version requirement.
 

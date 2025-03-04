@@ -7,7 +7,7 @@ distributed by GitLab Inc., you reserve all right, title, and interest in and to
 your Contributions.
 
 All contributions are subject to the
-[Developer Certificate of Origin and License](https://docs.gitlab.com/ee/legal/developer_certificate_of_origin).
+[Developer Certificate of Origin and License](https://docs.gitlab.com/legal/developer_certificate_of_origin/).
 
 _This notice should stay as the first item in the CONTRIBUTING.md file._
 

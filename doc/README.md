@@ -6,9 +6,9 @@ written in [the design doc](DESIGN.md).
 ## Configuring Gitaly
 
 Running Gitaly requires it to be configured correctly, options are described in
-GitLab's  [configuration documentation](https://docs.gitlab.com/ee/administration/gitaly/index.html).
+the GitLab [Gitaly configuration documentation](https://docs.gitlab.com/administration/gitaly/).
 
-The reference guide is documented in <https://docs.gitlab.com/ee/administration/gitaly/reference.html>.
+The reference guide is documented in <https://docs.gitlab.com/administration/gitaly/reference/>.
 
 ## Developing Gitaly
 

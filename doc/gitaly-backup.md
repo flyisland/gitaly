@@ -63,8 +63,8 @@ transfers the received data to the specified storage destination, as defined by 
 ## How to set up for backup
 
 1. For each project to backup, find the Gitaly storage name and relative or disk path using either:
-   - The [Admin area](https://docs.gitlab.com/ee/administration/repository_storage_paths.html#from-project-name-to-hashed-path).
-   - The [repository storage API](https://docs.gitlab.com/ee/api/projects.html#get-the-path-to-repository-storage).
+   - The [Admin area](https://docs.gitlab.com/administration/repository_storage_paths/#from-project-name-to-hashed-path).
+   - The [repository storage API](https://docs.gitlab.com/api/projects/#get-the-path-to-repository-storage).
 1. Generate the `GITALY_SERVERS` environment variable. This variable specifies
    the address and authentication details of each storage to restore to. The variable takes a base64-encoded JSON object.
 

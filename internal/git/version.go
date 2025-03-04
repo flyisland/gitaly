@@ -11,8 +11,8 @@ import (
 // also update the following locations:
 // - https://gitlab.com/gitlab-org/gitaly/blob/master/README.md#installation
 // - https://gitlab.com/gitlab-org/gitaly/blob/master/.gitlab-ci.yml
-// - https://docs.gitlab.com/ee/install/installation.html#software-requirements
-// - https://docs.gitlab.com/ee/update/ (see e.g. https://docs.gitlab.com/ee/update/#1440)
+// - https://docs.gitlab.com/install/installation/#software-requirements
+// - https://docs.gitlab.com/update/ (see e.g. https://docs.gitlab.com/update/versions/gitlab_17_changes/)
 var minimumVersion = Version{
 	versionString: "2.47.0",
 	major:         2,

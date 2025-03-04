@@ -4,7 +4,7 @@ The purpose of this document is to give more insight into the design choices we 
 
 ## Introduction
 
-Please read the [administrator documentation for the pack-objects cache](https://docs.gitlab.com/ee/administration/gitaly/configure_gitaly.html#pack-objects-cache) if you are not already familiar with what it does or what it is for.
+Please read the [administrator documentation for the pack-objects cache](https://docs.gitlab.com/administration/gitaly/configure_gitaly/#pack-objects-cache) if you are not already familiar with what it does or what it is for.
 
 Please read [Pack-objects cache for CI Git clones epic](https://gitlab.com/groups/gitlab-com/gl-infra/-/epics/372) for more information about Pack-objects cache.
 
