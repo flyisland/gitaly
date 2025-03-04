@@ -269,7 +269,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		}
 
 		// Create and set up manager
-		manager := newManager(logger, transport, config)
+		manager := newManager(config)
 
 		// Register the manager with the registry
 		require.NoError(t, registries[i].RegisterManager(PartitionKey{
@@ -287,13 +287,11 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	return cluster
 }
 
-func newManager(logger logger.LogrusLogger, transport Transport, cfg config.Cfg) RaftManager {
+func newManager(cfg config.Cfg) RaftManager {
 	walManager := log.NewManager("default", 1, cfg.Storages[0].Path, cfg.Storages[0].Path, nil, nil)
 
 	return &mockRaftManager{
-		logger:     logger,
 		logManager: walManager,
-		transport:  transport,
 	}
 }
 
