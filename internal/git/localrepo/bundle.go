@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -88,11 +87,6 @@ func (repo *Repo) CloneBundle(ctx context.Context, reader io.Reader) error {
 		return fmt.Errorf("getting repo path: %w", err)
 	}
 
-	refFormat := git.ReferenceBackendFiles.Name
-	if featureflag.NewRepoReftableBackend.IsEnabled(ctx) {
-		refFormat = git.ReferenceBackendReftables.Name
-	}
-
 	var cloneErr bytes.Buffer
 	cloneCmd, err := repo.gitCmdFactory.NewWithoutRepo(ctx,
 		gitcmd.Command{
@@ -100,7 +94,6 @@ func (repo *Repo) CloneBundle(ctx context.Context, reader io.Reader) error {
 			Flags: []gitcmd.Option{
 				gitcmd.Flag{Name: "--quiet"},
 				gitcmd.Flag{Name: "--mirror"},
-				gitcmd.Flag{Name: fmt.Sprintf("--ref-format=%s", refFormat)},
 			},
 			Args: []string{bundlePath, repoPath},
 		},
