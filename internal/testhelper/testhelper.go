@@ -299,6 +299,8 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.DryRunMigrations, rnd.Int()%2 == 0)
 	// Randomly enable either Git version 2.47 or 2.48.
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.GitV248, rnd.Int()%2 == 0)
+	// Randomly use non-repeating catfile cache keys.
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.CatfileCacheNonrepeating, rnd.Int()%2 == 0)
 
 	for _, opt := range opts {
 		ctx = opt(ctx)
