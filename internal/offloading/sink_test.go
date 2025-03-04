@@ -83,7 +83,7 @@ func TestNewSink(t *testing.T) {
 				require.NoError(t, err)
 				return
 			}
-			sink, err := NewSink(tc.bucket, WithOverallTimout(tc.overallTimeout),
+			sink, err := NewSink(tc.bucket, WithOverallTimeout(tc.overallTimeout),
 				WithMaxRetry(tc.maxRetry),
 				WithRetryTimeout(tc.retryTimeout),
 				WithBackoffStrategy(tc.backoffStrategy))
@@ -316,7 +316,7 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 			require.NoError(t, err)
 
 			sink, err := NewSink(simulatedBucket,
-				WithOverallTimout(tc.overallTimeout),
+				WithOverallTimeout(tc.overallTimeout),
 				WithMaxRetry(tc.maxRetry),
 				WithRetryTimeout(tc.operationTimeOut),
 				WithBackoffStrategy(&backoffStrategyInTest))
@@ -363,7 +363,7 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 
 		// make the overall timer and operation timer are long enough
-		sink, err := NewSink(simulatedBucket, WithOverallTimout(100*time.Second), WithNoRetry(),
+		sink, err := NewSink(simulatedBucket, WithOverallTimeout(100*time.Second), WithNoRetry(),
 			WithRetryTimeout(10*time.Second), WithBackoffStrategy(&backoffStrategyInTest))
 		require.NoError(t, err)
 		defer closeBucket(t, sink)
@@ -580,7 +580,7 @@ func TestSink_Download_Timeout_Cancellation_And_Retry(t *testing.T) {
 			simulatedBucket, err := newSimulationBucket(bucket, simulationData)
 			require.NoError(t, err)
 			sink, err := NewSink(simulatedBucket,
-				WithOverallTimout(tc.overallTimeout),
+				WithOverallTimeout(tc.overallTimeout),
 				WithMaxRetry(tc.maxRetry),
 				WithRetryTimeout(tc.operationTimeOut),
 				WithBackoffStrategy(&backoffStrategyInTest),
@@ -628,7 +628,7 @@ func TestSink_Download_Timeout_Cancellation_And_Retry(t *testing.T) {
 		simulatedBucket, err := newSimulationBucket(bucket, simulationData)
 		require.NoError(t, err)
 		ctx, cancel := context.WithCancel(ctx)
-		sink, err := NewSink(simulatedBucket, WithOverallTimout(defaultOverallTimeout),
+		sink, err := NewSink(simulatedBucket, WithOverallTimeout(defaultOverallTimeout),
 			WithNoRetry(), WithRetryTimeout(defaultRetryTimeout),
 			WithBackoffStrategy(&backoffStrategyInTest))
 		require.NoError(t, err)
@@ -860,7 +860,7 @@ func TestSink_Delete_Timeout_Cancellation_And_Retry(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			desc:             "delete failed with operation timout and with backoffStrategy",
+			desc:             "delete failed with operation timeout and with backoffStrategy",
 			maxRetry:         1,
 			overallTimeout:   60 * time.Second,
 			operationTimeOut: 50 * time.Millisecond,
@@ -919,7 +919,7 @@ func TestSink_Delete_Timeout_Cancellation_And_Retry(t *testing.T) {
 			simulatedBucket, err := newSimulationBucket(bucket, simulation)
 			require.NoError(t, err)
 			sink, err := NewSink(simulatedBucket,
-				WithOverallTimout(tc.overallTimeout),
+				WithOverallTimeout(tc.overallTimeout),
 				WithMaxRetry(tc.maxRetry),
 				WithRetryTimeout(tc.operationTimeOut),
 				WithBackoffStrategy(&backoffStrategyInTest),
@@ -965,7 +965,7 @@ func TestSink_Delete_Timeout_Cancellation_And_Retry(t *testing.T) {
 		simulatedBucket, err := newSimulationBucket(bucket, simulation)
 		require.NoError(t, err)
 		ctx, cancel := context.WithCancel(ctx)
-		sink, err := NewSink(simulatedBucket, WithOverallTimout(defaultOverallTimeout),
+		sink, err := NewSink(simulatedBucket, WithOverallTimeout(defaultOverallTimeout),
 			WithNoRetry(), WithRetryTimeout(defaultRetryTimeout),
 			WithBackoffStrategy(&backoffStrategyInTest))
 		require.NoError(t, err)
@@ -1191,7 +1191,7 @@ func TestSink_List_Timeout_Cancellation_And_Retry(t *testing.T) {
 			simulatedBucketPtr, ok := simulatedBucket.(*simulationBucket)
 			require.True(t, ok)
 
-			sink, err := NewSink(simulatedBucket, WithOverallTimout(tc.overallTimeout),
+			sink, err := NewSink(simulatedBucket, WithOverallTimeout(tc.overallTimeout),
 				WithMaxRetry(tc.maxRetry), WithRetryTimeout(tc.operationTimeOut),
 				WithBackoffStrategy(&backoffStrategyInTest))
 
@@ -1277,7 +1277,7 @@ func setupEmptyLocalBucket(t *testing.T) *Sink {
 	bucket, err := blob.OpenBucket(ctx, localBucketURI)
 	require.NoError(t, err)
 	// sink, err := NewSinkWithDefaults(bucket)
-	sink, err := NewSink(bucket, WithOverallTimout(defaultOverallTimeout),
+	sink, err := NewSink(bucket, WithOverallTimeout(defaultOverallTimeout),
 		WithMaxRetry(defaultMaxRetry), WithRetryTimeout(defaultRetryTimeout),
 		WithBackoffStrategy(&constantBackoff{}))
 	require.NoError(t, err)
@@ -1292,7 +1292,7 @@ func setupLocalBucketWithData(t *testing.T, prefix string, objectsToUpload []fil
 	localBucket, err := blob.OpenBucket(ctx, localBucketURI)
 	require.NoError(t, err)
 	// sink, err := NewSinkWithDefaults(localBucket)
-	sink, err := NewSink(localBucket, WithOverallTimout(defaultOverallTimeout),
+	sink, err := NewSink(localBucket, WithOverallTimeout(defaultOverallTimeout),
 		WithMaxRetry(defaultMaxRetry), WithRetryTimeout(defaultRetryTimeout),
 		WithBackoffStrategy(&constantBackoff{}))
 	require.NoError(t, err)
