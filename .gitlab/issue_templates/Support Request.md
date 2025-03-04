@@ -69,13 +69,13 @@ For S1 or S2 issues, please follow https://about.gitlab.com/handbook/engineering
     - `git` commands?
     - history changing tools (like [git filter-repo](https://github.com/newren/git-filter-repo))?
 - Does the customer have any hooks configured?
-    - [Git server hooks](https://docs.gitlab.com/ee/administration/server_hooks.html) 
+    - [Git server hooks](https://docs.gitlab.com/administration/server_hooks/)
     - [Git hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks)
 - If this is a performance issue, what does the Git workflow look like?
     - What are the customer RPS for push and pulls? (use [fast-stats](https://gitlab.com/gitlab-com/support/toolbox/fast-stats))
     - How mamy pipelines does the customer run?
     - How many users are working on the instance?
-    - How big are the repositories? Do they have [monorepos](https://docs.gitlab.com/ee/user/project/repository/monorepos/)?
+    - How big are the repositories? Do they have [monorepos](https://docs.gitlab.com/user/project/repository/monorepos/)?
         - Provide the output of [git-sizer](https://github.com/github/git-sizer). 
 
 ### Troubleshooting Performed

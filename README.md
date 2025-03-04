@@ -10,7 +10,7 @@ service for handling all the Git calls made by GitLab.
 For documentation generated from the protobuf definitions (in `proto/` directory),
 see [Gitaly RPC documentation](https://gitlab-org.gitlab.io/gitaly/).
 
-To see where it fits in please look at [GitLab's architecture](https://docs.gitlab.com/ce/development/architecture.html#system-layout).
+To see where it fits in please look at [GitLab's architecture](https://docs.gitlab.com/development/architecture/#system-layout).
 
 ## Project Goals
 
@@ -35,7 +35,7 @@ Gitaly uses `git`. Versions `2.47.0` and newer are supported.
 
 ## Configuration
 
-The administration and reference guide is [documented in the GitLab project](https://docs.gitlab.com/ee/administration/gitaly/).
+The administration and reference guide is [documented in the GitLab project](https://docs.gitlab.com/administration/gitaly/).
 
 ## Contributing
 
@@ -51,14 +51,14 @@ GitLab end up in Gitaly.
 
 ## Design
 
-The [Gitaly and Gitaly cluster](https://docs.gitlab.com/ee/administration/gitaly/) documentation details the architecture
+The [Gitaly and Gitaly cluster](https://docs.gitlab.com/administration/gitaly/) documentation details the architecture
 and design of Gitaly, including a list of known Gitaly consumers.
 
 ## High Availability
 
-Gitaly offers a High Availability solution known as Gitaly Cluster ([product documentation](https://docs.gitlab.com/ee/administration/gitaly/)).
+Gitaly offers a High Availability solution known as Gitaly Cluster ([product documentation](https://docs.gitlab.com/administration/gitaly/)).
 
-- In its current iteration, client traffic goes through [Praefect](https://docs.gitlab.com/ee/administration/gitaly/praefect.html), which then replicates data to multiple Gitaly servers, and stores state in a PostgreSQL database (see [Design](#design) above).
+- In its current iteration, client traffic goes through [Praefect](https://docs.gitlab.com/administration/gitaly/praefect/), which then replicates data to multiple Gitaly servers, and stores state in a PostgreSQL database (see [Design](#design) above).
 - We are working on a new distributed replication solution referred to as Raft, notably removing the need for Praefect and its database, and offering stricter consistency guarantees. See this [epic](https://gitlab.com/groups/gitlab-org/-/epics/8903) for details on the new design and its progress.
 
 ## Further reading

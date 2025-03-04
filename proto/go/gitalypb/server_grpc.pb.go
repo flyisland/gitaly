@@ -39,7 +39,7 @@ type ServerServiceClient interface {
 	ReadinessCheck(ctx context.Context, in *ReadinessCheckRequest, opts ...grpc.CallOption) (*ReadinessCheckResponse, error)
 	// ServerSignature returns the contents of the public key used to sign
 	// commits made through the GitLab UI or Web IDE.
-	// See https://docs.gitlab.com/ee/user/project/repository/signed_commits/#verify-commits-made-in-the-web-ui
+	// See https://docs.gitlab.com/user/project/repository/signed_commits/#verify-commits-made-in-the-web-ui
 	// for more information.
 	ServerSignature(ctx context.Context, in *ServerSignatureRequest, opts ...grpc.CallOption) (*ServerSignatureResponse, error)
 }
@@ -106,7 +106,7 @@ type ServerServiceServer interface {
 	ReadinessCheck(context.Context, *ReadinessCheckRequest) (*ReadinessCheckResponse, error)
 	// ServerSignature returns the contents of the public key used to sign
 	// commits made through the GitLab UI or Web IDE.
-	// See https://docs.gitlab.com/ee/user/project/repository/signed_commits/#verify-commits-made-in-the-web-ui
+	// See https://docs.gitlab.com/user/project/repository/signed_commits/#verify-commits-made-in-the-web-ui
 	// for more information.
 	ServerSignature(context.Context, *ServerSignatureRequest) (*ServerSignatureResponse, error)
 	mustEmbedUnimplementedServerServiceServer()

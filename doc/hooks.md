@@ -244,7 +244,7 @@ Administrators can install custom hooks that run after the usual logic executed
 by Gitaly itself. Custom hooks are _never_ expected to replace Gitaly's own
 hooks, which are mandatory. Gitaly supports installation of custom hooks for the
 `pre-receive`, `update`, and `post-receive` hooks. See the [GitLab server hooks
-documentation](https://docs.gitlab.com/ee/administration/server_hooks.html).
+documentation](https://docs.gitlab.com/administration/server_hooks/).
 
 ## Execution Path
 

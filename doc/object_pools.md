@@ -127,4 +127,4 @@ stops it from advertising alternate references.
 
 ## Further Reading
 
-- [How Git object deduplication works in GitLab](https://docs.gitlab.com/ee/development/git_object_deduplication.html)
+- [How Git object deduplication works in GitLab](https://docs.gitlab.com/development/git_object_deduplication/)

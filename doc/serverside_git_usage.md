@@ -37,4 +37,4 @@ When executing Git, developers should always use the `gitcmd.CommandFactory` and
 interfaces. These make sure Gitaly is protected against command injection, the
 correct `git` is used, and correct setup for observable command invocations are
 used. When working with `git(1)` in Ruby, please be sure to read the
-[Ruby shell scripting guide](https://docs.gitlab.com/ee/development/shell_commands.html).
+[Ruby shell scripting guide](https://docs.gitlab.com/development/shell_commands/).

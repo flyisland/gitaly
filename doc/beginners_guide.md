@@ -275,7 +275,7 @@ To use your custom Gitaly when running Rails tests in GDK, go to the
 `gitlab` directory in your GDK and follow the instructions at
 [Running tests with a locally modified version of Gitaly][custom-gitaly].
 
-[custom-gitaly]: https://docs.gitlab.com/ee/development/gitaly.html#running-tests-with-a-locally-modified-version-of-gitaly
+[custom-gitaly]: https://docs.gitlab.com/development/gitaly/#running-tests-with-a-locally-modified-version-of-gitaly
 [gdk]: https://gitlab.com/gitlab-org/gitlab-development-kit/#getting-started
 [gitaly]: https://gitlab.com/gitlab-org/gitaly
 [gitaly-proto]: https://gitlab.com/gitlab-org/gitaly/tree/master/proto

@@ -19,7 +19,7 @@ The "Feature Flag Roll Out" [template for the
 issue][feature-issue-template] has a checklist for the rest of the
 steps.
 
-[ff-api]: https://docs.gitlab.com/ee/api/features.html#features-flags-api
+[ff-api]: https://docs.gitlab.com/api/features/#features-flags-api
 [issue-for-feature-rollout]: https://gitlab.com/gitlab-org/gitaly/-/issues/new?issuable_template=Feature%20Flag%20Roll%20Out
 [feature-issue-template]: https://gitlab.com/gitlab-org/gitaly/-/blob/master/.gitlab/issue_templates/Feature%20Flag%20Roll%20Out.md
 
@@ -35,7 +35,7 @@ GitLab defines a very clear and strict [workflow for development][rails-feature-
 Because the flag evaluation is invoked in Rails, we have the flexibility of picking the desired
 actors for a feature flag.
 
-[rails-feature-development]: https://docs.gitlab.com/ee/development/feature_flags/index.html
+[rails-feature-development]: https://docs.gitlab.com/development/feature_flags/
 
 #### Feature flags in Gitaly
 
@@ -162,7 +162,7 @@ run:
 /chatops run feature get gitaly_go_user_delete_tag --staging
 ```
 
-[enable-flags]: https://docs.gitlab.com/ee/development/feature_flags/controls.html
+[enable-flags]: https://docs.gitlab.com/development/feature_flags/controls/
 [chan-chat-ops-test]: https://gitlab.slack.com/archives/CB2S7NNDP
 [production-request-acl]: https://gitlab.slack.com/archives/C101F3796
 [chan-production]: https://gitlab.com/gitlab-org/gitaly/-/issues/3371
@@ -224,7 +224,7 @@ details on the tagging and release process.
 
 You'll need chatops access. See [ChatOps on GitLab.com][chatops-access].
 
-[chatops-access]: https://docs.gitlab.com/ee/development/chatops_on_gitlabcom.html#requesting-access
+[chatops-access]: https://docs.gitlab.com/development/chatops_on_gitlabcom/#requesting-access
 
 #### Steps
 
@@ -402,7 +402,7 @@ it](#feature-lifecycle-after-it-is-live). It'll only be 100% live once
 the feature flag code is deleted. So make sure you don't skip the
 `100%` step.
 
-[actor-gates]: https://docs.gitlab.com/ee/development/feature_flags/controls.html#process
+[actor-gates]: https://docs.gitlab.com/development/feature_flags/controls/#process
 
 #### Discussion
 

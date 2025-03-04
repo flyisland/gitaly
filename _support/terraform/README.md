@@ -49,7 +49,7 @@ creation script has automatically created a `hosts.ini` file for use by
 Ansible containing all necessary information to configure the cluster.
 
 If you wish to manually configure the cluster, please consult
-https://docs.gitlab.com/ee/administration/gitaly/praefect.html.
+<https://docs.gitlab.com/administration/gitaly/praefect/>.
 
 To see the list of IP's for your machines, run:
 

@@ -162,4 +162,4 @@ will give you insight into the performance and behavior of the cache:
 [Cache Throughput Bytes]: https://dashboards.gitlab.net/d/5Y26KtFWk/gitaly-inforef-upload-pack-caching?orgId=1&fullscreen&panelId=6
 [Cache Effectiveness]: https://dashboards.gitlab.net/d/5Y26KtFWk/gitaly-inforef-upload-pack-caching?orgId=1&fullscreen&panelId=8
 [Cache Errors]: https://dashboards.gitlab.net/d/5Y26KtFWk/gitaly-inforef-upload-pack-caching?orgId=1&fullscreen&panelId=12
-[Node exporter]: https://docs.gitlab.com/ee/administration/monitoring/prometheus/node_exporter.html
+[Node exporter]: https://docs.gitlab.com/administration/monitoring/prometheus/node_exporter/

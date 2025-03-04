@@ -15,7 +15,7 @@ While this can be started at any time, team members should complete their onboar
 Skim/read through these, and use them as references.
 
 - [Debugging Gitaly](https://handbook.gitlab.com/handbook/engineering/infrastructure-platforms/data-access/gitaly/debug/)
-- [Managing monorepos](https://docs.gitlab.com/ee/user/project/repository/monorepos/)
+- [Managing monorepos](https://docs.gitlab.com/user/project/repository/monorepos/)
 - [GCP project layout for Gitaly VMs](https://gitlab.com/gitlab-com/gl-infra/readiness/-/blob/master/library/gitaly-multi-project/README.md)
 
 Please help correct, clarify, or otherwise improve any documentation you find lacking (including this template)!
@@ -59,7 +59,7 @@ Please edit this section like a workbook, adding not just the answer but also ho
 ### Tracking calls throughout the GitLab ecosystem
 
 - [ ] Pick a [repository files API
-  call](https://docs.gitlab.com/ee/api/repository_files.html#get-file-from-repository) that happened in the past day.  Which Gitaly calls were invoked downstream?
+  call](https://docs.gitlab.com/api/repository_files/#get-file-from-repository) that happened in the past day. Which Gitaly calls were invoked downstream?
 - [ ] Pick a `GetBlobs` RPC call in the past day. Who were the upstream callers?
 - [ ] Trace the entire flow when a user clones a repo, over SSH, over HTTP, and through the web editor. What components were involved? On which node is the repo data located?
 

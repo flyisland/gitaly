@@ -22,10 +22,10 @@ default. To start tracing, all you need to do is set up Jaeger:
 
 - If you are using the GDK for local development, getting Jaeger setup involves
   some additional configuration to the `gdk.yml` and restarting. You can follow
-  [this tutorial](https://docs.gitlab.com/ee/development/distributed_tracing.html#using-jaeger-in-the-gitlab-development-kit)
+  [this tutorial](https://docs.gitlab.com/development/distributed_tracing/#using-jaeger-in-the-gitlab-development-kit)
   for more information.
 - Otherwise, you'll need to set up Jaeger manually. You can follow
-  [this tutorial](https://docs.gitlab.com/ee/development/distributed_tracing.html#using-jaeger-without-the-gitlab-developer-kit).
+  [this tutorial](https://docs.gitlab.com/development/distributed_tracing/#using-jaeger-without-the-gitlab-developer-kit).
 
 ## How to use Jaeger for local development
 

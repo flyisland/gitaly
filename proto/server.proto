@@ -22,7 +22,7 @@ service ServerService {
 
   // ServerSignature returns the contents of the public key used to sign
   // commits made through the GitLab UI or Web IDE.
-  // See https://docs.gitlab.com/ee/user/project/repository/signed_commits/#verify-commits-made-in-the-web-ui
+  // See https://docs.gitlab.com/user/project/repository/signed_commits/#verify-commits-made-in-the-web-ui
   // for more information.
   rpc ServerSignature(ServerSignatureRequest) returns (ServerSignatureResponse);
 }

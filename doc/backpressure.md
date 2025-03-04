@@ -97,4 +97,4 @@ return sensible error messages to the end user. For example:
 ## Metrics
 
 Metrics are available that provide visibility into how these limits are being applied.
-See the [GitLab Documentation](https://docs.gitlab.com/ee/administration/gitaly/#monitor-gitaly-and-gitaly-cluster) for details.
+See the [GitLab Documentation](https://docs.gitlab.com/administration/gitaly/monitoring/) for details.

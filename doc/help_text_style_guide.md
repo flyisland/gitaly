@@ -112,7 +112,7 @@ When providing values for the `Description` field key:
 
 ## Related topics
 
-- [UI text](https://design.gitlab.com/content/ui-text) from GitLab Design System.
-- [Language](https://docs.gitlab.com/ee/development/documentation/styleguide/index.html#language) from GitLab
+- [UI text](https://design.gitlab.com/content/ui-text/) from GitLab Design System.
+- [Language](https://docs.gitlab.com/development/documentation/styleguide/#language) from GitLab
   Documentation Style Guide.
 - [Command Line Interface Guidelines](https://clig.dev).

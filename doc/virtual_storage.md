@@ -106,7 +106,7 @@ To fix the inconsistency, reconciler schedules `update`-type jobs to the storage
 A repository is considered outdated if its `generation` number in `storage_repositories` does not match the expected generation in the `repositories` table. This might be due to two reasons:
 
 1. The primary received a new mutator which was not yet replicated to the outdated physical storage.
-1. Administrator accepted data loss in the repository. Accepting data loss increments the expected generation in `repositories` and sets the selected authoritative storage's generation to match in `storage_repositories`, leading every other copy of the repository to be considered outdated. See [Gitaly Cluster documentation](https://docs.gitlab.com/ee/administration/gitaly/praefect.html#accept-data-loss) for more information.
+1. Administrator accepted data loss in the repository. Accepting data loss increments the expected generation in `repositories` and sets the selected authoritative storage's generation to match in `storage_repositories`, leading every other copy of the repository to be considered outdated. See [Gitaly Cluster documentation](https://docs.gitlab.com/administration/gitaly/recovery/#accept-data-loss) for more information.
 
 In the case below, `gitaly-2` has an outdated version of the repository as its generation does not match what's in the `repositories` table. `gitaly-2` is behind by three changes as generation counters starts from zero. If a physical storage is missing a repository, its generation should be considered to be `-1` to correctly calculate the number of changes it is behind.
 
@@ -227,4 +227,4 @@ of the removed storages are manually removed.
 
 ## Footnotes
 
-[^1]: A repository is uniquely identified by its primary key `(virtual_storage, relative_path)`. While Praefect doesn't expect a specific format for the relative path, it helps to know that it is generated in GitLab by hashing the unique ID of the GitLab project. To find out more, read about [hashed storage](https://docs.gitlab.com/ee/administration/repository_storage_types.html#hashed-storage).
+[^1]: A repository is uniquely identified by its primary key `(virtual_storage, relative_path)`. While Praefect doesn't expect a specific format for the relative path, it helps to know that it is generated in GitLab by hashing the unique ID of the GitLab project. To find out more, read about [hashed storage](https://docs.gitlab.com/administration/repository_storage_paths/#hashed-storage).
