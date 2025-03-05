@@ -568,8 +568,8 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		// appropriate configuration. This will be done once we are ready to use this manager
 		// to generate bundles.
 		maxBundleAge := time.Minute * 30
-		interval := 30 * time.Second
-		maxConcurrent := 3
+		interval := time.Second * 30
+		maxConcurrent := 5
 		threshold := 5
 		bundleGenerationStrategy, err := bundleuri.NewOccurrenceStrategy(logger, threshold, interval, maxConcurrent, maxBundleAge)
 		if err != nil {

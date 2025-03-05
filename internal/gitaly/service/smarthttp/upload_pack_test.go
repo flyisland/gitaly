@@ -462,6 +462,7 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := testhelper.Context(t)
 			ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.BundleURI, true)
+			ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.BundleGeneration, true)
 
 			testhelper.SkipQuarantinedTest(
 				t,
