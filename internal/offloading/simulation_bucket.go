@@ -116,30 +116,32 @@ func (r *listIteratorWrapper) Next(ctx context.Context) (*blob.ListObject, error
 	}
 }
 
-func (r *simulationBucket) simulate(ctx context.Context, key string, callback func() error) error {
-	simulationData, found := r.simulationMap[key]
-	if !found {
-		return callback()
-	}
-
+func (r *simulationBucket) simulate(ctx context.Context, key string, operation func() error) error {
 	r.mu.Lock()
-	retryIndex, found := r.retryStat[key]
-	if found {
-		r.retryStat[key] = r.retryStat[key] + 1
-	} else {
-		r.retryStat[key] = 1
+	simulations, ok := r.simulationMap[key]
+	retryCount := r.retryStat[key]
+
+	var sim simulation
+	if ok && retryCount < len(simulations) {
+		sim = simulations[retryCount]
+		r.retryStat[key]++
 	}
-	thisSimulation := simulationData[retryIndex]
-	timer := time.NewTimer(thisSimulation.Delay)
 	r.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return errSimulationCanceled
-	case <-timer.C:
-		if thisSimulation.Err != nil {
-			return thisSimulation.Err
+	if sim.Delay > 0 {
+		timer := time.NewTimer(sim.Delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errSimulationCanceled
+		case <-timer.C:
+			// Continue after delay
 		}
-		return callback()
 	}
+
+	if sim.Err != nil {
+		return sim.Err
+	}
+
+	return operation()
 }

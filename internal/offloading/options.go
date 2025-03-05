@@ -29,10 +29,10 @@ type sinkCfg struct {
 // SinkOption modifies a sink configuration.
 type SinkOption func(*sinkCfg)
 
-// WithOverallTimout sets the overallTimeout.
+// WithOverallTimeout sets the overallTimeout.
 // The overallTimeout specifies the maximum allowed duration for the entire operation,
 // including all retries. This ensures the operation completes or fails within a bounded time.
-func WithOverallTimout(timeout time.Duration) SinkOption {
+func WithOverallTimeout(timeout time.Duration) SinkOption {
 	return func(s *sinkCfg) {
 		s.overallTimeout = timeout
 	}

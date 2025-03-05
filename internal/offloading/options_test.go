@@ -18,7 +18,7 @@ func TestOffloadingSinkOptions(t *testing.T) {
 		{
 			desc: "with default values",
 			options: []SinkOption{
-				WithOverallTimout(defaultOverallTimeout),
+				WithOverallTimeout(defaultOverallTimeout),
 				WithMaxRetry(defaultMaxRetry),
 				WithRetryTimeout(defaultRetryTimeout),
 				WithBackoffStrategy(defaultBackoffStrategy),
@@ -43,7 +43,7 @@ func TestOffloadingSinkOptions(t *testing.T) {
 		{
 			desc: "with customized values",
 			options: []SinkOption{
-				WithOverallTimout(20 * time.Second),
+				WithOverallTimeout(20 * time.Second),
 				WithMaxRetry(100),
 				WithRetryTimeout(2 * time.Second),
 				WithBackoffStrategy(&backoffStrategyInTest),
