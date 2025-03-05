@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
@@ -22,6 +23,9 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
@@ -194,11 +198,35 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		testRaftServer := &mockRaftServer{transport: transport}
 		gitalypb.RegisterRaftServiceServer(srv, testRaftServer)
 
-		go testhelper.MustServe(t, srv, listener)
+		healthServer := health.NewServer()
+		healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+		grpc_health_v1.RegisterHealthServer(srv, healthServer)
 
-		t.Cleanup(func() {
-			srv.GracefulStop()
-		})
+		ready := make(chan struct{})
+
+		go testhelper.MustServe(t, srv, listener)
+		go func() {
+			ctx := testhelper.Context(t)
+			require.Eventually(t, func() bool {
+				// Try to connect to the server
+				if conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials())); err == nil {
+					defer conn.Close()
+
+					// Check health service
+					healthClient := grpc_health_v1.NewHealthClient(conn)
+					resp, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
+
+					if err == nil && resp.GetStatus() == grpc_health_v1.HealthCheckResponse_SERVING {
+						return true
+					}
+				}
+				return false
+			}, 5*time.Second, 10*time.Millisecond)
+			close(ready)
+		}()
+
+		<-ready
+		t.Cleanup(func() { srv.GracefulStop() })
 		transport.cfg.SocketPath = addr
 		return transport
 	}
