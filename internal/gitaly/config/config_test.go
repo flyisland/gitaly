@@ -2982,3 +2982,154 @@ initial_members = {1 = "localhost:4001", 2 = "localhost:4002", 3 = "localhost:40
 	require.NoError(t, expectedCfg.Sanitize())
 	require.Equal(t, expectedCfg.Raft, cfg.Raft)
 }
+
+func TestOffloadingConfig_Validate(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		offloading  Offloading
+		expectedErr error
+	}{
+		{
+			name: "empty",
+		},
+		{
+			name: "valid enabled",
+			offloading: Offloading{
+				Enabled:    true,
+				GoCloudURL: "s3://my-bucket",
+				CacheRoot:  "/tmp",
+			},
+		},
+		{
+			name: "valid disabled",
+			offloading: Offloading{
+				Enabled:    false,
+				GoCloudURL: "s3://my-bucket",
+				CacheRoot:  "/tmp",
+			},
+		},
+		{
+			name: "valid no cache root",
+			offloading: Offloading{
+				Enabled:    true,
+				GoCloudURL: "s3://my-bucket",
+			},
+		},
+		{
+			name: "valid with cache root",
+			offloading: Offloading{
+				Enabled:    true,
+				GoCloudURL: "s3://my-bucket",
+				CacheRoot:  "/tmp",
+			},
+		},
+		{
+			name: "invalid cache root",
+			offloading: Offloading{
+				Enabled:    true,
+				GoCloudURL: "s3://my-bucket",
+				CacheRoot:  "fake-path",
+			},
+			expectedErr: cfgerror.ValidationErrors{
+				cfgerror.NewValidationError(
+					fmt.Errorf("%w: %q", cfgerror.ErrNotAbsolutePath, "fake-path"),
+					"cache_root",
+				),
+				cfgerror.NewValidationError(
+					fmt.Errorf("%w: %q", cfgerror.ErrDoesntExist, "fake-path"),
+				),
+			},
+		},
+		{
+			name: "invalid go_cloud_url",
+			offloading: Offloading{
+				Enabled:    true,
+				GoCloudURL: "%invalid%",
+				CacheRoot:  "/tmp",
+			},
+			expectedErr: cfgerror.ValidationErrors{
+				cfgerror.NewValidationError(
+					&url.Error{
+						Op:  "parse",
+						URL: "%invalid%",
+						Err: url.EscapeError("%in"),
+					},
+					"go_cloud_url",
+				),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tc.offloading.Validate()
+			require.Equal(t, tc.expectedErr, err)
+		})
+	}
+}
+
+func TestOffloadingConfig(t *testing.T) {
+	t.Parallel()
+
+	customCacheRoot := testhelper.TempDir(t)
+
+	for _, tc := range []struct {
+		name              string
+		config            string
+		expectedCacheRoot string
+		enabled           bool
+	}{
+		{
+			name:              "not configured",
+			config:            ``,
+			expectedCacheRoot: "",
+			enabled:           false,
+		},
+		{
+			name: "disabled",
+			config: `
+			[offloading]
+			enabled = false`,
+			expectedCacheRoot: "",
+			enabled:           false,
+		},
+		{
+			name: "enabled",
+			config: `
+			[offloading]
+			enabled = true`,
+			expectedCacheRoot: "RUNTIME_DIR/offloading/transient",
+			enabled:           true,
+		},
+		{
+			name: "enabled and cache root configured",
+			config: fmt.Sprintf(`
+			[offloading]
+			enabled = true
+			cache_root = %q`, customCacheRoot),
+			expectedCacheRoot: customCacheRoot,
+			enabled:           true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, err := Load(strings.NewReader(tc.config))
+			require.NoError(t, err)
+
+			require.Equal(t, tc.enabled, cfg.Offloading.Enabled)
+
+			cfg, err = SetupRuntimeDirectory(cfg, os.Getpid())
+			require.NoError(t, err)
+
+			expectedCacheRoot := strings.Replace(tc.expectedCacheRoot, "RUNTIME_DIR", cfg.RuntimeDir, 1)
+			require.Equal(t, expectedCacheRoot, cfg.Offloading.CacheRoot)
+
+			if tc.enabled {
+				require.DirExists(t, expectedCacheRoot, "Offloading cache directory should exist")
+			}
+		})
+	}
+}
