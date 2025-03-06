@@ -14,7 +14,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
-	"google.golang.org/grpc/metadata"
 )
 
 func TestRepo_ReadObject(t *testing.T) {
@@ -101,11 +100,6 @@ func TestRepo_ReadObject_catfileCount(t *testing.T) {
 	gitCmdFactory := gittest.NewCountingCommandFactory(t, cfg)
 	catfileCache := catfile.NewCache(cfg)
 	t.Cleanup(catfileCache.Stop)
-
-	// Session needs to be set for the catfile cache to operate
-	ctx = testhelper.MergeIncomingMetadata(ctx,
-		metadata.Pairs(catfile.SessionIDField, "1"),
-	)
 
 	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 		SkipCreationViaService: true,

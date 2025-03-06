@@ -3,11 +3,13 @@ package catfile
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -24,9 +26,6 @@ const (
 
 	// The default maximum number of cache entries
 	defaultMaxLen = 100
-
-	// SessionIDField is the gRPC metadata field we use to store the gitaly session ID.
-	SessionIDField = "gitaly-session-id"
 )
 
 // Cache is a cache for git-cat-file(1) processes.
@@ -58,7 +57,7 @@ type ProcessCache struct {
 	ttl time.Duration
 	// monitorTicker is the ticker used for the monitoring Goroutine.
 	monitorTicker helper.Ticker
-	monitorDone   chan interface{}
+	monitorDone   chan struct{}
 
 	objectReaders               processes
 	objectReadersWithoutMailmap processes
@@ -122,7 +121,7 @@ func newCache(ttl time.Duration, maxLen int, monitorTicker helper.Ticker) *Proce
 			[]string{"type"},
 		),
 		monitorTicker: monitorTicker,
-		monitorDone:   make(chan interface{}),
+		monitorDone:   make(chan struct{}),
 	}
 
 	go processCache.monitor()
@@ -153,7 +152,6 @@ func (c *ProcessCache) monitor() {
 			c.objectReadersWithoutMailmap.EnforceTTL(time.Now())
 			c.monitorTicker.Reset()
 		case <-c.monitorDone:
-			close(c.monitorDone)
 			return
 		}
 
@@ -165,8 +163,7 @@ func (c *ProcessCache) monitor() {
 // once.
 func (c *ProcessCache) Stop() {
 	c.monitorTicker.Stop()
-	c.monitorDone <- struct{}{}
-	<-c.monitorDone
+	close(c.monitorDone)
 	c.Evict()
 }
 
@@ -229,8 +226,11 @@ func (c *ProcessCache) ObjectInfoReader(ctx context.Context, repo gitcmd.Reposit
 
 // Calculate the nearest 5-minute interval. For our cache key, we want to
 // enforce expiry after 5 minutes.
-func roundToNearestFiveMinute(t time.Time) int {
-	return ((t.Minute() / 5) + 1) * 5
+func roundToNearestFiveMinute(ctx context.Context, t time.Time) int64 {
+	if featureflag.CatfileCacheNonrepeating.IsDisabled(ctx) {
+		return ((int64(t.Minute()) / 5) + 1) * 5
+	}
+	return t.Truncate(5 * time.Minute).Unix()
 }
 
 func (c *ProcessCache) getOrCreateProcess(
@@ -245,7 +245,7 @@ func (c *ProcessCache) getOrCreateProcess(
 	span, ctx := tracing.StartSpanIfHasParent(ctx, spanName, nil)
 	defer span.Finish()
 
-	cacheKey, isCacheable := newCacheKey(fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now())), repo)
+	cacheKey, isCacheable := newCacheKey(fmt.Sprintf("%d", roundToNearestFiveMinute(ctx, time.Now())), repo)
 
 	if isCacheable {
 		// We only try to look up cached processes in case it is cacheable, which requires a
@@ -497,5 +497,5 @@ func (p *processes) delete(i int, wantClose bool) {
 		ent.value.close()
 	}
 
-	p.entries = append(p.entries[:i], p.entries[i+1:]...)
+	p.entries = slices.Delete(p.entries, i, i+1)
 }

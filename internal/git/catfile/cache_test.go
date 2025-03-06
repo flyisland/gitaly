@@ -10,14 +10,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
-	"gitlab.com/gitlab-org/labkit/correlation"
-	"google.golang.org/grpc/metadata"
 )
 
 func TestProcesses_add(t *testing.T) {
@@ -204,57 +203,104 @@ func TestCache_autoExpiry(t *testing.T) {
 }
 
 func TestRoundToNearestFiveMinutes(t *testing.T) {
-	testCases := []struct {
-		minute           int
-		expectedInterval int
-	}{
-		{
-			minute:           2,
-			expectedInterval: 5,
-		},
-		{
-			minute:           5,
-			expectedInterval: 10,
-		},
-		{
-			minute:           6,
-			expectedInterval: 10,
-		},
-		{
-			minute:           11,
-			expectedInterval: 15,
-		},
-		{
-			minute:           22,
-			expectedInterval: 25,
-		},
-		{
-			minute:           34,
-			expectedInterval: 35,
-		},
-		{
-			minute:           49,
-			expectedInterval: 50,
-		},
-		{
-			minute:           54,
-			expectedInterval: 55,
-		},
-		{
-			minute:           58,
-			expectedInterval: 60,
-		},
-	}
+	testhelper.NewFeatureSets(featureflag.CatfileCacheNonrepeating).Run(t, func(t *testing.T, ctx context.Context) {
+		testCases := testhelper.EnabledOrDisabledFlag(
+			ctx,
+			featureflag.CatfileCacheNonrepeating,
+			[]struct {
+				minute           int
+				expectedInterval int64
+			}{
+				{
+					minute:           2,
+					expectedInterval: 1727226000,
+				},
+				{
+					minute:           5,
+					expectedInterval: 1727226300,
+				},
+				{
+					minute:           6,
+					expectedInterval: 1727226300,
+				},
+				{
+					minute:           11,
+					expectedInterval: 1727226600,
+				},
+				{
+					minute:           22,
+					expectedInterval: 1727227200,
+				},
+				{
+					minute:           34,
+					expectedInterval: 1727227800,
+				},
+				{
+					minute:           49,
+					expectedInterval: 1727228700,
+				},
+				{
+					minute:           54,
+					expectedInterval: 1727229000,
+				},
+				{
+					minute:           58,
+					expectedInterval: 1727229300,
+				},
+			},
+			[]struct {
+				minute           int
+				expectedInterval int64
+			}{
+				{
+					minute:           2,
+					expectedInterval: 5,
+				},
+				{
+					minute:           5,
+					expectedInterval: 10,
+				},
+				{
+					minute:           6,
+					expectedInterval: 10,
+				},
+				{
+					minute:           11,
+					expectedInterval: 15,
+				},
+				{
+					minute:           22,
+					expectedInterval: 25,
+				},
+				{
+					minute:           34,
+					expectedInterval: 35,
+				},
+				{
+					minute:           49,
+					expectedInterval: 50,
+				},
+				{
+					minute:           54,
+					expectedInterval: 55,
+				},
+				{
+					minute:           58,
+					expectedInterval: 60,
+				},
+			},
+		)
 
-	base := time.Date(2024, 9, 25, 1, 0, 0, 0, time.UTC)
-	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%d minutes", tc.minute), func(t *testing.T) {
-			require.Equal(t,
-				tc.expectedInterval,
-				roundToNearestFiveMinute(base.Add(time.Duration(tc.minute)*time.Minute)),
-			)
-		})
-	}
+		base := time.Date(2024, 9, 25, 1, 0, 0, 0, time.UTC)
+		for _, tc := range testCases {
+			t.Run(fmt.Sprintf("%d minutes", tc.minute), func(t *testing.T) {
+				require.Equal(t,
+					tc.expectedInterval,
+					roundToNearestFiveMinute(ctx, base.Add(time.Duration(tc.minute)*time.Minute)),
+				)
+			})
+		}
+	})
 }
 
 func TestCache_ObjectReader(t *testing.T) {
@@ -276,11 +322,6 @@ func TestCache_ObjectReader(t *testing.T) {
 	t.Run("cached", func(t *testing.T) {
 		defer cache.Evict()
 
-		ctx := correlation.ContextWithCorrelation(ctx, "1")
-		ctx = testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
-
 		reader, cancel, err := cache.ObjectReader(ctx, repoExecutor)
 		require.NoError(t, err)
 
@@ -290,7 +331,7 @@ func TestCache_ObjectReader(t *testing.T) {
 
 		allKeys := keys(t, &cache.objectReaders)
 
-		expectedSessionID := fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now()))
+		expectedSessionID := fmt.Sprintf("%d", roundToNearestFiveMinute(ctx, time.Now()))
 		require.Equal(t, []key{{
 			sessionID:   expectedSessionID,
 			repoStorage: repo.GetStorageName(),
@@ -304,10 +345,6 @@ func TestCache_ObjectReader(t *testing.T) {
 
 	t.Run("dirty process does not get cached", func(t *testing.T) {
 		defer cache.Evict()
-
-		ctx := testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
 
 		reader, cancel, err := cache.ObjectReader(ctx, repoExecutor)
 		require.NoError(t, err)
@@ -329,10 +366,6 @@ func TestCache_ObjectReader(t *testing.T) {
 
 	t.Run("closed process does not get cached", func(t *testing.T) {
 		defer cache.Evict()
-
-		ctx := testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
 
 		reader, cancel, err := cache.ObjectReader(ctx, repoExecutor)
 		require.NoError(t, err)
@@ -367,11 +400,6 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 	t.Run("cached", func(t *testing.T) {
 		defer cache.Evict()
 
-		ctx := correlation.ContextWithCorrelation(ctx, "1")
-		ctx = testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
-
 		reader, cancel, err := cache.ObjectReaderWithoutMailmap(ctx, repoExecutor)
 		require.NoError(t, err)
 
@@ -381,7 +409,7 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 
 		allKeys := keys(t, &cache.objectReadersWithoutMailmap)
 
-		expectedSessionID := fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now()))
+		expectedSessionID := fmt.Sprintf("%d", roundToNearestFiveMinute(ctx, time.Now()))
 
 		require.Equal(t, []key{{
 			sessionID:   expectedSessionID,
@@ -396,10 +424,6 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 
 	t.Run("dirty process does not get cached", func(t *testing.T) {
 		defer cache.Evict()
-
-		ctx := testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
 
 		reader, cancel, err := cache.ObjectReaderWithoutMailmap(ctx, repoExecutor)
 		require.NoError(t, err)
@@ -421,10 +445,6 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 
 	t.Run("closed process does not get cached", func(t *testing.T) {
 		defer cache.Evict()
-
-		ctx := testhelper.MergeIncomingMetadata(ctx,
-			metadata.Pairs(SessionIDField, "1"),
-		)
 
 		reader, cancel, err := cache.ObjectReaderWithoutMailmap(ctx, repoExecutor)
 		require.NoError(t, err)
