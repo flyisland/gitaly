@@ -1165,7 +1165,7 @@ func (cfg *Cfg) configurePackObjectsCache() error {
 // directory is used instead. A directory is created for the internal socket as well since it is
 // expected to be present in the runtime directory. SetupRuntimeDirectory returns the absolute path
 // to the created runtime directory.
-func SetupRuntimeDirectory(cfg Cfg, processID int) (string, error) {
+func SetupRuntimeDirectory(cfg Cfg, processID int) (Cfg, error) {
 	var runtimeDir string
 	if cfg.RuntimeDir == "" {
 		// If there is no parent directory provided, we just use a temporary directory
@@ -1175,7 +1175,7 @@ func SetupRuntimeDirectory(cfg Cfg, processID int) (string, error) {
 		var err error
 		runtimeDir, err = os.MkdirTemp("", "gitaly-")
 		if err != nil {
-			return "", fmt.Errorf("creating temporary runtime directory: %w", err)
+			return Cfg{}, fmt.Errorf("creating temporary runtime directory: %w", err)
 		}
 	} else {
 		// Otherwise, we use the configured runtime directory. Note that we don't use the
@@ -1189,19 +1189,19 @@ func SetupRuntimeDirectory(cfg Cfg, processID int) (string, error) {
 		runtimeDir = GetGitalyProcessTempDir(cfg.RuntimeDir, processID)
 
 		if _, err := os.Stat(runtimeDir); err != nil && !os.IsNotExist(err) {
-			return "", fmt.Errorf("statting runtime directory: %w", err)
+			return Cfg{}, fmt.Errorf("statting runtime directory: %w", err)
 		} else if err != nil {
 			// If the directory exists already then it must be from an old invocation of
 			// Gitaly. Because we use the PID as path component we know that the old
 			// instance cannot exist anymore though, so it's safe to remove this
 			// directory now.
 			if err := os.RemoveAll(runtimeDir); err != nil {
-				return "", fmt.Errorf("removing old runtime directory: %w", err)
+				return Cfg{}, fmt.Errorf("removing old runtime directory: %w", err)
 			}
 		}
 
 		if err := os.Mkdir(runtimeDir, mode.Directory); err != nil {
-			return "", fmt.Errorf("creating runtime directory: %w", err)
+			return Cfg{}, fmt.Errorf("creating runtime directory: %w", err)
 		}
 	}
 
@@ -1214,14 +1214,14 @@ func SetupRuntimeDirectory(cfg Cfg, processID int) (string, error) {
 	// that is not too deep. We need a directory, not a tempfile, because we
 	// will later want to set its permissions to 0700
 	if err := os.Mkdir(cfg.InternalSocketDir(), mode.Directory); err != nil {
-		return "", fmt.Errorf("create internal socket directory: %w", err)
+		return Cfg{}, fmt.Errorf("create internal socket directory: %w", err)
 	}
 
 	if err := trySocketCreation(cfg.InternalSocketDir()); err != nil {
-		return "", fmt.Errorf("failed creating internal test socket: %w", err)
+		return Cfg{}, fmt.Errorf("failed creating internal test socket: %w", err)
 	}
 
-	return runtimeDir, nil
+	return cfg, nil
 }
 
 func trySocketCreation(dir string) error {

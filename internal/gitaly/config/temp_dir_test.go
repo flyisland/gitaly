@@ -34,8 +34,9 @@ func TestPruneOldGitalyProcessDirectories(t *testing.T) {
 
 		// Setup a runtime directory for our process, it can't be stale as long as
 		// we are running.
-		ownRuntimeDir, err := SetupRuntimeDirectory(cfg, os.Getpid())
+		newCfg, err := SetupRuntimeDirectory(cfg, os.Getpid())
 		require.NoError(t, err)
+		ownRuntimeDir := newCfg.RuntimeDir
 
 		expectedLogs := map[string]string{}
 		expectedErrs := map[string]error{}
@@ -46,16 +47,18 @@ func TestPruneOldGitalyProcessDirectories(t *testing.T) {
 			cmd := exec.Command("cat")
 			require.NoError(t, cmd.Run())
 
-			staleRuntimeDir, err := SetupRuntimeDirectory(cfg, cmd.Process.Pid)
+			newCfg, err = SetupRuntimeDirectory(cfg, cmd.Process.Pid)
 			require.NoError(t, err)
+			staleRuntimeDir := newCfg.RuntimeDir
 
 			prunableDirs = append(prunableDirs, staleRuntimeDir)
 			expectedLogs[staleRuntimeDir] = "removed leftover gitaly process directory"
 		}
 
 		// Setup runtime directory with pid of process not owned by git user
-		rootRuntimeDir, err := SetupRuntimeDirectory(cfg, 1)
+		newCfg, err = SetupRuntimeDirectory(cfg, 1)
 		require.NoError(t, err)
+		rootRuntimeDir := newCfg.RuntimeDir
 		expectedLogs[rootRuntimeDir] = "removed leftover gitaly process directory"
 		prunableDirs = append(prunableDirs, rootRuntimeDir)
 

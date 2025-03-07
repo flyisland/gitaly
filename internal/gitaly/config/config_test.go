@@ -1749,11 +1749,12 @@ func TestSetupRuntimeDirectory(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		t.Run("empty runtime directory", func(t *testing.T) {
 			cfg := Cfg{}
-			runtimeDir, err := SetupRuntimeDirectory(cfg, os.Getpid())
+			var err error
+			cfg, err = SetupRuntimeDirectory(cfg, os.Getpid())
 			require.NoError(t, err)
 
-			require.DirExists(t, runtimeDir)
-			require.True(t, strings.HasPrefix(runtimeDir, filepath.Join(os.TempDir(), "gitaly-")))
+			require.DirExists(t, cfg.RuntimeDir)
+			require.True(t, strings.HasPrefix(cfg.RuntimeDir, filepath.Join(os.TempDir(), "gitaly-")))
 		})
 
 		t.Run("non-existent runtime directory", func(t *testing.T) {
@@ -1771,11 +1772,12 @@ func TestSetupRuntimeDirectory(t *testing.T) {
 				RuntimeDir: dir,
 			}
 
-			runtimeDir, err := SetupRuntimeDirectory(cfg, os.Getpid())
+			var err error
+			cfg, err = SetupRuntimeDirectory(cfg, os.Getpid())
 			require.NoError(t, err)
 
-			require.Equal(t, filepath.Join(dir, fmt.Sprintf("gitaly-%d", os.Getpid())), runtimeDir)
-			require.DirExists(t, runtimeDir)
+			require.Equal(t, filepath.Join(dir, fmt.Sprintf("gitaly-%d", os.Getpid())), cfg.RuntimeDir)
+			require.DirExists(t, cfg.RuntimeDir)
 		})
 	})
 

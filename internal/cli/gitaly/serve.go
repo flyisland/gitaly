@@ -194,11 +194,11 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		}
 	}
 
-	runtimeDir, err := config.SetupRuntimeDirectory(cfg, os.Getpid())
+	var err error
+	cfg, err = config.SetupRuntimeDirectory(cfg, os.Getpid())
 	if err != nil {
 		return fmt.Errorf("setup runtime directory: %w", err)
 	}
-	cfg.RuntimeDir = runtimeDir
 
 	cgroupMgr := cgroups.NewManager(cfg.Cgroups, logger, os.Getpid())
 
