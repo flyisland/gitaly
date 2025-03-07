@@ -1,6 +1,6 @@
 module gitlab.com/gitlab-org/gitaly/tools/gotestsum
 
-go 1.22
+go 1.23
 
 require gotest.tools/gotestsum v1.12.0
 

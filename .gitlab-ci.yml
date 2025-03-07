@@ -15,8 +15,8 @@ default:
   debian: "bookworm"
   git_default: "default"
   git_minimum: "v2.47.0"
-  go_default: "1.22"
-  go_supported: ["1.22", "1.23"]
+  go_default: "1.23"
+  go_supported: ["1.23"]
   macos: "macos-14-xcode-15"
   pgbouncer: "1.17.0"
   postgres_default: "14-alpine"
