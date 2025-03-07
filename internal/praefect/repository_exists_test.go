@@ -98,7 +98,7 @@ func TestRepositoryExistsHandler(t *testing.T) {
 
 			go testhelper.MustServe(t, srv, ln)
 
-			clientConn, err := grpc.DialContext(ctx, "unix://"+ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			clientConn, err := grpc.NewClient("unix://"+ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, clientConn)
 

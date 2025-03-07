@@ -367,7 +367,7 @@ func TestProxyErrorPropagation(t *testing.T) {
 			}()
 			defer backendServer.Stop()
 
-			backendClientConn, err := grpc.DialContext(ctx, "unix://"+backendListener.Addr().String(),
+			backendClientConn, err := grpc.NewClient("unix://"+backendListener.Addr().String(),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithDefaultCallOptions(grpc.ForceCodec(proxy.NewCodec())),
 			)
@@ -399,7 +399,7 @@ func TestProxyErrorPropagation(t *testing.T) {
 			}()
 			defer proxyServer.Stop()
 
-			proxyClientConn, err := grpc.DialContext(ctx, "unix://"+proxyListener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			proxyClientConn, err := grpc.NewClient("unix://"+proxyListener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, proxyClientConn)
 

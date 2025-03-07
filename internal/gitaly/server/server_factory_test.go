@@ -48,7 +48,7 @@ func TestGitalyServerFactory(t *testing.T) {
 
 			creds := cert.TransportCredentials(t)
 
-			cc, err = grpc.DialContext(ctx, listener.Addr().String(), grpc.WithTransportCredentials(creds))
+			cc, err = grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(creds))
 			require.NoError(t, err)
 		} else {
 			srv, err := sf.CreateExternal(false)
@@ -296,7 +296,7 @@ func TestGitalyServerFactory_closeOrder(t *testing.T) {
 
 		go testhelper.MustServe(t, server, ln)
 
-		conn, err := grpc.DialContext(ctx, ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.NewClient(ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		require.NoError(t, err)
 		t.Cleanup(func() { testhelper.MustClose(t, conn) })
 		*builder.conn = conn

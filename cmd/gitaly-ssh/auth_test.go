@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
@@ -100,6 +101,44 @@ func TestConnectivity(t *testing.T) {
 					KeyPath:  certificate.KeyPath,
 				}
 				return runGitaly(t, cfg), certificate.CertPath
+			},
+		},
+		{
+			name: "dns",
+			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+				// Configure a Gitaly server that listens over TCP.
+				cfg.ListenAddr = "localhost:0"
+				gitalyAddr := runGitaly(t, cfg)
+				gitalyPort := strings.Split(gitalyAddr, ":")[2]
+
+				// Start a DNS server that responds to anything with the loopback address.
+				dnsServer := testhelper.NewFakeDNSServer(t).WithHandler(dns.TypeA, func(host string) []string {
+					return []string{"127.0.0.1"}
+				}).Start()
+
+				return fmt.Sprintf("dns://%s/%s", dnsServer.Addr(), "localhost:"+gitalyPort), ""
+			},
+		},
+		{
+			name: "dns (no authority)",
+			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+				// Configure a Gitaly server that listens over TCP.
+				cfg.ListenAddr = "localhost:0"
+				gitalyAddr := runGitaly(t, cfg)
+				gitalyPort := strings.Split(gitalyAddr, ":")[2]
+
+				return "dns:///localhost:" + gitalyPort, ""
+			},
+		},
+		{
+			name: "tcp with dns address (no authority)",
+			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+				// Configure a Gitaly server that listens over TCP.
+				cfg.ListenAddr = "localhost:0"
+				gitalyAddr := runGitaly(t, cfg)
+				gitalyPort := strings.Split(gitalyAddr, ":")[2]
+
+				return fmt.Sprintf("tcp://localhost:%s", gitalyPort), ""
 			},
 		},
 	}

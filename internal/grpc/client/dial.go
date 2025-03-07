@@ -31,6 +31,7 @@ const (
 	tlsConnection
 	unixConnection
 	dnsConnection
+	dnsPlusTLSConnection
 )
 
 func getConnectionType(rawAddress string) connectionType {
@@ -79,7 +80,7 @@ func WithHandshaker(handshaker Handshaker) DialOption {
 }
 
 // WithGrpcOptions will set up the given gRPC dial options so that they will be used when calling
-// `grpc.DialContext()`.
+// `grpc.NewClient()`.
 func WithGrpcOptions(opts []grpc.DialOption) DialOption {
 	return func(cfg *dialConfig) {
 		cfg.grpcOpts = append(cfg.grpcOpts, opts...)
@@ -131,7 +132,6 @@ func Dial(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Cli
 			return nil, fmt.Errorf("failed to parse target for 'dns' connection: %w", err)
 		}
 		canonicalAddress = rawAddress // DNS Resolver will handle this
-
 	case unixConnection:
 		canonicalAddress = rawAddress // This will be overridden by the custom dialer...
 		connOpts = append(
@@ -208,7 +208,7 @@ func Dial(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Cli
 		grpc.WithDefaultServiceConfig(defaultServiceConfig()),
 	)
 
-	conn, err := grpc.DialContext(ctx, canonicalAddress, connOpts...)
+	conn, err := grpc.NewClient(canonicalAddress, connOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial %q connection: %w", canonicalAddress, err)
 	}

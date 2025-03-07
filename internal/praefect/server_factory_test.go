@@ -237,7 +237,7 @@ func TestServerFactory(t *testing.T) {
 
 		creds := certificate.TransportCredentials(t)
 
-		cc, err := grpc.DialContext(ctx, listener.Addr().String(), grpc.WithTransportCredentials(creds))
+		cc, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(creds))
 		require.NoError(t, err)
 		defer func() { require.NoError(t, cc.Close()) }()
 

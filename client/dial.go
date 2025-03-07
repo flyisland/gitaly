@@ -18,11 +18,15 @@ import (
 // DefaultDialOpts hold the default DialOptions for connection to Gitaly over UNIX-socket
 var DefaultDialOpts = []grpc.DialOption{}
 
-// DialContext dials the Gitaly at the given address with the provided options. Valid address formats are
-// 'unix:<socket path>' for Unix sockets, 'tcp://<host:port>' for insecure TCP connections and 'tls://<host:port>'
-// for TCP+TLS connections.
+// DialContext creates a client connection to a Gitaly at the given address with the provided options. Valid address
+// formats are
+//   - 'unix:<socket path>' for Unix sockets
+//   - 'tcp://<host:port>' for insecure TCP connections to an IP or hostname (resolved via DNS).
+//   - 'tls://<host:port>' for TCP+TLS connections to an IP or hostname (resolved via DNS).
+//   - 'dns://<authority_host:authority_port>/<host:port>' for insecure TCP connections that should be resolved by the
+//     specified authoritative DNS server. Note that it's not possible to use TLS in conjunction with a DNS authority.
 //
-// The returned ClientConns are configured with tracing and correlation id interceptors to ensure they are propagated
+// The returned ClientConn is configured with tracing and correlation id interceptors to ensure they are propagated
 // correctly. They're also configured to send Keepalives with settings matching what Gitaly expects.
 //
 // connOpts should not contain `grpc.WithInsecure` as DialContext determines whether it is needed or not from the

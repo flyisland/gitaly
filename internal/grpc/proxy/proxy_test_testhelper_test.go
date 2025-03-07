@@ -34,8 +34,7 @@ func newBackendPinger(tb testing.TB, ctx context.Context) (*grpc.ClientConn, *in
 		require.NoError(tb, srvr.Serve(listener))
 	}()
 
-	cc, err := grpc.DialContext(
-		ctx,
+	cc, err := grpc.NewClient(
 		listener.Addr().String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
@@ -72,8 +71,7 @@ func newProxy(tb testing.TB, ctx context.Context, director proxy.StreamDirector,
 		require.NoError(tb, proxySrvr.Serve(listener))
 	}()
 
-	proxyCC, err := grpc.DialContext(
-		ctx,
+	proxyCC, err := grpc.NewClient(
 		listener.Addr().String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
