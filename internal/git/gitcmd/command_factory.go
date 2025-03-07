@@ -456,6 +456,21 @@ func (cf *ExecCommandFactory) newCommand(ctx context.Context, repo storage.Repos
 		opts = append(opts, WithConfig(*attrTreeConfig))
 	}
 
+	// For new repositories being created, we want to ensure that the
+	// right reference backend is used.
+	//
+	// Make sure we don't override the env variable, if set.
+	_, refFormatSet := os.LookupEnv("GIT_DEFAULT_REF_FORMAT")
+	if (sc.Name == "clone" || sc.Name == "init") && !refFormatSet {
+		backend := git.ReferenceBackendFiles
+
+		if featureflag.NewRepoReftableBackend.IsEnabled(ctx) && storage.ExtractTransaction(ctx) != nil {
+			backend = git.ReferenceBackendReftables
+		}
+
+		sc.Flags = append(sc.Flags, Flag{Name: fmt.Sprintf("--ref-format=%s", backend.Name)})
+	}
+
 	config, err := cf.combineOpts(ctx, sc, opts)
 	if err != nil {
 		return nil, err

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/repoutil"
@@ -36,11 +35,6 @@ func (s *server) CreateFork(ctx context.Context, req *gitalypb.CreateForkRequest
 			return err
 		}
 
-		refFormat := git.ReferenceBackendFiles.Name
-		if featureflag.NewRepoReftableBackend.IsEnabled(ctx) {
-			refFormat = git.ReferenceBackendReftables.Name
-		}
-
 		// Ideally we'd just fetch into the already-created repo, but that wouldn't
 		// allow us to easily set up HEAD to point to the correct ref. We thus have
 		// no easy choice but to use git-clone(1).
@@ -48,7 +42,6 @@ func (s *server) CreateFork(ctx context.Context, req *gitalypb.CreateForkRequest
 		flags := []gitcmd.Option{
 			gitcmd.Flag{Name: "--bare"},
 			gitcmd.Flag{Name: "--quiet"},
-			gitcmd.Flag{Name: fmt.Sprintf("--ref-format=%s", refFormat)},
 		}
 
 		if req.GetRevision() != nil {

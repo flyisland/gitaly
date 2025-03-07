@@ -12,7 +12,6 @@ import (
 	"runtime/trace"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
@@ -119,18 +118,12 @@ func Create(
 	}
 
 	if !cfg.skipInit {
-		refFormat := git.ReferenceBackendFiles.Name
-		if featureflag.NewRepoReftableBackend.IsEnabled(ctx) {
-			refFormat = git.ReferenceBackendReftables.Name
-		}
-
 		stderr := &bytes.Buffer{}
 		cmd, err := gitCmdFactory.NewWithoutRepo(ctx, gitcmd.Command{
 			Name: "init",
 			Flags: append([]gitcmd.Option{
 				gitcmd.Flag{Name: "--bare"},
 				gitcmd.Flag{Name: "--quiet"},
-				gitcmd.Flag{Name: fmt.Sprintf("--ref-format=%s", refFormat)},
 			}, cfg.gitOptions...),
 			Args: []string{newRepoDir.Path()},
 		}, gitcmd.WithStderr(stderr))
