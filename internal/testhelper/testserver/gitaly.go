@@ -341,7 +341,6 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 	}
 
 	migrations := []migration.Migration{}
-	dryRunMigrations := []migration.Migration{}
 
 	if gsd.MigrationStateManager == nil {
 		gsd.MigrationStateManager = migration.NewStateManager(migrations)
@@ -373,7 +372,6 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 					),
 					migration.NewMetrics(),
 					migrations,
-					dryRunMigrations,
 				),
 				storagemgr.DefaultMaxInactivePartitions,
 				storagemgr.NewMetrics(cfg.Prometheus),
