@@ -30,7 +30,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.0
 	github.com/miekg/dns v1.1.63
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/opencontainers/runtime-spec v1.2.0
+	github.com/opencontainers/runtime-spec v1.2.1
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/prometheus/client_golang v1.21.0
