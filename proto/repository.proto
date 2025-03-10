@@ -1334,7 +1334,7 @@ message GetFileAttributesResponse {
     string value = 3;
   }
   // attribute_infos is the list of attributes that matches the given GetFileAttributesRequest
-  repeated AttributeInfo attribute_infos = 1;
+  repeated AttributeInfo attribute_infos = 1; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
 }
 
 // FastExportRequest is a request for the FastExport RPC
