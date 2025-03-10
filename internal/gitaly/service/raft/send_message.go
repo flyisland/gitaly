@@ -19,6 +19,11 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 			return structerr.NewInternal("receive error: %w", err)
 		}
 
+		replicaID := req.GetReplicaId()
+		partitionKey := replicaID.GetPartitionKey()
+		authorityName := partitionKey.GetAuthorityName()
+		partitionID := partitionKey.GetPartitionId()
+
 		// The cluster ID protects Gitaly from cross-cluster interactions, which could potentially corrupt the clusters.
 		// This is particularly crucial after disaster recovery so that an identical cluster is restored from backup.
 		if req.GetClusterId() == "" {
@@ -31,16 +36,16 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 				req.GetClusterId(), s.cfg.Raft.ClusterID)
 		}
 
-		if req.GetAuthorityName() == "" {
+		if authorityName == "" {
 			return structerr.NewInvalidArgument("authority_name is required")
 		}
-		if req.GetPartitionId() == 0 {
+		if partitionID == 0 {
 			return structerr.NewInvalidArgument("partition_id is required")
 		}
 
 		raftMsg := req.GetMessage()
 
-		if err := s.transport.Receive(stream.Context(), req.GetPartitionId(), req.GetAuthorityName(), *raftMsg); err != nil {
+		if err := s.transport.Receive(stream.Context(), partitionKey, *raftMsg); err != nil {
 			return structerr.NewInternal("receive error: %w", err)
 		}
 	}

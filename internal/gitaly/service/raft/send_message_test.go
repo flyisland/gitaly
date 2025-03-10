@@ -35,9 +35,14 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "successful message send",
 			req: &gitalypb.RaftMessageRequest{
-				ClusterId:     "test-cluster",
-				AuthorityName: "test-authority",
-				PartitionId:   1,
+				ClusterId: "test-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: "storage-name",
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: "test-authority",
+						PartitionId:   1,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -47,8 +52,13 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "missing cluster ID",
 			req: &gitalypb.RaftMessageRequest{
-				AuthorityName: "test-authority",
-				PartitionId:   1,
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: "storage-name",
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: "test-authority",
+						PartitionId:   1,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -60,9 +70,14 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "wrong cluster ID",
 			req: &gitalypb.RaftMessageRequest{
-				ClusterId:     "wrong-cluster",
-				AuthorityName: "test-authority",
-				PartitionId:   1,
+				ClusterId: "wrong-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: "storage-name",
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: "test-authority",
+						PartitionId:   1,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -74,8 +89,13 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "missing authority name",
 			req: &gitalypb.RaftMessageRequest{
-				ClusterId:   "test-cluster",
-				PartitionId: 1,
+				ClusterId: "test-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: "storage-name",
+					PartitionKey: &gitalypb.PartitionKey{
+						PartitionId: 1,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -87,8 +107,13 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "missing partition ID",
 			req: &gitalypb.RaftMessageRequest{
-				ClusterId:     "test-cluster",
-				AuthorityName: "test-authority",
+				ClusterId: "test-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: "storage-name",
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: "test-authority",
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,

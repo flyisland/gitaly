@@ -30,9 +30,9 @@ type Transport interface {
 	// Send dispatches a batch of Raft messages. It returns an error if the sending fails. This function receives a
 	// context, the list of messages to send and a function that returns the path of WAL directory of a particular
 	// log entry. The implementation must respect input context's cancellation.
-	Send(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, messages []raftpb.Message) error
+	Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error
 	// Receive receives a Raft message and processes it.
-	Receive(ctx context.Context, partitionID uint64, authorityName string, raftMsg raftpb.Message) error
+	Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error
 }
 
 // GrpcTransport is a gRPC transport implementation for sending Raft messages across nodes.
@@ -57,8 +57,8 @@ func NewGrpcTransport(logger log.Logger, cfg config.Cfg, routingTable RoutingTab
 }
 
 // Send sends Raft messages to the appropriate nodes.
-func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, messages []raftpb.Message) error {
-	messagesByNode, err := t.prepareRaftMessageRequests(ctx, logReader, partitionID, authorityName, messages)
+func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error {
+	messagesByNode, err := t.prepareRaftMessageRequests(ctx, logReader, partitionKey, messages)
 	if err != nil {
 		return fmt.Errorf("preparing raft messages: %w", err)
 	}
@@ -91,7 +91,7 @@ func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, p
 	return nil
 }
 
-func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, msgs []raftpb.Message) (map[uint64][]*gitalypb.RaftMessageRequest, error) {
+func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, msgs []raftpb.Message) (map[uint64][]*gitalypb.RaftMessageRequest, error) {
 	requests := make([]*gitalypb.RaftMessageRequest, len(msgs))
 	g := &errgroup.Group{}
 
@@ -128,12 +128,13 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 
 			}
 			requests[i] = &gitalypb.RaftMessageRequest{
-				ClusterId:     t.cfg.Raft.ClusterID,
-				AuthorityName: authorityName,
-				PartitionId:   partitionID,
-				Message:       &msg,
+				ClusterId: t.cfg.Raft.ClusterID,
+				ReplicaId: &gitalypb.ReplicaID{
+					PartitionKey: partitionKey,
+					NodeId:       msg.To,
+				},
+				Message: &msg,
 			}
-
 			return nil
 		})
 	}
@@ -153,13 +154,11 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 }
 
 func (t *GrpcTransport) sendToNode(ctx context.Context, nodeID uint64, reqs []*gitalypb.RaftMessageRequest) error {
-	// For now, we are using a static routing table that contains mapping of nodeID to address. In future, the routing
-	// table can become dynamic so that storage addresses are propagated through gossiping.
-	authorityName, partitionID := reqs[0].GetAuthorityName(), reqs[0].GetPartitionId()
+	partitionKey := reqs[0].GetReplicaId().GetPartitionKey()
 	addr, err := t.routingTable.Translate(RoutingKey{
 		partitionKey: PartitionKey{
-			authorityName: authorityName,
-			partitionID:   partitionID,
+			partitionID:   partitionKey.GetPartitionId(),
+			authorityName: partitionKey.GetAuthorityName(),
 		},
 		nodeID: nodeID,
 	})
@@ -209,15 +208,12 @@ func (t *GrpcTransport) packLogData(ctx context.Context, lsn storage.LSN, messag
 }
 
 // Receive receives a stream of Raft messages and processes them.
-func (t *GrpcTransport) Receive(ctx context.Context, partitionID uint64, authorityName string, raftMsg raftpb.Message) error {
+func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error {
 	// Retrieve the raft manager from the registry, assumption is that all the messages are from the same partition key.
-	raftManager, err := t.registry.GetManager(PartitionKey{
-		authorityName: authorityName,
-		partitionID:   partitionID,
-	})
+	raftManager, err := t.registry.GetManager(partitionKey)
 	if err != nil {
 		return status.Errorf(codes.NotFound, "raft manager not found for partition %d: %v",
-			partitionID, err)
+			partitionKey.GetPartitionId(), err)
 	}
 
 	for _, entry := range raftMsg.Entries {

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
@@ -23,24 +22,13 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
-type testNode struct {
-	id              uint64
-	name            string
-	transport       *GrpcTransport
-	server          *grpc.Server
-	managerRegistry ManagerRegistry
-}
-
 type cluster struct {
-	leader    *testNode
-	followers []*testNode
+	leader    *mockStorageNode
+	followers []*mockStorageNode
 }
 
 type walEntry struct {
@@ -54,9 +42,21 @@ const (
 	clusterID   = "44c58f50-0a8b-4849-bf8b-d5a56198ea7c"
 )
 
+type mockStorageNode struct {
+	id              uint64
+	name            string
+	transport       *GrpcTransport
+	server          *grpc.Server
+	managerRegistry ManagerRegistry
+}
+
+func (m mockStorageNode) GetTransport() Transport {
+	return m.transport
+}
+
 type mockRaftServer struct {
 	gitalypb.UnimplementedRaftServiceServer
-	transport *GrpcTransport
+	node mockStorageNode
 }
 
 func (s *mockRaftServer) SendMessage(stream gitalypb.RaftService_SendMessageServer) error {
@@ -71,7 +71,9 @@ func (s *mockRaftServer) SendMessage(stream gitalypb.RaftService_SendMessageServ
 
 		raftMsg := req.GetMessage()
 
-		if err := s.transport.Receive(stream.Context(), req.GetPartitionId(), req.GetAuthorityName(), *raftMsg); err != nil {
+		partitionKey := req.GetReplicaId().GetPartitionKey()
+
+		if err := s.node.GetTransport().Receive(stream.Context(), partitionKey, *raftMsg); err != nil {
 			return status.Errorf(codes.Internal, "receive error: %v", err)
 		}
 	}
@@ -138,17 +140,19 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 				require.NoError(t, leader.transport.connectionPool.Close())
 			})
 
-			mgr, err := leader.managerRegistry.GetManager(PartitionKey{
-				partitionID:   uint64(tc.partitionID),
-				authorityName: storageName,
-			})
+			partitionKey := &gitalypb.PartitionKey{
+				PartitionId:   uint64(tc.partitionID),
+				AuthorityName: storageName,
+			}
+
+			mgr, err := leader.managerRegistry.GetManager(partitionKey)
 			require.NoError(t, err)
 
 			// Create test messages
 			msgs := createTestMessages(t, testCluster, mgr, tc.walEntries)
 
 			// Send Message from leader to all followers
-			err = leader.transport.Send(ctx, mgr, 1, storageName, msgs)
+			err = leader.transport.Send(ctx, mgr, partitionKey, msgs)
 			if tc.expectedError != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectedError)
@@ -158,10 +162,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 
 			// Verify WAL replication
 			for i, follower := range testCluster.followers {
-				mgr, err := follower.managerRegistry.GetManager(PartitionKey{
-					partitionID:   uint64(tc.partitionID),
-					authorityName: storageName,
-				})
+				mgr, err := follower.managerRegistry.GetManager(partitionKey)
 				require.NoError(t, err)
 
 				for _, entry := range tc.walEntries {
@@ -195,38 +196,18 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		))
 
 		transport := NewGrpcTransport(logger, cfg, routingTable, registry, pool)
-		testRaftServer := &mockRaftServer{transport: transport}
+		testRaftServer := &mockRaftServer{
+			node: mockStorageNode{
+				transport: transport,
+			},
+		}
 		gitalypb.RegisterRaftServiceServer(srv, testRaftServer)
 
-		healthServer := health.NewServer()
-		healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
-		grpc_health_v1.RegisterHealthServer(srv, healthServer)
-
-		ready := make(chan struct{})
-
 		go testhelper.MustServe(t, srv, listener)
-		go func() {
-			ctx := testhelper.Context(t)
-			require.Eventually(t, func() bool {
-				// Try to connect to the server
-				if conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials())); err == nil {
-					defer conn.Close()
 
-					// Check health service
-					healthClient := grpc_health_v1.NewHealthClient(conn)
-					resp, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
-
-					if err == nil && resp.GetStatus() == grpc_health_v1.HealthCheckResponse_SERVING {
-						return true
-					}
-				}
-				return false
-			}, 5*time.Second, 10*time.Millisecond)
-			close(ready)
-		}()
-
-		<-ready
-		t.Cleanup(func() { srv.GracefulStop() })
+		t.Cleanup(func() {
+			srv.GracefulStop()
+		})
 		transport.cfg.SocketPath = addr
 		return transport
 	}
@@ -237,9 +218,10 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	}
 
 	cluster := &cluster{}
-	cluster.leader = &testNode{}
-	cluster.followers = []*testNode{}
+	cluster.leader = &mockStorageNode{}
+	cluster.followers = []*mockStorageNode{}
 
+	// First set up all servers and fill routing table
 	// First set up all servers and fill routing table
 	for i := range numNodes {
 		srv, listener, addr := runServer(t)
@@ -260,7 +242,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		config := testcfg.Build(t)
 		config.Raft.ClusterID = clusterID
 		transport := createTransport(config, servers[i], listeners[i], addresses[i], registries[i])
-		node := &testNode{
+		node := &mockStorageNode{
 			transport:       transport,
 			server:          servers[i],
 			managerRegistry: registries[i],
@@ -271,14 +253,19 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		// Create and set up manager
 		manager := newManager(config)
 
+		partitionKey := &gitalypb.PartitionKey{
+			AuthorityName: storageName,
+			PartitionId:   uint64(partitionID),
+		}
+
 		// Register the manager with the registry
-		require.NoError(t, registries[i].RegisterManager(PartitionKey{
-			partitionID:   uint64(partitionID),
-			authorityName: storageName,
-		}, manager))
+		require.NoError(t, registries[i].RegisterManager(partitionKey, manager))
 
 		if i == 0 {
 			cluster.leader = node
+			raftMgr, err := node.managerRegistry.GetManager(partitionKey)
+			require.Equal(t, raftMgr, manager)
+			require.NoError(t, err)
 		} else {
 			cluster.followers = append(cluster.followers, node)
 		}
