@@ -52,8 +52,14 @@ func NewNode(cfg config.Cfg, baseNode storage.Node, logger log.Logger, dbMgr *da
 			return nil, fmt.Errorf("get base storage %q: %w", cfgStorage.Name, err)
 		}
 
+		// Get the storage's KV store for the routing table
+		kvStore, err := dbMgr.GetDB(cfgStorage.Name)
+		if err != nil {
+			return nil, fmt.Errorf("get KV store for storage %q: %w", cfgStorage.Name, err)
+		}
+
 		// Create per-storage Raft components
-		routingTable := NewStaticRaftRoutingTable()
+		routingTable := NewKVRoutingTable(kvStore)
 		managerRegistry := NewRaftManagerRegistry()
 		transport := NewGrpcTransport(logger, cfg, routingTable, managerRegistry, connsPool)
 

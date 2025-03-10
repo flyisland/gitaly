@@ -7,12 +7,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
-// PartitionKey is used to uniquely identify a partition.
-type PartitionKey struct {
-	authorityName string
-	partitionID   uint64
-}
-
 func partitionKeyToString(pk *gitalypb.PartitionKey) string {
 	return fmt.Sprintf("%d:%s", pk.GetPartitionId(), pk.GetAuthorityName())
 }

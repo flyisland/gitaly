@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
@@ -113,7 +114,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 			walEntries: []walEntry{
 				{lsn: storage.LSN(1), content: "random-content"},
 			},
-			expectedError: "create stream to node 2: rpc error: code = Unavailable desc = last connection error: connection error:",
+			expectedError: "connect: no such file or directory",
 		},
 	}
 
@@ -184,10 +185,18 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 }
 
 func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partitionID int) *cluster {
-	routingTable := NewStaticRaftRoutingTable()
+	dir := t.TempDir()
+	kvStore, err := keyvalue.NewBadgerStore(logger, dir)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, kvStore.Close())
+	})
+
 	var servers []*grpc.Server
 	var listeners []net.Listener
 	var addresses []string
+
+	routingTable := NewKVRoutingTable(kvStore)
 
 	createTransport := func(cfg config.Cfg, srv *grpc.Server, listener net.Listener, addr string, registry ManagerRegistry) *GrpcTransport {
 		pool := client.NewPool(client.WithDialOptions(
@@ -222,16 +231,8 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	cluster.followers = []*mockStorageNode{}
 
 	// First set up all servers and fill routing table
-	// First set up all servers and fill routing table
-	for i := range numNodes {
+	for range numNodes {
 		srv, listener, addr := runServer(t)
-		require.NoError(t, routingTable.AddMember(RoutingKey{
-			partitionKey: PartitionKey{
-				authorityName: storageName,
-				partitionID:   uint64(partitionID),
-			},
-			nodeID: uint64(i + 1),
-		}, addr))
 		servers = append(servers, srv)
 		listeners = append(listeners, listener)
 		addresses = append(addresses, addr)
@@ -261,13 +262,47 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		// Register the manager with the registry
 		require.NoError(t, registries[i].RegisterManager(partitionKey, manager))
 
+		nodeID := uint64(i + 1)
 		if i == 0 {
 			cluster.leader = node
 			raftMgr, err := node.managerRegistry.GetManager(partitionKey)
 			require.Equal(t, raftMgr, manager)
 			require.NoError(t, err)
+
+			entry := RoutingTableEntry{
+				Replicas: []*gitalypb.ReplicaID{
+					{
+						PartitionKey: partitionKey,
+						NodeId:       nodeID,
+						Metadata: &gitalypb.ReplicaID_Metadata{
+							Address: addresses[i],
+						},
+					},
+				},
+				Term:  1,
+				Index: 1,
+			}
+
+			require.NoError(t, routingTable.UpsertEntry(entry))
+
 		} else {
 			cluster.followers = append(cluster.followers, node)
+
+			// Get existing entry and add the new follower to replicas
+			existingEntry, err := routingTable.GetEntry(partitionKey)
+			require.NoError(t, err)
+
+			existingEntry.Index = uint64(i + 1)
+			existingEntry.Replicas = append(existingEntry.Replicas, &gitalypb.ReplicaID{
+				PartitionKey: partitionKey,
+				NodeId:       nodeID,
+				Metadata: &gitalypb.ReplicaID_Metadata{
+					Address: addresses[i],
+				},
+			})
+
+			require.NoError(t, routingTable.UpsertEntry(*existingEntry))
+
 		}
 	}
 

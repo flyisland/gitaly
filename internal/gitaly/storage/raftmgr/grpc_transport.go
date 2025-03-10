@@ -66,9 +66,10 @@ func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, p
 	g := &errgroup.Group{}
 	errCh := make(chan error, len(messagesByNode))
 
-	for nodeID, reqs := range messagesByNode {
+	for addr, reqs := range messagesByNode {
 		g.Go(func() error {
-			if err := t.sendToNode(ctx, nodeID, reqs); err != nil {
+			nodeID := reqs[0].GetReplicaId().GetNodeId()
+			if err := t.sendToNode(ctx, addr, reqs); err != nil {
 				errCh <- fmt.Errorf("node %d: %w", nodeID, err)
 				return err
 			}
@@ -91,11 +92,12 @@ func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, p
 	return nil
 }
 
-func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, msgs []raftpb.Message) (map[uint64][]*gitalypb.RaftMessageRequest, error) {
-	requests := make([]*gitalypb.RaftMessageRequest, len(msgs))
+func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, msgs []raftpb.Message) (map[string][]*gitalypb.RaftMessageRequest, error) {
+	messagesByAddress := make(map[string][]*gitalypb.RaftMessageRequest)
+	messagesByAddressMutex := sync.Mutex{}
 	g := &errgroup.Group{}
 
-	for i, msg := range msgs {
+	for _, msg := range msgs {
 		g.Go(func() error {
 			for j := range msg.Entries {
 				if msg.Entries[j].Type != raftpb.EntryNormal {
@@ -127,14 +129,26 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 				t.mutex.Unlock()
 
 			}
-			requests[i] = &gitalypb.RaftMessageRequest{
+			replica, err := t.routingTable.Translate(partitionKey, msg.To)
+			if err != nil {
+				return fmt.Errorf("translate nodeID %d: %w", msg.To, err)
+			}
+
+			addr := replica.GetMetadata().GetAddress()
+
+			messagesByAddressMutex.Lock()
+			// We are not adding address in the request because it will increase the payload size, and
+			// is not needed on the receiver end.
+			messagesByAddress[addr] = append(messagesByAddress[addr], &gitalypb.RaftMessageRequest{
 				ClusterId: t.cfg.Raft.ClusterID,
 				ReplicaId: &gitalypb.ReplicaID{
 					PartitionKey: partitionKey,
 					NodeId:       msg.To,
+					StorageName:  replica.GetStorageName(),
 				},
 				Message: &msg,
-			}
+			})
+			messagesByAddressMutex.Unlock()
 			return nil
 		})
 	}
@@ -144,48 +158,30 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 		return nil, err
 	}
 
-	messagesByNode := make(map[uint64][]*gitalypb.RaftMessageRequest)
-	for _, req := range requests {
-		nodeID := req.GetMessage().To
-		messagesByNode[nodeID] = append(messagesByNode[nodeID], req)
-	}
-
-	return messagesByNode, nil
+	return messagesByAddress, nil
 }
 
-func (t *GrpcTransport) sendToNode(ctx context.Context, nodeID uint64, reqs []*gitalypb.RaftMessageRequest) error {
-	partitionKey := reqs[0].GetReplicaId().GetPartitionKey()
-	addr, err := t.routingTable.Translate(RoutingKey{
-		partitionKey: PartitionKey{
-			partitionID:   partitionKey.GetPartitionId(),
-			authorityName: partitionKey.GetAuthorityName(),
-		},
-		nodeID: nodeID,
-	})
-	if err != nil {
-		return fmt.Errorf("translate nodeID %d: %w", nodeID, err)
-	}
-
+func (t *GrpcTransport) sendToNode(ctx context.Context, addr string, reqs []*gitalypb.RaftMessageRequest) error {
 	// get the connection to the node
 	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.Token)
 	if err != nil {
-		return fmt.Errorf("get connection to node %d: %w", nodeID, err)
+		return fmt.Errorf("get connection to address %s: %w", addr, err)
 	}
 
 	client := gitalypb.NewRaftServiceClient(conn)
 	stream, err := client.SendMessage(ctx)
 	if err != nil {
-		return fmt.Errorf("create stream to node %d: %w", nodeID, err)
+		return fmt.Errorf("create stream to address %s: %w", addr, err)
 	}
 
 	for _, req := range reqs {
 		if err := stream.Send(req); err != nil {
-			return fmt.Errorf("send request to node %d: %w", nodeID, err)
+			return fmt.Errorf("send request to address %s: %w", addr, err)
 		}
 	}
 
 	if _, err := stream.CloseAndRecv(); err != nil {
-		return fmt.Errorf("close stream to node %d: %w", nodeID, err)
+		return fmt.Errorf("close stream to address %s: %w", addr, err)
 	}
 
 	return nil
