@@ -1,11 +1,9 @@
 package repository
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -18,13 +16,7 @@ import (
 func TestDryRunReftableMigration(t *testing.T) {
 	t.Parallel()
 
-	testhelper.NewFeatureSets(
-		featureflag.ReftableMigration,
-	).Run(t, testDryRunReftableMigration)
-}
-
-func testDryRunReftableMigration(t *testing.T, ctx context.Context) {
-	t.Parallel()
+	ctx := testhelper.Context(t)
 
 	logger := testhelper.NewLogger(t)
 	hook := testhelper.AddLoggerHook(logger)
@@ -56,19 +48,11 @@ func testDryRunReftableMigration(t *testing.T, ctx context.Context) {
 					RelativePath: repoProto.GetRelativePath(),
 				},
 			},
-			expectedErr: testhelper.EnabledOrDisabledFlag(ctx,
-				featureflag.ReftableMigration,
-				testhelper.WithOrWithoutWAL(
-					structerr.NewInternal("error to rollback transaction"),
-					structerr.NewInternal("transaction not found"),
-				),
-				structerr.NewFailedPrecondition("migration disabled"),
+			expectedErr: testhelper.WithOrWithoutWAL(
+				structerr.NewInternal("error to rollback transaction"),
+				structerr.NewInternal("transaction not found"),
 			),
-			expectedSuccess: testhelper.EnabledOrDisabledFlag(ctx,
-				featureflag.ReftableMigration,
-				testhelper.WithOrWithoutWAL(true, false),
-				false,
-			),
+			expectedSuccess: testhelper.WithOrWithoutWAL(true, false),
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
