@@ -107,7 +107,7 @@ workflow:
   services:
     - name: postgres:${POSTGRES_VERSION}
       alias: postgres
-      command: ["postgres", "-c", "max_connections=800", "-c", "shared_buffers=1GB"]
+      command: ["postgres", "-c", "max_connections=1000", "-c", "shared_buffers=1GB"]
   variables: &test_variables
     PGHOST: postgres
     PGPORT: 5432
