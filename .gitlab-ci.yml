@@ -107,7 +107,7 @@ workflow:
   services:
     - name: postgres:${POSTGRES_VERSION}
       alias: postgres
-      command: ["postgres", "-c", "max_connections=800", "-c", "shared_buffers=1GB"]
+      command: ["postgres", "-c", "max_connections=1000", "-c", "shared_buffers=1GB"]
   variables: &test_variables
     PGHOST: postgres
     PGPORT: 5432
@@ -289,8 +289,8 @@ test:pgbouncer:
     PGBOUNCER_DATABASE: "*"
     PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits
     PGBOUNCER_POOL_MODE: transaction
-    PGBOUNCER_MAX_CLIENT_CONN: 700
-    PGBOUNCER_MAX_DB_CONNECTIONS: 200
+    PGBOUNCER_MAX_CLIENT_CONN: 500
+    PGBOUNCER_MAX_DB_CONNECTIONS: 100
     # And these are finally used by Gitaly's tests.
     PGHOST_PGBOUNCER: pgbouncer
     PGPORT_PGBOUNCER: 6432
