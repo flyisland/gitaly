@@ -263,6 +263,8 @@ type TransactionOptions struct {
 type Storage interface {
 	// ListPartitions returns a partition iterator for listing the partitions.
 	ListPartitions(partitionID PartitionID) (PartitionIterator, error)
+	// MaybeAssignToPartition ensures that the repository at relativePath is assigned to a partition.
+	MaybeAssignToPartition(ctx context.Context, relativePath string) (PartitionID, error)
 	// GetAssignedPartitionID returns the assigned ID of the partition the relative path
 	// has been assigned to.
 	GetAssignedPartitionID(relativePath string) (PartitionID, error)
