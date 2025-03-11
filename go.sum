@@ -660,8 +660,8 @@ github.com/yusufpapurcu/wmi v1.2.2 h1:KBNDSne4vP5mbSWnJbO+51IMOXJB67QiYCSBrubbPR
 github.com/yusufpapurcu/wmi v1.2.2/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 gitlab.com/gitlab-org/go/reopen v1.0.0 h1:6BujZ0lkkjGIejTUJdNO1w56mN1SI10qcVQyQlOPM+8=
 gitlab.com/gitlab-org/go/reopen v1.0.0/go.mod h1:D6OID8YJDzEVZNYW02R/Pkj0v8gYFSIhXFTArAsBQw8=
-gitlab.com/gitlab-org/labkit v1.21.2 h1:GlFHh8OdkrIMH3Qi0ByOzva0fGYXMICsuahGpJe4KNQ=
-gitlab.com/gitlab-org/labkit v1.21.2/go.mod h1:Q++SWyCH/abH2pytnX2SU/3mrCX6aK/xKz/WpM1hLbA=
+gitlab.com/gitlab-org/labkit v1.22.0 h1:TZe7ryLX+aLEqghu4lkODABpEKS4IL3o9yIq453n2DQ=
+gitlab.com/gitlab-org/labkit v1.22.0/go.mod h1:pikea0zSNSfV3wuMrFST4REaM3yrSjnccIfMyCmlrkw=
 go.etcd.io/etcd/client/pkg/v3 v3.5.18 h1:mZPOYw4h8rTk7TeJ5+3udUkfVGBqc+GCjOJYd68QgNM=
 go.etcd.io/etcd/client/pkg/v3 v3.5.18/go.mod h1:BxVf2o5wXG9ZJV+/Cu7QNUiJYk4A29sAhoI5tIRsCu4=
 go.etcd.io/etcd/raft/v3 v3.5.18 h1:gueCda+9U76Lvk6rINjNc/mXalUp0u8OK5CVESDZh4I=
