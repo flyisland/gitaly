@@ -54,11 +54,10 @@ func checkAction(ctx *cli.Context) (returnedErr error) {
 		}
 	}
 
-	runtimeDir, err := config.SetupRuntimeDirectory(cfg, os.Getpid())
+	cfg, err = config.SetupRuntimeDirectory(cfg, os.Getpid())
 	if err != nil {
 		return fmt.Errorf("setup runtime directory: %w", err)
 	}
-	cfg.RuntimeDir = runtimeDir
 
 	defer func() {
 		if rmErr := os.RemoveAll(cfg.RuntimeDir); rmErr != nil {

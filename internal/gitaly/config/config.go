@@ -145,6 +145,7 @@ type Cfg struct {
 	Transactions           Transactions        `json:"transactions,omitempty"      toml:"transactions,omitempty"`
 	AdaptiveLimiting       AdaptiveLimiting    `json:"adaptive_limiting,omitempty" toml:"adaptive_limiting,omitempty"`
 	Raft                   Raft                `json:"raft,omitempty"              toml:"raft,omitempty"`
+	Offloading             Offloading          `json:"offloading,omitempty"        toml:"offloading,omitempty"`
 }
 
 // Transactions configures transaction related options.
@@ -813,6 +814,7 @@ func (cfg *Cfg) ValidateV2() error {
 		{field: "raft", validate: func() error {
 			return cfg.Raft.Validate(cfg.Transactions)
 		}},
+		{field: "offloading", validate: cfg.Offloading.Validate},
 	} {
 		var fields []string
 		if check.field != "" {
@@ -1165,7 +1167,7 @@ func (cfg *Cfg) configurePackObjectsCache() error {
 // directory is used instead. A directory is created for the internal socket as well since it is
 // expected to be present in the runtime directory. SetupRuntimeDirectory returns the absolute path
 // to the created runtime directory.
-func SetupRuntimeDirectory(cfg Cfg, processID int) (string, error) {
+func SetupRuntimeDirectory(cfg Cfg, processID int) (Cfg, error) {
 	var runtimeDir string
 	if cfg.RuntimeDir == "" {
 		// If there is no parent directory provided, we just use a temporary directory
@@ -1175,7 +1177,7 @@ func SetupRuntimeDirectory(cfg Cfg, processID int) (string, error) {
 		var err error
 		runtimeDir, err = os.MkdirTemp("", "gitaly-")
 		if err != nil {
-			return "", fmt.Errorf("creating temporary runtime directory: %w", err)
+			return Cfg{}, fmt.Errorf("creating temporary runtime directory: %w", err)
 		}
 	} else {
 		// Otherwise, we use the configured runtime directory. Note that we don't use the
@@ -1189,19 +1191,19 @@ func SetupRuntimeDirectory(cfg Cfg, processID int) (string, error) {
 		runtimeDir = GetGitalyProcessTempDir(cfg.RuntimeDir, processID)
 
 		if _, err := os.Stat(runtimeDir); err != nil && !os.IsNotExist(err) {
-			return "", fmt.Errorf("statting runtime directory: %w", err)
+			return Cfg{}, fmt.Errorf("statting runtime directory: %w", err)
 		} else if err != nil {
 			// If the directory exists already then it must be from an old invocation of
 			// Gitaly. Because we use the PID as path component we know that the old
 			// instance cannot exist anymore though, so it's safe to remove this
 			// directory now.
 			if err := os.RemoveAll(runtimeDir); err != nil {
-				return "", fmt.Errorf("removing old runtime directory: %w", err)
+				return Cfg{}, fmt.Errorf("removing old runtime directory: %w", err)
 			}
 		}
 
 		if err := os.Mkdir(runtimeDir, mode.Directory); err != nil {
-			return "", fmt.Errorf("creating runtime directory: %w", err)
+			return Cfg{}, fmt.Errorf("creating runtime directory: %w", err)
 		}
 	}
 
@@ -1209,19 +1211,26 @@ func SetupRuntimeDirectory(cfg Cfg, processID int) (string, error) {
 	// rely on it.
 	cfg.RuntimeDir = runtimeDir
 
+	if cfg.Offloading.Enabled && cfg.Offloading.CacheRoot == "" {
+		cfg.Offloading.CacheRoot = filepath.Join(cfg.RuntimeDir, "offloading", "transient")
+		if err := os.MkdirAll(cfg.Offloading.CacheRoot, mode.Directory); err != nil {
+			return Cfg{}, fmt.Errorf("creating cache root directory: %w", err)
+		}
+	}
+
 	// The socket path must be short-ish because listen(2) fails on long
 	// socket paths. We hope/expect that os.MkdirTemp creates a directory
 	// that is not too deep. We need a directory, not a tempfile, because we
 	// will later want to set its permissions to 0700
 	if err := os.Mkdir(cfg.InternalSocketDir(), mode.Directory); err != nil {
-		return "", fmt.Errorf("create internal socket directory: %w", err)
+		return Cfg{}, fmt.Errorf("create internal socket directory: %w", err)
 	}
 
 	if err := trySocketCreation(cfg.InternalSocketDir()); err != nil {
-		return "", fmt.Errorf("failed creating internal test socket: %w", err)
+		return Cfg{}, fmt.Errorf("failed creating internal test socket: %w", err)
 	}
 
-	return runtimeDir, nil
+	return cfg, nil
 }
 
 func trySocketCreation(dir string) error {
@@ -1326,6 +1335,39 @@ func (r Raft) Validate(transactions Transactions) error {
 		if _, err := uuid.Parse(r.ClusterID); err != nil {
 			cfgErr = cfgErr.Append(fmt.Errorf("invalid UUID format for ClusterID: %s", err.Error()), "cluster_id")
 		}
+	}
+
+	return cfgErr.AsError()
+}
+
+// Offloading configures offloading related options.
+type Offloading struct {
+	// Enabled enables offloading support for repositories.
+	Enabled bool `json:"enabled,omitempty" toml:"enabled,omitempty"`
+	// CacheRoot is the directory used for temporarily downloading object and pack files.
+	// If not provided, it fallbacks to ${cfg.RuntimeDir}/offloading/transient as default.
+	CacheRoot string `json:"cache_root" toml:"cache_root"`
+	// GoCloudURL is the blob storage GoCloud URL that will be used to store
+	// offloaded repositories.
+	GoCloudURL string `json:"go_cloud_url,omitempty" toml:"go_cloud_url,omitempty"`
+}
+
+// Validate runs validation on all fields and returns any errors found.
+func (oc Offloading) Validate() error {
+	if !oc.Enabled {
+		return nil
+	}
+
+	cfgErr := cfgerror.New()
+
+	if _, err := url.Parse(oc.GoCloudURL); err != nil {
+		cfgErr = cfgErr.Append(err, "go_cloud_url")
+	}
+
+	if oc.CacheRoot != "" {
+		cfgErr = cfgErr.
+			Append(cfgerror.PathIsAbs(oc.CacheRoot), "cache_root").
+			Append(cfgerror.DirExists(oc.CacheRoot))
 	}
 
 	return cfgErr.AsError()
