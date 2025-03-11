@@ -16,11 +16,18 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
-// NewReftableMigration provides a new reftable migration.
-func NewReftableMigration(id uint64, localRepoFactory localrepo.Factory) Migration {
+// NewReferenceBackendMigration provides a new reference backend migration.
+func NewReferenceBackendMigration(
+	id uint64,
+	targetBackend git.ReferenceBackend,
+	localRepoFactory localrepo.Factory,
+	flag *featureflag.FeatureFlag,
+) Migration {
+	name := fmt.Sprintf("migrate_ref_backend_%s", targetBackend.Name)
+
 	return Migration{
 		ID:   id,
-		Name: "reftable_migration",
+		Name: name,
 		Fn: func(ctx context.Context, tx storage.Transaction, storageName string, relativePath string) error {
 			scopedFactory, err := localRepoFactory.ScopeByStorage(ctx, storageName)
 			if err != nil {
@@ -29,6 +36,17 @@ func NewReftableMigration(id uint64, localRepoFactory localrepo.Factory) Migrati
 
 			originalRepo := &gitalypb.Repository{RelativePath: relativePath}
 			repo := scopedFactory.Build(tx.RewriteRepository(originalRepo).GetRelativePath())
+
+			currentBackend, err := repo.ReferenceBackend(ctx)
+			if err != nil {
+				return fmt.Errorf("reference backend: %w", err)
+			}
+
+			// If the repository is already using the expected backend, there is
+			// nothing to do.
+			if currentBackend.Name == targetBackend.Name {
+				return nil
+			}
 
 			getHash := func(repo *localrepo.Repo) ([]byte, error) {
 				hasher := sha256.New()
@@ -46,17 +64,6 @@ func NewReftableMigration(id uint64, localRepoFactory localrepo.Factory) Migrati
 				}
 
 				return hasher.Sum(nil), nil
-			}
-
-			backend, err := repo.ReferenceBackend(ctx)
-			if err != nil {
-				return fmt.Errorf("reference backend: %w", err)
-			}
-
-			// If the repository is already using the reftable backend, there is
-			// nothing to do.
-			if backend.Name == git.ReferenceBackendReftables.Name {
-				return nil
 			}
 
 			preMigrationHash, err := getHash(repo)
@@ -78,8 +85,16 @@ func NewReftableMigration(id uint64, localRepoFactory localrepo.Factory) Migrati
 				return fmt.Errorf("removing refs directory: %w", err)
 			}
 
-			if err := tx.FS().RecordRemoval(filepath.Join(relPath, "packed-refs")); err != nil {
-				return fmt.Errorf("removing packed-refs: %w", err)
+			if targetBackend == git.ReferenceBackendReftables {
+				if err := tx.FS().RecordRemoval(filepath.Join(relPath, "packed-refs")); err != nil {
+					return fmt.Errorf("removing packed-refs: %w", err)
+				}
+			} else if targetBackend == git.ReferenceBackendFiles {
+				if err := storage.RecordDirectoryRemoval(tx.FS(), tx.FS().Root(), filepath.Join(relPath, "reftable")); err != nil {
+					return fmt.Errorf("removing reftable directory: %w", err)
+				}
+			} else {
+				return fmt.Errorf("unknown backend provided: %s", targetBackend.Name)
 			}
 
 			if err := tx.FS().RecordRemoval(filepath.Join(relPath, "HEAD")); err != nil {
@@ -95,11 +110,34 @@ func NewReftableMigration(id uint64, localRepoFactory localrepo.Factory) Migrati
 				Name:   "refs",
 				Action: "migrate",
 				Flags: []gitcmd.Option{
-					gitcmd.Flag{Name: "--ref-format=reftable"},
+					gitcmd.Flag{Name: fmt.Sprintf("--ref-format=%s", targetBackend.Name)},
 				},
 			}, gitcmd.WithStderr(stderr))
 			if err != nil {
 				return fmt.Errorf("running refs migrate: %w, stderr: %q", err, stderr)
+			}
+
+			// Since Git 2.48, the files backend will directly write to packed-refs
+			// during ref-migrations. But for versions before that, we need to manually
+			// pack the refs. Let's do that. We can remove this block once Git 2.48 is
+			// made the minimum version.
+			if targetBackend == git.ReferenceBackendFiles {
+				gitVersion, err := repo.GitVersion(ctx)
+				if err != nil {
+					return fmt.Errorf("git version: %w", err)
+				}
+
+				if gitVersion.LessThan(git.NewVersion(2, 48, 0, 0)) {
+					err = repo.ExecAndWait(ctx, gitcmd.Command{
+						Name: "pack-refs",
+						Flags: []gitcmd.Option{
+							gitcmd.Flag{Name: "--all"},
+						},
+					}, gitcmd.WithStderr(stderr))
+					if err != nil {
+						return fmt.Errorf("running pack-refs: %w, stderr: %q", err, stderr)
+					}
+				}
 			}
 
 			postMigrationHash, err := getHash(repo)
@@ -119,22 +157,37 @@ func NewReftableMigration(id uint64, localRepoFactory localrepo.Factory) Migrati
 				return fmt.Errorf("recording HEAD: %w", err)
 			}
 
-			if err := tx.FS().RecordDirectory(filepath.Join(relPath, "refs")); err != nil {
-				return fmt.Errorf("recording refs: %w", err)
-			}
+			if targetBackend == git.ReferenceBackendReftables {
+				if err := tx.FS().RecordDirectory(filepath.Join(relPath, "refs")); err != nil {
+					return fmt.Errorf("recording refs: %w", err)
+				}
 
-			if err := tx.FS().RecordFile(filepath.Join(relPath, "refs/heads")); err != nil {
-				return fmt.Errorf("recording refs/heads: %w", err)
-			}
+				if err := tx.FS().RecordFile(filepath.Join(relPath, "refs/heads")); err != nil {
+					return fmt.Errorf("recording refs/heads: %w", err)
+				}
 
-			if err := storage.RecordDirectoryCreation(tx.FS(), filepath.Join(relPath, "reftable")); err != nil {
-				return fmt.Errorf("recording reftable dir: %w", err)
+				if err := storage.RecordDirectoryCreation(tx.FS(), filepath.Join(relPath, "reftable")); err != nil {
+					return fmt.Errorf("recording reftable dir: %w", err)
+				}
+			} else if targetBackend == git.ReferenceBackendFiles {
+				if err := tx.FS().RecordFile(filepath.Join(relPath, "packed-refs")); err != nil {
+					return fmt.Errorf("recording packed-refs: %w", err)
+				}
+
+				if err := storage.RecordDirectoryCreation(tx.FS(), filepath.Join(relPath, "refs")); err != nil {
+					return fmt.Errorf("recording refs dir: %w", err)
+				}
+			} else {
+				return fmt.Errorf("unknown backend provided: %s", targetBackend.Name)
 			}
 
 			return nil
 		},
 		IsDisabled: func(ctx context.Context) bool {
-			return featureflag.ReftableMigration.IsDisabled(ctx)
+			if flag != nil {
+				return flag.IsDisabled(ctx)
+			}
+			return false
 		},
 	}
 }
