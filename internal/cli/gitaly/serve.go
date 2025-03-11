@@ -582,6 +582,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		if err != nil {
 			return fmt.Errorf("error creating bundle manager: %w", err)
 		}
+		logger.Info(fmt.Sprintf("bundle-uri bucket configured: %s", cfg.BundleURI.GoCloudURL))
 		prometheus.MustRegister(bundleURIManager)
 	}
 
