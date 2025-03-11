@@ -23,7 +23,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.1.0
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.1
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/yamux v0.1.2-0.20220728231024-8f49b6f63f18
@@ -56,12 +56,12 @@ require (
 	// Please upgrade grpc-go with caution. Newer grpc-go versions contain some known issues:
 	// - https://gitlab.com/gitlab-com/request-for-help/-/issues/2127
 	// - https://gitlab.com/gitlab-org/gitaly/-/issues/6385
-	google.golang.org/grpc v1.66.3
+	google.golang.org/grpc v1.67.1
 	google.golang.org/protobuf v1.36.5
 )
 
 require (
-	cel.dev/expr v0.16.1 // indirect
+	cel.dev/expr v0.19.1 // indirect
 	cloud.google.com/go v0.115.1 // indirect
 	cloud.google.com/go/auth v0.9.3 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.4 // indirect
