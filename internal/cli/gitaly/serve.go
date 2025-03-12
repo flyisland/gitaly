@@ -440,7 +440,15 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			return fmt.Errorf("new node: %w", err)
 		}
 		defer nodeMgr.Close()
-		node = nodeMgr
+
+		if cfg.Raft.Enabled {
+			node, err = raftmgr.NewNode(cfg, nodeMgr, logger, dbMgr, conns)
+			if err != nil {
+				return fmt.Errorf("new raft node: %w", err)
+			}
+		} else {
+			node = nodeMgr
+		}
 
 		txMiddleware = server.TransactionMiddleware{
 			UnaryInterceptor:  storagemgr.NewUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
@@ -554,13 +562,6 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		}
 	}
 
-	var raftTransport *raftmgr.GrpcTransport
-	if cfg.Raft.Enabled {
-		raftManagerRegistry := raftmgr.NewRaftManagerRegistry()
-		routingTable := raftmgr.NewStaticRaftRoutingTable()
-		raftTransport = raftmgr.NewGrpcTransport(logger, cfg, routingTable, raftManagerRegistry, conns)
-	}
-
 	var bundleURIManager *bundleuri.GenerationManager
 	if cfg.BundleURI.GoCloudURL != "" {
 		bundleURISink, err := bundleuri.NewSink(ctx, cfg.BundleURI.GoCloudURL)
@@ -622,7 +623,6 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			Logger:                 logger,
 			Cfg:                    cfg,
 			GitalyHookManager:      hookManager,
-			RaftGrpcTransport:      raftTransport,
 			TransactionManager:     transactionManager,
 			StorageLocator:         locator,
 			ClientPool:             conns,

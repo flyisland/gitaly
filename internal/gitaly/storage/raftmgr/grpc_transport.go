@@ -30,9 +30,9 @@ type Transport interface {
 	// Send dispatches a batch of Raft messages. It returns an error if the sending fails. This function receives a
 	// context, the list of messages to send and a function that returns the path of WAL directory of a particular
 	// log entry. The implementation must respect input context's cancellation.
-	Send(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, messages []raftpb.Message) error
+	Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error
 	// Receive receives a Raft message and processes it.
-	Receive(ctx context.Context, partitionID uint64, authorityName string, raftMsg raftpb.Message) error
+	Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error
 }
 
 // GrpcTransport is a gRPC transport implementation for sending Raft messages across nodes.
@@ -57,8 +57,8 @@ func NewGrpcTransport(logger log.Logger, cfg config.Cfg, routingTable RoutingTab
 }
 
 // Send sends Raft messages to the appropriate nodes.
-func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, messages []raftpb.Message) error {
-	messagesByNode, err := t.prepareRaftMessageRequests(ctx, logReader, partitionID, authorityName, messages)
+func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error {
+	messagesByNode, err := t.prepareRaftMessageRequests(ctx, logReader, partitionKey, messages)
 	if err != nil {
 		return fmt.Errorf("preparing raft messages: %w", err)
 	}
@@ -66,9 +66,10 @@ func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, p
 	g := &errgroup.Group{}
 	errCh := make(chan error, len(messagesByNode))
 
-	for nodeID, reqs := range messagesByNode {
+	for addr, reqs := range messagesByNode {
 		g.Go(func() error {
-			if err := t.sendToNode(ctx, nodeID, reqs); err != nil {
+			nodeID := reqs[0].GetReplicaId().GetNodeId()
+			if err := t.sendToNode(ctx, addr, reqs); err != nil {
 				errCh <- fmt.Errorf("node %d: %w", nodeID, err)
 				return err
 			}
@@ -91,11 +92,12 @@ func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, p
 	return nil
 }
 
-func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionID uint64, authorityName string, msgs []raftpb.Message) (map[uint64][]*gitalypb.RaftMessageRequest, error) {
-	requests := make([]*gitalypb.RaftMessageRequest, len(msgs))
+func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, msgs []raftpb.Message) (map[string][]*gitalypb.RaftMessageRequest, error) {
+	messagesByAddress := make(map[string][]*gitalypb.RaftMessageRequest)
+	messagesByAddressMutex := sync.Mutex{}
 	g := &errgroup.Group{}
 
-	for i, msg := range msgs {
+	for _, msg := range msgs {
 		g.Go(func() error {
 			for j := range msg.Entries {
 				if msg.Entries[j].Type != raftpb.EntryNormal {
@@ -127,13 +129,26 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 				t.mutex.Unlock()
 
 			}
-			requests[i] = &gitalypb.RaftMessageRequest{
-				ClusterId:     t.cfg.Raft.ClusterID,
-				AuthorityName: authorityName,
-				PartitionId:   partitionID,
-				Message:       &msg,
+			replica, err := t.routingTable.Translate(partitionKey, msg.To)
+			if err != nil {
+				return fmt.Errorf("translate nodeID %d: %w", msg.To, err)
 			}
 
+			addr := replica.GetMetadata().GetAddress()
+
+			messagesByAddressMutex.Lock()
+			// We are not adding address in the request because it will increase the payload size, and
+			// is not needed on the receiver end.
+			messagesByAddress[addr] = append(messagesByAddress[addr], &gitalypb.RaftMessageRequest{
+				ClusterId: t.cfg.Raft.ClusterID,
+				ReplicaId: &gitalypb.ReplicaID{
+					PartitionKey: partitionKey,
+					NodeId:       msg.To,
+					StorageName:  replica.GetStorageName(),
+				},
+				Message: &msg,
+			})
+			messagesByAddressMutex.Unlock()
 			return nil
 		})
 	}
@@ -143,50 +158,30 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 		return nil, err
 	}
 
-	messagesByNode := make(map[uint64][]*gitalypb.RaftMessageRequest)
-	for _, req := range requests {
-		nodeID := req.GetMessage().To
-		messagesByNode[nodeID] = append(messagesByNode[nodeID], req)
-	}
-
-	return messagesByNode, nil
+	return messagesByAddress, nil
 }
 
-func (t *GrpcTransport) sendToNode(ctx context.Context, nodeID uint64, reqs []*gitalypb.RaftMessageRequest) error {
-	// For now, we are using a static routing table that contains mapping of nodeID to address. In future, the routing
-	// table can become dynamic so that storage addresses are propagated through gossiping.
-	authorityName, partitionID := reqs[0].GetAuthorityName(), reqs[0].GetPartitionId()
-	addr, err := t.routingTable.Translate(RoutingKey{
-		partitionKey: PartitionKey{
-			authorityName: authorityName,
-			partitionID:   partitionID,
-		},
-		nodeID: nodeID,
-	})
-	if err != nil {
-		return fmt.Errorf("translate nodeID %d: %w", nodeID, err)
-	}
-
+func (t *GrpcTransport) sendToNode(ctx context.Context, addr string, reqs []*gitalypb.RaftMessageRequest) error {
 	// get the connection to the node
 	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.Token)
 	if err != nil {
-		return fmt.Errorf("get connection to node %d: %w", nodeID, err)
+		return fmt.Errorf("get connection to address %s: %w", addr, err)
 	}
 
 	client := gitalypb.NewRaftServiceClient(conn)
 	stream, err := client.SendMessage(ctx)
 	if err != nil {
-		return fmt.Errorf("create stream to node %d: %w", nodeID, err)
+		return fmt.Errorf("create stream to address %s: %w", addr, err)
 	}
 
 	for _, req := range reqs {
 		if err := stream.Send(req); err != nil {
-			return fmt.Errorf("send request to node %d: %w", nodeID, err)
+			return fmt.Errorf("send request to address %s: %w", addr, err)
 		}
 	}
 
 	if _, err := stream.CloseAndRecv(); err != nil {
-		return fmt.Errorf("close stream to node %d: %w", nodeID, err)
+		return fmt.Errorf("close stream to address %s: %w", addr, err)
 	}
 
 	return nil
@@ -209,15 +204,12 @@ func (t *GrpcTransport) packLogData(ctx context.Context, lsn storage.LSN, messag
 }
 
 // Receive receives a stream of Raft messages and processes them.
-func (t *GrpcTransport) Receive(ctx context.Context, partitionID uint64, authorityName string, raftMsg raftpb.Message) error {
+func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error {
 	// Retrieve the raft manager from the registry, assumption is that all the messages are from the same partition key.
-	raftManager, err := t.registry.GetManager(PartitionKey{
-		authorityName: authorityName,
-		partitionID:   partitionID,
-	})
+	raftManager, err := t.registry.GetManager(partitionKey)
 	if err != nil {
 		return status.Errorf(codes.NotFound, "raft manager not found for partition %d: %v",
-			partitionID, err)
+			partitionKey.GetPartitionId(), err)
 	}
 
 	for _, entry := range raftMsg.Entries {

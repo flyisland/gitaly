@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -19,6 +20,11 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 			return structerr.NewInternal("receive error: %w", err)
 		}
 
+		replicaID := req.GetReplicaId()
+		partitionKey := replicaID.GetPartitionKey()
+		authorityName := partitionKey.GetAuthorityName()
+		partitionID := partitionKey.GetPartitionId()
+
 		// The cluster ID protects Gitaly from cross-cluster interactions, which could potentially corrupt the clusters.
 		// This is particularly crucial after disaster recovery so that an identical cluster is restored from backup.
 		if req.GetClusterId() == "" {
@@ -31,16 +37,35 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 				req.GetClusterId(), s.cfg.Raft.ClusterID)
 		}
 
-		if req.GetAuthorityName() == "" {
+		if authorityName == "" {
 			return structerr.NewInvalidArgument("authority_name is required")
 		}
-		if req.GetPartitionId() == 0 {
+		if partitionID == 0 {
 			return structerr.NewInvalidArgument("partition_id is required")
 		}
 
-		raftMsg := req.GetMessage()
+		storageName := replicaID.GetStorageName()
+		node, ok := s.node.(*raftmgr.Node)
+		if !ok {
+			return structerr.NewInternal("node is not Raft-enabled")
+		}
 
-		if err := s.transport.Receive(stream.Context(), req.GetPartitionId(), req.GetAuthorityName(), *raftMsg); err != nil {
+		storageManager, err := node.GetStorage(storageName)
+		if err != nil {
+			return structerr.NewInternal("get storage manager: %w", err)
+		}
+
+		raftStorage, ok := storageManager.(*raftmgr.RaftStorageWrapper)
+		if !ok {
+			return structerr.NewInternal("storage is not Raft-enabled")
+		}
+
+		transport := raftStorage.GetTransport()
+		if transport == nil {
+			return structerr.NewInternal("transport not available")
+		}
+
+		if err := transport.Receive(stream.Context(), partitionKey, *req.GetMessage()); err != nil {
 			return structerr.NewInternal("receive error: %w", err)
 		}
 	}

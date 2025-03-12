@@ -2,12 +2,20 @@ package raft
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/node"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
@@ -17,14 +25,67 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+const (
+	clusterID      = "test-cluster"
+	authorityName  = "test-authority"
+	storageNameOne = "default"
+	storageNameTwo = "default-two"
+)
+
 func TestServer_SendMessage(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
-	cfg := testcfg.Build(t)
-	cfg.Raft.ClusterID = "test-cluster"
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageNameOne, storageNameTwo))
+	cfg.Raft.ClusterID = clusterID
+	logger := testhelper.SharedLogger(t)
 
-	client := runRaftServer(t, ctx, cfg)
+	// Create unique directory for database
+	dbPath := testhelper.TempDir(t)
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(logger log.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	metrics := storagemgr.NewMetrics(cfg.Prometheus)
+	nodeMgr, err := node.NewManager(cfg.Storages, storagemgr.NewFactory(logger, dbMgr, nil, 2, metrics))
+	require.NoError(t, err)
+	t.Cleanup(nodeMgr.Close)
+
+	mockNode, err := raftmgr.NewNode(cfg, nodeMgr, log.LogrusLogger{}, dbMgr, nil)
+	require.NoError(t, err)
+
+	// Register storage one
+	storage, err := mockNode.GetStorage(storageNameOne)
+	require.NoError(t, err)
+
+	registry := storage.(*raftmgr.RaftStorageWrapper).GetManagerRegistry()
+	raftMgr := &mockRaftManager{}
+
+	partitionKey := &gitalypb.PartitionKey{
+		AuthorityName: authorityName,
+		PartitionId:   1,
+	}
+	err = registry.RegisterManager(partitionKey, raftMgr)
+	require.NoError(t, err)
+
+	// Register storage two
+	storageTwo, err := mockNode.GetStorage(storageNameTwo)
+	require.NoError(t, err)
+
+	registryTwo := storageTwo.(*raftmgr.RaftStorageWrapper).GetManagerRegistry()
+	raftMgrTwo := &mockRaftManager{}
+	err = registryTwo.RegisterManager(partitionKey, raftMgrTwo)
+	require.NoError(t, err)
+
+	client := runRaftServer(t, ctx, cfg, mockNode)
 
 	testCases := []struct {
 		desc            string
@@ -33,11 +94,33 @@ func TestServer_SendMessage(t *testing.T) {
 		expectedError   string
 	}{
 		{
-			desc: "successful message send",
+			desc: "successful message send to storage one",
 			req: &gitalypb.RaftMessageRequest{
-				ClusterId:     "test-cluster",
-				AuthorityName: "test-authority",
-				PartitionId:   1,
+				ClusterId: "test-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: storageNameOne,
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: authorityName,
+						PartitionId:   1,
+					},
+				},
+				Message: &raftpb.Message{
+					Type: raftpb.MsgApp,
+					To:   2,
+				},
+			},
+		},
+		{
+			desc: "successful message send to storage two",
+			req: &gitalypb.RaftMessageRequest{
+				ClusterId: "test-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: storageNameTwo,
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: authorityName,
+						PartitionId:   1,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -47,8 +130,13 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "missing cluster ID",
 			req: &gitalypb.RaftMessageRequest{
-				AuthorityName: "test-authority",
-				PartitionId:   1,
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: "storage-name",
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: authorityName,
+						PartitionId:   1,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -60,9 +148,14 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "wrong cluster ID",
 			req: &gitalypb.RaftMessageRequest{
-				ClusterId:     "wrong-cluster",
-				AuthorityName: "test-authority",
-				PartitionId:   1,
+				ClusterId: "wrong-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: "storage-name",
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: authorityName,
+						PartitionId:   1,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -74,8 +167,13 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "missing authority name",
 			req: &gitalypb.RaftMessageRequest{
-				ClusterId:   "test-cluster",
-				PartitionId: 1,
+				ClusterId: "test-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: storageNameOne,
+					PartitionKey: &gitalypb.PartitionKey{
+						PartitionId: 1,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -87,8 +185,13 @@ func TestServer_SendMessage(t *testing.T) {
 		{
 			desc: "missing partition ID",
 			req: &gitalypb.RaftMessageRequest{
-				ClusterId:     "test-cluster",
-				AuthorityName: "test-authority",
+				ClusterId: "test-cluster",
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: storageNameOne,
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: authorityName,
+					},
+				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
 					To:   2,
@@ -119,12 +222,10 @@ func TestServer_SendMessage(t *testing.T) {
 	}
 }
 
-func runRaftServer(t *testing.T, ctx context.Context, cfg config.Cfg) gitalypb.RaftServiceClient {
+func runRaftServer(t *testing.T, ctx context.Context, cfg config.Cfg, node *raftmgr.Node) gitalypb.RaftServiceClient {
 	serverSocketPath := testserver.RunGitalyServer(t, cfg, func(srv *grpc.Server, deps *service.Dependencies) {
-		transport := newMockTransport(t)
-		deps.RaftGrpcTransport = transport
 		deps.Cfg = cfg
-
+		deps.Node = node
 		gitalypb.RegisterRaftServiceServer(srv, NewServer(deps))
 	}, testserver.WithDisablePraefect())
 
