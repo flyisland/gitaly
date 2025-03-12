@@ -143,7 +143,6 @@ func dial(ctx context.Context, addr, token string, timeout time.Duration, opts .
 	defer cancel()
 
 	opts = append(opts,
-		grpc.WithBlock(),
 		client.UnaryInterceptor(),
 		client.StreamInterceptor(),
 	)

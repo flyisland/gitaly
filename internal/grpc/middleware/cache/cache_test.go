@@ -132,7 +132,6 @@ func TestInvalidators(t *testing.T) {
 
 			conn, err := grpc.NewClient(
 				listener.Addr().String(),
-				grpc.WithBlock(),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 			)
 			require.NoError(t, err)

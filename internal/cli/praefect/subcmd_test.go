@@ -57,7 +57,7 @@ func listenAndServe(tb testing.TB, svcs []svcRegistrar) (net.Listener, testhelpe
 
 	// verify the service is up
 	addr := fmt.Sprintf("%s://%s", ln.Addr().Network(), ln.Addr())
-	cc, err := grpc.NewClient(addr, grpc.WithBlock(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(tb, err)
 	require.NoError(tb, cc.Close())
 

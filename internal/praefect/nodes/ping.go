@@ -71,7 +71,6 @@ func (p *Ping) Address() string {
 
 func (p *Ping) dial(ctx context.Context) (*grpc.ClientConn, error) {
 	opts := []grpc.DialOption{
-		grpc.WithBlock(),
 		client.UnaryInterceptor(),
 		client.StreamInterceptor(),
 	}

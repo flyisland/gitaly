@@ -509,7 +509,7 @@ func TestRegisterStreamHandlers(t *testing.T) {
 			go testhelper.MustServe(t, server, listener)
 			defer server.Stop()
 
-			conn, err := client.New(ctx, "tcp://"+listener.Addr().String(), client.WithGrpcOptions([]grpc.DialOption{grpc.WithBlock()}))
+			conn, err := client.New(ctx, "tcp://"+listener.Addr().String())
 			require.NoError(t, err)
 			defer conn.Close()
 			client := grpc_testing.NewTestServiceClient(conn)

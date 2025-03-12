@@ -60,7 +60,6 @@ func subCmdDial(ctx context.Context, addr, token string, timeout time.Duration, 
 	defer cancel()
 
 	opts = append(opts,
-		grpc.WithBlock(),
 		client.UnaryInterceptor(),
 		client.StreamInterceptor(),
 	)

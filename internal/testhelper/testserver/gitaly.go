@@ -145,7 +145,6 @@ func (gs GitalyServer) Address() string {
 // waitHealthy waits until the server hosted at address becomes healthy.
 func waitHealthy(tb testing.TB, ctx context.Context, addr string, authToken string) {
 	grpcOpts := []grpc.DialOption{
-		grpc.WithBlock(),
 		client.UnaryInterceptor(),
 		client.StreamInterceptor(),
 	}
