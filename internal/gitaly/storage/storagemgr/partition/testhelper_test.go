@@ -10,11 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
@@ -36,10 +39,13 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
+	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestMain(m *testing.M) {
@@ -672,14 +678,30 @@ func RequireDatabase(tb testing.TB, ctx context.Context, database keyvalue.Trans
 
 			// Unmarshal the actual value to the same type as the expected value.
 			actualValue := reflect.New(reflect.TypeOf(expectedValue).Elem()).Interface().(proto.Message)
-			require.NoError(tb, proto.Unmarshal(value, actualValue))
+			require.NoErrorf(tb, proto.Unmarshal(value, actualValue), "unmarshalling value in db: %q", key)
+
+			if _, isAny := expectedValue.(*anypb.Any); isAny {
+				// Verify if the database contains the key, but the content does not matter.
+				actualState[string(key)] = expectedValue
+				continue
+			}
 			actualState[string(key)] = actualValue
 		}
 
 		return nil
 	}))
 
-	require.Empty(tb, unexpectedKeys, "database contains unexpected keys")
+	require.Emptyf(tb, unexpectedKeys, "database contains unexpected keys")
+
+	// Ignore optional keys in expectedState but not in actualState
+	for k, v := range expectedState {
+		if _, isAny := v.(*anypb.Any); isAny {
+			if _, exist := actualState[k]; !exist {
+				delete(expectedState, k)
+			}
+		}
+	}
+
 	testhelper.ProtoEqual(tb, expectedState, actualState)
 }
 
@@ -960,6 +982,8 @@ type RepositoryAssertion struct {
 type StateAssertion struct {
 	// Database is the expected state of the database.
 	Database DatabaseState
+	// NotOffsetDatabaseInRaft indicates if the LSN in the database should not be shifted.
+	NotOffsetDatabaseInRaft bool
 	// Directory is the expected state of the manager's state directory in the repository.
 	Directory testhelper.DirectoryState
 	// Repositories is the expected state of the repositories in the storage. The key is
@@ -1047,11 +1071,27 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		return NewMetrics(housekeeping.NewMetrics(setup.Config.Prometheus))
 	}
 
+	var raftFactory raftmgr.RaftManagerFactory
+	var raftEntryRecorder *raftmgr.EntryRecorder
+	clusterID := uuid.New().String()
+	if testhelper.IsRaftEnabled() {
+		raftEntryRecorder = raftmgr.NewEntryRecorder()
+		setup.Config.Raft = config.DefaultRaftConfig(clusterID)
+		// Speed up initial election overhead in the test setup
+		setup.Config.Raft.ElectionTicks = 5
+		setup.Config.Raft.RTTMilliseconds = 100
+		setup.Config.Raft.SnapshotDir = testhelper.TempDir(t)
+
+		raftFactory = func(storageName string, partitionID storage.PartitionID, raftStorage *raftmgr.Storage, logger logging.Logger) (*raftmgr.Manager, error) {
+			return raftmgr.NewManager(storageName, partitionID, setup.Config.Raft, raftStorage, logger, raftmgr.WithEntryRecorder(raftEntryRecorder))
+		}
+	}
+
 	var (
 		// managerRunning tracks whether the manager is running or closed.
 		managerRunning bool
 		// factory is the factory that produces the current TransactionManager
-		factory = NewFactory(setup.CommandFactory, setup.RepositoryFactory, newMetrics(), setup.Consumer)
+		factory = NewFactory(setup.CommandFactory, setup.RepositoryFactory, newMetrics(), setup.Consumer, setup.Config.Raft, raftFactory)
 		// transactionManager is the current TransactionManager instance.
 		transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 		// managerErr is used for synchronizing manager closing and returning
@@ -1103,7 +1143,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
 			transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
-			installHooks(transactionManager, &inflightTransactions, step.Hooks)
+			installHooks(transactionManager, &inflightTransactions, step.Hooks, raftEntryRecorder)
 
 			go func() {
 				defer func() {
@@ -1145,7 +1185,11 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.NoError(t, err)
 
 			tx := transaction.(*Transaction)
-			require.Equalf(t, step.ExpectedSnapshotLSN, tx.SnapshotLSN(), "mismatched ExpectedSnapshotLSN")
+			expectedSnapshotLSN := step.ExpectedSnapshotLSN
+			if testhelper.IsRaftEnabled() {
+				expectedSnapshotLSN = raftEntryRecorder.Offset(expectedSnapshotLSN)
+			}
+			require.Equalf(t, expectedSnapshotLSN, tx.SnapshotLSN(), "mismatched ExpectedSnapshotLSN")
 			require.NotEmpty(t, tx.Root(), "empty Root")
 			require.Contains(t, tx.Root(), transactionManager.snapshotsDir())
 
@@ -1420,7 +1464,11 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			transaction := openTransactions[step.TransactionID]
 			transaction.WriteCommitGraphs(step.Config)
 		case ConsumerAcknowledge:
-			require.NoError(t, transactionManager.logManager.AcknowledgePosition(log.ConsumerPosition, step.LSN))
+			lsn := step.LSN
+			if testhelper.IsRaftEnabled() {
+				lsn = raftEntryRecorder.Offset(lsn)
+			}
+			require.NoError(t, transactionManager.logManager.AcknowledgePosition(log.ConsumerPosition, lsn))
 		case RepositoryAssertion:
 			require.Contains(t, openTransactions, step.TransactionID, "test error: transaction's snapshot asserted before beginning it")
 			transaction := openTransactions[step.TransactionID]
@@ -1487,6 +1535,36 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		require.NoError(t, err)
 	}
 
+	// If singular Raft cluster is enabled, the Raft handler starts to insert raft log entries. We need to offset
+	// the expected LSN to account for LSN shifting. As the order of insertion is not deterministic, the LSN
+	// shifting depends on a Raft event recorder.
+	//
+	// Without Raft:
+	// Entry 1 (update A) -> Entry 2 (update B)
+	//
+	// With Raft:
+	// Entry 1 (ConfChange) -> Entry 2 (Empty verification entry) -> Entry 3 (update A) -> Entry 4 (update B)
+	if testhelper.IsRaftEnabled() && raftEntryRecorder.Len() > 0 {
+		if !tc.expectedState.NotOffsetDatabaseInRaft {
+			appliedLSN, exist := tc.expectedState.Database[string(keyAppliedLSN)]
+			if exist {
+				// If expected applied LSN is present, offset expected LSN.
+				appliedLSN := appliedLSN.(*gitalypb.LSN)
+				tc.expectedState.Database[string(keyAppliedLSN)] = raftEntryRecorder.Offset(storage.LSN(appliedLSN.GetValue())).ToProto()
+			} else {
+				// Otherwise, the test expects no applied log entry in cases such as invalid transactions.
+				// Regardless, raft log entries are applied successfully.
+				if tc.expectedState.Database == nil {
+					tc.expectedState.Database = DatabaseState{}
+				}
+				tc.expectedState.Database[string(keyAppliedLSN)] = raftEntryRecorder.Latest().ToProto()
+			}
+		}
+		// Those are raft-specific keys. They should not be a concern of TransactionManager tests.
+		for _, key := range raftmgr.RaftDBKeys {
+			tc.expectedState.Database[string(key)] = &anypb.Any{}
+		}
+	}
 	RequireDatabase(t, ctx, database, tc.expectedState.Database)
 
 	expectedRepositories := tc.expectedState.Repositories
@@ -1538,6 +1616,8 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		}
 	}
 
+	expectedDirectory = modifyDirectoryStateForRaft(t, expectedDirectory, transactionManager, raftEntryRecorder)
+
 	testhelper.RequireDirectoryState(t, stateDir, "", expectedDirectory)
 
 	expectedStagingDirState := testhelper.DirectoryState{
@@ -1553,6 +1633,64 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 	}
 
 	testhelper.RequireDirectoryState(t, transactionManager.stagingDirectory, "", expectedStagingDirState)
+}
+
+// modifyDirectoryStateForRaft modifies log entry directory. It does three major things:
+// - Shift expected log entry paths to the corresponding location. The LSN of normal entries are affected by Raft's
+// internal entries.
+// - Insert RAFT metadata files.
+// - Insert Raft's internal log entries if they are not pruned away.
+func modifyDirectoryStateForRaft(t *testing.T, expectedDirectory testhelper.DirectoryState, tm *TransactionManager, recorder *raftmgr.EntryRecorder) testhelper.DirectoryState {
+	if !testhelper.IsRaftEnabled() {
+		return expectedDirectory
+	}
+
+	newExpectedDirectory := testhelper.DirectoryState{}
+	lsnRegex := regexp.MustCompile(`/wal/(\d+)\/?.*`)
+	for path, state := range expectedDirectory {
+		matches := lsnRegex.FindStringSubmatch(path)
+		if len(matches) == 0 {
+			// If no LSN found, retain the original entry
+			newExpectedDirectory[path] = state
+			continue
+		}
+		// Extract and offset the LSN
+		lsnStr := matches[1]
+		lsn, err := strconv.ParseUint(lsnStr, 10, 64)
+		require.NoError(t, err)
+
+		offsetLSN := recorder.Offset(storage.LSN(lsn))
+		offsetPath := strings.Replace(path, fmt.Sprintf("/%s", lsnStr), fmt.Sprintf("/%s", offsetLSN.String()), 1)
+		newExpectedDirectory[offsetPath] = state
+		newExpectedDirectory[fmt.Sprintf("/wal/%s/RAFT", offsetLSN)] = testhelper.DirectoryEntry{
+			Mode:    mode.File,
+			Content: "anything",
+			ParseContent: func(tb testing.TB, path string, content []byte) any {
+				// The test should not be concerned with the actual content of RAFT file.
+				return "anything"
+			},
+		}
+	}
+
+	// Insert Raft-specific log entries into the new directory structure
+	raftEntries := recorder.FromRaft()
+	for lsn, raftEntry := range raftEntries {
+		if lsn >= tm.GetLogReader().LowWaterMark() {
+			newExpectedDirectory[fmt.Sprintf("/wal/%s", lsn)] = testhelper.DirectoryEntry{Mode: mode.Directory}
+			newExpectedDirectory[fmt.Sprintf("/wal/%s/MANIFEST", lsn)] = manifestDirectoryEntry(raftEntry)
+			newExpectedDirectory[fmt.Sprintf("/wal/%s/RAFT", lsn)] = testhelper.DirectoryEntry{
+				Mode:    mode.File,
+				Content: "anything",
+				ParseContent: func(tb testing.TB, path string, content []byte) any {
+					// The test should not be concerned with the actual content of RAFT file.
+					return "anything"
+				},
+			}
+		}
+	}
+
+	// Update expected directory
+	return newExpectedDirectory
 }
 
 func checkManagerError(t *testing.T, ctx context.Context, managerErrChannel chan error, mgr *TransactionManager) (bool, error) {

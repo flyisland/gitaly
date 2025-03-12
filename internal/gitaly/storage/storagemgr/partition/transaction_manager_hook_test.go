@@ -8,6 +8,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/refdb"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
@@ -22,10 +23,18 @@ type hookContext struct {
 	closeManager func()
 	// lsn stores the LSN context when the hook is triggered.
 	lsn storage.LSN
+	// raftEntryRecorder normal and Raft-specific entries that are inserted into the WAL. It is used to filter out entries
+	// injected by Raft in hook executions.
+	raftEntryRecorder *raftmgr.EntryRecorder
 }
 
 // installHooks takes the hooks in the test setup and configures them in the TransactionManager.
-func installHooks(mgr *TransactionManager, inflightTransactions *sync.WaitGroup, hooks testTransactionHooks) {
+func installHooks(
+	mgr *TransactionManager,
+	inflightTransactions *sync.WaitGroup,
+	hooks testTransactionHooks,
+	raftEntryRecorder *raftmgr.EntryRecorder,
+) {
 	for destination, source := range map[*func()]hookFunc{
 		&mgr.testHooks.beforeInitialization: hooks.BeforeReadAppliedLSN,
 		&mgr.testHooks.beforeRunExiting: func(hookContext) {
@@ -56,8 +65,9 @@ func installHooks(mgr *TransactionManager, inflightTransactions *sync.WaitGroup,
 			runHook := source
 			*destination = func(lsn storage.LSN) {
 				runHook(hookContext{
-					closeManager: mgr.Close,
-					lsn:          lsn,
+					closeManager:      mgr.Close,
+					lsn:               lsn,
+					raftEntryRecorder: raftEntryRecorder,
 				})
 			}
 		}

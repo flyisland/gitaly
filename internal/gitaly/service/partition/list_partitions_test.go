@@ -19,6 +19,9 @@ func TestListPartitions(t *testing.T) {
 		t.Skip(`Since it is not guaranteed that all the gitaly instances for a given Praefect
 		will have the same partition IDs, this RPC will not be supported for Praefect`)
 	}
+	testhelper.SkipWithRaft(t, `The test asserts the existence of backup files based on the latest
+				LSN. When Raft is not enabled, the LSN is not static. The test should fetch the latest
+				LSN instead https://gitlab.com/gitlab-org/gitaly/-/issues/6459`)
 
 	ctx := testhelper.Context(t)
 	cfg, ptnClient, repoClient := setupServices(t)

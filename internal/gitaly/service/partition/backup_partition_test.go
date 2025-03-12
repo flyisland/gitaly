@@ -30,6 +30,9 @@ func TestBackupPartition(t *testing.T) {
 	if testhelper.IsPraefectEnabled() {
 		t.Skip(`Praefect currently doesn't support routing the PARTITION scoped RPC messages.`)
 	}
+	testhelper.SkipWithRaft(t, `The test asserts the existence of backup files based on the latest
+				LSN. When Raft is not enabled, the LSN is not static. The test should fetch the latest
+				LSN instead https://gitlab.com/gitlab-org/gitaly/-/issues/6459`)
 
 	type setupData struct {
 		cfg         config.Cfg
@@ -251,6 +254,9 @@ func TestBackupPartition_BackupExists(t *testing.T) {
 	if testhelper.IsPraefectEnabled() {
 		t.Skip(`Praefect currently doesn't support routing the PARTITION scoped RPC messages.`)
 	}
+	testhelper.SkipWithRaft(t, `The test asserts the existence of backup files based on the latest
+				LSN. When Raft is not enabled, the LSN is not static. The test should fetch the latest
+				LSN instead https://gitlab.com/gitlab-org/gitaly/-/issues/6459`)
 
 	ctx := testhelper.Context(t)
 

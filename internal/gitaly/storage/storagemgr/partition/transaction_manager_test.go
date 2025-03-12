@@ -43,8 +43,16 @@ var errSimulatedCrash = errors.New("simulated crash")
 
 // simulateCrashHook returns a hook function that panics with errSimulatedCrash.
 var simulateCrashHook = func() func(hookContext) {
-	return func(hookContext) {
-		panic(errSimulatedCrash)
+	return func(c hookContext) {
+		if !testhelper.IsRaftEnabled() {
+			// Always panic if Raft is not enabled
+			panic(errSimulatedCrash)
+		} else if c.raftEntryRecorder == nil {
+			// Some hooks don't include Raft entry recorder.
+			panic(errSimulatedCrash)
+		} else if !c.raftEntryRecorder.IsFromRaft(c.lsn) {
+			panic(errSimulatedCrash)
+		}
 	}
 }
 
@@ -491,6 +499,11 @@ func generateCommonTests(t *testing.T, ctx context.Context, setup testTransactio
 		}(),
 		{
 			desc: "commit returns if transaction processing stops before transaction acceptance",
+			skip: func(t *testing.T) {
+				testhelper.SkipWithRaft(t, `The hook is installed before appending log entry, before
+					recorder is activated. Hence, it's not feasible to differentiate between normal
+					entries and Raft internal entries`)
+			},
 			steps: steps{
 				StartManager{
 					Hooks: testTransactionHooks{
@@ -532,6 +545,15 @@ func generateCommonTests(t *testing.T, ctx context.Context, setup testTransactio
 				},
 			},
 			expectedState: StateAssertion{
+				Database: testhelper.WithOrWithoutRaft(
+					// The process crashes before apply but after it's committed. So, only
+					// committedLSN is persisted.
+					DatabaseState{
+						string(keyAppliedLSN): storage.LSN(2).ToProto(),
+					},
+					DatabaseState{},
+				),
+				NotOffsetDatabaseInRaft: true,
 				Directory: gittest.FilesOrReftables(testhelper.DirectoryState{
 					"/":                  {Mode: mode.Directory},
 					"/wal":               {Mode: mode.Directory},
@@ -1459,6 +1481,10 @@ func generateCommonTests(t *testing.T, ctx context.Context, setup testTransactio
 					ExpectedError: errSimulatedCrash,
 				},
 			},
+			expectedState: StateAssertion{
+				Database:                DatabaseState{},
+				NotOffsetDatabaseInRaft: true,
+			},
 		},
 		{
 			desc: "transaction rollbacked after already being rollbacked",
@@ -1755,6 +1781,9 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 	return []transactionTestCase{
 		{
 			desc: "manager has just initialized",
+			skip: func(t *testing.T) {
+				testhelper.SkipWithRaft(t, `this test assert internal state of TransactionManager, which is hard to interfere`)
+			},
 			steps: steps{
 				StartManager{},
 				AdhocAssertion(func(t *testing.T, ctx context.Context, tm *TransactionManager) {
@@ -1764,6 +1793,9 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 		},
 		{
 			desc: "a transaction has one reader",
+			skip: func(t *testing.T) {
+				testhelper.SkipWithRaft(t, `this test assert internal state of TransactionManager, which is hard to interfere`)
+			},
 			steps: steps{
 				StartManager{},
 				Begin{
@@ -1872,6 +1904,9 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 		},
 		{
 			desc: "a transaction has multiple readers",
+			skip: func(t *testing.T) {
+				testhelper.SkipWithRaft(t, `this test assert internal state of TransactionManager, which is hard to interfere`)
+			},
 			steps: steps{
 				StartManager{},
 				Begin{
@@ -2037,6 +2072,9 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 		},
 		{
 			desc: "committed read-only transaction are not kept",
+			skip: func(t *testing.T) {
+				testhelper.SkipWithRaft(t, `this test assert internal state of TransactionManager, which is hard to interfere`)
+			},
 			steps: steps{
 				StartManager{},
 				Begin{
@@ -2073,6 +2111,9 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 		},
 		{
 			desc: "transaction manager cleans up left-over committed entries when appliedLSN == appendedLSN",
+			skip: func(t *testing.T) {
+				testhelper.SkipWithRaft(t, `this test assert internal state of TransactionManager, which is hard to interfere`)
+			},
 			steps: steps{
 				StartManager{},
 				Begin{
@@ -2202,6 +2243,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 			desc: "transaction manager cleans up left-over committed entries when appliedLSN < appendedLSN",
 			skip: func(t *testing.T) {
 				testhelper.SkipWithReftable(t, "test requires manual log addition")
+				testhelper.SkipWithRaft(t, `this test assert internal state of TransactionManager, which is hard to interfere`)
 			},
 			steps: steps{
 				StartManager{},
@@ -2413,7 +2455,7 @@ func BenchmarkTransactionManager(b *testing.B) {
 				// Valid partition IDs are >=1.
 				testPartitionID := storage.PartitionID(i + 1)
 
-				factory := NewFactory(cmdFactory, repositoryFactory, m, nil)
+				factory := NewFactory(cmdFactory, repositoryFactory, m, nil, cfg.Raft, nil)
 				// transactionManager is the current TransactionManager instance.
 				manager := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 

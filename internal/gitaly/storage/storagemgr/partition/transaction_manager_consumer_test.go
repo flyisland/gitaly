@@ -462,7 +462,10 @@ func generateConsumerTests(t *testing.T, setup testTransactionSetup) []transacti
 			},
 		},
 		{
-			desc:        "stopped manager does not prune acknowledged entry",
+			desc: "stopped manager does not prune acknowledged entry",
+			skip: func(t *testing.T) {
+				testhelper.SkipWithRaft(t, "asserting pruning of internal log entries in this case is not relibale")
+			},
 			customSetup: customSetup,
 			steps: steps{
 				StartManager{},

@@ -2,7 +2,7 @@ package raftmgr
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// Metrics contains the unscoped collected by Snapshotter.
+// Metrics contains the unscoped collected by Raft activities.
 type Metrics struct {
 	snapSaveSec *prometheus.HistogramVec
 }
@@ -32,15 +32,15 @@ func (m *Metrics) Collect(metrics chan<- prometheus.Metric) {
 	m.snapSaveSec.Collect(metrics)
 }
 
-// SnapshotterMetrics are metrics scoped for a specific storage
-type SnapshotterMetrics struct {
+// RaftMetrics are metrics scoped for a specific storage
+type RaftMetrics struct {
 	snapSaveSec prometheus.Observer
 }
 
-// Scope returns snapshotter metrics scoped for a specific storage.
-func (m *Metrics) Scope(storage string) SnapshotterMetrics {
+// Scope returns Raft metrics scoped for a specific storage.
+func (m *Metrics) Scope(storage string) RaftMetrics {
 	labels := prometheus.Labels{"storage": storage}
-	return SnapshotterMetrics{
+	return RaftMetrics{
 		snapSaveSec: m.snapSaveSec.With(labels),
 	}
 }

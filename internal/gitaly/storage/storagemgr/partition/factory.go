@@ -6,8 +6,10 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	logger "gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -15,10 +17,12 @@ import (
 
 // Factory is factory type that can create new partitions.
 type Factory struct {
-	cmdFactory  gitcmd.CommandFactory
-	repoFactory localrepo.Factory
-	metrics     Metrics
-	logConsumer storage.LogConsumer
+	cmdFactory       gitcmd.CommandFactory
+	repoFactory      localrepo.Factory
+	partitionMetrics Metrics
+	logConsumer      storage.LogConsumer
+	raftCfg          config.Raft
+	raftFactory      raftmgr.RaftManagerFactory
 }
 
 // New returns a new Partition instance.
@@ -26,8 +30,7 @@ func (f Factory) New(
 	logger logger.Logger,
 	partitionID storage.PartitionID,
 	db keyvalue.Transactioner,
-	storageName string,
-	storagePath string,
+	storageName string, storagePath string,
 	absoluteStateDir string,
 	stagingDir string,
 ) storagemgr.Partition {
@@ -50,7 +53,42 @@ func (f Factory) New(
 		}
 	}
 
-	logManager := log.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, f.logConsumer, positionTracker)
+	var logManager storage.LogManager
+	if f.raftCfg.Enabled {
+		factory := f.raftFactory
+		if factory == nil {
+			factory = raftmgr.DefaultFactory(f.raftCfg)
+		}
+
+		raftStorage, err := raftmgr.NewStorage(
+			f.raftCfg,
+			logger,
+			storageName,
+			partitionID,
+			db,
+			stagingDir,
+			absoluteStateDir,
+			f.logConsumer,
+			positionTracker,
+			f.partitionMetrics.raft,
+		)
+		if err != nil {
+			panic(fmt.Errorf("creating raft storage: %w", err))
+		}
+		raftManager, err := factory(
+			storageName,
+			partitionID,
+			raftStorage,
+			logger,
+		)
+		if err != nil {
+			panic(fmt.Errorf("creating raft manager: %w", err))
+		}
+		logManager = raftManager
+	} else {
+		logManager = log.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, f.logConsumer, positionTracker)
+	}
+
 	return NewTransactionManager(
 		partitionID,
 		logger,
@@ -61,22 +99,31 @@ func (f Factory) New(
 		stagingDir,
 		f.cmdFactory,
 		repoFactory,
-		f.metrics.Scope(storageName),
+		f.partitionMetrics.Scope(storageName),
 		logManager,
 	)
 }
 
-// NewFactory returns a new Factory.
+// NewFactory creates a partition factory with the given components:
+// - cmdFactory: Used to create Git commands
+// - repoFactory: Used to create local repository instances
+// - metrics: Used to track partition operations
+// - logConsumer: Consumes WAL entries (optional, can be nil)
+// - raftFactory: Creates Raft managers for replicated partitions (optional, can be nil)
 func NewFactory(
 	cmdFactory gitcmd.CommandFactory,
 	repoFactory localrepo.Factory,
-	metrics Metrics,
+	partitionMetrics Metrics,
 	logConsumer storage.LogConsumer,
+	raftCfg config.Raft,
+	raftFactory raftmgr.RaftManagerFactory,
 ) Factory {
 	return Factory{
-		cmdFactory:  cmdFactory,
-		repoFactory: repoFactory,
-		metrics:     metrics,
-		logConsumer: logConsumer,
+		cmdFactory:       cmdFactory,
+		repoFactory:      repoFactory,
+		partitionMetrics: partitionMetrics,
+		logConsumer:      logConsumer,
+		raftCfg:          raftCfg,
+		raftFactory:      raftFactory,
 	}
 }
