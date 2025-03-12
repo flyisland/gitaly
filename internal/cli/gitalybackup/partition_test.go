@@ -110,6 +110,10 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 			}
 			require.NoError(t, err)
 
+			testhelper.SkipWithRaft(t, `The test asserts the existence of backup files based on the latest
+				LSN. When Raft is not enabled, the LSN is not static. The test should fetch the latest
+				LSN instead https://gitlab.com/gitlab-org/gitaly/-/issues/6459`)
+
 			lsn := storage.LSN(1)
 			tarPath := filepath.Join(path, "partition-backups", cfg.Storages[0].Name, "2", lsn.String()) + ".tar"
 			tar, err := os.Open(tarPath)

@@ -133,7 +133,7 @@ func testReftableMigration(t *testing.T, ctx context.Context) {
 			cmdFactory := gittest.NewCommandFactory(t, cfg)
 			localRepoFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, catfileCache)
 
-			partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil)
+			partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil, cfg.Raft, nil)
 
 			database, err := keyvalue.NewBadgerStore(testhelper.SharedLogger(t), t.TempDir())
 			require.NoError(t, err)

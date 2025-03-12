@@ -57,6 +57,30 @@ func IsWALEnabled() bool {
 	return ok
 }
 
+// IsRaftEnabled returns whether Raft single cluster is enabled in this testing run.
+func IsRaftEnabled() bool {
+	_, ok := os.LookupEnv("GITALY_TEST_RAFT")
+	if ok && !IsWALEnabled() {
+		panic("GITALY_TEST_WAL must be enabled")
+	}
+	return ok
+}
+
+// WithOrWithoutRaft returns a value correspondingly to if Raft is enabled or not.
+func WithOrWithoutRaft[T any](raftVal, noRaftVal T) T {
+	if IsRaftEnabled() {
+		return raftVal
+	}
+	return noRaftVal
+}
+
+// SkipWithRaft skips the test if Raft is enabled in this testing run.
+func SkipWithRaft(tb testing.TB, reason string) {
+	if IsRaftEnabled() {
+		tb.Skip(reason)
+	}
+}
+
 // SkipWithWAL skips the test if write-ahead logging is enabled in this testing run. A reason
 // should be provided either as a description or a link to an issue to explain why the test is
 // skipped.

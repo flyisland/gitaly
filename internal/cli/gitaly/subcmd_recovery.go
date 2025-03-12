@@ -562,6 +562,8 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 					localrepo.NewFactory(logger, config.NewLocator(cfg), gitCmdFactory, catfileCache),
 					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
 					nil,
+					cfg.Raft,
+					nil,
 				),
 				migration.NewMetrics(),
 				[]migration.Migration{},

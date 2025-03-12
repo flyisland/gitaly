@@ -371,9 +371,10 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 
 	storageMetrics := storagemgr.NewMetrics(cfg.Prometheus)
 	housekeepingMetrics := housekeeping.NewMetrics(cfg.Prometheus)
+	raftMetrics := raftmgr.NewMetrics()
 	partitionMetrics := partition.NewMetrics(housekeepingMetrics)
 	migrationMetrics := migration.NewMetrics()
-	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics, migrationMetrics)
+	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics, migrationMetrics, raftMetrics)
 
 	migrations := []migration.Migration{}
 
@@ -409,6 +410,11 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			logConsumer = walArchiver
 		}
 
+		var raftFactory raftmgr.RaftManagerFactory
+		if cfg.Raft.Enabled {
+			raftFactory = raftmgr.DefaultFactory(cfg.Raft)
+		}
+
 		nodeMgr, err := nodeimpl.NewManager(
 			cfg.Storages,
 			storagemgr.NewFactory(
@@ -420,6 +426,8 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 						localrepoFactory,
 						partitionMetrics,
 						logConsumer,
+						cfg.Raft,
+						raftFactory,
 					),
 					migrationMetrics,
 					migrations,
@@ -468,6 +476,8 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 						gitCmdFactory,
 						localrepoFactory,
 						partitionMetrics,
+						nil,
+						cfg.Raft,
 						nil,
 					),
 					// In recovery mode we don't want to keep inactive partitions active. The cache
@@ -543,13 +553,12 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			return fmt.Errorf("resolve backup locator: %w", err)
 		}
 	}
-	raftTransport := &raftmgr.GrpcTransport{}
+
+	var raftTransport *raftmgr.GrpcTransport
 	if cfg.Raft.Enabled {
 		raftManagerRegistry := raftmgr.NewRaftManagerRegistry()
 		routingTable := raftmgr.NewStaticRaftRoutingTable()
 		raftTransport = raftmgr.NewGrpcTransport(logger, cfg, routingTable, raftManagerRegistry, conns)
-		raftSnapshotterMetrics := raftmgr.NewMetrics()
-		prometheus.MustRegister(raftSnapshotterMetrics)
 	}
 
 	var bundleURIManager *bundleuri.GenerationManager

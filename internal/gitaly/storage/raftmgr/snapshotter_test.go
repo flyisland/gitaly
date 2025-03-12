@@ -2,6 +2,8 @@ package raftmgr
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,28 +11,22 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/fsrecorder"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/protobuf/encoding/protodelim"
 )
 
 func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
 	t.Parallel()
 
-	if !testhelper.IsWALEnabled() {
-		t.Skip(`Transactions must be enabled for raft snapshots to work.`)
-	}
-
-	// Setup partition with transaction enabled
 	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
 		Raft: config.Raft{
@@ -38,37 +34,8 @@ func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
 		},
 	}))
 	logger := testhelper.NewLogger(t)
-	catfileCache := catfile.NewCache(cfg)
-	t.Cleanup(catfileCache.Stop)
-
-	// Setup factories
-	cmdFactory := gittest.NewCommandFactory(t, cfg)
-	locator := config.NewLocator(cfg)
-	localRepoFactory := localrepo.NewFactory(logger, locator, cmdFactory, catfileCache)
-	partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil)
-
 	storageName := cfg.Storages[0].Name
 	storagePath := cfg.Storages[0].Path
-
-	// Setup db mgr and storage mgr
-	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-	require.NoError(t, err)
-	defer dbMgr.Close()
-	storageMgr, err := storagemgr.NewStorageManager(
-		logger,
-		cfg.Storages[0].Name,
-		cfg.Storages[0].Path,
-		dbMgr,
-		partitionFactory,
-		1,
-		storagemgr.NewMetrics(cfg.Prometheus),
-	)
-	require.NoError(t, err)
-	defer storageMgr.Close()
-
-	// Retrieve partition from storage
-	p, err := storageMgr.GetPartition(ctx, storage.PartitionID(1))
-	require.NoError(t, err)
 
 	// Create repo so partition is not empty
 	repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
@@ -76,15 +43,35 @@ func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
 		Storage:                config.Storage{Name: storageName, Path: storagePath},
 	})
 
-	metrics := NewMetrics().Scope("default")
-	// Setup snapshotter
-	s, err := NewRaftSnapshotter(cfg.Raft, logger, metrics)
-	require.NoError(t, err)
+	// Add some KV entries to the DB so that the collected DB is not empty.
+	db := getTestDBManager(t, ctx, cfg, logger)
+	dbTxn := db.NewTransaction(true)
+	require.NoError(t, dbTxn.Set([]byte("hello"), []byte("world")))
+	require.NoError(t, dbTxn.Commit())
 
-	// Begin transaction on partition
-	txn, err := p.Begin(ctx, storage.BeginOptions{
-		RelativePaths: []string{repo.GetRelativePath()},
-	})
+	// Setup a proper snapshot with partition snapshot manager
+	snapshotManager, err := snapshot.NewManager(
+		logger,
+		storagePath,
+		testhelper.TempDir(t),
+		snapshot.NewMetrics().Scope(storageName),
+	)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, snapshotManager)
+
+	// Create a new snapshot of the partition
+	snapshot, err := snapshotManager.GetSnapshot(ctx, []string{repo.GetRelativePath()}, false)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, snapshot)
+
+	// Create a mock transaction which depends on the newly created snapshot.
+	txn := &mockTransaction{
+		db: db,
+		fs: fsrecorder.NewFS(snapshot.Root(), wal.NewEntry(testhelper.TempDir(t))),
+	}
+
+	// Setup snapshotter
+	s, err := NewRaftSnapshotter(cfg.Raft, logger, NewMetrics().Scope("default"))
 	require.NoError(t, err)
 
 	// Package partition's disk into snapshot
@@ -101,28 +88,56 @@ func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	defer tar.Close()
 
+	// This commit is a no-op
 	require.NoError(t, txn.Commit(ctx))
 
 	// Tar should contain a directory with repository
-	testhelper.ContainsTarState(t, bufio.NewReader(tar), testhelper.DirectoryState{
+	directoryState := testhelper.DirectoryState{
 		filepath.Join("fs", repo.GetRelativePath()):                    {Mode: archive.DirectoryMode},
-		filepath.Join("fs", repo.GetRelativePath(), "HEAD"):            {Mode: archive.TarFileMode, Content: []byte("ref: refs/heads/main\n")},
 		filepath.Join("fs", repo.GetRelativePath(), "objects"):         {Mode: archive.DirectoryMode},
 		filepath.Join("fs", repo.GetRelativePath(), "objects", "info"): {Mode: archive.DirectoryMode},
 		filepath.Join("fs", repo.GetRelativePath(), "objects", "pack"): {Mode: archive.DirectoryMode},
-		filepath.Join("fs", repo.GetRelativePath(), "refs"):            {Mode: archive.DirectoryMode},
-		filepath.Join("fs", repo.GetRelativePath(), "refs", "heads"):   {Mode: archive.DirectoryMode},
-		filepath.Join("fs", repo.GetRelativePath(), "refs", "tags"):    {Mode: archive.DirectoryMode},
-		"kv-state": {Mode: archive.TarFileMode, Content: []byte{}},
-	})
+		filepath.Join("fs", repo.GetRelativePath(), "config"): {
+			Mode:    archive.TarFileMode,
+			Content: "config content",
+			ParseContent: func(tb testing.TB, path string, content []byte) any {
+				require.Equal(t, filepath.Join("fs", repo.GetRelativePath(), "config"), path)
+				return "config content"
+			},
+		},
+		filepath.Join("fs", repo.GetRelativePath(), "refs"): {Mode: archive.DirectoryMode},
+		"kv-state": {Mode: archive.TarFileMode, ParseContent: func(tb testing.TB, path string, content []byte) any {
+			var keyPair gitalypb.KVPair
+			require.NoError(t, protodelim.UnmarshalFrom(bytes.NewReader(content), &keyPair))
+
+			testhelper.ProtoEqual(t, &gitalypb.KVPair{
+				Key:   []byte("hello"),
+				Value: []byte("world"),
+			}, &keyPair)
+			return nil
+		}},
+	}
+	if testhelper.IsReftableEnabled() {
+		directoryState[filepath.Join("fs", repo.GetRelativePath(), "refs", "heads")] = testhelper.DirectoryEntry{
+			Mode:    archive.TarFileMode,
+			Content: []byte("this repository uses the reftable format\n"),
+		}
+	} else {
+		directoryState[filepath.Join("fs", repo.GetRelativePath(), "HEAD")] = testhelper.DirectoryEntry{
+			Mode: archive.TarFileMode, Content: []byte("ref: refs/heads/main\n"),
+		}
+		directoryState[filepath.Join("fs", repo.GetRelativePath(), "refs", "heads")] = testhelper.DirectoryEntry{
+			Mode: archive.DirectoryMode,
+		}
+		directoryState[filepath.Join("fs", repo.GetRelativePath(), "refs", "tags")] = testhelper.DirectoryEntry{
+			Mode: archive.DirectoryMode,
+		}
+	}
+	testhelper.ContainsTarState(t, bufio.NewReader(tar), directoryState)
 }
 
 func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 	t.Parallel()
-
-	if !testhelper.IsWALEnabled() {
-		t.Skip(`Transactions must be enabled for raft snapshots to work.`)
-	}
 
 	ctx := testhelper.Context(t)
 	t.Run("reject snapshot creation if no transaction found in context", func(t *testing.T) {
@@ -227,9 +242,25 @@ func (m *MockRaftSnapshotter) materializeSnapshot(snapshotMetadata SnapshotMetad
 	}, nil
 }
 
-type mockTransaction struct{ storage.Transaction }
+type mockTransaction struct {
+	storage.Transaction
+	db keyvalue.Transactioner
+	fs fsrecorder.FS
+}
 
-// Mock SnapshotLSN
 func (*mockTransaction) SnapshotLSN() storage.LSN {
 	return storage.LSN(1)
+}
+
+func (m *mockTransaction) KV() keyvalue.ReadWriter {
+	return m.db.NewTransaction(true)
+}
+
+func (m *mockTransaction) FS() storage.FS {
+	return m.fs
+}
+
+func (m *mockTransaction) Commit(context.Context) error {
+	// No-Op
+	return nil
 }

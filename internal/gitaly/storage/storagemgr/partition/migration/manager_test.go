@@ -175,7 +175,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 
 			m := partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))
 
-			factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil)
+			factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil, cfg.Raft, nil)
 			tm := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
 
 			ctx, cancel := context.WithCancel(ctx)

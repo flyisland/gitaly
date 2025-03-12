@@ -3,66 +3,20 @@ package raftmgr
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
-	lg "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
-
-type mockConsumer struct {
-	notifications []mockNotification
-	mutex         sync.Mutex
-}
-
-type mockNotification struct {
-	storageName   string
-	partitionID   storage.PartitionID
-	lowWaterMark  storage.LSN
-	highWaterMark storage.LSN
-}
-
-func (mc *mockConsumer) NotifyNewEntries(storageName string, partitionID storage.PartitionID, lowWaterMark, committedLSN storage.LSN) {
-	mc.mutex.Lock()
-	defer mc.mutex.Unlock()
-	mc.notifications = append(mc.notifications, mockNotification{
-		storageName:   storageName,
-		partitionID:   partitionID,
-		lowWaterMark:  lowWaterMark,
-		highWaterMark: committedLSN,
-	})
-}
-
-func (mc *mockConsumer) GetNotifications() []mockNotification {
-	mc.mutex.Lock()
-	defer mc.mutex.Unlock()
-	return mc.notifications
-}
-
-func getTestDBManager(t *testing.T, ctx context.Context, cfg config.Cfg, logger lg.Logger) keyvalue.Transactioner {
-	t.Helper()
-
-	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-	require.NoError(t, err)
-	t.Cleanup(dbMgr.Close)
-
-	db, err := dbMgr.GetDB(cfg.Storages[0].Name)
-	require.NoError(t, err)
-
-	return db
-}
 
 func setupStorage(t *testing.T, ctx context.Context, cfg config.Cfg) *Storage {
 	stagingDir := testhelper.TempDir(t)

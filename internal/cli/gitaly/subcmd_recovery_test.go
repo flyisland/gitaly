@@ -53,6 +53,8 @@ type setupData struct {
 func TestRecoveryCLI_status(t *testing.T) {
 	t.Parallel()
 
+	testhelper.SkipWithRaft(t, "Raft must not be enabled during recovery")
+
 	for _, tc := range []struct {
 		desc  string
 		setup func(tb testing.TB, ctx context.Context, opts setupOptions) setupData
@@ -342,6 +344,8 @@ Available WAL backup entries: up to LSN: %s`,
 					localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache),
 					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
 					nil,
+					cfg.Raft,
+					nil,
 				),
 				1,
 				storagemgr.NewMetrics(cfg.Prometheus),
@@ -376,6 +380,8 @@ Available WAL backup entries: up to LSN: %s`,
 
 func TestRecoveryCLI_replay(t *testing.T) {
 	t.Parallel()
+
+	testhelper.SkipWithRaft(t, "Raft must not be enabled during recovery")
 
 	for _, tc := range []struct {
 		desc  string
@@ -650,6 +656,8 @@ Successfully processed log entries up to LSN: %s`,
 					localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache),
 					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
 					nil,
+					cfg.Raft,
+					nil,
 				),
 				1,
 				storagemgr.NewMetrics(cfg.Prometheus),
@@ -696,6 +704,8 @@ Successfully processed log entries up to LSN: %s`,
 					gitCmdFactory,
 					localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache),
 					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
+					nil,
+					cfg.Raft,
 					nil,
 				),
 				1,

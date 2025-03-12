@@ -3,6 +3,7 @@ package partition
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 )
 
@@ -12,6 +13,7 @@ type Metrics struct {
 	// them is the responsibility of the caller.
 	housekeeping *housekeeping.Metrics
 	snapshot     snapshot.Metrics
+	raft         *raftmgr.Metrics
 
 	commitQueueDepth                           *prometheus.GaugeVec
 	commitQueueWaitSeconds                     *prometheus.HistogramVec
@@ -30,6 +32,7 @@ func NewMetrics(housekeeping *housekeeping.Metrics) Metrics {
 	return Metrics{
 		housekeeping: housekeeping,
 		snapshot:     snapshot.NewMetrics(),
+		raft:         raftmgr.NewMetrics(),
 		commitQueueDepth: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "gitaly_transaction_commit_queue_depth",
 			Help: "Records the number transactions waiting in the commit queue.",
@@ -65,6 +68,7 @@ func (m Metrics) Describe(out chan<- *prometheus.Desc) {
 // Collect implements prometheus.Collector.
 func (m Metrics) Collect(out chan<- prometheus.Metric) {
 	m.snapshot.Collect(out)
+	m.raft.Collect(out)
 	m.commitQueueDepth.Collect(out)
 	m.commitQueueWaitSeconds.Collect(out)
 	m.transactionControlStatementDurationSeconds.Collect(out)

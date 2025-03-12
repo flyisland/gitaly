@@ -440,6 +440,12 @@ test-with-praefect: test-go
 test-wal: export GITALY_TEST_WAL = YesPlease
 test-wal: test-go
 
+.PHONY: test-raft
+## Run Go tests with write-ahead logging + Raft enabled.
+test-raft: export GITALY_TEST_WAL = YesPlease
+test-raft: export GITALY_TEST_RAFT = YesPlease
+test-raft: test-go
+
 .PHONY: test-with-praefect-wal
 ## Run Go tests with write-ahead logging and Praefect enabled.
 test-with-praefect-wal: export GITALY_TEST_WAL = YesPlease

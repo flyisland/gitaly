@@ -145,10 +145,10 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 			require.NoError(t, err)
 
 			// Create test messages
-			msgs := createTestMessages(t, testCluster, mgr.GetLogReader(), tc.walEntries)
+			msgs := createTestMessages(t, testCluster, mgr, tc.walEntries)
 
 			// Send Message from leader to all followers
-			err = leader.transport.Send(ctx, mgr.GetLogReader(), 1, storageName, msgs)
+			err = leader.transport.Send(ctx, mgr, 1, storageName, msgs)
 			if tc.expectedError != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectedError)

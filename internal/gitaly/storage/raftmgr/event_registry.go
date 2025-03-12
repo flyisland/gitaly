@@ -1,15 +1,10 @@
 package raftmgr
 
 import (
-	"fmt"
 	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 )
-
-// ErrObsoleted is returned when an event associated with a LSN is shadowed by another one with higher term. That event
-// must be unlocked and removed from the registry.
-var ErrObsoleted = fmt.Errorf("obsoleted event, shadowed by a log entry with higher term")
 
 // EventID uniquely identifies an event in the registry.
 type EventID uint64
@@ -18,8 +13,7 @@ type EventID uint64
 type Waiter struct {
 	ID  EventID
 	LSN storage.LSN
-	C   chan struct{}
-	Err error
+	C   chan error
 }
 
 // Registry manages events and their associated waiters, enabling the registration
@@ -47,7 +41,7 @@ func (r *Registry) Register() *Waiter {
 	r.nextEventID++
 	waiter := &Waiter{
 		ID: r.nextEventID,
-		C:  make(chan struct{}),
+		C:  make(chan error, 1),
 	}
 	r.waiters[r.nextEventID] = waiter
 
@@ -67,8 +61,9 @@ func (r *Registry) AssignLSN(id EventID, lsn storage.LSN) {
 	waiter.LSN = lsn
 }
 
-// UntrackSince untracks all events having LSNs greater than or equal to the input LSN.
-func (r *Registry) UntrackSince(lsn storage.LSN) {
+// UntrackSince untracks all events having LSNs greater than or equal to the input LSN. The input error is assigned to
+// impacted events.
+func (r *Registry) UntrackSince(lsn storage.LSN, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -79,10 +74,22 @@ func (r *Registry) UntrackSince(lsn storage.LSN) {
 		}
 	}
 	for _, id := range toRemove {
+		r.waiters[id].C <- err
 		close(r.waiters[id].C)
-		r.waiters[id].Err = ErrObsoleted
 		delete(r.waiters, id)
 	}
+}
+
+// UntrackAll untracks all events. The input error is assigned to impacted events.
+func (r *Registry) UntrackAll(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, w := range r.waiters {
+		w.C <- err
+		close(w.C)
+	}
+	clear(r.waiters)
 }
 
 // Untrack closes the channel associated with a given EventID and removes the waiter from the registry once the event is
