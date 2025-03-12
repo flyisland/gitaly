@@ -67,10 +67,9 @@ func NewManager(cfg config.Cfg, logger log.Logger, backchannels *backchannel.Reg
 	return &PoolManager{
 		logger:       logger.WithField("component", "transaction.PoolManager"),
 		backchannels: backchannels,
-		conns: client.NewPool(client.WithDialOptions(append(
-			client.FailOnNonTempDialError(),
+		conns: client.NewPool(client.WithDialOptions(
 			client.UnaryInterceptor(),
-			client.StreamInterceptor())...,
+			client.StreamInterceptor(),
 		)),
 		votingDelayMetric: prometheus.NewHistogram(
 			prometheus.HistogramOpts{

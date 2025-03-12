@@ -47,7 +47,7 @@ func DialSidechannel(ctx context.Context, rawAddress string, sr *SidechannelRegi
 
 // FailOnNonTempDialError helps to identify if remote listener is ready to accept new connections.
 func FailOnNonTempDialError() []grpc.DialOption {
-	return client.FailOnNonTempDialError()
+	return []grpc.DialOption{}
 }
 
 // HealthCheckDialer uses provided dialer as an actual dialer, but issues a health check request to the remote

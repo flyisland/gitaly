@@ -280,14 +280,6 @@ func defaultServiceConfig() string {
 	return string(configJSON)
 }
 
-// FailOnNonTempDialError helps to identify if remote listener is ready to accept new connections.
-func FailOnNonTempDialError() []grpc.DialOption {
-	return []grpc.DialOption{
-		grpc.WithBlock(),
-		grpc.FailOnNonTempDialError(true),
-	}
-}
-
 // HealthCheckDialer uses provided dialer as an actual dialer, but issues a health check request to the remote
 // to verify the connection was set properly and could be used with no issues.
 func HealthCheckDialer(base Dialer) Dialer {
