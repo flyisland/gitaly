@@ -20,15 +20,12 @@ func (s *server) DryRunReftableMigration(
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
 
-	migrator := migration.NewReftableMigration(1, s.localRepoFactory)
-	if migrator.IsDisabled(ctx) {
-		return nil, structerr.NewFailedPrecondition("migration disabled")
-	}
-
 	tx := storage.ExtractTransaction(ctx)
 	if tx == nil {
 		return nil, structerr.NewInternal("transaction not found")
 	}
+
+	migrator := migration.NewReftableMigration(1, s.localRepoFactory)
 
 	logger := log.FromContext(ctx)
 	t := time.Now()
