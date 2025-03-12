@@ -292,7 +292,7 @@ func TestCreateBundlePatterns_HandleEOF(t *testing.T) {
 
 	cfg.SocketPath = testserver.RunGitalyServer(t, cfg, setup.RegisterAll)
 
-	conn, err := client.Dial(ctx, cfg.SocketPath)
+	conn, err := client.New(ctx, cfg.SocketPath)
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, conn)
 
@@ -311,7 +311,7 @@ func TestRemoteRepository_ResetRefs_HandleEOF(t *testing.T) {
 	cfg.SocketPath = testserver.RunGitalyServer(t, cfg, setup.RegisterAll)
 	ctx := testhelper.Context(t)
 
-	conn, err := client.Dial(ctx, cfg.SocketPath)
+	conn, err := client.New(ctx, cfg.SocketPath)
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, conn)
 

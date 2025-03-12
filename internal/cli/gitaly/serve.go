@@ -274,7 +274,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 	conns := client.NewPool(
 		client.WithDialer(client.HealthCheckDialer(
 			func(ctx context.Context, address string, opts []grpc.DialOption) (*grpc.ClientConn, error) {
-				return client.Dial(ctx, address, client.WithGrpcOptions(opts))
+				return client.New(ctx, address, client.WithGrpcOptions(opts))
 			},
 		)),
 		client.WithDialOptions(

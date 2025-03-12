@@ -67,7 +67,7 @@ func TestRemoveRepositoryHandler(t *testing.T) {
 			gitalyOneRepoPath := filepath.Join(gitalyOneCfg.Storages[0].Path, relativePath)
 
 			gitalyOneAddr := testserver.RunGitalyServer(t, gitalyOneCfg, setup.RegisterAll, testserver.WithDisablePraefect())
-			gitalyOneConn, err := client.Dial(ctx, gitalyOneAddr)
+			gitalyOneConn, err := client.New(ctx, gitalyOneAddr)
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, gitalyOneConn)
 
@@ -79,7 +79,7 @@ func TestRemoveRepositoryHandler(t *testing.T) {
 			gitalyTwoRepoPath := filepath.Join(gitalyTwoCfg.Storages[0].Path, relativePath)
 
 			gitalyTwoAddr := testserver.RunGitalyServer(t, gitalyTwoCfg, setup.RegisterAll, testserver.WithDisablePraefect())
-			gitalyTwoConn, err := client.Dial(ctx, gitalyTwoAddr)
+			gitalyTwoConn, err := client.New(ctx, gitalyTwoAddr)
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, gitalyTwoConn)
 

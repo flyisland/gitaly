@@ -56,7 +56,7 @@ func TestListUntrackedRepositoriesCommand(t *testing.T) {
 
 	praefectServer := testserver.StartPraefect(t, conf)
 
-	cc, err := client.Dial(ctx, praefectServer.Address())
+	cc, err := client.New(ctx, praefectServer.Address())
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cc.Close()) }()
 	repoClient := gitalypb.NewRepositoryServiceClient(cc)

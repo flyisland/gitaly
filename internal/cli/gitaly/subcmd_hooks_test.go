@@ -223,7 +223,7 @@ func newRepositoryClient(tb testing.TB, ctx context.Context, cfg config.Cfg, ser
 	if cfg.Auth.Token != "" {
 		connOpts = append(connOpts, grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(cfg.Auth.Token)))
 	}
-	conn, err := client.Dial(ctx, serverSocketPath, client.WithGrpcOptions(connOpts))
+	conn, err := client.New(ctx, serverSocketPath, client.WithGrpcOptions(connOpts))
 	require.NoError(tb, err)
 	tb.Cleanup(func() { require.NoError(tb, conn.Close()) })
 

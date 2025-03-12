@@ -2180,7 +2180,7 @@ func TestCoordinator_grpcErrorHandling(t *testing.T) {
 					gitalypb.RegisterOperationServiceServer(srv, operationServer)
 				}, testserver.WithDiskCache(&mockDiskCache{}), testserver.WithDisablePraefect())
 
-				conn, err := client.Dial(ctx, addr, client.WithGrpcOptions([]grpc.DialOption{
+				conn, err := client.New(ctx, addr, client.WithGrpcOptions([]grpc.DialOption{
 					grpc.WithDefaultCallOptions(grpc.ForceCodec(proxy.NewCodec())),
 				}))
 				require.NoError(t, err)

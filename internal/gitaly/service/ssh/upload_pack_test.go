@@ -685,7 +685,7 @@ func (m mockStreamCache) Fetch(ctx context.Context, key string, dst io.Writer, c
 }
 
 func newRepositoryClient(tb testing.TB, cfg config.Cfg) gitalypb.RepositoryServiceClient {
-	conn, err := client.Dial(testhelper.Context(tb), cfg.SocketPath)
+	conn, err := client.New(testhelper.Context(tb), cfg.SocketPath)
 	require.NoError(tb, err)
 	tb.Cleanup(func() { require.NoError(tb, conn.Close()) })
 

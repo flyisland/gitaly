@@ -218,7 +218,7 @@ func dialGitaly(ctx context.Context, payload gitcmd.HooksPayload) (*grpc.ClientC
 
 	dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
 	dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(streamInterceptors...))
-	conn, err := client.Dial(ctx, "unix://"+payload.InternalSocket, client.WithGrpcOptions(dialOpts))
+	conn, err := client.New(ctx, "unix://"+payload.InternalSocket, client.WithGrpcOptions(dialOpts))
 	if err != nil {
 		return nil, fmt.Errorf("error when dialing: %w", err)
 	}

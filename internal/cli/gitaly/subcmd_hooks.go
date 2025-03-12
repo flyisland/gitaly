@@ -156,7 +156,7 @@ func dial(ctx context.Context, addr, token string, timeout time.Duration, opts .
 		)
 	}
 
-	return client.Dial(ctx, addr, client.WithGrpcOptions(opts))
+	return client.New(ctx, addr, client.WithGrpcOptions(opts))
 }
 
 func getAddressWithScheme(cfg config.Cfg) (string, error) {

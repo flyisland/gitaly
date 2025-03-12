@@ -188,5 +188,5 @@ func (cc *ClientConn) CloseWrite() error {
 // also injects sr as a sidechannel registry, so that Gitaly can establish sidechannels back to the client.
 func Dial(ctx context.Context, registry *Registry, logger log.Logger, rawAddress string, connOpts []grpc.DialOption) (*grpc.ClientConn, error) {
 	clientHandshaker := NewClientHandshaker(logger, registry)
-	return client.Dial(ctx, rawAddress, client.WithGrpcOptions(connOpts), client.WithHandshaker(clientHandshaker))
+	return client.New(ctx, rawAddress, client.WithGrpcOptions(connOpts), client.WithHandshaker(clientHandshaker))
 }

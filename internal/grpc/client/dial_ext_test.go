@@ -106,7 +106,7 @@ func TestRetryPolicy(t *testing.T) {
 		SkipSnapshotInvalidation: true,
 	})
 
-	conn, err := client.Dial(ctx, cfg.SocketPath)
+	conn, err := client.New(ctx, cfg.SocketPath)
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, conn)
 

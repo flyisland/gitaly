@@ -124,7 +124,7 @@ func dialLocalPort(tb testing.TB, ctx context.Context, port int, backend bool) *
 		)
 	}
 
-	cc, err := client.Dial(
+	cc, err := client.New(
 		ctx,
 		fmt.Sprintf("tcp://localhost:%d", port),
 		client.WithGrpcOptions(opts),

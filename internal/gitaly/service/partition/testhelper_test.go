@@ -26,7 +26,7 @@ func setupServices(tb testing.TB, opt ...testserver.GitalyServerOpt) (config.Cfg
 	addr := testserver.RunGitalyServer(tb, cfg, setup.RegisterAll, opt...)
 	cfg.SocketPath = addr
 
-	cc, err := client.Dial(testhelper.Context(tb), cfg.SocketPath)
+	cc, err := client.New(testhelper.Context(tb), cfg.SocketPath)
 	require.NoError(tb, err)
 	tb.Cleanup(func() { testhelper.MustClose(tb, cc) })
 

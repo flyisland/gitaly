@@ -67,7 +67,7 @@ type dialConfig struct {
 	creds      credentials.TransportCredentials
 }
 
-// DialOption is an option that can be passed to Dial.
+// DialOption is an option that can be passed to NewClient.
 type DialOption func(*dialConfig)
 
 // WithHandshaker sets up the given handshaker so that it's passed as the transport credentials
@@ -96,9 +96,9 @@ func WithTransportCredentials(creds credentials.TransportCredentials) DialOption
 	}
 }
 
-// Dial dials a Gitaly node serving at the given address. Dial is used by the public 'client' package
-// and the expected behavior is mostly documented there.
-func Dial(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.ClientConn, error) {
+// New creates a dormant connection to a Gitaly node serving at the given address. New is used by the public 'client'
+// package and the expected behavior is mostly documented there.
+func New(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.ClientConn, error) {
 	var dialCfg dialConfig
 	for _, opt := range opts {
 		opt(&dialCfg)

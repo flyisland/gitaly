@@ -64,7 +64,7 @@ func TestGitalyServerFactory(t *testing.T) {
 			endpoint, err := starter.ComposeEndpoint(schema, listener.Addr().String())
 			require.NoError(t, err)
 
-			cc, err = client.Dial(ctx, endpoint)
+			cc, err = client.New(ctx, endpoint)
 			require.NoError(t, err)
 		}
 		t.Cleanup(func() { assert.NoError(t, cc.Close()) })

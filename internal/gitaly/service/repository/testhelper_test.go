@@ -35,7 +35,7 @@ func newRepositoryClient(tb testing.TB, cfg config.Cfg, serverSocketPath string)
 	if cfg.Auth.Token != "" {
 		connOpts = append(connOpts, grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(cfg.Auth.Token)))
 	}
-	conn, err := client.Dial(testhelper.Context(tb), serverSocketPath, client.WithGrpcOptions(connOpts))
+	conn, err := client.New(testhelper.Context(tb), serverSocketPath, client.WithGrpcOptions(connOpts))
 	require.NoError(tb, err)
 	tb.Cleanup(func() { require.NoError(tb, conn.Close()) })
 
@@ -43,7 +43,7 @@ func newRepositoryClient(tb testing.TB, cfg config.Cfg, serverSocketPath string)
 }
 
 func newMuxedRepositoryClient(t *testing.T, ctx context.Context, cfg config.Cfg, serverSocketPath string, handshaker client.Handshaker) gitalypb.RepositoryServiceClient {
-	conn, err := client.Dial(ctx, serverSocketPath,
+	conn, err := client.New(ctx, serverSocketPath,
 		client.WithGrpcOptions([]grpc.DialOption{
 			grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(cfg.Auth.Token)),
 		}),

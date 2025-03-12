@@ -208,7 +208,7 @@ func TestServerFactory(t *testing.T) {
 
 		creds := insecure.NewCredentials()
 
-		cc, err := client.Dial(ctx, praefectAddr)
+		cc, err := client.New(ctx, praefectAddr)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, cc.Close()) }()
 		ctx := testhelper.Context(t)
@@ -291,7 +291,7 @@ func TestServerFactory(t *testing.T) {
 			address, err := starter.ComposeEndpoint(listener.Addr().Network(), listener.Addr().String())
 			require.NoError(t, err)
 
-			conn, err := client.Dial(ctx, address, cfg.dialOpts...)
+			conn, err := client.New(ctx, address, cfg.dialOpts...)
 			require.NoError(t, err)
 			defer func() { require.NoError(t, conn.Close()) }()
 

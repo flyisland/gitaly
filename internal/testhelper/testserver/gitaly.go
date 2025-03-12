@@ -153,7 +153,7 @@ func waitHealthy(tb testing.TB, ctx context.Context, addr string, authToken stri
 		grpcOpts = append(grpcOpts, grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(authToken)))
 	}
 
-	conn, err := client.Dial(ctx, addr, client.WithGrpcOptions(grpcOpts))
+	conn, err := client.New(ctx, addr, client.WithGrpcOptions(grpcOpts))
 	require.NoError(tb, err)
 	defer testhelper.MustClose(tb, conn)
 

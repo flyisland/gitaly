@@ -73,7 +73,7 @@ func subCmdDial(ctx context.Context, addr, token string, timeout time.Duration, 
 		)
 	}
 
-	return client.Dial(ctx, addr, client.WithGrpcOptions(opts))
+	return client.New(ctx, addr, client.WithGrpcOptions(opts))
 }
 
 type requiredParameterError string

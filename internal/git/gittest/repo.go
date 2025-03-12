@@ -118,7 +118,7 @@ func DialService(tb testing.TB, ctx context.Context, cfg config.Cfg) *grpc.Clien
 		require.FailNow(tb, "cannot dial service without configured address")
 	}
 
-	conn, err := client.Dial(ctx, addr, client.WithGrpcOptions(dialOptions))
+	conn, err := client.New(ctx, addr, client.WithGrpcOptions(dialOptions))
 	require.NoError(tb, err)
 	tb.Cleanup(func() { testhelper.MustClose(tb, conn) })
 	return conn

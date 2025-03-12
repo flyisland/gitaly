@@ -38,11 +38,11 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 	gitalyOneAddr := testserver.RunGitalyServer(t, gitalyOneCfg, setup.RegisterAll, testserver.WithDisablePraefect())
 	gitalyTwoSrv := testserver.StartGitalyServer(t, gitalyTwoCfg, setup.RegisterAll, testserver.WithDisablePraefect())
 
-	gitalyOneConfig, err := client.Dial(ctx, gitalyOneAddr)
+	gitalyOneConfig, err := client.New(ctx, gitalyOneAddr)
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, gitalyOneConfig)
 
-	gitalyTwoConfig, err := client.Dial(ctx, gitalyTwoSrv.Address())
+	gitalyTwoConfig, err := client.New(ctx, gitalyTwoSrv.Address())
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, gitalyTwoConfig)
 
@@ -70,7 +70,7 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 
 	praefectServer := testserver.StartPraefect(t, conf)
 
-	cc, err := client.Dial(ctx, praefectServer.Address())
+	cc, err := client.New(ctx, praefectServer.Address())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cc.Close()) })
 	repoClient := gitalypb.NewRepositoryServiceClient(cc)

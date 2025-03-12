@@ -36,7 +36,7 @@ func TestReplicatorInvalidSourceRepository(t *testing.T) {
 	defer srv.Stop()
 	go testhelper.MustServe(t, srv, ln)
 
-	targetCC, err := client.Dial(ctx, ln.Addr().Network()+":"+ln.Addr().String())
+	targetCC, err := client.New(ctx, ln.Addr().Network()+":"+ln.Addr().String())
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, targetCC)
 
