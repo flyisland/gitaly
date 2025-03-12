@@ -15,7 +15,7 @@ require (
 	github.com/cloudflare/tableflip v1.2.3
 	github.com/containerd/cgroups/v3 v3.0.5
 	github.com/dgraph-io/badger/v4 v4.6.0
-	github.com/getsentry/sentry-go v0.29.0
+	github.com/getsentry/sentry-go v0.31.1
 	github.com/git-lfs/git-lfs/v3 v3.6.1
 	github.com/go-enry/go-enry/v2 v2.9.2
 	github.com/go-enry/go-license-detector/v4 v4.3.0
@@ -51,7 +51,7 @@ require (
 	golang.org/x/sync v0.11.0
 	golang.org/x/sys v0.31.0
 	golang.org/x/text v0.22.0
-	golang.org/x/time v0.7.0
+	golang.org/x/time v0.11.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240930140551-af27646dc61f
 	// Please upgrade grpc-go with caution. Newer grpc-go versions contain some known issues:
 	// - https://gitlab.com/gitlab-com/request-for-help/-/issues/2127
