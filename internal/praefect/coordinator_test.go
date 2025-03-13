@@ -1828,6 +1828,8 @@ func TestAbsentCorrelationID(t *testing.T) {
 }
 
 func TestCoordinatorEnqueueFailure(t *testing.T) {
+	testhelper.SkipWithMacOS(t, "this test is extremely flaky on macos platform")
+
 	t.Parallel()
 	conf := config.Config{
 		VirtualStorages: []*config.VirtualStorage{

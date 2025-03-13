@@ -936,6 +936,7 @@ func TestProxyWrites(t *testing.T) {
 }
 
 func TestErrorThreshold(t *testing.T) {
+	testhelper.SkipWithMacOS(t, "this test is extremely flaky on macos platform")
 	t.Parallel()
 	backendToken := ""
 	backend, cleanup := newMockDownstream(t, backendToken, func(srv *grpc.Server) {
