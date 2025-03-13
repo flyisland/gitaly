@@ -131,7 +131,7 @@ workflow:
     # Speed up test execution by writing test data into tmpfs instead of onto
     # the underlying disk.
     - chmod 1777 "${TEST_TMP_DIR}"
-    - mount none -t tmpfs -o size=7G "${TEST_TMP_DIR}"
+    - mount none -t tmpfs -o size=10G "${TEST_TMP_DIR}"
     - go version
   script:
     # Create the build directory for the unprivileged user that we're running
