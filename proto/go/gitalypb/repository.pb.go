@@ -4724,7 +4724,7 @@ func (x *GetFileAttributesRequest) GetPaths() []string {
 type GetFileAttributesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// attribute_infos is the list of attributes that matches the given GetFileAttributesRequest
-	AttributeInfos []*GetFileAttributesResponse_AttributeInfo `protobuf:"bytes,1,rep,name=attribute_infos,json=attributeInfos,proto3" json:"attribute_infos,omitempty"`
+	AttributeInfos []*GetFileAttributesResponse_AttributeInfo `protobuf:"bytes,1,rep,name=attribute_infos,json=attributeInfos,proto3" json:"attribute_infos,omitempty"` // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
