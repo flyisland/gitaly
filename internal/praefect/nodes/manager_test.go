@@ -472,7 +472,7 @@ func TestNodeStatus_IsHealthy(t *testing.T) {
 
 	healthSrv := testhelper.NewServerWithHealth(t, socket)
 
-	clientConn, err := client.Dial(ctx, address)
+	clientConn, err := client.New(ctx, address)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, clientConn.Close()) }()
 

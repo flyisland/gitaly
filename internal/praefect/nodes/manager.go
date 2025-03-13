@@ -160,7 +160,7 @@ func Dial(
 		client.StreamInterceptor(),
 	}
 
-	return client.Dial(ctx, node.Address, client.WithGrpcOptions(dialOpts), client.WithHandshaker(handshaker))
+	return client.New(ctx, node.Address, client.WithGrpcOptions(dialOpts), client.WithHandshaker(handshaker))
 }
 
 // NewManager creates a new NodeMgr based on virtual storage configs

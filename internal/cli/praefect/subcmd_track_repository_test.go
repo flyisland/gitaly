@@ -64,11 +64,11 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 	}
 	confPath := writeConfigToFile(t, conf)
 
-	gitalyOneConn, err := client.Dial(ctx, gitalyOneAddr)
+	gitalyOneConn, err := client.New(ctx, gitalyOneAddr)
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, gitalyOneConn)
 
-	gitalyTwoConn, err := client.Dial(ctx, gitalyTwoSrv.Address())
+	gitalyTwoConn, err := client.New(ctx, gitalyTwoSrv.Address())
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, gitalyTwoConn)
 

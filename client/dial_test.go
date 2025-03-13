@@ -117,12 +117,6 @@ func TestDial(t *testing.T) {
 			rawAddress:        "",
 			expectDialFailure: true,
 		},
-		{
-			name:              "dial fail if there is no listener on address",
-			rawAddress:        "tcp://invalid.address",
-			dialOpts:          FailOnNonTempDialError(),
-			expectDialFailure: true,
-		},
 	}
 
 	for _, tc := range tests {

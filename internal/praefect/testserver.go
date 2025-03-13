@@ -113,7 +113,6 @@ func listenAvailPort(tb testing.TB) (net.Listener, int) {
 
 func dialLocalPort(tb testing.TB, ctx context.Context, port int, backend bool) *grpc.ClientConn {
 	opts := []grpc.DialOption{
-		grpc.WithBlock(),
 		grpc.WithUnaryInterceptor(correlation.UnaryClientCorrelationInterceptor()),
 		grpc.WithStreamInterceptor(correlation.StreamClientCorrelationInterceptor()),
 	}
@@ -124,7 +123,7 @@ func dialLocalPort(tb testing.TB, ctx context.Context, port int, backend bool) *
 		)
 	}
 
-	cc, err := client.Dial(
+	cc, err := client.New(
 		ctx,
 		fmt.Sprintf("tcp://localhost:%d", port),
 		client.WithGrpcOptions(opts),

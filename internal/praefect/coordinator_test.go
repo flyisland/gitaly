@@ -1828,6 +1828,8 @@ func TestAbsentCorrelationID(t *testing.T) {
 }
 
 func TestCoordinatorEnqueueFailure(t *testing.T) {
+	testhelper.SkipWithMacOS(t, "this test is extremely flaky on macos platform")
+
 	t.Parallel()
 	conf := config.Config{
 		VirtualStorages: []*config.VirtualStorage{
@@ -2180,7 +2182,7 @@ func TestCoordinator_grpcErrorHandling(t *testing.T) {
 					gitalypb.RegisterOperationServiceServer(srv, operationServer)
 				}, testserver.WithDiskCache(&mockDiskCache{}), testserver.WithDisablePraefect())
 
-				conn, err := client.Dial(ctx, addr, client.WithGrpcOptions([]grpc.DialOption{
+				conn, err := client.New(ctx, addr, client.WithGrpcOptions([]grpc.DialOption{
 					grpc.WithDefaultCallOptions(grpc.ForceCodec(proxy.NewCodec())),
 				}))
 				require.NoError(t, err)

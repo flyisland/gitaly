@@ -130,10 +130,8 @@ func TestInvalidators(t *testing.T) {
 			}()
 			t.Cleanup(server.Stop)
 
-			conn, err := grpc.DialContext(
-				ctx,
+			conn, err := grpc.NewClient(
 				listener.Addr().String(),
-				grpc.WithBlock(),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 			)
 			require.NoError(t, err)

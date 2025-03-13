@@ -71,7 +71,6 @@ func (p *Ping) Address() string {
 
 func (p *Ping) dial(ctx context.Context) (*grpc.ClientConn, error) {
 	opts := []grpc.DialOption{
-		grpc.WithBlock(),
 		client.UnaryInterceptor(),
 		client.StreamInterceptor(),
 	}
@@ -80,7 +79,7 @@ func (p *Ping) dial(ctx context.Context) (*grpc.ClientConn, error) {
 		opts = append(opts, grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(p.token)))
 	}
 
-	return client.Dial(ctx, p.address, client.WithGrpcOptions(opts))
+	return client.New(ctx, p.address, client.WithGrpcOptions(opts))
 }
 
 func (p *Ping) healthCheck(ctx context.Context, cc *grpc.ClientConn) (grpc_health_v1.HealthCheckResponse_ServingStatus, error) {

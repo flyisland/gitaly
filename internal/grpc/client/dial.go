@@ -31,6 +31,7 @@ const (
 	tlsConnection
 	unixConnection
 	dnsConnection
+	dnsPlusTLSConnection
 )
 
 func getConnectionType(rawAddress string) connectionType {
@@ -66,7 +67,7 @@ type dialConfig struct {
 	creds      credentials.TransportCredentials
 }
 
-// DialOption is an option that can be passed to Dial.
+// DialOption is an option that can be passed to NewClient.
 type DialOption func(*dialConfig)
 
 // WithHandshaker sets up the given handshaker so that it's passed as the transport credentials
@@ -79,7 +80,7 @@ func WithHandshaker(handshaker Handshaker) DialOption {
 }
 
 // WithGrpcOptions will set up the given gRPC dial options so that they will be used when calling
-// `grpc.DialContext()`.
+// `grpc.NewClient()`.
 func WithGrpcOptions(opts []grpc.DialOption) DialOption {
 	return func(cfg *dialConfig) {
 		cfg.grpcOpts = append(cfg.grpcOpts, opts...)
@@ -95,9 +96,9 @@ func WithTransportCredentials(creds credentials.TransportCredentials) DialOption
 	}
 }
 
-// Dial dials a Gitaly node serving at the given address. Dial is used by the public 'client' package
-// and the expected behavior is mostly documented there.
-func Dial(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.ClientConn, error) {
+// New creates a dormant connection to a Gitaly node serving at the given address. New is used by the public 'client'
+// package and the expected behavior is mostly documented there.
+func New(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.ClientConn, error) {
 	var dialCfg dialConfig
 	for _, opt := range opts {
 		opt(&dialCfg)
@@ -131,7 +132,6 @@ func Dial(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Cli
 			return nil, fmt.Errorf("failed to parse target for 'dns' connection: %w", err)
 		}
 		canonicalAddress = rawAddress // DNS Resolver will handle this
-
 	case unixConnection:
 		canonicalAddress = rawAddress // This will be overridden by the custom dialer...
 		connOpts = append(
@@ -208,7 +208,7 @@ func Dial(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Cli
 		grpc.WithDefaultServiceConfig(defaultServiceConfig()),
 	)
 
-	conn, err := grpc.DialContext(ctx, canonicalAddress, connOpts...)
+	conn, err := grpc.NewClient(canonicalAddress, connOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial %q connection: %w", canonicalAddress, err)
 	}
@@ -278,14 +278,6 @@ func defaultServiceConfig() string {
 	}
 
 	return string(configJSON)
-}
-
-// FailOnNonTempDialError helps to identify if remote listener is ready to accept new connections.
-func FailOnNonTempDialError() []grpc.DialOption {
-	return []grpc.DialOption{
-		grpc.WithBlock(),
-		grpc.FailOnNonTempDialError(true),
-	}
 }
 
 // HealthCheckDialer uses provided dialer as an actual dialer, but issues a health check request to the remote

@@ -48,7 +48,7 @@ func TestPoolManager_Vote(t *testing.T) {
 	logger := testhelper.NewLogger(t)
 
 	registry := backchannel.NewRegistry()
-	backchannelConn, err := client.Dial(ctx, transactionServerAddr)
+	backchannelConn, err := client.New(ctx, transactionServerAddr)
 	require.NoError(t, err)
 	defer backchannelConn.Close()
 
@@ -198,7 +198,7 @@ func TestPoolManager_Stop(t *testing.T) {
 	logger := testhelper.NewLogger(t)
 
 	registry := backchannel.NewRegistry()
-	backchannelConn, err := client.Dial(ctx, transactionServerAddr)
+	backchannelConn, err := client.New(ctx, transactionServerAddr)
 	require.NoError(t, err)
 	defer backchannelConn.Close()
 

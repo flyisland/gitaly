@@ -42,7 +42,7 @@ func TestMiddleware_partitioning_hint(t *testing.T) {
 		{
 			desc: "implicit CreateFork hint",
 			createFork: func(t *testing.T, ctx context.Context, cfg config.Cfg, alternate *gitalypb.Repository) *gitalypb.Repository {
-				cc, err := client.Dial(ctx, cfg.ListenAddr)
+				cc, err := client.New(ctx, cfg.ListenAddr)
 				require.NoError(t, err)
 				defer testhelper.MustClose(t, cc)
 
@@ -65,7 +65,7 @@ func TestMiddleware_partitioning_hint(t *testing.T) {
 		{
 			desc: "explicit partitioning hint with implicit CreateFork hint",
 			createFork: func(t *testing.T, ctx context.Context, cfg config.Cfg, alternate *gitalypb.Repository) *gitalypb.Repository {
-				cc, err := client.Dial(ctx, cfg.ListenAddr)
+				cc, err := client.New(ctx, cfg.ListenAddr)
 				require.NoError(t, err)
 				defer testhelper.MustClose(t, cc)
 
@@ -96,7 +96,7 @@ func TestMiddleware_partitioning_hint(t *testing.T) {
 		{
 			desc: "explicit partitioning hint with an additional repository fails",
 			createFork: func(t *testing.T, ctx context.Context, cfg config.Cfg, alternate *gitalypb.Repository) *gitalypb.Repository {
-				cc, err := client.Dial(ctx, cfg.ListenAddr)
+				cc, err := client.New(ctx, cfg.ListenAddr)
 				require.NoError(t, err)
 				defer testhelper.MustClose(t, cc)
 
@@ -133,7 +133,7 @@ func TestMiddleware_partitioning_hint(t *testing.T) {
 				RelativePath: gittest.NewObjectPoolName(t),
 			})
 
-			cc, err := client.Dial(ctx, cfg.ListenAddr)
+			cc, err := client.New(ctx, cfg.ListenAddr)
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, cc)
 

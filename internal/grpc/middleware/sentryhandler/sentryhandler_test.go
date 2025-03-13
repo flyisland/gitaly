@@ -415,7 +415,7 @@ func (s *mockServiceServer) setup(tb testing.TB, ctx context.Context) grpc_testi
 	listener := bufconn.Listen(1)
 	go testhelper.MustServe(tb, server, listener)
 
-	conn, err := grpc.DialContext(ctx, listener.Addr().String(),
+	conn, err := grpc.NewClient("passthrough://"+listener.Addr().String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return listener.DialContext(ctx)

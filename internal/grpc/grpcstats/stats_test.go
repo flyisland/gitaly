@@ -101,7 +101,7 @@ func TestPayloadBytes(t *testing.T) {
 	t.Cleanup(srv.GracefulStop)
 	go func() { assert.NoError(t, srv.Serve(lis)) }()
 
-	cc, err := client.Dial(ctx, "unix://"+sock.Name())
+	cc, err := client.New(ctx, "unix://"+sock.Name())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cc.Close()) })
 

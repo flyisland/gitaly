@@ -28,7 +28,7 @@ func WithDialer(dialer Dialer) PoolOption {
 	}
 }
 
-// WithDialOptions sets gRPC options to use for the gRPC Dial call.
+// WithDialOptions sets gRPC options to use for the gRPC NewClient call.
 func WithDialOptions(dialOptions ...grpc.DialOption) PoolOption {
 	return func(options *poolConfig) {
 		options.dialOptions = dialOptions
@@ -50,7 +50,7 @@ type Pool struct {
 func NewPool(opts ...PoolOption) *Pool {
 	cfg := poolConfig{
 		dialer: func(ctx context.Context, address string, opts []grpc.DialOption) (*grpc.ClientConn, error) {
-			return Dial(ctx, address, WithGrpcOptions(opts))
+			return New(ctx, address, WithGrpcOptions(opts))
 		},
 	}
 	for _, opt := range opts {

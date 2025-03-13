@@ -63,7 +63,7 @@ func newSmartHTTPClient(t *testing.T, serverSocketPath, token string) gitalypb.S
 func newMuxedSmartHTTPClient(t *testing.T, ctx context.Context, serverSocketPath, token string, serverFactory backchannel.ServerFactory) gitalypb.SmartHTTPServiceClient {
 	t.Helper()
 
-	conn, err := client.Dial(
+	conn, err := client.New(
 		ctx,
 		serverSocketPath,
 		client.WithGrpcOptions([]grpc.DialOption{grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(token))}),

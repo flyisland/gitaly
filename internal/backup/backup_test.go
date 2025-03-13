@@ -484,7 +484,7 @@ func TestManager_Restore_latest(t *testing.T) {
 
 			ctx := testhelper.Context(t)
 
-			cc, err := client.Dial(ctx, cfg.SocketPath)
+			cc, err := client.New(ctx, cfg.SocketPath)
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, cc)
 
@@ -849,7 +849,7 @@ func TestManager_Restore_specific(t *testing.T) {
 
 			ctx := testhelper.Context(t)
 
-			cc, err := client.Dial(ctx, cfg.SocketPath)
+			cc, err := client.New(ctx, cfg.SocketPath)
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, cc)
 

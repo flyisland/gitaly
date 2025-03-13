@@ -634,7 +634,7 @@ messages and behavior by erroring out the requests before they even hit this int
 				testserver.WithLogger(log.FromLogrusEntry(entry)),
 			)
 
-			clientConn, err := client.Dial(ctx, serverAddress)
+			clientConn, err := client.New(ctx, serverAddress)
 			require.NoError(t, err)
 			defer clientConn.Close()
 
@@ -815,7 +815,7 @@ messages and behavior by erroring out the requests before they even hit this int
 				})
 			})
 
-			clientConn, err := client.Dial(ctx, serverAddress)
+			clientConn, err := client.New(ctx, serverAddress)
 			require.NoError(t, err)
 			defer clientConn.Close()
 

@@ -7,7 +7,7 @@ import (
 )
 
 // extractHostFromRemoteURL will convert Gitaly-style URL addresses of the form
-// scheme://host:port to the "host:port" addresses used by `grpc.Dial`
+// scheme://host:port to the "host:port" addresses used by `grpc.NewClient`
 func extractHostFromRemoteURL(rawAddress string) (hostAndPort string, err error) {
 	u, err := url.Parse(rawAddress)
 	if err != nil {
