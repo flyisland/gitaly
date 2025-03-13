@@ -224,7 +224,7 @@ GIT_FILTER_REPO_SOURCE_DIR           ?= ${DEPENDENCY_DIR}/git-filter-repo
 ## Go packages to test when using the test-go target.
 TEST_PACKAGES     ?= ${SOURCE_DIR}/...
 ## Test options passed to `go test`.
-TEST_OPTIONS      ?= -count=1
+TEST_OPTIONS      ?= -count=1 -p=4
 ## Specify the output format used to print tests ["standard-verbose", "standard-quiet", "short"]
 TEST_FORMAT       ?= short
 ## Specify the location where the JUnit-style format shall be written to.
