@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RaftService_SendMessage_FullMethodName = "/gitaly.RaftService/SendMessage"
+	RaftService_SendMessage_FullMethodName  = "/gitaly.RaftService/SendMessage"
+	RaftService_SendSnapshot_FullMethodName = "/gitaly.RaftService/SendSnapshot"
 )
 
 // RaftServiceClient is the client API for RaftService service.
@@ -31,6 +32,9 @@ type RaftServiceClient interface {
 	// SendMessage processes Raft messages and ensures they are handled by
 	// the receiving node to update its Raft state machine.
 	SendMessage(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RaftMessageRequest, RaftMessageResponse], error)
+	// SendSnapshot sends raft snapshots from the leader to the follower node. Typically it
+	// would be useful for nodes to catch up to the latest state.
+	SendSnapshot(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse], error)
 }
 
 type raftServiceClient struct {
@@ -54,6 +58,19 @@ func (c *raftServiceClient) SendMessage(ctx context.Context, opts ...grpc.CallOp
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RaftService_SendMessageClient = grpc.ClientStreamingClient[RaftMessageRequest, RaftMessageResponse]
 
+func (c *raftServiceClient) SendSnapshot(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RaftService_ServiceDesc.Streams[1], RaftService_SendSnapshot_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RaftService_SendSnapshotClient = grpc.ClientStreamingClient[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]
+
 // RaftServiceServer is the server API for RaftService service.
 // All implementations must embed UnimplementedRaftServiceServer
 // for forward compatibility.
@@ -63,6 +80,9 @@ type RaftServiceServer interface {
 	// SendMessage processes Raft messages and ensures they are handled by
 	// the receiving node to update its Raft state machine.
 	SendMessage(grpc.ClientStreamingServer[RaftMessageRequest, RaftMessageResponse]) error
+	// SendSnapshot sends raft snapshots from the leader to the follower node. Typically it
+	// would be useful for nodes to catch up to the latest state.
+	SendSnapshot(grpc.ClientStreamingServer[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]) error
 	mustEmbedUnimplementedRaftServiceServer()
 }
 
@@ -75,6 +95,9 @@ type UnimplementedRaftServiceServer struct{}
 
 func (UnimplementedRaftServiceServer) SendMessage(grpc.ClientStreamingServer[RaftMessageRequest, RaftMessageResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
+}
+func (UnimplementedRaftServiceServer) SendSnapshot(grpc.ClientStreamingServer[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method SendSnapshot not implemented")
 }
 func (UnimplementedRaftServiceServer) mustEmbedUnimplementedRaftServiceServer() {}
 func (UnimplementedRaftServiceServer) testEmbeddedByValue()                     {}
@@ -104,6 +127,13 @@ func _RaftService_SendMessage_Handler(srv interface{}, stream grpc.ServerStream)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RaftService_SendMessageServer = grpc.ClientStreamingServer[RaftMessageRequest, RaftMessageResponse]
 
+func _RaftService_SendSnapshot_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(RaftServiceServer).SendSnapshot(&grpc.GenericServerStream[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RaftService_SendSnapshotServer = grpc.ClientStreamingServer[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]
+
 // RaftService_ServiceDesc is the grpc.ServiceDesc for RaftService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -115,6 +145,11 @@ var RaftService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SendMessage",
 			Handler:       _RaftService_SendMessage_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "SendSnapshot",
+			Handler:       _RaftService_SendSnapshot_Handler,
 			ClientStreams: true,
 		},
 	},
