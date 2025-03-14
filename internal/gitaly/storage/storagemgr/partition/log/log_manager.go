@@ -43,17 +43,18 @@ type Manager struct {
 	// and signal internal workers to stop. It ensures proper cleanup when the Manager is no longer in use.
 	cancel context.CancelFunc
 
+	// pruningSignals is a buffered channel signaling the pruning task to start. The pruning task is handled by a
+	// background goroutine. It scans and removes entries below the low water mark. The channel is buffered because
+	// the pruning goroutine doesn't need to block callers.
+	pruningSignals chan struct{}
+	// pruningDone is a channel used to wait for background pruning task completion.
+	pruningDone chan struct{}
+
 	// mutex protects access to critical states, especially `appendedLSN`, as well as the integrity
 	// of inflight log entries. Since indices are monotonic, two parallel log appending operations result in pushing
 	// files into the same directory and breaking the manifest file. Thus, Parallel log entry appending and pruning
 	// are not supported.
 	mutex sync.Mutex
-	// pruningMutex guards `oldestLSN` from parallel access and ensures there's only one pruning task running at the
-	// same time.
-	pruningMutex sync.Mutex
-	// wg tracks the concurrent tasks spawned by the log manager (if any). It is used to ensure all
-	// tasks exit gracefully.
-	wg sync.WaitGroup
 
 	// storageName is the name of the storage the Manager's partition is a member of.
 	storageName string
@@ -100,6 +101,8 @@ func NewManager(
 		consumer:        consumer,
 		positionTracker: positionTracker,
 		notifyQueue:     make(chan error, 1),
+		pruningSignals:  make(chan struct{}, 1),
+		pruningDone:     make(chan struct{}),
 	}
 }
 
@@ -162,6 +165,11 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.oldestLSN, mgr.appendedLSN)
 	}
 
+	go mgr.pruneLogEntries()
+
+	// Trigger the first pruning task to clean up leftovers from prior restarts if any.
+	mgr.pruningSignals <- struct{}{}
+
 	return nil
 }
 
@@ -171,11 +179,15 @@ func (mgr *Manager) AcknowledgePosition(t storage.PositionType, lsn storage.LSN)
 		return fmt.Errorf("acknowledge position: %w", err)
 	}
 
+	// Wake the background pruning task up.
+	select {
+	case mgr.pruningSignals <- struct{}{}:
+	default:
+	}
 	// Alert the outsider. If it has a pending acknowledgement already no action is required.
 	if t.ShouldNotify {
 		mgr.NotifyNewEntries()
 	}
-	mgr.pruneLogEntries()
 	return nil
 }
 
@@ -203,7 +215,7 @@ func (mgr *Manager) Close() error {
 		return fmt.Errorf("log manager has not been initialized")
 	}
 	mgr.cancel()
-	mgr.wg.Wait()
+	<-mgr.pruningDone
 	return nil
 }
 
@@ -301,62 +313,42 @@ func (mgr *Manager) createStateDirectory() error {
 	return nil
 }
 
-// pruneLogEntries schedules a task to prune log entries from the Write-Ahead Log (WAL) that have been committed and are
-// no longer needed. It ensures efficient storage management by removing redundant entries while maintaining the
-// integrity of the log sequence. The method respects the established low-water mark, ensuring no entries that might
-// still be required for transaction consistency are deleted. The pruning task is performed in parallel so that the
-// caller is unblocked instantly. It's guarantee that there's only one pruning task running at the same time. If
-// there's one, a pruning task is initiated.
+// pruneLogEntries prunes log entries from the Write-Ahead Log (WAL) that have been committed and are no longer needed.
+// It ensures efficient storage management by removing redundant entries while maintaining the integrity of the log
+// sequence. The method respects the established low-water mark, ensuring no entries that might still be required for
+// transaction consistency are deleted.
 func (mgr *Manager) pruneLogEntries() {
-	select {
-	case <-mgr.ctx.Done():
-		return
-	default:
-	}
+	defer close(mgr.pruningDone)
 
-	// Try to acquire the pruning mutex. If it cannot be acquired, another pruning task is running.
-	if pruning := mgr.pruningMutex.TryLock(); !pruning {
-		return
-	}
-
-	// Now we have the responsibility to initiate a new pruning task. We defer the Unlock() to ensure:
-	// - No concurrent goroutines can also perform pruning.
-	// - The below goroutine only begins once this function exits.
-	defer mgr.pruningMutex.Unlock()
-
-	mgr.wg.Add(1)
-	go func() {
-		defer mgr.wg.Done()
-
-		// This task acquires the same mutex for the aforementioned task creation. This also guarantees
-		// redundant goroutines (rare, but possible) wait until the prior one finishes.
-		mgr.pruningMutex.Lock()
-		defer mgr.pruningMutex.Unlock()
-
-		// All log entries below the low-water mark can be removed. However, we could like to maintain the
-		// oldest LSN. The log entries must be removed in order and the oldestLSN advances one by one. This
-		// approach is to prevent a log entry from being forgotten if the manager fails to remove it in a prior
-		// session.
-		//
-		//                  ┌── Consumer not acknowledged
-		//                  │       ┌─ Applied til this point
-		//    Can remove    │       │       ┌─ Not consumed nor applied, cannot be removed.
-		//  ◄───────────►   │       │       │
-		// ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐
-		// └┬┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘
-		//  └─ oldestLSN    ▲
-		//                  │
-		//            Low-water mark
-		//
-		for mgr.oldestLSN < mgr.LowWaterMark() {
-			if err := mgr.DeleteLogEntry(mgr.oldestLSN); err != nil {
-				err = fmt.Errorf("deleting log entry: %w", err)
-				mgr.notifyQueue <- err
-				return
+	for {
+		select {
+		case <-mgr.ctx.Done():
+			return
+		case <-mgr.pruningSignals:
+			// All log entries below the low-water mark can be removed. However, we would like to maintain the
+			// oldest LSN. The log entries must be removed in order and the oldestLSN advances one by one. This
+			// approach is to prevent a log entry from being forgotten if the manager fails to remove it in a prior
+			// session.
+			//
+			//                  ┌── Consumer not acknowledged
+			//                  │       ┌─ Applied til this point
+			//    Can remove    │       │       ┌─ Not consumed nor applied, cannot be removed.
+			//  ◄───────────►   │       │       │
+			// ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐ ┌▼┐
+			// └┬┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘
+			//  └─ oldestLSN    ▲
+			//                  │
+			//            Low-water mark
+			//
+			for mgr.oldestLSN < mgr.LowWaterMark() {
+				if err := mgr.DeleteLogEntry(mgr.oldestLSN); err != nil {
+					mgr.notifyQueue <- fmt.Errorf("deleting log entry: %w", err)
+					return
+				}
+				mgr.oldestLSN++
 			}
-			mgr.oldestLSN++
 		}
-	}()
+	}
 }
 
 // AppendedLSN returns the index of latest appended log entry.
@@ -414,10 +406,6 @@ func (mgr *Manager) DeleteTrailingLogEntries(from storage.LSN) (returnedErr erro
 	if from < lowWaterMark {
 		return fmt.Errorf("requested LSN is below the low water mark")
 	}
-
-	// Acquire the pruning mutex first to ensure no concurrent pruning activity
-	mgr.pruningMutex.Lock()
-	defer mgr.pruningMutex.Unlock()
 
 	// Protect critical state with the main mutex.
 	mgr.mutex.Lock()
