@@ -2384,10 +2384,6 @@ func (mgr *TransactionManager) initialize(ctx context.Context) error {
 	if err := mgr.logManager.Initialize(ctx, mgr.appliedLSN); err != nil {
 		return fmt.Errorf("initialize log management: %w", err)
 	}
-	if err := mgr.logManager.AcknowledgePosition(log.AppliedPosition, mgr.appliedLSN); err != nil {
-		return fmt.Errorf("acknowledge applied LSN: %w", err)
-	}
-
 	if err := os.Mkdir(mgr.snapshotsDir(), mode.Directory); err != nil {
 		return fmt.Errorf("create snapshot manager directory: %w", err)
 	}

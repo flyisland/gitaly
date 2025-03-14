@@ -154,6 +154,9 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 		// pruned entry anyway.
 		_ = mgr.positionTracker.Set(t, mgr.oldestLSN-1)
 	})
+	if err := mgr.positionTracker.Set(AppliedPosition.Name, appliedLSN); err != nil {
+		return fmt.Errorf("setting applied position: %w", err)
+	}
 
 	if mgr.consumer != nil && mgr.appendedLSN != 0 {
 		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.oldestLSN, mgr.appendedLSN)
