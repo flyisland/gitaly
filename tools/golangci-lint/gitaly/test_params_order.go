@@ -2,15 +2,14 @@ package main
 
 import (
 	"go/ast"
-	"go/types"
 
 	"golang.org/x/tools/go/analysis"
 )
 
 const testParamsOrder = "test_params_order"
 
-// newTestParamsOrder returns an analyzer to detect parameters of test helper functions. testing.TB arguments should
-// always be passed as first parameter, followed by context.Context.
+// newTestParamsOrder returns an analyzer to detect parameters of test helper functions.
+// testing.TB arguments should always be passed as first parameter, followed by context.Context.
 //
 //   - Bad
 //     func testHelper(paramA string, t *testing.T)
@@ -40,11 +39,6 @@ func newTestParamsOrder() *analysis.Analyzer {
 	}
 }
 
-var (
-	testingTB      = mustFindPackageInterface("testing", "TB")
-	contextContext = mustFindPackageInterface("context", "Context")
-)
-
 func runTestParamsOrder(pass *analysis.Pass) (interface{}, error) {
 	for _, file := range pass.Files {
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -61,49 +55,49 @@ func analyzeTestHelperParams(pass *analysis.Pass, decl *ast.FuncDecl) {
 	params := decl.Type.Params
 	// Either case is fine:
 	// - No param. Out of scope.
-	// - The only param is not testing.TB. Out of scope.
-	// - The only param is testing.TB. This is perfectly fine.
+	// - The only param is not *testing.T or *testing.B. Out of scope.
+	// - The only param is *testing.T or *testing.B. This is perfectly fine.
 	if params.NumFields() <= 1 {
 		return
 	}
 
-	testingTBIndex := -1
+	testingParamIndex := -1
 	contextContextIndex := -1
 	for index, field := range params.List {
 		fieldType := pass.TypesInfo.TypeOf(field.Type)
-		if types.Implements(fieldType, testingTB) {
-			// More than one testing.TB parameters
-			if testingTBIndex != -1 {
+		if isTestingParam(fieldType) {
+			// More than one *testing.T or *testing.B parameter
+			if testingParamIndex != -1 {
 				pass.Report(analysis.Diagnostic{
 					Pos:     params.Pos(),
 					End:     params.End(),
-					Message: "more than one testing.TB parameter",
+					Message: "more than one *testing.T or *testing.B parameter",
 				})
 				return
 			}
-			testingTBIndex = index
+			testingParamIndex = index
 		}
-		if fieldType.Underlying().String() == contextContext.String() {
+		if isContextContext(fieldType) {
 			contextContextIndex = index
 		}
 	}
 
 	switch {
-	case testingTBIndex == -1:
-		// No testing.TB parameter is present. The function is probably not a test helper function.
+	case testingParamIndex == -1:
+		// No *testing.T or *testing.B parameter is present. The function is probably not a test helper function.
 		return
-	case testingTBIndex != 0:
-		testingTBField := params.List[testingTBIndex]
+	case testingParamIndex != 0:
+		testingParamField := params.List[testingParamIndex]
 		pass.Report(analysis.Diagnostic{
-			Pos:     testingTBField.Pos(),
-			End:     testingTBField.End(),
+			Pos:     testingParamField.Pos(),
+			End:     testingParamField.End(),
 			Message: "testing.TB argument should always be passed as first parameter",
 		})
 	case contextContextIndex != -1 && contextContextIndex != 1:
-		testingTBField := params.List[testingTBIndex]
+		contextContextField := params.List[contextContextIndex]
 		pass.Report(analysis.Diagnostic{
-			Pos:     testingTBField.Pos(),
-			End:     testingTBField.End(),
+			Pos:     contextContextField.Pos(),
+			End:     contextContextField.End(),
 			Message: "context.Context should follow after testing.TB",
 		})
 	}

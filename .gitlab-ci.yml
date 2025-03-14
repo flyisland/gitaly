@@ -6,6 +6,7 @@ stages:
   - qa
 
 default:
+  # This image is generated here: https://gitlab.com/gitlab-org/gitlab-build-images/-/blob/master/.gitlab/ci/gitaly.images.yml
   image: registry.gitlab.com/gitlab-org/gitlab-build-images/debian-${DEBIAN_VERSION}-golang-${GO_VERSION}-rust-${RUST_VERSION}:git-2.45
   tags:
     - saas-linux-large-amd64
@@ -16,14 +17,17 @@ default:
   git_default: "default"
   git_minimum: "v2.47.0"
   go_default: "1.23"
-  go_supported: ["1.23"]
+  # Follow the following process to upgrade Go version:
+  # - https://gitlab.com/gitlab-org/gitlab-build-images/-/tree/master#note-regarding-golang-and-fips
+  # - https://docs.gitlab.com/development/go_guide/go_upgrade/#supporting-multiple-go-versions
+  go_supported: ["1.23", "1.24"]
   macos: "macos-14-xcode-15"
   pgbouncer: "1.17.0"
   postgres_default: "14-alpine"
   postgres_minimum: "11-alpine"
   ruby: "3.2"
   rust: "1.73"
-  ubi: "8.6"
+  ubi: "9.5"
 
 variables:
   FF_USE_FASTZIP: "true"
@@ -127,7 +131,7 @@ workflow:
     # Speed up test execution by writing test data into tmpfs instead of onto
     # the underlying disk.
     - chmod 1777 "${TEST_TMP_DIR}"
-    - mount none -t tmpfs -o size=7G "${TEST_TMP_DIR}"
+    - mount none -t tmpfs -o size=10G "${TEST_TMP_DIR}"
     - go version
   script:
     # Create the build directory for the unprivileged user that we're running
@@ -349,6 +353,7 @@ test:fips:
     <<: *test_variables
     CACHE_PREFIX: ubi-${UBI_VERSION}
     TEST_OPTIONS: "-count=1 -timeout=30m" # https://gitlab.com/gitlab-org/gitaly/-/issues/6296
+    GOTESTSUM_OPTIONS: "--rerun-fails-max-failures=24 --rerun-fails=3"
   before_script:
     - *test_before_script
     - dnf install -y python3

@@ -235,6 +235,8 @@ TEST_JSON_REPORT  ?=
 TEST_COVERAGE_DIR ?= ${BUILD_DIR}/cover
 ## Directory where all runtime test data is being created.
 TEST_TMP_DIR      ?=
+## Custom options for gosumtest. These options are different from TEST_OPTIONS
+GOTESTSUM_OPTIONS ?=
 ## Directory where Gitaly should write logs to during test execution.
 TEST_LOG_DIR	  ?=
 TEST_REPO_DIR     := ${BUILD_DIR}/testrepos
@@ -267,7 +269,7 @@ find_go_sources              = $(shell find ${SOURCE_DIR} -type d \( -path "${SO
 run_go_tests = PATH='${SOURCE_DIR}/internal/testhelper/testdata/home/bin:${PATH}' \
     TEST_TMP_DIR='${TEST_TMP_DIR}' \
     TEST_LOG_DIR='${TEST_LOG_DIR}' \
-    ${GOTESTSUM} --rerun-fails --packages $(TEST_PACKAGES) --format ${TEST_FORMAT} --junitfile '${TEST_JUNIT_REPORT}' --jsonfile '${TEST_JSON_REPORT}' -- -ldflags '${GO_LDFLAGS}' -tags '${SERVER_BUILD_TAGS}' ${TEST_OPTIONS} ${TEST_PACKAGES}
+    ${GOTESTSUM} --rerun-fails --packages $(TEST_PACKAGES) --format ${TEST_FORMAT} --junitfile '${TEST_JUNIT_REPORT}' --jsonfile '${TEST_JSON_REPORT}' ${GOTESTSUM_OPTIONS} -- -ldflags '${GO_LDFLAGS}' -tags '${SERVER_BUILD_TAGS}' ${TEST_OPTIONS} ${TEST_PACKAGES}
 
 ## Test options passed to `dlv test`.
 DEBUG_OPTIONS      ?= $(patsubst -%,-test.%,${TEST_OPTIONS})
