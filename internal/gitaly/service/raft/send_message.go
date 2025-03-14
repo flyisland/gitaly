@@ -20,28 +20,9 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 			return structerr.NewInternal("receive error: %w", err)
 		}
 
-		replicaID := req.GetReplicaId()
-		partitionKey := replicaID.GetPartitionKey()
-		authorityName := partitionKey.GetAuthorityName()
-		partitionID := partitionKey.GetPartitionId()
-
-		// The cluster ID protects Gitaly from cross-cluster interactions, which could potentially corrupt the clusters.
-		// This is particularly crucial after disaster recovery so that an identical cluster is restored from backup.
-		if req.GetClusterId() == "" {
-			return structerr.NewInvalidArgument("cluster_id is required")
-		}
-
-		// Let's assume we have a single cluster per node for now.
-		if req.GetClusterId() != s.cfg.Raft.ClusterID {
-			return structerr.NewPermissionDenied("message from wrong cluster: got %q, want %q",
-				req.GetClusterId(), s.cfg.Raft.ClusterID)
-		}
-
-		if authorityName == "" {
-			return structerr.NewInvalidArgument("authority_name is required")
-		}
-		if partitionID == 0 {
-			return structerr.NewInvalidArgument("partition_id is required")
+		replicaID, partitionKey, err := extractRaftMessageReq(req, s)
+		if err != nil {
+			return err
 		}
 
 		storageName := replicaID.GetStorageName()
@@ -71,4 +52,31 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 	}
 
 	return stream.SendAndClose(&gitalypb.RaftMessageResponse{})
+}
+
+func extractRaftMessageReq(req *gitalypb.RaftMessageRequest, s *Server) (*gitalypb.ReplicaID, *gitalypb.PartitionKey, error) {
+	replicaID := req.GetReplicaId()
+	partitionKey := replicaID.GetPartitionKey()
+	authorityName := partitionKey.GetAuthorityName()
+	partitionID := partitionKey.GetPartitionId()
+
+	// The cluster ID protects Gitaly from cross-cluster interactions, which could potentially corrupt the clusters.
+	// This is particularly crucial after disaster recovery so that an identical cluster is restored from backup.
+	if req.GetClusterId() == "" {
+		return nil, nil, structerr.NewInvalidArgument("cluster_id is required")
+	}
+
+	// Let's assume we have a single cluster per node for now.
+	if req.GetClusterId() != s.cfg.Raft.ClusterID {
+		return nil, nil, structerr.NewPermissionDenied("message from wrong cluster: got %q, want %q",
+			req.GetClusterId(), s.cfg.Raft.ClusterID)
+	}
+
+	if authorityName == "" {
+		return nil, nil, structerr.NewInvalidArgument("authority_name is required")
+	}
+	if partitionID == 0 {
+		return nil, nil, structerr.NewInvalidArgument("partition_id is required")
+	}
+	return replicaID, partitionKey, nil
 }
