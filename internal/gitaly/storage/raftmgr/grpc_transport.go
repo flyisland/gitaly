@@ -18,6 +18,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v16/streamio"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -33,6 +34,7 @@ type Transport interface {
 	Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error
 	// Receive receives a Raft message and processes it.
 	Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error
+	SendSnapshot(ctx context.Context, partitionKey *gitalypb.PartitionKey, message raftpb.Message, snapshot *Snapshot) error
 }
 
 // GrpcTransport is a gRPC transport implementation for sending Raft messages across nodes.
@@ -279,4 +281,85 @@ func unpackLogData(msg *gitalypb.RaftEntry, logEntryPath string) error {
 	}
 
 	return nil
+}
+
+// SendSnapshot sends a snapshot of a partition to a specified node in the cluster.
+func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.PartitionKey, message raftpb.Message, snapshot *Snapshot) (returnedErr error) {
+	followerNodeID := message.To
+
+	// Find replica's address as recipient of snapshot
+	replica, err := t.routingTable.Translate(pk, followerNodeID)
+	if err != nil {
+		return fmt.Errorf("translate nodeID %d: %w", followerNodeID, err)
+	}
+
+	addr := replica.GetMetadata().GetAddress()
+
+	// Get raft client of follower node
+	client, returnedErr := t.getRaftClient(ctx, addr)
+	if returnedErr != nil {
+		return returnedErr
+	}
+
+	// Create a client stream
+	stream, err := client.SendSnapshot(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create stream: %w", err)
+	}
+
+	if err := stream.Send(&gitalypb.RaftSnapshotMessageRequest{
+		RaftSnapshotPayload: &gitalypb.RaftSnapshotMessageRequest_RaftMsg{
+			RaftMsg: &gitalypb.RaftMessageRequest{
+				ClusterId: t.cfg.Raft.ClusterID,
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: replica.GetStorageName(),
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: pk.GetAuthorityName(),
+						PartitionId:   pk.GetPartitionId(),
+					},
+				},
+				Message: &message,
+			},
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to send raft message chunk: %w", err)
+	}
+
+	// Send the chunk to the server
+	sw := streamio.NewWriter(func(p []byte) error {
+		select {
+		case <-stream.Context().Done():
+			return fmt.Errorf("context cancelled while sending snapshot: %w", ctx.Err())
+		default:
+			return stream.Send(&gitalypb.RaftSnapshotMessageRequest{
+				RaftSnapshotPayload: &gitalypb.RaftSnapshotMessageRequest_Chunk{
+					Chunk: p,
+				},
+			})
+		}
+	})
+	_, err = io.Copy(sw, snapshot.file)
+	if err != nil {
+		return errors.Join(returnedErr, fmt.Errorf("failed to send chunk: %w", err))
+	}
+
+	if _, err := stream.CloseAndRecv(); err != nil {
+		returnedErr = errors.Join(returnedErr, fmt.Errorf("close stream: %w", err))
+	}
+	return
+}
+
+// getRaftClient returns a Raft client connection for the given address
+func (t *GrpcTransport) getRaftClient(ctx context.Context, addr string) (gitalypb.RaftServiceClient, error) {
+	// get the connection to the node
+	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.Token)
+	if err != nil {
+		return nil, fmt.Errorf("get connection to address %s: %w", addr, err)
+	}
+
+	client := gitalypb.NewRaftServiceClient(conn)
+	if client == nil {
+		return nil, fmt.Errorf("NewRaftServiceClient returned nil")
+	}
+	return client, nil
 }

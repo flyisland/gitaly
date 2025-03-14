@@ -19,11 +19,19 @@ import (
 
 const snapSuffix = ".snap"
 
+// SnapshotFile represents a file used for snapshots.
+type SnapshotFile interface {
+	io.Reader
+	io.Closer
+	io.Writer
+	Name() string
+}
+
 // Snapshot is a structure that holds state about a temporary file that is used
 // to hold a snapshot. By using an intermediate file we avoid holding everything
-// in memory. Index and Term are used to identify when the snapshot was taken.
+// in memory. Index, Term & PartitionID are used to identify when the snapshot was taken.
 type Snapshot struct {
-	file     *os.File
+	file     SnapshotFile
 	metadata SnapshotMetadata
 }
 
