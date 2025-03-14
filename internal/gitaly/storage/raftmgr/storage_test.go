@@ -206,9 +206,7 @@ func TestStorage_InitialState(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
-			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
-		}))
+		cfg := testcfg.Build(t)
 		cfg.Raft.SnapshotDir = testhelper.TempDir(t)
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
@@ -310,9 +308,7 @@ func TestStorage_Entries(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
-			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
-		}))
+		cfg := testcfg.Build(t)
 		cfg.Raft.SnapshotDir = testhelper.TempDir(t)
 
 		rs := setupStorage(t, ctx, cfg)
