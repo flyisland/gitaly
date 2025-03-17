@@ -164,6 +164,7 @@ type RaftManagerFactory func(
 	partitionID storage.PartitionID,
 	raftStorage *Storage,
 	logger logging.Logger,
+	metrics *Metrics,
 ) (*Manager, error)
 
 // DefaultFactory returns a RaftManagerFactory that returns a manager from input raft config
@@ -173,8 +174,9 @@ func DefaultFactory(raftCfg config.Raft) RaftManagerFactory {
 		partitionID storage.PartitionID,
 		raftStorage *Storage,
 		logger logging.Logger,
+		metrics *Metrics,
 	) (*Manager, error) {
-		return NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		return NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics)
 	}
 }
 
@@ -185,6 +187,7 @@ func NewManager(
 	raftCfg config.Raft,
 	raftStorage *Storage,
 	logger logging.Logger,
+	metrics *Metrics,
 	opts ...OptionFunc,
 ) (*Manager, error) {
 	if !raftCfg.Enabled {

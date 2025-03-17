@@ -58,7 +58,7 @@ func TestManager_Initialize(t *testing.T) {
 		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		// Initialize the manager
@@ -104,7 +104,7 @@ func TestManager_Initialize(t *testing.T) {
 		require.NoError(t, err)
 
 		// Configure manager with Raft disabled
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 		require.Nil(t, mgr)
 		require.ErrorContains(t, err, "raft is not enabled")
 	})
@@ -128,7 +128,7 @@ func TestManager_Initialize(t *testing.T) {
 		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// First initialization should succeed
@@ -162,7 +162,7 @@ func TestManager_Initialize(t *testing.T) {
 		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		releaseReady := make(chan struct{})
@@ -197,7 +197,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		err = mgr.Initialize(ctx, 0)
@@ -412,6 +412,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 			raftCfg,
 			raftStorage,
 			logger,
+			NewMetrics(),
 			WithEntryRecorder(recorder),
 			WithOpTimeout(1*time.Nanosecond), // Set a very short timeout to force failure
 		)
@@ -510,7 +511,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		require.NoError(t, err)
 
 		// Configure manager
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		for _, f := range setupFuncs {
@@ -557,7 +558,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		raftStorage, err := NewStorage(raftCfg, logger, env.storageName, env.partitionID, db, env.stagingDir, env.stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
 		require.NoError(t, err)
 
-		recoveryMgr, err := NewManager(env.storageName, env.partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(env.recorder))
+		recoveryMgr, err := NewManager(env.storageName, env.partitionID, raftCfg, raftStorage, logger, NewMetrics(), WithEntryRecorder(env.recorder))
 		require.NoError(t, err)
 
 		// Initialize with the last known LSN
@@ -1050,7 +1051,7 @@ func TestManager_Close(t *testing.T) {
 		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// Initialize the manager
@@ -1091,7 +1092,7 @@ func TestManager_Close(t *testing.T) {
 		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// Close without initializing
@@ -1119,7 +1120,7 @@ func TestManager_Close(t *testing.T) {
 		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		// Initialize the manager
@@ -1177,7 +1178,7 @@ func TestManager_NotImplementedLogMethods(t *testing.T) {
 	raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 	require.NoError(t, err)
 
-	mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+	mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 	require.NoError(t, err)
 
 	// Initialize the manager
