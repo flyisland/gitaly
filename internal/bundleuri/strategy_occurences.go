@@ -2,14 +2,17 @@ package bundleuri
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
 // evaluateRequest is a helper struct to pass along multiple
@@ -22,14 +25,27 @@ type evaluateRequest struct {
 	key  string
 }
 
-func newEvaluateRequest(ctx context.Context, repo *localrepo.Repo, t time.Time, cb StrategyCallbackFn) evaluateRequest {
+func newEvaluateRequest(ctx context.Context, repo *localrepo.Repo, t time.Time, cb StrategyCallbackFn) (evaluateRequest, error) {
+	repoProto, ok := repo.Repository.(*gitalypb.Repository)
+	if !ok {
+		return evaluateRequest{}, errors.New("expecting repo.Repository to be of type *gitalypb.Repository")
+	}
+
+	// A transaction re-writes the relative path to include the
+	// snapshot path. Using the snapshot path will not work here
+	// because we need a common key for each repository, not for
+	// each snapshot.
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		repoProto = tx.OriginalRepository(repoProto)
+	}
+
 	return evaluateRequest{
 		ctx:  ctx,
 		repo: repo,
 		time: t,
 		cb:   cb,
-		key:  bundleRelativePath(repo, defaultBundle),
-	}
+		key:  bundleRelativePath(repoProto, defaultBundle),
+	}, nil
 }
 
 // repositoryState holds the state of a repository's occurrences
@@ -208,10 +224,15 @@ func (s *OccurrenceStrategy) Start(ctx context.Context) (stop func()) {
 
 // Evaluate prepares an evaluateRequest and sends it to the evaluateQueue for further processing.
 func (s *OccurrenceStrategy) Evaluate(ctx context.Context, repo *localrepo.Repo, cb StrategyCallbackFn) error {
+	req, err := newEvaluateRequest(ctx, repo, s.now(), cb)
+	if err != nil {
+		return err
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case s.evaluateQueue <- newEvaluateRequest(ctx, repo, s.now(), cb):
+	case s.evaluateQueue <- req:
 	}
 	return nil
 }
