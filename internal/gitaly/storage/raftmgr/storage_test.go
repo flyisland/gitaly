@@ -88,6 +88,7 @@ func TestStorage_Initialize(t *testing.T) {
 
 		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
 		require.NoError(t, err)
+		defer func() { require.NoError(t, rs.close()) }()
 
 		bootstrapped, err := rs.initialize(ctx, 0)
 		require.NoError(t, err)
@@ -102,8 +103,6 @@ func TestStorage_Initialize(t *testing.T) {
 		require.Equal(t, uint64(0), lastIndex)
 
 		require.Empty(t, rs.consumer.(*mockConsumer).GetNotifications())
-
-		require.NoError(t, rs.close())
 	})
 
 	t.Run("raft storage was bootstrapped, no left-over log entries after restart", func(t *testing.T) {
@@ -121,6 +120,8 @@ func TestStorage_Initialize(t *testing.T) {
 		// Restart the storage using the same state dir
 		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
 		require.NoError(t, err)
+
+		defer func() { require.NoError(t, rs.close()) }()
 
 		// Initialize
 		bootstrapped, err := rs.initialize(ctx, 3)
@@ -150,8 +151,6 @@ func TestStorage_Initialize(t *testing.T) {
 				highWaterMark: storage.LSN(3),
 			},
 		}, rs.consumer.(*mockConsumer).GetNotifications())
-
-		require.NoError(t, rs.close())
 	})
 
 	t.Run("raft storage was bootstrapped, some log entries are left over", func(t *testing.T) {
@@ -168,6 +167,8 @@ func TestStorage_Initialize(t *testing.T) {
 
 		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
 		require.NoError(t, err)
+
+		defer func() { require.NoError(t, rs.close()) }()
 
 		// Initialize with applied LSN 3
 		bootstrapped, err := rs.initialize(ctx, 3)
@@ -194,8 +195,6 @@ func TestStorage_Initialize(t *testing.T) {
 				highWaterMark: storage.LSN(3),
 			},
 		}, rs.consumer.(*mockConsumer).GetNotifications())
-
-		require.NoError(t, rs.close())
 	})
 }
 
@@ -244,6 +243,8 @@ func TestStorage_InitialState(t *testing.T) {
 
 		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, nil, posTracker, NewMetrics())
 		require.NoError(t, err)
+
+		defer func() { require.NoError(t, rs.close()) }()
 
 		_, err = rs.initialize(ctx, 0)
 		require.NoError(t, err)
@@ -654,6 +655,7 @@ func TestStorage_Term(t *testing.T) {
 		// Now restart the storage
 		rs, err = NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
 		require.NoError(t, err)
+		defer func() { require.NoError(t, rs.close()) }()
 
 		_, err = rs.initialize(ctx, 4)
 		require.NoError(t, err)
@@ -972,6 +974,8 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 		require.NoError(t, err)
 		_, err = rs.initialize(ctx, 0)
 		require.NoError(t, err)
+
+		defer func() { require.NoError(t, rs.close()) }()
 
 		require.NoError(t, rs.saveHardState(raftpb.HardState{
 			Term:   1,
