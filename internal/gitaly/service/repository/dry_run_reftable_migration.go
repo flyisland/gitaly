@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -25,7 +26,7 @@ func (s *server) DryRunReftableMigration(
 		return nil, structerr.NewInternal("transaction not found")
 	}
 
-	migrator := migration.NewReftableMigration(1, s.localRepoFactory)
+	migrator := migration.NewReferenceBackendMigration(1, git.ReferenceBackendReftables, s.localRepoFactory, nil)
 
 	logger := log.FromContext(ctx)
 	t := time.Now()

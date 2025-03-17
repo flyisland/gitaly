@@ -1,14 +1,12 @@
 package migration
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
@@ -27,13 +25,7 @@ import (
 func TestReftableMigration(t *testing.T) {
 	t.Parallel()
 
-	testhelper.NewFeatureSets(
-		featureflag.ReftableMigration,
-	).Run(t, testReftableMigration)
-}
-
-func testReftableMigration(t *testing.T, ctx context.Context) {
-	t.Parallel()
+	ctx := testhelper.Context(t)
 
 	type setupData struct {
 		repo     *gitalypb.Repository
@@ -161,7 +153,12 @@ func testReftableMigration(t *testing.T, ctx context.Context) {
 				logger,
 				NewMetrics(),
 				storageName,
-				[]Migration{NewReftableMigration(1, localRepoFactory)},
+				[]Migration{NewReferenceBackendMigration(
+					1,
+					gittest.FilesOrReftables(git.ReferenceBackendReftables, git.ReferenceBackendFiles),
+					localRepoFactory,
+					nil,
+				)},
 			)
 
 			done := make(chan struct{})
@@ -196,11 +193,9 @@ func testReftableMigration(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			require.NoError(t, txn.Rollback(ctx))
 
-			expectedBackend := testhelper.EnabledOrDisabledFlag(
-				ctx,
-				featureflag.ReftableMigration,
+			expectedBackend := gittest.FilesOrReftables(
 				git.ReferenceBackendReftables,
-				backend,
+				git.ReferenceBackendFiles,
 			)
 
 			repo = localrepo.NewTestRepo(t, cfg, data.repo)
