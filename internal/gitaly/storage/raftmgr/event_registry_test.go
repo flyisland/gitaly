@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
 
 func TestRegistry_Untrack(t *testing.T) {
@@ -16,13 +17,20 @@ func TestRegistry_Untrack(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		action         func(*testing.T, *Registry) []*Waiter
+		action         func(*testing.T, *Registry, *Metrics) []*Waiter
 		expectedEvents []EventID
 	}{
 		{
 			name: "Register and Remove single event",
-			action: func(t *testing.T, r *Registry) []*Waiter {
+			action: func(t *testing.T, r *Registry, metrics *Metrics) []*Waiter {
 				waiter := r.Register()
+
+				testhelper.RequirePromMetrics(t, metrics, `
+                                	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                                	# TYPE gitaly_raft_proposal_queue_depth gauge
+                                	gitaly_raft_proposal_queue_depth{storage="test-storage"} 1
+				`)
+
 				require.True(t, r.Untrack(waiter.ID), "event should not be untracked beforehand")
 				return []*Waiter{waiter}
 			},
@@ -30,9 +38,16 @@ func TestRegistry_Untrack(t *testing.T) {
 		},
 		{
 			name: "Register multiple events and remove in order",
-			action: func(t *testing.T, r *Registry) []*Waiter {
+			action: func(t *testing.T, r *Registry, metrics *Metrics) []*Waiter {
 				w1 := r.Register()
 				w2 := r.Register()
+
+				testhelper.RequirePromMetrics(t, metrics, `
+                                	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                                	# TYPE gitaly_raft_proposal_queue_depth gauge
+                                	gitaly_raft_proposal_queue_depth{storage="test-storage"} 2
+				`)
+
 				require.True(t, r.Untrack(w1.ID), "event should not be untracked beforehand")
 				require.True(t, r.Untrack(w2.ID), "event should not be untracked beforehand")
 				return []*Waiter{w1, w2}
@@ -41,9 +56,16 @@ func TestRegistry_Untrack(t *testing.T) {
 		},
 		{
 			name: "Register multiple events and remove out of order",
-			action: func(t *testing.T, r *Registry) []*Waiter {
+			action: func(t *testing.T, r *Registry, metrics *Metrics) []*Waiter {
 				w1 := r.Register()
 				w2 := r.Register()
+
+				testhelper.RequirePromMetrics(t, metrics, `
+                                	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                                	# TYPE gitaly_raft_proposal_queue_depth gauge
+                                	gitaly_raft_proposal_queue_depth{storage="test-storage"} 2
+				`)
+
 				require.True(t, r.Untrack(w2.ID), "event should not be untracked beforehand") // Removing the second one first
 				require.True(t, r.Untrack(w1.ID), "event should not be untracked beforehand") // Then the first one
 				return []*Waiter{w1, w2}
@@ -52,7 +74,7 @@ func TestRegistry_Untrack(t *testing.T) {
 		},
 		{
 			name: "Remove non-existent event",
-			action: func(t *testing.T, r *Registry) []*Waiter {
+			action: func(t *testing.T, r *Registry, _ *Metrics) []*Waiter {
 				require.False(t, r.Untrack(1234), "event should not be tracked")
 
 				c := make(chan error, 1)
@@ -67,8 +89,18 @@ func TestRegistry_Untrack(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			registry := NewRegistry()
-			waiters := tc.action(t, registry)
+			metrics := NewMetrics()
+			raftMetrics := metrics.Scope("test-storage")
+			registry := NewRegistry(raftMetrics)
+
+			// Assert initial queue depth is zero
+			testhelper.RequirePromMetrics(t, metrics, `
+                                # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                                # TYPE gitaly_raft_proposal_queue_depth gauge
+                                gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+			`)
+
+			waiters := tc.action(t, registry, metrics)
 
 			for _, waiter := range waiters {
 				select {
@@ -79,16 +111,40 @@ func TestRegistry_Untrack(t *testing.T) {
 				}
 				require.Contains(t, tc.expectedEvents, waiter.ID)
 			}
+
+			// Verify queue depth is 0 at the end of the test
+			testhelper.RequirePromMetrics(t, metrics, `
+                                # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                                # TYPE gitaly_raft_proposal_queue_depth gauge
+                                gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+			`)
 		})
 	}
 }
 
 func TestRegistry_AssignLSN(t *testing.T) {
 	t.Parallel()
-	registry := NewRegistry()
+
+	metrics := NewMetrics()
+	raftMetrics := metrics.Scope("test-storage")
+	registry := NewRegistry(raftMetrics)
+
+	// Assert initial queue depth is zero
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+	`)
 
 	waiter1 := registry.Register()
 	waiter2 := registry.Register()
+
+	// Assert queue depth has increased after registering waiters
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 2
+	`)
 
 	// Assign LSN to the registered waiters
 	registry.AssignLSN(waiter1.ID, 10)
@@ -98,15 +154,50 @@ func TestRegistry_AssignLSN(t *testing.T) {
 	// Verify that LSNs are assigned correctly
 	require.Equal(t, storage.LSN(10), waiter1.LSN)
 	require.Equal(t, storage.LSN(20), waiter2.LSN)
+
+	// Assigning LSN should not change queue depth
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 2
+	`)
+
+	// Clean up
+	registry.Untrack(waiter1.ID)
+	registry.Untrack(waiter2.ID)
+
+	// Verify queue depth is back to zero
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+	`)
 }
 
 func TestRegistry_UntrackSince(t *testing.T) {
 	t.Parallel()
-	registry := NewRegistry()
+
+	metrics := NewMetrics()
+	raftMetrics := metrics.Scope("test-storage")
+	registry := NewRegistry(raftMetrics)
+
+	// Assert initial queue depth is zero
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+	`)
 
 	waiter1 := registry.Register()
 	waiter2 := registry.Register()
 	waiter3 := registry.Register()
+
+	// Assert queue depth has increased after registering waiters
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 3
+	`)
 
 	// Assign LSNs
 	registry.AssignLSN(waiter1.ID, 10)
@@ -116,7 +207,14 @@ func TestRegistry_UntrackSince(t *testing.T) {
 	// Call UntrackSince with threshold LSN
 	registry.UntrackSince(11, fmt.Errorf("a random error"))
 
-	// Waiters with LSN > 10 should be obsoleted
+	// After untracking since 11, we should have only waiter1 remaining
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 1
+	`)
+
+	// Waiters with LSN >= 11 should be obsoleted
 	select {
 	case <-waiter1.C:
 		t.Fatalf("Expected channel for event %d to remain open", waiter1.ID)
@@ -144,23 +242,54 @@ func TestRegistry_UntrackSince(t *testing.T) {
 	// Waiter2 and Waiter3 should not be tracked anymore
 	require.False(t, registry.Untrack(waiter2.ID))
 	require.False(t, registry.Untrack(waiter3.ID))
+
+	// After untracking waiter1, queue should be empty
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+	`)
 }
 
 func TestRegistry_UntrackAll(t *testing.T) {
 	t.Parallel()
-	registry := NewRegistry()
+
+	metrics := NewMetrics()
+	raftMetrics := metrics.Scope("test-storage")
+	registry := NewRegistry(raftMetrics)
+
+	// Assert initial queue depth is zero
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+	`)
 
 	waiter1 := registry.Register()
 	waiter2 := registry.Register()
 	waiter3 := registry.Register()
+
+	// Assert queue depth has increased after registering waiters
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 3
+	`)
 
 	// Assign LSNs
 	registry.AssignLSN(waiter1.ID, 10)
 	registry.AssignLSN(waiter2.ID, 11)
 	registry.AssignLSN(waiter3.ID, 12)
 
-	// Call UntrackSince with threshold LSN
+	// Call UntrackAll
 	registry.UntrackAll(fmt.Errorf("a random error"))
+
+	// Queue should be empty after UntrackAll
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+	`)
 
 	for _, w := range []*Waiter{waiter1, waiter2, waiter3} {
 		select {
@@ -182,23 +311,43 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	const numEvents = 100
 
-	registry := NewRegistry()
+	metrics := NewMetrics()
+	raftMetrics := metrics.Scope("test-storage")
+	registry := NewRegistry(raftMetrics)
+
+	// Assert initial queue depth is zero
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+	`)
+
 	waiters := make(chan EventID, numEvents)
 	var producerWg, consumerWg sync.WaitGroup
 
 	// Register events concurrently
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		producerWg.Add(1)
 		go func() {
 			defer producerWg.Done()
-			for i := 0; i < numEvents; i++ {
+			for range numEvents / 10 {
 				waiters <- registry.Register().ID
 			}
 		}()
 	}
 
+	// Wait for all registrations to complete
+	producerWg.Wait()
+
+	// There should be numEvents in the queue after registration
+	testhelper.RequirePromMetrics(t, metrics, fmt.Sprintf(`
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} %d
+	`, numEvents))
+
 	// Untrack events concurrently
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		consumerWg.Add(1)
 		go func() {
 			defer consumerWg.Done()
@@ -208,9 +357,15 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 		}()
 	}
 
-	producerWg.Wait()
 	close(waiters)
 	consumerWg.Wait()
 
 	require.Emptyf(t, registry.waiters, "waiter list must be empty")
+
+	// After all events are registered and then untracked, queue depth should be 0
+	testhelper.RequirePromMetrics(t, metrics, `
+        	# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        	# TYPE gitaly_raft_proposal_queue_depth gauge
+        	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
+	`)
 }

@@ -22,12 +22,14 @@ type Registry struct {
 	mu          sync.Mutex
 	nextEventID EventID
 	waiters     map[EventID]*Waiter
+	metrics     RaftMetrics
 }
 
 // NewRegistry initializes and returns a new instance of Registry.
-func NewRegistry() *Registry {
+func NewRegistry(metrics RaftMetrics) *Registry {
 	return &Registry{
 		waiters: make(map[EventID]*Waiter),
+		metrics: metrics,
 	}
 }
 
@@ -44,6 +46,7 @@ func (r *Registry) Register() *Waiter {
 		C:  make(chan error, 1),
 	}
 	r.waiters[r.nextEventID] = waiter
+	r.updateQueueDepth()
 
 	return waiter
 }
@@ -73,11 +76,14 @@ func (r *Registry) UntrackSince(lsn storage.LSN, err error) {
 			toRemove = append(toRemove, id)
 		}
 	}
+
 	for _, id := range toRemove {
 		r.waiters[id].C <- err
 		close(r.waiters[id].C)
 		delete(r.waiters, id)
 	}
+
+	r.updateQueueDepth()
 }
 
 // UntrackAll untracks all events. The input error is assigned to impacted events.
@@ -90,6 +96,8 @@ func (r *Registry) UntrackAll(err error) {
 		close(w.C)
 	}
 	clear(r.waiters)
+
+	r.updateQueueDepth()
 }
 
 // Untrack closes the channel associated with a given EventID and removes the waiter from the registry once the event is
@@ -106,5 +114,13 @@ func (r *Registry) Untrack(id EventID) bool {
 	// Close the channel to notify any goroutines waiting on this event.
 	close(waiter.C)
 	delete(r.waiters, id)
+
+	r.updateQueueDepth()
 	return true
+}
+
+func (r *Registry) updateQueueDepth() {
+	if r.metrics.proposalQueueDepth != nil {
+		r.metrics.proposalQueueDepth.Set(float64(len(r.waiters)))
+	}
 }

@@ -205,6 +205,8 @@ func NewManager(
 		"raft.partition": partitionID,
 	})
 
+	scopedMetrics := metrics.Scope(authorityName)
+
 	return &Manager{
 		authorityName: authorityName,
 		ptnID:         partitionID,
@@ -212,7 +214,7 @@ func NewManager(
 		options:       options,
 		storage:       raftStorage,
 		logger:        logger,
-		registry:      NewRegistry(),
+		registry:      NewRegistry(scopedMetrics),
 		syncer:        safe.NewSyncer(),
 		leadership:    NewLeadership(),
 		ready:         &ready{c: make(chan error, 1)},
