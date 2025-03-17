@@ -285,7 +285,7 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 	} else {
 		// For restarts, set Applied to latest committed LSN
 		// WAL considers entries committed once they are in the Raft log
-		config.Applied = uint64(mgr.storage.committedLSN)
+		config.Applied = uint64(mgr.storage.readCommittedLSN())
 		mgr.node = raft.RestartNode(config)
 	}
 
@@ -429,7 +429,7 @@ func (mgr *Manager) AcknowledgePosition(t storage.PositionType, lsn storage.LSN)
 
 // AppendedLSN returns the LSN of the most recently appended log entry.
 func (mgr *Manager) AppendedLSN() storage.LSN {
-	return mgr.storage.committedLSN
+	return mgr.storage.readCommittedLSN()
 }
 
 // LowWaterMark returns the earliest LSN that should be retained.
