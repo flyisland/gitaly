@@ -468,8 +468,12 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		}
 
 		txMiddleware = server.TransactionMiddleware{
-			UnaryInterceptor:  storagemgr.NewUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
-			StreamInterceptor: storagemgr.NewStreamInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
+			UnaryInterceptors: []grpc.UnaryServerInterceptor{
+				storagemgr.NewUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
+			},
+			StreamInterceptors: []grpc.StreamServerInterceptor{
+				storagemgr.NewStreamInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
+			},
 		}
 	} else {
 		storagePaths := make([]string, len(cfg.Storages))
@@ -518,8 +522,12 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 
 			recoveryMiddleware := storagemgr.NewTransactionRecoveryMiddleware(protoregistry.GitalyProtoPreregistered, nodeMgr)
 			txMiddleware = server.TransactionMiddleware{
-				UnaryInterceptor:  recoveryMiddleware.UnaryServerInterceptor(),
-				StreamInterceptor: recoveryMiddleware.StreamServerInterceptor(),
+				UnaryInterceptors: []grpc.UnaryServerInterceptor{
+					recoveryMiddleware.UnaryServerInterceptor(),
+				},
+				StreamInterceptors: []grpc.StreamServerInterceptor{
+					recoveryMiddleware.StreamServerInterceptor(),
+				},
 			}
 		}
 	}

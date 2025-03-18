@@ -188,12 +188,16 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 	var txMiddleware server.TransactionMiddleware
 	if deps.GetNode() != nil {
 		txMiddleware = server.TransactionMiddleware{
-			UnaryInterceptor: storagemgr.NewUnaryInterceptor(
-				deps.Logger, protoregistry.GitalyProtoPreregistered, deps.GetTransactionRegistry(), deps.GetNode(), deps.GetLocator(),
-			),
-			StreamInterceptor: storagemgr.NewStreamInterceptor(
-				deps.Logger, protoregistry.GitalyProtoPreregistered, deps.GetTransactionRegistry(), deps.GetNode(), deps.GetLocator(),
-			),
+			UnaryInterceptors: []grpc.UnaryServerInterceptor{
+				storagemgr.NewUnaryInterceptor(
+					deps.Logger, protoregistry.GitalyProtoPreregistered, deps.GetTransactionRegistry(), deps.GetNode(), deps.GetLocator(),
+				),
+			},
+			StreamInterceptors: []grpc.StreamServerInterceptor{
+				storagemgr.NewStreamInterceptor(
+					deps.Logger, protoregistry.GitalyProtoPreregistered, deps.GetTransactionRegistry(), deps.GetNode(), deps.GetLocator(),
+				),
+			},
 		}
 	}
 

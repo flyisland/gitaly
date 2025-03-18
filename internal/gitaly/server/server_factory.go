@@ -24,12 +24,12 @@ type GitalyServerFactory struct {
 }
 
 // TransactionMiddleware collects transaction middleware into a single struct that can be
-// provided to enable transactions.
+// provided to enable transactions and transaction related logic.
 type TransactionMiddleware struct {
-	// UnaryInterceptor is the unary RPC interceptor that handles transaction logic.
-	UnaryInterceptor grpc.UnaryServerInterceptor
-	// StreamInterceptor is the stream RPC interceptor that handles transaction logic.
-	StreamInterceptor grpc.StreamServerInterceptor
+	// UnaryInterceptors are the unary RPC interceptors that handles transaction logic.
+	UnaryInterceptors []grpc.UnaryServerInterceptor
+	// StreamInterceptor are the stream RPC interceptors that handles transaction logic.
+	StreamInterceptors []grpc.StreamServerInterceptor
 }
 
 // NewGitalyServerFactory allows to create and start secure/insecure 'grpc.Server's.
