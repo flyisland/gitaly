@@ -55,21 +55,80 @@ func (r *EntryRecorder) Record(fromRaft bool, lsn storage.LSN, entry *gitalypb.L
 	})
 }
 
-// Offset adjusts the log sequence number (LSN) by accounting for internal Raft entries that may occupy slots.
-func (r *EntryRecorder) Offset(lsn storage.LSN) storage.LSN {
+// OffsetRight adjusts the log sequence number (LSN) by excluding internal Raft entries occupying LSN slots.
+func (r *EntryRecorder) OffsetRight(lsn storage.LSN) storage.LSN {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// R denotes an internal log entry.
+	// A denotes an application-issued log entry.
+	//
+	// R R
+	// Offset 0 -> 2
+	// Offset 1 -> 3
+	//
+	// A R
+	// Offset 0 -> 0
+	// Offset 1 -> 1
+	// Offset 2 -> 3
+	//
+	// R A
+	// Offset 0 -> 1
+	// Offset 1 -> 2
+	// Offset 2 -> 2
+	// Offset 3 -> 3
+	//
+	// A A
+	// Offset 0 -> 0
+	// Offset 1 -> 1
+	// Offset 2 -> 2
+	// Offset 3 -> 3
 	offset := lsn
 	for _, itm := range r.Items {
 		if itm.FromRaft {
 			offset++
-		}
-		if itm.LSN >= offset {
-			break
+		} else {
+			if lsn <= 1 {
+				break
+			}
+			lsn--
 		}
 	}
 	return offset
+}
+
+// OffsetLeft adjusts the log sequence number (LSN) by including internal Raft entries occupying LSN slots.
+func (r *EntryRecorder) OffsetLeft(lsn storage.LSN) storage.LSN {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// R denotes an internal log entry.
+	// A denotes an application-issued log entry.
+	//
+	// R R A
+	// Offset 1 -> 0
+	// Offset 2 -> 0
+	// Offset 3 -> 1
+	// Offset 4 -> 2
+	//
+	// A R A
+	// Offset 1 -> 1
+	// Offset 2 -> 1
+	// Offset 3 -> 2
+	// Offset 4 -> 3
+	offset := storage.LSN(0)
+	for _, itm := range r.Items {
+		if itm.FromRaft {
+			offset++
+		}
+		if itm.LSN >= lsn {
+			break
+		}
+	}
+	if offset >= lsn {
+		return 0
+	}
+	return lsn - offset
 }
 
 // Metadata returns metadata of an entry if it exists.
