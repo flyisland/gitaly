@@ -187,17 +187,26 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 
 	var txMiddleware server.TransactionMiddleware
 	if deps.GetNode() != nil {
+		unaryInterceptors := []grpc.UnaryServerInterceptor{
+			storagemgr.NewUnaryInterceptor(
+				deps.Logger, protoregistry.GitalyProtoPreregistered, deps.GetTransactionRegistry(), deps.GetNode(), deps.GetLocator(),
+			),
+		}
+		streamInterceptors := []grpc.StreamServerInterceptor{
+			storagemgr.NewStreamInterceptor(
+				deps.Logger, protoregistry.GitalyProtoPreregistered, deps.GetTransactionRegistry(), deps.GetNode(), deps.GetLocator(),
+			),
+		}
+
+		if gsd.transactionInterceptorsFn != nil {
+			unary, stream := gsd.transactionInterceptorsFn(deps.GetLogger(), deps.GetNode(), deps.GetRepositoryFactory())
+			unaryInterceptors = append(unaryInterceptors, unary...)
+			streamInterceptors = append(streamInterceptors, stream...)
+		}
+
 		txMiddleware = server.TransactionMiddleware{
-			UnaryInterceptors: []grpc.UnaryServerInterceptor{
-				storagemgr.NewUnaryInterceptor(
-					deps.Logger, protoregistry.GitalyProtoPreregistered, deps.GetTransactionRegistry(), deps.GetNode(), deps.GetLocator(),
-				),
-			},
-			StreamInterceptors: []grpc.StreamServerInterceptor{
-				storagemgr.NewStreamInterceptor(
-					deps.Logger, protoregistry.GitalyProtoPreregistered, deps.GetTransactionRegistry(), deps.GetNode(), deps.GetLocator(),
-				),
-			},
+			UnaryInterceptors:  unaryInterceptors,
+			StreamInterceptors: streamInterceptors,
 		}
 	}
 
@@ -277,33 +286,34 @@ func registerHealthServerIfNotRegistered(srv *grpc.Server) {
 }
 
 type gitalyServerDeps struct {
-	disablePraefect       bool
-	logger                log.Logger
-	conns                 *client.Pool
-	locator               storage.Locator
-	txMgr                 transaction.Manager
-	hookMgr               hook.Manager
-	gitlabClient          gitlab.Client
-	gitCmdFactory         gitcmd.CommandFactory
-	backchannelReg        *backchannel.Registry
-	catfileCache          catfile.Cache
-	diskCache             cache.Cache
-	packObjectsCache      streamcache.Cache
-	packObjectsLimiter    limiter.Limiter
-	limitHandler          *limithandler.LimiterMiddleware
-	repositoryCounter     *counter.RepositoryCounter
-	updaterWithHooks      *updateref.UpdaterWithHooks
-	housekeepingManager   housekeepingmgr.Manager
-	backupSink            *backup.Sink
-	backupLocator         backup.Locator
-	signingKey            string
-	transactionRegistry   *storagemgr.TransactionRegistry
-	procReceiveRegistry   *hook.ProcReceiveRegistry
-	bundleURIManager      *bundleuri.GenerationManager
-	bundleURISink         *bundleuri.Sink
-	bundleURIStrategy     bundleuri.GenerationStrategy
-	localRepoFactory      localrepo.Factory
-	MigrationStateManager migration.StateManager
+	disablePraefect           bool
+	logger                    log.Logger
+	conns                     *client.Pool
+	locator                   storage.Locator
+	txMgr                     transaction.Manager
+	hookMgr                   hook.Manager
+	gitlabClient              gitlab.Client
+	gitCmdFactory             gitcmd.CommandFactory
+	backchannelReg            *backchannel.Registry
+	catfileCache              catfile.Cache
+	diskCache                 cache.Cache
+	packObjectsCache          streamcache.Cache
+	packObjectsLimiter        limiter.Limiter
+	limitHandler              *limithandler.LimiterMiddleware
+	repositoryCounter         *counter.RepositoryCounter
+	updaterWithHooks          *updateref.UpdaterWithHooks
+	housekeepingManager       housekeepingmgr.Manager
+	backupSink                *backup.Sink
+	backupLocator             backup.Locator
+	signingKey                string
+	transactionRegistry       *storagemgr.TransactionRegistry
+	procReceiveRegistry       *hook.ProcReceiveRegistry
+	bundleURIManager          *bundleuri.GenerationManager
+	bundleURISink             *bundleuri.Sink
+	bundleURIStrategy         bundleuri.GenerationStrategy
+	localRepoFactory          localrepo.Factory
+	MigrationStateManager     migration.StateManager
+	transactionInterceptorsFn func(log.Logger, storage.Node, localrepo.Factory) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor)
 }
 
 func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Context, cfg config.Cfg) *service.Dependencies {
@@ -698,6 +708,17 @@ func WithProcReceiveRegistry(registry *hook.ProcReceiveRegistry) GitalyServerOpt
 func WithRepositoryFactory(repoFactory localrepo.Factory) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
 		deps.localRepoFactory = repoFactory
+		return deps
+	}
+}
+
+// WithTransactionInterceptors allows for setting additional transaction middlewares to the server via
+// a callback function.
+func WithTransactionInterceptors(
+	fn func(log.Logger, storage.Node, localrepo.Factory) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor),
+) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.transactionInterceptorsFn = fn
 		return deps
 	}
 }
