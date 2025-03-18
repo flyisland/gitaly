@@ -118,22 +118,9 @@ message LogEntry {
     };
   }
 
-  // Metadata contains some metadata data of the log entry.
-  message Metadata {
-    // raft_term is the term sequence of the Raft group finalized this
-    // log entry.
-    uint64 raft_term = 1;
-    // raft_type is the type of sequence. It's essentially equal to
-    // raftpb.EntryType.
-    uint64 raft_type = 2;
-  }
-
   // operations is an ordered list of operations to run in order to apply
   // this log entry.
   repeated Operation operations = 10;
-
-  // metadata contains some extra information, mostly Raft-related metadata.
-  Metadata metadata = 11;
 }
 
 // LSN serializes a log sequence number. It's used for storing a partition's

@@ -131,19 +131,6 @@ func (r *EntryRecorder) OffsetLeft(lsn storage.LSN) storage.LSN {
 	return lsn - offset
 }
 
-// Metadata returns metadata of an entry if it exists.
-func (r *EntryRecorder) Metadata(lsn storage.LSN) *gitalypb.LogEntry_Metadata {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, itm := range r.Items {
-		if itm.LSN == lsn {
-			return itm.Entry.GetMetadata()
-		}
-	}
-	return nil
-}
-
 // Latest returns the latest recorded LSN.
 func (r *EntryRecorder) Latest() storage.LSN {
 	r.mu.Lock()
