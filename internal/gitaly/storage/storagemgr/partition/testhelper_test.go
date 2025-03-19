@@ -1185,11 +1185,11 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.NoError(t, err)
 
 			tx := transaction.(*Transaction)
-			expectedSnapshotLSN := step.ExpectedSnapshotLSN
+			actualSnapshotLSN := tx.SnapshotLSN()
 			if testhelper.IsRaftEnabled() {
-				expectedSnapshotLSN = raftEntryRecorder.Offset(expectedSnapshotLSN)
+				actualSnapshotLSN = raftEntryRecorder.OffsetLeft(actualSnapshotLSN)
 			}
-			require.Equalf(t, expectedSnapshotLSN, tx.SnapshotLSN(), "mismatched ExpectedSnapshotLSN")
+			require.Equalf(t, step.ExpectedSnapshotLSN, actualSnapshotLSN, "mismatched ExpectedSnapshotLSN")
 			require.NotEmpty(t, tx.Root(), "empty Root")
 			require.Contains(t, tx.Root(), transactionManager.snapshotsDir())
 
@@ -1466,7 +1466,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		case ConsumerAcknowledge:
 			lsn := step.LSN
 			if testhelper.IsRaftEnabled() {
-				lsn = raftEntryRecorder.Offset(lsn)
+				lsn = raftEntryRecorder.OffsetRight(lsn)
 			}
 			require.NoError(t, transactionManager.logManager.AcknowledgePosition(log.ConsumerPosition, lsn))
 		case RepositoryAssertion:
@@ -1550,7 +1550,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			if exist {
 				// If expected applied LSN is present, offset expected LSN.
 				appliedLSN := appliedLSN.(*gitalypb.LSN)
-				tc.expectedState.Database[string(keyAppliedLSN)] = raftEntryRecorder.Offset(storage.LSN(appliedLSN.GetValue())).ToProto()
+				tc.expectedState.Database[string(keyAppliedLSN)] = raftEntryRecorder.OffsetRight(storage.LSN(appliedLSN.GetValue())).ToProto()
 			} else {
 				// Otherwise, the test expects no applied log entry in cases such as invalid transactions.
 				// Regardless, raft log entries are applied successfully.
@@ -1659,7 +1659,7 @@ func modifyDirectoryStateForRaft(t *testing.T, expectedDirectory testhelper.Dire
 		lsn, err := strconv.ParseUint(lsnStr, 10, 64)
 		require.NoError(t, err)
 
-		offsetLSN := recorder.Offset(storage.LSN(lsn))
+		offsetLSN := recorder.OffsetRight(storage.LSN(lsn))
 		offsetPath := strings.Replace(path, fmt.Sprintf("/%s", lsnStr), fmt.Sprintf("/%s", offsetLSN.String()), 1)
 		newExpectedDirectory[offsetPath] = state
 		newExpectedDirectory[fmt.Sprintf("/wal/%s/RAFT", offsetLSN)] = testhelper.DirectoryEntry{

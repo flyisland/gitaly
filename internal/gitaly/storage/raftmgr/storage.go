@@ -350,6 +350,13 @@ func (s *Storage) Term(i uint64) (uint64, error) {
 	return raftEntry.Term, nil
 }
 
+func (s *Storage) readCommittedLSN() storage.LSN {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	return s.committedLSN
+}
+
 // setKey marshals and stores a given protocol buffer message into the database under the given key.
 func (s *Storage) setKey(key []byte, value []byte) error {
 	return s.database.Update(func(tx keyvalue.ReadWriter) error {
