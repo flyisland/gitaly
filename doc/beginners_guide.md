@@ -239,35 +239,35 @@ Gitaly listens on a UNIX socket when operated locally using GDK. You can use too
 [`grpcurl`](https://github.com/fullstorydev/grpcurl) and [`grpcgui`](https://github.com/fullstorydev/grpcui)
 to invoke the gRPC endpoints of Gitaly locally:
 
+1. Generate a Protoset file at `_build/protoset/gitaly.protoset`:
+
+   ```shell
+   make build-protoset
+   ```
+
 1. Identify the address of the socket:
    - If using Praefect, the address is the value of the `socket_path` field in one of the `gitaly/gitaly-*.praefect.toml` files.
    - Otherwise, the address is the value of the `socket_path` field in the `gitaly/gitaly.config.toml` file.
-1. Validate the address by performing a test request. For example, you can [list services](https://github.com/fullstorydev/grpcurl#listing-services)
-   provided by the server:
 
-   ```shell
-   $ grpcurl -plaintext -unix <socket address> list
-   
-   gitaly.BlobService
-   gitaly.CleanupService
-   gitaly.CommitService
-   gitaly.ConflictsService
-   gitaly.DiffService
-   gitaly.HookService
-   gitaly.InternalGitaly
-   gitaly.NamespaceService
-   gitaly.ObjectPoolService
-   gitaly.OperationService
-   gitaly.RefService
-   gitaly.RemoteService
-   gitaly.RepositoryService
-   gitaly.SSHService
-   gitaly.ServerService
-   gitaly.SmartHTTPService
-   grpc.health.v1.Health
-   grpc.reflection.v1.ServerReflection
-   grpc.reflection.v1alpha.ServerReflection
-   ```
+You can now invoke RPCs with `grpcurl` or open a web GUI with `grpcui`:
+
+- Invoke RPCs with `grpcurl`:
+
+  ```shell
+  grpcurl -plaintext -unix -protoset <protoset path> <socket address> <command>
+  ```
+
+- Open a web GUI by using `grpcui`:
+
+  ```shell
+  grpcui -plaintext -unix -protoset <protoset path> <socket address>
+  ```
+
+> [!note]
+> The latest versions of `grpcui` and `grpcurl` have issues when connecting to Unix sockets. Either:
+>
+> - [Workaround the issues](https://github.com/fullstorydev/grpcui/issues/375).
+> - Use an older version.
 
 ## Rails tests
 

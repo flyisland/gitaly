@@ -567,6 +567,18 @@ build-proto-docs: ${PROTOC} ${DEPENDENCY_DIR}/raftpb ${PROTOC_GEN_DOC}
 	${Q}rm -rf ${BUILD_DIR}/proto-docs && mkdir -p ${BUILD_DIR}/proto-docs
 	${Q}${PROTOC} ${PROTOC_INCLUDE} --doc_out=${BUILD_DIR}/proto-docs --doc_opt=html,index.html --plugin=protoc-gen-doc=${PROTOC_GEN_DOC} ${SOURCE_DIR}/proto/*.proto
 
+.PHONY: build-protoset
+## Build a compiled Protoset file which can be used with grpcui/grpcurl.
+## https://github.com/fullstorydev/grpcui?tab=readme-ov-file#protoset-files
+## Example usage: grpcui -plaintext -unix -protoset <gitaly.protoset> <gitaly.socket>
+build-protoset: proto
+	${Q}rm -rf ${BUILD_DIR}/protoset && mkdir -p ${BUILD_DIR}/protoset
+	${Q}${PROTOC} \
+		--descriptor_set_out=${BUILD_DIR}/protoset/gitaly.protoset \
+		--include_imports \
+		${PROTOC_INCLUDE} \
+		${SOURCE_DIR}/proto/*.proto
+
 .PHONY: govulncheck
 ## pipefail is set in the SHELL config, but we don't care about govulncheck's exit code here.
 govulncheck: ${GOVULNCHECK}
