@@ -86,12 +86,23 @@ def generate_sources(output_dir, version)
   proto_output_dir = File.absolute_path(File.join(output_dir, 'ruby', 'proto', 'gitaly'))
 
   FileUtils.mkdir_p(proto_output_dir)
+  raftpb_sourcedir = ENV['RAFTPB_SOURCE_DIR']
+  gogoproto_sourcedir = ENV['GOGOPROTO_SOURCE_DIR']
+
+  # gogoproto is a dependency of raftpb
+  gogoproto_dir = File.join(gogoproto_sourcedir, 'gogoproto')
+  gogoproto_files = Dir[File.join(gogoproto_dir, '*.proto')].sort
+
+  raftpb_dir = File.join(raftpb_sourcedir, 'raftpb')
+  raftpb_files = Dir[File.join(raftpb_dir, '*.proto')].sort
+
+  raft_proto_files = gogoproto_files + raftpb_files
 
   proto_dir = File.join(SOURCE_DIR, 'proto')
   proto_files = Dir[File.join(proto_dir, '*.proto')].sort
 
   run!(
-    %W[bundle exec grpc_tools_ruby_protoc -I #{proto_dir} --ruby_out=#{proto_output_dir} --grpc_out=#{proto_output_dir}] + proto_files,
+    %W[bundle exec grpc_tools_ruby_protoc -I #{proto_dir} -I #{gogoproto_sourcedir} -I #{raftpb_sourcedir} --ruby_out=#{proto_output_dir} --grpc_out=#{proto_output_dir}] + raft_proto_files + proto_files ,
     File.join(SOURCE_DIR, 'tools', 'protogem')
   )
 
