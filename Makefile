@@ -538,11 +538,11 @@ lint-proto: ${PROTOC} ${PROTOLINT} ${PROTOC_GEN_GITALY_LINT} proto
 
 .PHONY: build-proto-gem
 ## Build the Ruby Gem that contains Gitaly's Protobuf definitions.
-build-proto-gem:
+build-proto-gem: ${DEPENDENCY_DIR}/raftpb
 	${Q}rm -rf "${BUILD_DIR}/${BUILD_GEM_NAME}.gem" && mkdir -p ${BUILD_DIR}
 	${Q}rm -rf "${BUILD_DIR}/${BUILD_GEM_NAME}-gem" && mkdir -p ${BUILD_DIR}/${BUILD_GEM_NAME}-gem
 	${Q}cd "${SOURCE_DIR}"/tools/protogem && bundle install
-	${Q}"${SOURCE_DIR}"/tools/protogem/build-proto-gem -o "${BUILD_DIR}/${BUILD_GEM_NAME}.gem" --name ${BUILD_GEM_NAME} --working-dir ${BUILD_DIR}/${BUILD_GEM_NAME}-gem ${BUILD_GEM_OPTIONS}
+	${Q}GOGOPROTO_SOURCE_DIR="${GOGOPROTO_SOURCE_DIR}" RAFTPB_SOURCE_DIR="${RAFTPB_SOURCE_DIR}" "${SOURCE_DIR}"/tools/protogem/build-proto-gem -o "${BUILD_DIR}/${BUILD_GEM_NAME}.gem" --name ${BUILD_GEM_NAME} --working-dir ${BUILD_DIR}/${BUILD_GEM_NAME}-gem ${BUILD_GEM_OPTIONS}
 
 .PHONY: publish-proto-gem
 ## Build and publish the Ruby Gem that contains Gitaly's Protobuf definitions.
