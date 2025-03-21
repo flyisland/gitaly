@@ -307,6 +307,13 @@ func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.Partition
 		return fmt.Errorf("failed to create stream: %w", err)
 	}
 
+	// Ensure stream is closed properly
+	defer func() {
+		if _, err := stream.CloseAndRecv(); err != nil {
+			returnedErr = errors.Join(returnedErr, formatError(err, followerNodeID, "close stream"))
+		}
+	}()
+
 	if err := stream.Send(&gitalypb.RaftSnapshotMessageRequest{
 		RaftSnapshotPayload: &gitalypb.RaftSnapshotMessageRequest_RaftMsg{
 			RaftMsg: &gitalypb.RaftMessageRequest{
@@ -322,10 +329,10 @@ func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.Partition
 			},
 		},
 	}); err != nil {
-		return fmt.Errorf("failed to send raft message chunk: %w", err)
+		return fmt.Errorf("failed to send raft message: %w", err)
 	}
 
-	// Send the chunk to the server
+	// Send snapshot data in chunks to the server
 	sw := streamio.NewWriter(func(p []byte) error {
 		select {
 		case <-stream.Context().Done():
@@ -338,14 +345,11 @@ func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.Partition
 			})
 		}
 	})
-	_, err = io.Copy(sw, snapshot.file)
+	sent, err := io.Copy(sw, snapshot.file)
 	if err != nil {
-		return errors.Join(returnedErr, fmt.Errorf("failed to send chunk: %w", err))
+		return fmt.Errorf("failed to send chunk, %d bytes sent: %w", sent, err)
 	}
 
-	if _, err := stream.CloseAndRecv(); err != nil {
-		returnedErr = errors.Join(returnedErr, fmt.Errorf("close stream: %w", err))
-	}
 	return
 }
 
@@ -357,9 +361,20 @@ func (t *GrpcTransport) getRaftClient(ctx context.Context, addr string) (gitalyp
 		return nil, fmt.Errorf("get connection to address %s: %w", addr, err)
 	}
 
-	client := gitalypb.NewRaftServiceClient(conn)
-	if client == nil {
-		return nil, fmt.Errorf("NewRaftServiceClient returned nil")
+	return gitalypb.NewRaftServiceClient(conn), nil
+}
+
+// formatError formats gRPC errors with specific messages based on error codes.
+// It handles common connection-related errors and uses the provided default message for other errors.
+func formatError(err error, nodeID uint64, defaultMsg string) error {
+	switch status.Code(err) {
+	case codes.Unavailable:
+		return fmt.Errorf("connection to node %d lost: %w", nodeID, err)
+	case codes.Canceled:
+		return fmt.Errorf("node %d rejected request: connection canceled: %w", nodeID, err)
+	case codes.Aborted:
+		return fmt.Errorf("node %d aborted request: %w", nodeID, err)
+	default:
+		return fmt.Errorf("%s to node %d: %w", defaultMsg, nodeID, err)
 	}
-	return client, nil
 }
