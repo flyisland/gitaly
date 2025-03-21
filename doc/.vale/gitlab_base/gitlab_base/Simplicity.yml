@@ -1,0 +1,19 @@
+---
+# Warning: gitlab_base.Simplicity
+#
+# Checks for words implying ease of use, to avoid cognitive dissonance for frustrated users.
+#
+# For a list of all options, see https://vale.sh/docs/topics/styles/
+extends: existence
+message: "Remove '%s'. Be precise instead of subjective."
+vocab: false
+level: warning
+ignorecase: true
+link: https://docs.gitlab.com/development/documentation/styleguide/word_list/
+tokens:
+  - easy
+  - easily
+  - handy
+  - simple
+  - simply
+  - useful

@@ -134,7 +134,7 @@ invalidator was not working in a previous run.
   GitLab instances until the cache is warmed up. On a busy site like GitLab.com,
   this may last as long as several seconds to a minute.
 
-The following Prometheus queries (adapted from [GitLab's dashboards])
+The following Prometheus queries (adapted from [GitLab dashboards])
 will give you insight into the performance and behavior of the cache:
 
 - [Cache invalidation behavior]
@@ -157,7 +157,7 @@ will give you insight into the performance and behavior of the cache:
     - `ErrMissingLeaseFile`
     - `ErrPendingExists`
 
-[GitLab's dashboards]: https://dashboards.gitlab.net/d/5Y26KtFWk/gitaly-inforef-upload-pack-caching?orgId=1
+[GitLab dashboards]: https://dashboards.gitlab.net/d/5Y26KtFWk/gitaly-inforef-upload-pack-caching?orgId=1
 [Cache invalidation behavior]: https://dashboards.gitlab.net/d/5Y26KtFWk/gitaly-inforef-upload-pack-caching?orgId=1&fullscreen&panelId=2
 [Cache Throughput Bytes]: https://dashboards.gitlab.net/d/5Y26KtFWk/gitaly-inforef-upload-pack-caching?orgId=1&fullscreen&panelId=6
 [Cache Effectiveness]: https://dashboards.gitlab.net/d/5Y26KtFWk/gitaly-inforef-upload-pack-caching?orgId=1&fullscreen&panelId=8

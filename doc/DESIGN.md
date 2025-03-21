@@ -23,7 +23,7 @@ Gitaly is a layer that brings horizontal scaling and higher availability to mass
 
 **IMPORTANT:** The above characteristics and assumptions combined with specific Git workloads create challenging compute characteristics - high burst CPU utilization, high burst memory utilization and high burst storage channel utilization. Bursts in these compute needs are based on Git usage patterns - how much content, how dense (e.g. binaries) and how often.
 
-These workload characteristics are not fundamentally predictable across the portfolio of source code that a given GitLab server may need to store. Large monorepos might exist at companies with few employees.  Binaries storage - while not considered an ideal file type for Git file systems - is common in some industry segments or project types. This means that architecting a GitLab instance with built-in Git headroom limitations causes unexpected limitations of specific Git usage patterns of the people using the instance.
+These workload characteristics are not fundamentally predictable across the portfolio of source code that a given GitLab server may need to store. Large monorepos might exist at companies with few employees. Binaries storage - while not considered an ideal file type for Git file systems - is common in some industry segments or project types. This means that architecting a GitLab instance with built-in Git headroom limitations causes unexpected limitations of specific Git usage patterns of the people using the instance.
 
 These are some of the most challenging Git workloads for Git:
 
@@ -37,10 +37,10 @@ The above workload factors compound together when a given workload has more than
 #### Affects on Horizontal Compute Architecture
 
 - The memory burstiness profile of Git makes it (and therefore Gitaly) very challenging to reliably containerize because container systems have very strong memory limits. Exceeding these limits causes significant operational instability and/or termination by the container running system.
-- The disk IO burstiness profile of Git makes it (and therefore Gitaly) very challenging to use remote file systems with reliability and integrity (e.g.  NFS - including PaaS versions). This was, in fact, the first design reason for Gitaly - to avoid having the Git binary operate on remote storage.
+- The disk IO burstiness profile of Git makes it (and therefore Gitaly) very challenging to use remote file systems with reliability and integrity (e.g. NFS - including PaaS versions). This was, in fact, the first design reason for Gitaly - to avoid having the Git binary operate on remote storage.
 - The CPU burstiness profile of Git (and therefore Gitaly) also makes it challenging to reliably containerize.
 
-These are the challenges that imply an application layer is needed to help Git scale horizontally in any scaled implementation - not just GitLab.  GitLab has built this layer and continues to chip away (iterate) against all of the above challenges in this innovative layer.
+These are the challenges that imply an application layer is needed to help Git scale horizontally in any scaled implementation - not just GitLab. GitLab has built this layer and continues to chip away (iterate) against all of the above challenges in this innovative layer.
 
 ### Evidence To Back Building a New Horizontal Layer to Scale Git
 
@@ -59,7 +59,7 @@ Gitaly will make our situation better in a few steps:
 1. One central place to monitor operations
 1. Performance improvements doing less and caching more
 1. Move the Git operations from the app to the file/Git server with Git rpc (routing Git access over JSON HTTP calls)
-1. Use Git ketch to allow active-active (push to a local server), and distributed read operations (read from a secondary). This is far in the future, we might also use a distributed key value store instead. See the [active-active issue](https://gitlab.com/gitlab-org/gitlab-ee/issues/1381). Until we are active active we can just use persistent storage on the cloud to shard, this eliminates the need for redundancy.
+1. Use Git ketch to allow active-active (push to a local server), and distributed read operations (read from a secondary). This is far in the future, we might also use a distributed key value store instead. See the [active-active issue](https://gitlab.com/gitlab-org/gitlab-ee/issues/1381). Until we are active-active we can just use persistent storage on the cloud to shard, this eliminates the need for redundancy.
 
 ## Scope
 

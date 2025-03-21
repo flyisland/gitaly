@@ -120,7 +120,7 @@ gdk restart gitaly
 The general approach is:
 
 1. Add a request/response combination to [Gitaly Proto][gitaly-proto], or edit
-  an existing one
+   an existing one
 1. Change [Gitaly][gitaly] accordingly
 1. Use the endpoint in other GitLab components (CE/EE, GitLab Workhorse, etc.)
 
@@ -157,7 +157,7 @@ A typical set of Go tests for an RPC consists of two or three test
 functions:
 
 - a success test
-- a failure test (usually a table driven test using t.Run)
+- a failure test (usually a table driven test using `t.Run`)
 - sometimes a validation test.
 
 Our Go RPC tests use in-process test servers that only implement the service the current RPC belongs to.

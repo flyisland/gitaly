@@ -124,9 +124,9 @@ Set up the environment as show in [Set up environment step](#how-to-set-up-for-b
 
 1. Pipe the restore job file to `gitaly-backup restore`.
 
-    ```shell
-     /opt/gitlab/embedded/bin/gitaly-backup restore -path $BACKUP_SOURCE_PATH < restore_job.json
-    ```
+   ```shell
+    /opt/gitlab/embedded/bin/gitaly-backup restore -path $BACKUP_SOURCE_PATH < restore_job.json
+   ```
 
      | Argument                    | Type                   | Required | Description |
     |:----------------------------|:-----------------------|:---------|:------------|
@@ -146,10 +146,10 @@ To use server-side create:
 1. Set up the environment and create backup job file as show in [Set up environment step](#how-to-set-up-for-backup).
 1. Add backup parameters (`enabled` and `go_cloud_url`) to the Gitaly `config.toml` file.
 
-    ```toml
-    [backup]
-    go_cloud_url = "s3://gitaly-backup?region=us-east-1"
-    ```
+   ```toml
+   [backup]
+   go_cloud_url = "s3://gitaly-backup?region=us-east-1"
+   ```
 
     See [object storage](#object-storage) for information on how to configure `go_cloud_url` storage.
 
@@ -198,9 +198,9 @@ To use server-side create:
 1. Restart your Gitaly server.
 1. Pipe the backup job file to `gitaly-backup create`.
 
-    ```shell
-     /opt/gitlab/embedded/bin/gitaly-backup create -server-side < backup_job.json
-    ```
+   ```shell
+    /opt/gitlab/embedded/bin/gitaly-backup create -server-side < backup_job.json
+   ```
 
    | Argument                    | Type                   | Required | Description |
    |:----------------------------|:-----------------------|:---------|:------------|
@@ -220,10 +220,10 @@ To use server-side restore:
 1. Set up the environment and create backup job file as show in [Set up environment step](#how-to-set-up-for-backup)
 1. Add backup parameters (`enabled` and `go_cloud_url`) to the Gitaly `config.toml` file.
 
-    ```toml
-    [backup]
-    go_cloud_url = "s3://gitaly-backup?region=us-east-1"
-    ```
+   ```toml
+   [backup]
+   go_cloud_url = "s3://gitaly-backup?region=us-east-1"
+   ```
 
    See [object storage](#object-storage) for information on how to configure `go_cloud_url` storage.
 
@@ -273,9 +273,9 @@ To use server-side restore:
 1. Restart your Gitaly server.
 1. Pipe the backup job file to `gitaly-backup restore`.
 
-    ```shell
-     /opt/gitlab/embedded/bin/gitaly-backup restore -server-side < backup_job.json
-    ```
+   ```shell
+    /opt/gitlab/embedded/bin/gitaly-backup restore -server-side < backup_job.json
+   ```
 
    | Argument                    | Type                   | Required | Description |
     |:----------------------------|:-----------------------|:---------|:------------|
@@ -328,7 +328,7 @@ For example, a repository with the relative path of
 `@hashed/4e/c9/4ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a.git`
 creates the following structure:
 
-```text
+```plaintext
 $BACKUP_DESTINATION_PATH/
   @hashed/
     4e/
@@ -371,7 +371,7 @@ For example, a repository with the relative path of
 `@hashed/4e/c9/4ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a.git`
 and a backup ID of `20210930065413` will create the following structure:
 
-```text
+```plaintext
 $BACKUP_DESTINATION_PATH/
   @hashed/
     4e/

@@ -47,8 +47,8 @@ If a message gets lost, that can lead to data loss.
 ## What sort of throughput do we expect?
 
 Currently (November 2019), `gitlab.com` has about 5000 Gitaly calls per
-second. About 300 of those [are labeled as
-"mutators"](https://prometheus.gprd.gitlab.net/graph?g0.range_input=7d&g0.expr=sum(rate(gitaly_cacheinvalidator_optype_total%5B5m%5D))%20by%20(type)&g0.tab=0),
+second. About 300 of those
+[are labeled as "mutators"](https://prometheus.gprd.gitlab.net/graph?g0.range_input=7d&g0.expr=sum(rate(gitaly_cacheinvalidator_optype_total%5B5m%5D))%20by%20(type)&g0.tab=0),
 which suggests that today we'd see about 300 replication jobs per
 second. Each job may need multiple writes as it progresses through
 different states; say 5 state changes. That makes 1500 writes per
@@ -97,7 +97,7 @@ Praefect serves as a front end for a cluster of Gitaly servers (the
 need some form of consensus over which internal Gitaly nodes are good
 (available) or bad (offline). This is not a YAGNI, we will need this.
 Like the queue this would be shared state. The most natural fit for
-this, within GitLab's current architecture, would be Consul. But Consul
+this, within the current architecture of GitLab, would be Consul. But Consul
 is not a good fit for storing the queue.
 
 We might want Praefect to have a catalogue of all repositories it is
@@ -120,7 +120,7 @@ Con:
 - Deployed with snapshot persistence (RDB dump) in GitLab, which is
   not the durability I think we want
 
-### Postgres
+### PostgreSQL
 
 Pro:
 
@@ -164,8 +164,8 @@ a database although it is not presented as that by it authors. The
 advertised use cases are service discovery and having service mesh.
 
 Consul does contain a key-value store you can use to store values
-smaller than 512KB in. But the [documentation
-states](https://www.consul.io/docs/install/performance.html#memory-requirements):
+smaller than 512KB in. But the
+[documentation states](https://www.consul.io/docs/install/performance.html#memory-requirements):
 
 > NOTE: Consul is not designed to serve as a general purpose database,
 > and you should keep this in mind when choosing what data are populated

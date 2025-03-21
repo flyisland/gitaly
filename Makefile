@@ -489,6 +489,7 @@ lint-fix: ${GOLANGCI_LINT} ${GITALY_PACKED_EXECUTABLES} ${GIT_PACKED_EXECUTABLES
 ## Run markdownlint-cli2-config to lint the documentation and lychee to check for broken links.
 lint-docs:
 	${Q}markdownlint-cli2 README.md REVIEWING.md STYLE.md doc/**/*.md doc/*.md
+	${Q}vale --minAlertLevel error README.md REVIEWING.md STYLE.md doc
 	${Q}lychee --version
 	${Q}lychee --offline --include-fragments README.md REVIEWING.md STYLE.md doc/**/*.md doc/*.md
 

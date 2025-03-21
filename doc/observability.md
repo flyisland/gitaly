@@ -33,9 +33,8 @@ necessary.
 
 #### Tiled (repeated) dashboards
 
-If you want to make a change across a tiled Grafana dashboard such as
-the [feature request rate
-overview](https://dashboards.gitlab.net/d/000000198/gitaly-features-overview?orgId=1),
+If you want to make a change across a tiled Grafana dashboard such as the
+[feature request rate overview](https://dashboards.gitlab.net/d/000000198/gitaly-features-overview?orgId=1),
 then edit the first tile (top left). Its settings get applied to the
 other tiles as well. If you edit any tile other than the first your
 changes will be lost.

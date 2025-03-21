@@ -103,8 +103,8 @@ Local files get a speed boost from RAM, and GitLab.com servers have lots of unus
 
 The pack-objects cache is off by default because in some cases it
 significantly increases the number of bytes written to disk. For more
-information, see this issue where [we turned on the cache for
-`gitlab-com/www-gitlab-com`](https://gitlab.com/gitlab-com/gl-infra/production/-/issues/4010#note_534564684).
+information, see this issue where
+[we turned on the cache for `gitlab-com/www-gitlab-com`](https://gitlab.com/gitlab-com/gl-infra/production/-/issues/4010#note_534564684).
 
 It would be better if the cache was on by default. But, if you don't have
 CI-like traffic, there is probably no benefit, and if your Gitaly

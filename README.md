@@ -1,4 +1,6 @@
-# ![Gitaly](https://gitlab.com/gitlab-org/gitaly/uploads/509123ed56bd51247996038c858db006/gitaly-wordmark-small.png)
+# Gitaly
+
+![Gitaly](https://gitlab.com/gitlab-org/gitaly/uploads/509123ed56bd51247996038c858db006/gitaly-wordmark-small.png)
 
 **Quick Links**:
   [**Roadmap**][roadmap] |
@@ -10,7 +12,7 @@ service for handling all the Git calls made by GitLab.
 For documentation generated from the protobuf definitions (in `proto/` directory),
 see [Gitaly RPC documentation](https://gitlab-org.gitlab.io/gitaly/).
 
-To see where it fits in please look at [GitLab's architecture](https://docs.gitlab.com/development/architecture/#system-layout).
+To see where it fits in please look at [GitLab architecture](https://docs.gitlab.com/development/architecture/#system-layout).
 
 ## Project Goals
 

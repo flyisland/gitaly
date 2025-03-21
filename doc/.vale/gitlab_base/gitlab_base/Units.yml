@@ -1,0 +1,16 @@
+---
+# Warning: gitlab_base.Units
+#
+# Recommends a space between a number and a unit of measure.
+#
+# For a list of all options, see https://vale.sh/docs/topics/styles/
+extends: existence
+message: "Add a space between the number and the unit in '%s'."
+link: 'https://docs.gitlab.com/development/documentation/styleguide/'
+vocab: false
+nonword: true
+level: warning
+ignorecase: true
+tokens:
+  - \d+(?:B|kB|KiB|MB|MiB|GB|GiB|TB|TiB)
+  - \d+(?:ns|ms|μs|s|min|h|d)\b

@@ -42,7 +42,7 @@ Each partition is a Raft group with one or more members. Raft groups are also id
 the one-to-one relationship.
 
 The `raftmgr.Manager` oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
-integer **Node ID** to a Raft group member. The Node ID does not change throughout the life cycle of a group member.
+integer **Node ID** to a Raft group member. The Node ID does not change throughout the lifecycle of a group member.
 
 When a partition is bootstrapped for the first time, the Raft manager initializes the `etcd/raft` state machine,
 elects itself as the initial leader, and persists all Raft metadata to persistent storage. Its internal Node ID

@@ -100,8 +100,8 @@ a repository replica needs to be repaired.
 For transaction mutator RPCs, Praefect attempts to make the same change to a
 quorum of repository replicas in a single transactional write. If a quorum of replicas
 successfully applies the RPC, then replication will only be scheduled for any
-replicas that were unsuccessful. See the section on [strong consistency
-design](#strong-consistency-design) for more details.
+replicas that were unsuccessful. See the section on
+[strong consistency design](#strong-consistency-design) for more details.
 
 ```mermaid
 sequenceDiagram
@@ -236,9 +236,9 @@ Depending on the configured strategy, there are a few ways of handling a failure
 Gitaly node:
 
 1. Strategies:
-    1. Failover disabled
-    1. Local elector
-    1. SQL elector
+   1. Failover disabled
+   1. Local elector
+   1. SQL elector
 1. Read-only mode
 
 #### Failover Disabled
@@ -340,7 +340,7 @@ can trigger such a reference update, including but not limited to:
 
 - Clients execute `git-push(1)`.
 
-- Creation of tags via GitLab's `UserCreateTag` RPC.
+- Creation of tags using the GitLab `UserCreateTag` RPC.
 
 - Merges and rebases when accepting merge requests.
 

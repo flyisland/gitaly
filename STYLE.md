@@ -55,10 +55,10 @@ interpolating strings. The `%q` operator quotes strings and escapes
 spaces and non-printable characters. This can save a lot of debugging
 time.
 
-### Use [`structerr`](internal/structerr/error.go) for error creation
+### Use `structerr` for error creation
 
 Gitaly uses its own small error framework that can be used to generate
-errors with the `structerr` package. This package handles:
+errors with the [`structerr`](internal/structerr/error.go) package. This package handles:
 
 - Propagation of the correct [gRPC error code](https://grpc.github.io/grpc/core/md_doc_statuscodes.html)
   so that clients can see a rough classification of why an error happens.
@@ -74,7 +74,7 @@ Therefore, `structerr` is recommended for generating errors in Gitaly, both:
 
 The following example shows how the `structerr` package can be used:
 
-```golang
+```go
 func CheckFrobnicated(s string) error {
     if s != "frobnicated" {
         return structerr.NewInvalidArgument("input is not frobnicated").
@@ -107,7 +107,7 @@ causes the `structerr` package to:
 
 For example:
 
-```golang
+```go
 func ValidateArguments(s string) error {
     if err := CheckFrobnicated(s); err != nil {
         return structerr.ErrInvalidArgumentf("checking frobnication: %w", err)
@@ -213,7 +213,7 @@ interface instead of either `*logrus.Entry` or `*logrus.Logger`.
 When writing log entries, you should use `logger.WithFields()` to add relevant
 metadata relevant to the entry. The keys should use snake case:
 
-```golang
+```go
 logger.WithField("correlation_id", 12345).Info("StartTransaction")
 ```
 
@@ -223,7 +223,7 @@ In case you do not want to write a specific log message, but only want to notify
 about a certain function or RPC being called, you should use the function's name
 as the log message:
 
-```golang
+```go
 func StartTransaction(id uint64) {
     logger.WithField("transaction_id", id).Debug("StartTransaction")
 }
@@ -235,7 +235,7 @@ In order to associate log entries with a given code package, you should add a
 `component` field to the log entry. If the log entry is generated in a method,
 the component should be `$PACKAGE_NAME.$STRUCT_NAME`:
 
-```golang
+```go
 package transaction
 
 type Manager struct {}
@@ -253,7 +253,7 @@ func (m Manager) StartTransaction(ctx context.Context) {
 
 The following are equivalent in Go:
 
-```golang
+```go
 // Preferred
 foo := &Foo{}
 
@@ -270,7 +270,7 @@ Sometimes you want to use a byte literal in a Go string. Use a
 hexadecimal literal in that case. Unless you have a good reason to use
 octal of course.
 
-```golang
+```go
 // Preferred
 foo := "bar\x00baz"
 
@@ -347,7 +347,7 @@ func testHelper(tb testing.TB, ctx context.Context) {
 
 ### Table-driven tests
 
-We like table-driven tests ([Table-driven tests using subtests](https://blog.golang.org/subtests#TOC_4.), [Cheney blog post], [Golang wiki]).
+We like table-driven tests ([Table-driven tests using subtests](https://blog.golang.org/subtests#TOC_4.), [Cheney blog post], [Go wiki]).
 
 - Use [subtests](https://blog.golang.org/subtests#TOC_4.) with your table-driven tests, using `t.Run`:
 
@@ -378,7 +378,7 @@ func TestTime(t *testing.T) {
 ```
 
   [Cheney blog post]: https://dave.cheney.net/2013/06/09/writing-table-driven-tests-in-go
-  [Golang wiki]: https://github.com/golang/go/wiki/TableDrivenTests
+  [Go wiki]: https://go.dev/wiki/TableDrivenTests
 
 ### Fatal exit
 
@@ -428,8 +428,8 @@ service tests are white box.
 ## Prometheus metrics
 
 Prometheus is a great tool to collect data about how our code behaves in
-production. When adding new Prometheus metrics, please follow the [best
-practices](https://prometheus.io/docs/practices/naming/) and be aware of
+production. When adding new Prometheus metrics, please follow the
+[best practices](https://prometheus.io/docs/practices/naming/) and be aware of
 the
 [gotchas](https://prometheus.io/docs/practices/instrumentation/#things-to-watch-out-for).
 

@@ -5,7 +5,7 @@
 Gitaly as it exists today is a service that stores all its state on a
 local filesystem. This filesystem must therefore be durable. In this
 document we describe an alternative storage system which can store
-repository snapshots in SQL and object storage (e.g. S3).
+repository snapshots in SQL and object storage (e.g. S3).
 
 Key properties:
 
@@ -69,7 +69,7 @@ snapshots is that this makes it faster to make new snapshots. For faster
 restores, and to keep the total list size in check, we can collapse
 multiple snapshots into one. This comes down to restoring the repository
 in a temporary directory, up to a known snapshot. Then we make a new
-full (i.e. non-incremental) snapshot from that point-in-time copy, and
+full (i.e. non-incremental) snapshot from that point-in-time copy, and
 replace all snapshots up to and including that point with a single
 (full) snapshot.
 
