@@ -147,7 +147,7 @@ func TestStorage_Initialize(t *testing.T) {
 			{
 				storageName:   rs.storageName,
 				partitionID:   rs.partitionID,
-				lowWaterMark:  storage.LSN(1),
+				lowWaterMark:  storage.LSN(4),
 				highWaterMark: storage.LSN(3),
 			},
 		}, rs.consumer.(*mockConsumer).GetNotifications())
@@ -170,18 +170,17 @@ func TestStorage_Initialize(t *testing.T) {
 
 		defer func() { require.NoError(t, rs.close()) }()
 
-		// Initialize with applied LSN 3
-		bootstrapped, err := rs.initialize(ctx, 3)
+		// Initialize with applied LSN 2
+		bootstrapped, err := rs.initialize(ctx, 2)
 		require.NoError(t, err)
 		require.True(t, bootstrapped, "expected bootstrapped installation")
-		require.NoError(t, rs.localLog.AcknowledgePosition(log.AppliedPosition, 3))
 
-		// First index is 4
+		// First index is 3 == AppliedLSN + 1. Applied LSN is pruned.
 		firstIndex, err := rs.FirstIndex()
 		require.NoError(t, err)
-		require.Equal(t, uint64(4), firstIndex)
+		require.Equal(t, uint64(3), firstIndex)
 
-		// Last index is 5, equal to the latest appended LSN
+		// Last index is 5, equal to the latest appended LSN.
 		lastIndex, err := rs.LastIndex()
 		require.NoError(t, err)
 		require.Equal(t, uint64(5), lastIndex)
@@ -191,7 +190,7 @@ func TestStorage_Initialize(t *testing.T) {
 			{
 				storageName:   rs.storageName,
 				partitionID:   rs.partitionID,
-				lowWaterMark:  storage.LSN(1),
+				lowWaterMark:  storage.LSN(3),
 				highWaterMark: storage.LSN(3),
 			},
 		}, rs.consumer.(*mockConsumer).GetNotifications())

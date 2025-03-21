@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -45,14 +46,20 @@ func setupLogManager(t *testing.T, ctx context.Context, consumer storage.LogCons
 	logManager := NewManager("test-storage", 1, testhelper.TempDir(t), testhelper.TempDir(t), consumer, newTracker(t, consumer))
 	require.NoError(t, logManager.Initialize(ctx, 0))
 
+	t.Cleanup(func() { require.NoError(t, logManager.Close()) })
+
 	return logManager
 }
 
 func waitUntilPruningFinish(t *testing.T, manager *Manager) {
 	// Users of log manager are blocked until log pruning task is done. Log pruning runs in parallel and should not
-	// conflict other activities of log manager. In this test suite, we need to assert in-between states. Thus, the
-	// tests must wait until a task finishes before asserting. The easiest solution is to use errgroup's Wait().
-	manager.wg.Wait()
+	// conflict other activities of log manager. In this test suite, we need to assert in-between states. Thus, this
+	// method sends a pruning signal to the manager to force it to perform pruning.
+	manager.pruningSignals <- struct{}{}
+	manager.pruningSignals <- struct{}{}
+	require.Eventually(t, func() bool {
+		return len(manager.pruningSignals) == 0
+	}, 5*time.Second, 10*time.Millisecond)
 }
 
 func assertDirectoryState(t *testing.T, manager *Manager, expected testhelper.DirectoryState) {
@@ -135,11 +142,6 @@ func TestLogManager_Initialize(t *testing.T) {
 
 		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
 
-		waitUntilPruningFinish(t, logManager)
-		require.Equal(t, storage.LSN(3), logManager.oldestLSN)
-		require.Equal(t, storage.LSN(3), logManager.appendedLSN)
-		require.Equal(t, storage.LSN(3), logManager.LowWaterMark())
-
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
 			"/wal":                 {Mode: mode.Directory},
@@ -147,16 +149,20 @@ func TestLogManager_Initialize(t *testing.T) {
 			"/wal/0000000000003/1": {Mode: mode.File, Content: []byte("content-3")},
 		})
 		require.NoError(t, logManager.Close())
+
+		require.Equal(t, storage.LSN(3), logManager.oldestLSN)
+		require.Equal(t, storage.LSN(3), logManager.appendedLSN)
+		require.Equal(t, storage.LSN(3), logManager.LowWaterMark())
 	})
 
 	t.Run("existing WAL entries with up-to-date appliedLSN", func(t *testing.T) {
 		t.Parallel()
-		ctx := testhelper.Context(t)
+
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 
 		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
-		require.NoError(t, logManager.Initialize(ctx, 0))
+		require.NoError(t, logManager.Initialize(testhelper.Context(t), 0))
 
 		for i := 0; i < 3; i++ {
 			appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
@@ -164,20 +170,18 @@ func TestLogManager_Initialize(t *testing.T) {
 		require.NoError(t, logManager.Close())
 
 		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
-		require.NoError(t, logManager.Initialize(ctx, 3))
+		require.NoError(t, logManager.Initialize(testhelper.Context(t), 3))
 		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 3))
-
-		waitUntilPruningFinish(t, logManager)
-		require.Equal(t, storage.LSN(4), logManager.oldestLSN)
-		require.Equal(t, storage.LSN(3), logManager.appendedLSN)
-		require.Equal(t, storage.LSN(4), logManager.LowWaterMark())
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
 			"/wal": {Mode: mode.Directory},
 		})
-
 		require.NoError(t, logManager.Close())
+
+		require.Equal(t, storage.LSN(4), logManager.oldestLSN)
+		require.Equal(t, storage.LSN(3), logManager.appendedLSN)
+		require.Equal(t, storage.LSN(4), logManager.LowWaterMark())
 	})
 
 	t.Run("double initialization error", func(t *testing.T) {
@@ -304,9 +308,6 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		// Manually set the consumer's position to the first entry, forcing low-water mark to retain it
 		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, 1))
 
-		waitUntilPruningFinish(t, logManager)
-		require.Equal(t, storage.LSN(2), logManager.oldestLSN)
-
 		// Assert on-disk state to ensure no entries were removed
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":                    {Mode: mode.Directory},
@@ -316,6 +317,8 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			"/wal/0000000000003":   {Mode: mode.Directory},
 			"/wal/0000000000003/1": {Mode: mode.File, Content: []byte("content-3")},
 		})
+		require.NoError(t, logManager.Close())
+		require.Equal(t, storage.LSN(2), logManager.oldestLSN)
 	})
 
 	t.Run("remove multiple applied entries", func(t *testing.T) {
@@ -346,10 +349,6 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 
 		// Set the applied LSN to 3, allowing the first three entries to be pruned
 		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 3))
-		waitUntilPruningFinish(t, logManager)
-
-		// Ensure only entries starting from LSN 4 are retained
-		require.Equal(t, storage.LSN(4), logManager.oldestLSN)
 
 		// Assert on-disk state after removals
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
@@ -360,6 +359,10 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			"/wal/0000000000005":   {Mode: mode.Directory},
 			"/wal/0000000000005/1": {Mode: mode.File, Content: []byte("content-5")},
 		})
+
+		require.NoError(t, logManager.Close())
+		// Ensure only entries starting from LSN 4 are retained
+		require.Equal(t, storage.LSN(4), logManager.oldestLSN)
 	})
 
 	t.Run("log entry pruning fails", func(t *testing.T) {
@@ -414,6 +417,7 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			"/":    {Mode: mode.Directory},
 			"/wal": {Mode: mode.Directory},
 		})
+		require.NoError(t, logManager.Close())
 	})
 
 	t.Run("trigger log entry pruning concurrently", func(t *testing.T) {
@@ -422,43 +426,71 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 
-		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil, newTracker(t, nil))
+		tracker := NewPositionTracker()
+		require.NoError(t, tracker.Register(ConsumerPosition))
+
+		logManager := NewManager("test-storage", 1, stagingDir, stateDir, nil, tracker)
 		require.NoError(t, logManager.Initialize(ctx, 0))
 
 		var wg sync.WaitGroup
 
-		const totalLSN = 25
+		const totalLSN = 100
 
 		// One producer goroutine
+		done := make(chan struct{})
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < totalLSN; i++ {
-				appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
+			for i := range totalLSN {
+				appendLogEntry(t, logManager, map[string][]byte{"1": fmt.Appendf([]byte{}, "content-%d", i+1)})
+				require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, logManager.AppendedLSN()))
 			}
+			close(done)
 		}()
 
-		// Three goroutines spams acknowledgement constantly.
-		for i := 0; i < 3; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for {
-					if logManager.AppendedLSN() == totalLSN {
-						return
-					}
-					require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, logManager.AppendedLSN()))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-done:
+					return
+				default:
 				}
-			}()
-		}
+				if logManager.AppendedLSN() > 5 {
+					require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, logManager.AppendedLSN()-5))
+				} else {
+					require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, logManager.AppendedLSN()))
+				}
+			}
+		}()
 		wg.Wait()
-		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, logManager.AppendedLSN()))
-
 		require.NoError(t, logManager.Close())
+
+		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, tracker)
+		require.NoError(t, logManager.Initialize(ctx, totalLSN))
+
+		assertDirectoryState(t, logManager, testhelper.DirectoryState{
+			"/":                    {Mode: mode.Directory},
+			"/wal":                 {Mode: mode.Directory},
+			"/wal/000000000002o":   {Mode: mode.Directory},
+			"/wal/000000000002o/1": {Mode: mode.File, Content: []byte("content-96")},
+			"/wal/000000000002p":   {Mode: mode.Directory},
+			"/wal/000000000002p/1": {Mode: mode.File, Content: []byte("content-97")},
+			"/wal/000000000002q":   {Mode: mode.Directory},
+			"/wal/000000000002q/1": {Mode: mode.File, Content: []byte("content-98")},
+			"/wal/000000000002r":   {Mode: mode.Directory},
+			"/wal/000000000002r/1": {Mode: mode.File, Content: []byte("content-99")},
+			"/wal/000000000002s":   {Mode: mode.Directory},
+			"/wal/000000000002s/1": {Mode: mode.File, Content: []byte("content-100")},
+		})
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, logManager.AppendedLSN()))
+
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
 			"/wal": {Mode: mode.Directory},
 		})
+		require.NoError(t, logManager.Close())
 	})
 }
 
@@ -787,6 +819,7 @@ func TestLogManager_Positions(t *testing.T) {
 			"/wal/0000000000004":   {Mode: mode.Directory},
 			"/wal/0000000000004/1": {Mode: mode.File, Content: []byte("content-4")},
 		})
+		require.NoError(t, logManager.Close())
 
 		// Restart the log consumer.
 		mockConsumer = &mockLogConsumer{}
@@ -807,6 +840,7 @@ func TestLogManager_Positions(t *testing.T) {
 			"/":    {Mode: mode.Directory},
 			"/wal": {Mode: mode.Directory},
 		})
+		require.NoError(t, logManager.Close())
 	})
 
 	t.Run("unacknowledged entries are not pruned", func(t *testing.T) {
@@ -882,8 +916,6 @@ func TestLogManager_Positions(t *testing.T) {
 
 		appendLogEntry(t, logManager, map[string][]byte{"1": []byte("content-2")})
 		simulatePositions(t, logManager, 2, 2)
-
-		logManager.pruneLogEntries()
 
 		assertDirectoryState(t, logManager, testhelper.DirectoryState{
 			"/":    {Mode: mode.Directory},
@@ -1002,6 +1034,7 @@ func TestLogManager_Positions(t *testing.T) {
 			"/":    {Mode: mode.Directory},
 			"/wal": {Mode: mode.Directory},
 		})
+		require.NoError(t, logManager.Close())
 	})
 }
 
@@ -1065,6 +1098,7 @@ func TestLogManager_Close(t *testing.T) {
 
 		// Trigger pruning
 		require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 2))
+		waitUntilPruningFinish(t, logManager)
 
 		// Close the manager and ensure all tasks are completed
 		require.NoError(t, logManager.Close())
