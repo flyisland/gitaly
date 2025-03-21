@@ -4,6 +4,7 @@ package gitaly;
 
 import "errors.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "lint.proto";
 import "shared.proto";
 
@@ -499,6 +500,68 @@ message RepositoryInfoResponse {
     // Git and will thus stay around forever, even if their objects are part of
     // other packfiles already.
     uint64 keep_size = 4;
+    // packfile_count is the number of all packfiles, including stale and kept ones.
+    uint64 packfile_count = 5;
+    // reverse_index_count is the number of reverse indices.
+    uint64 reverse_index_count = 6;
+    // cruft_count is the number of cruft packfiles which have a .mtimes file.
+    uint64 cruft_count = 7;
+    // keep_count is the number of .keep packfiles.
+    uint64 keep_count = 8;
+    // loose_objects_count is the number of loose objects.
+    uint64 loose_objects_count = 9;
+    // stale_loose_objects_count is the number of stale loose objects.
+    uint64 stale_loose_objects_count = 10;
+    // loose_objects_garbage_count is the number of garbage files in loose objects shards.
+    uint64 loose_objects_garbage_count = 11;
+  }
+
+  // CommitGraphInfo hosts information about the commit-graph of a repository.
+  message CommitGraphInfo {
+    // commit_graph_chain_length is the length of the commit-graph chain, if it exists. If the
+    // repository does not have a commit-graph chain but a monolithic commit-graph, then this
+    // field will be set to 0.
+    uint64 commit_graph_chain_length = 1;
+    // has_bloom_filters tells whether the commit-graph has bloom filters. Bloom filters are used
+    // to answer the question whether a certain path has been changed in the commit the bloom
+    // filter applies to.
+    bool has_bloom_filters = 2;
+    // has_generation_data tells whether the commit-graph has generation data. Generation
+    // data is stored as the corrected committer date, which is defined as the maximum
+    // of the commit's own committer date or the corrected committer date of any of its
+    // parents. This data can be used to determine whether a commit A comes after a
+    // certain commit B.
+    bool has_generation_data = 3;
+    // has_generation_data_overflow stores overflow data in case the corrected committer
+    // date takes more than 31 bits to represent.
+    bool has_generation_data_overflow = 5;
+  }
+
+  // BitmapInfo hosts information about bitmaps in a repository.
+  message BitmapInfo {
+    // has_hash_cache indicates whether the name hash cache extension exists in the bitmap.
+    bool has_hash_cache = 1;
+    // has_lookup_table indicates whether the lookup table exists in the bitmap.
+    bool has_lookup_table = 2;
+    // version is the version of the bitmap (currently only version 1 is supported by Git).
+    uint64 version = 3;
+  }
+
+  // MultiPackIndexInfo hosts information about the multi-pack-index.
+  message MultiPackIndexInfo {
+    // packfile_count is the count of packfiles that the multi-pack-index tracks.
+    uint64 packfile_count = 1;
+    // version is the version of the multi-pack-index (currently only version 1 is supported by Git).
+    uint64 version = 2;
+  }
+
+  // AlternatesInfo hosts information about alternate object directories.
+  message AlternatesInfo {
+    // object_directories contains the list of paths to object directories that the repository is linked to.
+    repeated string object_directories = 1;
+    // last_modified is the time when the alternates file has last been
+    // modified.
+    google.protobuf.Timestamp last_modified = 2;
   }
 
   // size is the total size of all files part of the repository. It does not include the size of
@@ -508,6 +571,21 @@ message RepositoryInfoResponse {
   ReferencesInfo references = 2;
   // objects contains information about objects.
   ObjectsInfo objects = 3;
+  // commit_graph contains information about the repository's commit-graphs.
+  CommitGraphInfo commit_graph = 4;
+  // bitmap contains information about the bitmap, if any exists.
+  BitmapInfo bitmap = 5;
+  // multi_pack_index contains information about the multi-pack-index, if any exists.
+  MultiPackIndexInfo multi_pack_index = 6;
+  // multi_pack_index_bitmap contains information about the bitmap for the multi-pack-index.
+  BitmapInfo multi_pack_index_bitmap = 7;
+  // alternates contains information about alternate object directories.
+  AlternatesInfo alternates = 8;
+  // is_object_pool determines whether the repository is an object pool.
+  bool is_object_pool = 9;
+  // last_full_repack indicates the last date at which a full repack has been
+  // performed.
+  google.protobuf.Timestamp last_full_repack = 10;
 }
 
 // ObjectsSizeRequest is a request for the ObjectsSize RPC. The RPC is defined as a streaming RPC given that a client

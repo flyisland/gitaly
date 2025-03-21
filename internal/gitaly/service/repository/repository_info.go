@@ -8,6 +8,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *server) RepositoryInfo(
@@ -56,7 +57,7 @@ func convertRepositoryInfo(repoSize uint64, repoInfo stats.RepositoryInfo) (*git
 		return nil, fmt.Errorf("invalid reference backend")
 	}
 
-	return &gitalypb.RepositoryInfoResponse{
+	response := &gitalypb.RepositoryInfoResponse{
 		Size: repoSize,
 		References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
 			LooseCount:       repoInfo.References.LooseReferencesCount,
@@ -64,10 +65,68 @@ func convertRepositoryInfo(repoSize uint64, repoInfo stats.RepositoryInfo) (*git
 			ReferenceBackend: referenceBackend,
 		},
 		Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-			Size:       repoInfo.LooseObjects.Size + repoInfo.Packfiles.Size,
-			RecentSize: recentLooseObjectsSize + recentPackfilesSize,
-			StaleSize:  repoInfo.LooseObjects.StaleSize + repoInfo.Packfiles.CruftSize,
-			KeepSize:   repoInfo.Packfiles.KeepSize,
+			Size:                     repoInfo.LooseObjects.Size + repoInfo.Packfiles.Size,
+			RecentSize:               recentLooseObjectsSize + recentPackfilesSize,
+			StaleSize:                repoInfo.LooseObjects.StaleSize + repoInfo.Packfiles.CruftSize,
+			KeepSize:                 repoInfo.Packfiles.KeepSize,
+			PackfileCount:            repoInfo.Packfiles.Count,
+			ReverseIndexCount:        repoInfo.Packfiles.ReverseIndexCount,
+			CruftCount:               repoInfo.Packfiles.CruftCount,
+			KeepCount:                repoInfo.Packfiles.KeepCount,
+			LooseObjectsCount:        repoInfo.LooseObjects.Count,
+			StaleLooseObjectsCount:   repoInfo.LooseObjects.StaleCount,
+			LooseObjectsGarbageCount: repoInfo.LooseObjects.GarbageCount,
 		},
-	}, nil
+	}
+
+	// Only set CommitGraph if it exists
+	if repoInfo.CommitGraph.Exists {
+		response.CommitGraph = &gitalypb.RepositoryInfoResponse_CommitGraphInfo{
+			CommitGraphChainLength:    repoInfo.CommitGraph.CommitGraphChainLength,
+			HasBloomFilters:           repoInfo.CommitGraph.HasBloomFilters,
+			HasGenerationData:         repoInfo.CommitGraph.HasGenerationData,
+			HasGenerationDataOverflow: repoInfo.CommitGraph.HasGenerationDataOverflow,
+		}
+	}
+
+	// Only set Bitmap if it exists
+	if repoInfo.Packfiles.Bitmap.Exists {
+		response.Bitmap = &gitalypb.RepositoryInfoResponse_BitmapInfo{
+			HasHashCache:   repoInfo.Packfiles.Bitmap.HasHashCache,
+			HasLookupTable: repoInfo.Packfiles.Bitmap.HasLookupTable,
+			Version:        uint64(repoInfo.Packfiles.Bitmap.Version),
+		}
+	}
+
+	// Only set MultiPackIndex if it exists
+	if repoInfo.Packfiles.MultiPackIndex.Exists {
+		response.MultiPackIndex = &gitalypb.RepositoryInfoResponse_MultiPackIndexInfo{
+			PackfileCount: repoInfo.Packfiles.MultiPackIndex.PackfileCount,
+			Version:       uint64(repoInfo.Packfiles.MultiPackIndex.Version),
+		}
+	}
+
+	// Only set MultiPackIndexBitmap if it exists
+	if repoInfo.Packfiles.MultiPackIndexBitmap.Exists {
+		response.MultiPackIndexBitmap = &gitalypb.RepositoryInfoResponse_BitmapInfo{
+			HasHashCache:   repoInfo.Packfiles.MultiPackIndexBitmap.HasHashCache,
+			HasLookupTable: repoInfo.Packfiles.MultiPackIndexBitmap.HasLookupTable,
+			Version:        uint64(repoInfo.Packfiles.MultiPackIndexBitmap.Version),
+		}
+	}
+
+	// Only set Alternates if the file exists, consistent with other fields
+	if repoInfo.Alternates.Exists {
+		response.Alternates = &gitalypb.RepositoryInfoResponse_AlternatesInfo{
+			ObjectDirectories: repoInfo.Alternates.ObjectDirectories,
+			LastModified:      &timestamppb.Timestamp{Seconds: repoInfo.Alternates.LastModified.Unix()},
+		}
+	}
+
+	response.IsObjectPool = repoInfo.IsObjectPool
+	if !repoInfo.Packfiles.LastFullRepack.IsZero() {
+		response.LastFullRepack = &timestamppb.Timestamp{Seconds: repoInfo.Packfiles.LastFullRepack.Unix()}
+	}
+
+	return response, nil
 }

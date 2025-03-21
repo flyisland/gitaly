@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,12 +12,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestRepositoryInfo(t *testing.T) {
@@ -39,6 +42,27 @@ func TestRepositoryInfo(t *testing.T) {
 		require.NoError(t, err)
 		return uint64(size)
 	}()
+
+	repoFullRepackTimestamp := func(t *testing.T, repoPath string) *timestamppb.Timestamp {
+		timestamp, err := stats.FullRepackTimestamp(repoPath)
+		require.NoError(t, err)
+		return &timestamppb.Timestamp{Seconds: timestamp.Unix()}
+	}
+
+	repoAlternateModifiedTimestamp := func(t *testing.T, repoPath string) *timestamppb.Timestamp {
+		alternatesStat, err := os.Stat(filepath.Join(repoPath, "objects", "info", "alternates"))
+		require.NoError(t, err)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+
+			require.NoError(t, err)
+			return nil
+		}
+
+		return &timestamppb.Timestamp{Seconds: alternatesStat.ModTime().Unix()}
+	}
 
 	type setupData struct {
 		request          *gitalypb.RepositoryInfoRequest
@@ -80,7 +104,7 @@ func TestRepositoryInfo(t *testing.T) {
 		{
 			desc: "empty repository",
 			setup: func(t *testing.T) setupData {
-				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
 				return setupData{
 					request: &gitalypb.RepositoryInfoRequest{
@@ -94,7 +118,8 @@ func TestRepositoryInfo(t *testing.T) {
 								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
 							),
 						},
-						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+						Objects:        &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -120,7 +145,8 @@ func TestRepositoryInfo(t *testing.T) {
 								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
 							),
 						},
-						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+						Objects:        &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -146,7 +172,8 @@ func TestRepositoryInfo(t *testing.T) {
 								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
 							),
 						},
-						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+						Objects:        &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -172,9 +199,11 @@ func TestRepositoryInfo(t *testing.T) {
 							),
 						},
 						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-							Size:       123,
-							RecentSize: 123,
+							Size:              123,
+							RecentSize:        123,
+							LooseObjectsCount: 1,
 						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -202,9 +231,12 @@ func TestRepositoryInfo(t *testing.T) {
 							),
 						},
 						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-							Size:      123,
-							StaleSize: 123,
+							Size:                   123,
+							StaleSize:              123,
+							LooseObjectsCount:      1,
+							StaleLooseObjectsCount: 1,
 						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -236,10 +268,13 @@ func TestRepositoryInfo(t *testing.T) {
 							),
 						},
 						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-							Size:       770,
-							RecentSize: 70,
-							StaleSize:  700,
+							Size:                   770,
+							RecentSize:             70,
+							StaleSize:              700,
+							LooseObjectsCount:      2,
+							StaleLooseObjectsCount: 1,
 						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -264,9 +299,11 @@ func TestRepositoryInfo(t *testing.T) {
 							),
 						},
 						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-							Size:       123,
-							RecentSize: 123,
+							Size:          123,
+							RecentSize:    123,
+							PackfileCount: 1,
 						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -292,9 +329,12 @@ func TestRepositoryInfo(t *testing.T) {
 							),
 						},
 						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-							Size:      123,
-							StaleSize: 123,
+							Size:          123,
+							StaleSize:     123,
+							PackfileCount: 1,
+							CruftCount:    1,
 						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -320,10 +360,13 @@ func TestRepositoryInfo(t *testing.T) {
 							),
 						},
 						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-							Size:       123,
-							RecentSize: 123,
-							KeepSize:   123,
+							Size:          123,
+							RecentSize:    123,
+							KeepSize:      123,
+							PackfileCount: 1,
+							KeepCount:     1,
 						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -354,11 +397,313 @@ func TestRepositoryInfo(t *testing.T) {
 							),
 						},
 						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-							Size:       7770,
-							RecentSize: 770,
-							KeepSize:   700,
-							StaleSize:  7000,
+							Size:          7770,
+							RecentSize:    770,
+							KeepSize:      700,
+							StaleSize:     7000,
+							PackfileCount: 3,
+							KeepCount:     1,
+							CruftCount:    1,
 						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
+					},
+				}
+			},
+		},
+		{
+			desc: "repository with commit-graph",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
+				gittest.Exec(t, cfg, "-C", repoPath,
+					"-c",
+					"commitGraph.generationVersion=2",
+					"commit-graph",
+					"write",
+					"--reachable",
+					"--changed-paths",
+				)
+
+				// This test should only be concerned with the commit-graph info. Other info, especially
+				// sizes, are not deterministic.
+				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
+				require.NoError(t, err)
+
+				repoSize, err := dirSizeInBytes(repoPath)
+				require.NoError(t, err)
+
+				return setupData{
+					request: &gitalypb.RepositoryInfoRequest{
+						Repository: repo,
+					},
+					expectedResponse: &gitalypb.RepositoryInfoResponse{
+						Size: uint64(repoSize),
+						References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+							ReferenceBackend: gittest.FilesOrReftables(
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+							),
+							LooseCount: uint64(gittest.FilesOrReftables(1, 0)),
+						},
+						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
+							LooseObjectsCount: repoStats.LooseObjects.Count,
+							RecentSize:        repoStats.LooseObjects.Size,
+							Size:              repoStats.LooseObjects.Size,
+						},
+						CommitGraph: &gitalypb.RepositoryInfoResponse_CommitGraphInfo{
+							HasBloomFilters:   true,
+							HasGenerationData: true,
+						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
+					},
+				}
+			},
+		},
+		{
+			desc: "repository with bitmap info",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				// Write a commit and create a branch to ensure we have reachable objects
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
+
+				// Use explicit configuration to ensure bitmap is created with expected properties
+				gittest.Exec(t, cfg, "-C", repoPath,
+					"-c", "pack.writeBitmapLookupTable=true",
+					"-c", "pack.writeBitmapHashCache=true",
+					"repack", "-Adb")
+
+				// Get the actual repository info to use consistent sizes
+				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
+				require.NoError(t, err)
+
+				repoSize, err := dirSizeInBytes(repoPath)
+				require.NoError(t, err)
+
+				return setupData{
+					request: &gitalypb.RepositoryInfoRequest{
+						Repository: repo,
+					},
+					expectedResponse: &gitalypb.RepositoryInfoResponse{
+						Size: uint64(repoSize),
+						References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+							ReferenceBackend: gittest.FilesOrReftables(
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+							),
+							LooseCount: uint64(gittest.FilesOrReftables(1, 0)),
+						},
+						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
+							PackfileCount:     1,
+							Size:              repoStats.Packfiles.Size,
+							RecentSize:        repoStats.Packfiles.Size,
+							ReverseIndexCount: 1,
+						},
+						Bitmap: &gitalypb.RepositoryInfoResponse_BitmapInfo{
+							HasHashCache:   true,
+							HasLookupTable: true,
+							Version:        1,
+						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
+					},
+				}
+			},
+		},
+		{
+			desc: "repository with multi-pack-index",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				// Create initial commit and packfile
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithMessage("first"), gittest.WithBranch("main"))
+				gittest.Exec(t, cfg, "-C", repoPath, "repack", "-Ad")
+
+				// Add another commit and create a second packfile
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithMessage("second"), gittest.WithBranch("second"))
+
+				// Create multi-pack-index with explicit configuration
+				gittest.Exec(t, cfg, "-C", repoPath,
+					"-c", "pack.writeReverseIndex=true",
+					"repack", "-Ad", "--write-midx")
+
+				// Get the actual repository info
+				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
+				require.NoError(t, err)
+
+				repoSize, err := dirSizeInBytes(repoPath)
+				require.NoError(t, err)
+
+				return setupData{
+					request: &gitalypb.RepositoryInfoRequest{
+						Repository: repo,
+					},
+					expectedResponse: &gitalypb.RepositoryInfoResponse{
+						Size: uint64(repoSize),
+						References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+							ReferenceBackend: gittest.FilesOrReftables(
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+							),
+							LooseCount: uint64(gittest.FilesOrReftables(2, 0)),
+						},
+						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
+							PackfileCount:     repoStats.Packfiles.Count,
+							Size:              repoStats.Packfiles.Size,
+							RecentSize:        repoStats.Packfiles.Size,
+							ReverseIndexCount: repoStats.Packfiles.ReverseIndexCount,
+						},
+						MultiPackIndex: &gitalypb.RepositoryInfoResponse_MultiPackIndexInfo{
+							PackfileCount: repoStats.Packfiles.MultiPackIndex.PackfileCount,
+							Version:       1,
+						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
+					},
+				}
+			},
+		},
+		{
+			desc: "repository with multi-pack-index and bitmap",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				// Create initial commit and packfile
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithMessage("first"), gittest.WithBranch("main"))
+
+				// Create multi-pack-index with bitmap using explicit config
+				gittest.Exec(t, cfg, "-C", repoPath,
+					"-c", "pack.writeBitmapLookupTable=true",
+					"-c", "pack.writeBitmapHashCache=true",
+					"-c", "pack.writeReverseIndex=true",
+					"repack", "-Adb", "--write-midx")
+
+				// Get actual repository info
+				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
+				require.NoError(t, err)
+
+				repoSize, err := dirSizeInBytes(repoPath)
+				require.NoError(t, err)
+
+				return setupData{
+					request: &gitalypb.RepositoryInfoRequest{
+						Repository: repo,
+					},
+					expectedResponse: &gitalypb.RepositoryInfoResponse{
+						Size: uint64(repoSize),
+						References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+							ReferenceBackend: gittest.FilesOrReftables(
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+							),
+							LooseCount: uint64(gittest.FilesOrReftables(1, 0)),
+						},
+						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
+							PackfileCount:     1,
+							Size:              repoStats.Packfiles.Size,
+							RecentSize:        repoStats.Packfiles.Size,
+							ReverseIndexCount: 1,
+						},
+						MultiPackIndex: &gitalypb.RepositoryInfoResponse_MultiPackIndexInfo{
+							PackfileCount: 1,
+							Version:       1,
+						},
+						MultiPackIndexBitmap: &gitalypb.RepositoryInfoResponse_BitmapInfo{
+							HasHashCache:   true,
+							HasLookupTable: true,
+							Version:        1,
+						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
+					},
+				}
+			},
+		},
+		{
+			desc: "repository with garbage",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				writeFile(t, 1000, repoPath, "objects", "17", "garbage")
+
+				// Get actual repository info
+				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
+				require.NoError(t, err)
+
+				repoSize, err := dirSizeInBytes(repoPath)
+				require.NoError(t, err)
+
+				return setupData{
+					request: &gitalypb.RepositoryInfoRequest{
+						Repository: repo,
+					},
+					expectedResponse: &gitalypb.RepositoryInfoResponse{
+						Size: uint64(repoSize),
+						References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+							ReferenceBackend: gittest.FilesOrReftables(
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+							),
+						},
+						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
+							Size:                     repoStats.Packfiles.Size,
+							RecentSize:               repoStats.Packfiles.Size,
+							LooseObjectsGarbageCount: 1,
+						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
+					},
+				}
+			},
+		},
+		{
+			desc: "repository with alternates",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				poolRelativePath := gittest.NewObjectPoolName(t)
+				gittest.CreateObjectPool(t, ctx, cfg, repo, gittest.CreateObjectPoolConfig{
+					RelativePath:               poolRelativePath,
+					LinkRepositoryToObjectPool: true,
+				})
+
+				var objectsDirectory string
+				if testhelper.IsPraefectEnabled() {
+					// Praefect has a much more sophiasticated flow for object pool. This RPC should
+					// focus on translating repository stats rather than finding the precise
+					// alternates path.
+					repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
+					require.NoError(t, err)
+					objectsDirectory = repoStats.Alternates.ObjectDirectories[0]
+				} else {
+					// Without Praefect, it's trivial to imply the alternates path. This assertion
+					// uses the precise location.
+					var err error
+					objectsDirectory, err = filepath.Rel(
+						filepath.Join(repoPath, "objects"),
+						filepath.Join(cfg.Storages[0].Path, poolRelativePath, "objects"),
+					)
+					require.NoError(t, err)
+				}
+
+				repoSize, err := dirSizeInBytes(repoPath)
+				require.NoError(t, err)
+
+				return setupData{
+					request: &gitalypb.RepositoryInfoRequest{
+						Repository: repo,
+					},
+					expectedResponse: &gitalypb.RepositoryInfoResponse{
+						Size: uint64(repoSize),
+						References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+							ReferenceBackend: gittest.FilesOrReftables(
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+							),
+						},
+						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+						Alternates: &gitalypb.RepositoryInfoResponse_AlternatesInfo{
+							ObjectDirectories: []string{objectsDirectory},
+							LastModified:      repoAlternateModifiedTimestamp(t, repoPath),
+						},
+						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
 				}
 			},
@@ -459,9 +804,13 @@ func TestConvertRepositoryInfo(t *testing.T) {
 			desc: "packfiles",
 			repoInfo: stats.RepositoryInfo{
 				Packfiles: stats.PackfilesInfo{
-					Size:      123,
-					CruftSize: 3,
-					KeepSize:  7,
+					Size:              123,
+					CruftSize:         3,
+					KeepSize:          7,
+					Count:             10,
+					ReverseIndexCount: 5,
+					CruftCount:        1,
+					KeepCount:         3,
 				},
 				References: stats.ReferencesInfo{
 					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
@@ -475,10 +824,43 @@ func TestConvertRepositoryInfo(t *testing.T) {
 					),
 				},
 				Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
+					Size:              123,
+					RecentSize:        120,
+					StaleSize:         3,
+					KeepSize:          7,
+					PackfileCount:     10,
+					ReverseIndexCount: 5,
+					CruftCount:        1,
+					KeepCount:         3,
+				},
+			},
+		},
+		{
+			desc: "loose objects with counts",
+			repoInfo: stats.RepositoryInfo{
+				LooseObjects: stats.LooseObjectsInfo{
 					Size:       123,
-					RecentSize: 120,
 					StaleSize:  3,
-					KeepSize:   7,
+					Count:      50,
+					StaleCount: 5,
+				},
+				References: stats.ReferencesInfo{
+					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
+				},
+			},
+			expectedResponse: &gitalypb.RepositoryInfoResponse{
+				References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+					ReferenceBackend: gittest.FilesOrReftables(
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+					),
+				},
+				Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
+					Size:                   123,
+					RecentSize:             120,
+					StaleSize:              3,
+					LooseObjectsCount:      50,
+					StaleLooseObjectsCount: 5,
 				},
 			},
 		},
@@ -486,13 +868,19 @@ func TestConvertRepositoryInfo(t *testing.T) {
 			desc: "loose objects and packfiles",
 			repoInfo: stats.RepositoryInfo{
 				LooseObjects: stats.LooseObjectsInfo{
-					Size:      7,
-					StaleSize: 3,
+					Size:       7,
+					StaleSize:  3,
+					Count:      10,
+					StaleCount: 2,
 				},
 				Packfiles: stats.PackfilesInfo{
-					Size:      700,
-					CruftSize: 300,
-					KeepSize:  500,
+					Size:              700,
+					CruftSize:         300,
+					KeepSize:          500,
+					Count:             15,
+					ReverseIndexCount: 10,
+					CruftCount:        5,
+					KeepCount:         2,
 				},
 				References: stats.ReferencesInfo{
 					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
@@ -506,11 +894,207 @@ func TestConvertRepositoryInfo(t *testing.T) {
 					),
 				},
 				Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-					Size:       707,
-					RecentSize: 404,
-					StaleSize:  303,
-					KeepSize:   500,
+					Size:                   707,
+					RecentSize:             404,
+					StaleSize:              303,
+					KeepSize:               500,
+					PackfileCount:          15,
+					ReverseIndexCount:      10,
+					CruftCount:             5,
+					KeepCount:              2,
+					LooseObjectsCount:      10,
+					StaleLooseObjectsCount: 2,
 				},
+			},
+		},
+		{
+			desc: "commit graph info",
+			repoInfo: stats.RepositoryInfo{
+				CommitGraph: stats.CommitGraphInfo{
+					Exists:                    true,
+					CommitGraphChainLength:    3,
+					HasBloomFilters:           true,
+					HasGenerationData:         true,
+					HasGenerationDataOverflow: false,
+				},
+				References: stats.ReferencesInfo{
+					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
+				},
+			},
+			expectedResponse: &gitalypb.RepositoryInfoResponse{
+				References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+					ReferenceBackend: gittest.FilesOrReftables(
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+					),
+				},
+				Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+				CommitGraph: &gitalypb.RepositoryInfoResponse_CommitGraphInfo{
+					CommitGraphChainLength:    3,
+					HasBloomFilters:           true,
+					HasGenerationData:         true,
+					HasGenerationDataOverflow: false,
+				},
+			},
+		},
+		{
+			desc: "bitmap info",
+			repoInfo: stats.RepositoryInfo{
+				Packfiles: stats.PackfilesInfo{
+					Bitmap: stats.BitmapInfo{
+						Exists:         true,
+						HasHashCache:   true,
+						HasLookupTable: false,
+						Version:        2,
+					},
+				},
+				References: stats.ReferencesInfo{
+					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
+				},
+			},
+			expectedResponse: &gitalypb.RepositoryInfoResponse{
+				References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+					ReferenceBackend: gittest.FilesOrReftables(
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+					),
+				},
+				Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+				Bitmap: &gitalypb.RepositoryInfoResponse_BitmapInfo{
+					HasHashCache:   true,
+					HasLookupTable: false,
+					Version:        2,
+				},
+			},
+		},
+		{
+			desc: "multi-pack-index info",
+			repoInfo: stats.RepositoryInfo{
+				Packfiles: stats.PackfilesInfo{
+					MultiPackIndex: stats.MultiPackIndexInfo{
+						Exists:        true,
+						PackfileCount: 5,
+						Version:       2,
+					},
+				},
+				References: stats.ReferencesInfo{
+					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
+				},
+			},
+			expectedResponse: &gitalypb.RepositoryInfoResponse{
+				References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+					ReferenceBackend: gittest.FilesOrReftables(
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+					),
+				},
+				Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+				MultiPackIndex: &gitalypb.RepositoryInfoResponse_MultiPackIndexInfo{
+					PackfileCount: 5,
+					Version:       2,
+				},
+			},
+		},
+		{
+			desc: "multi-pack-index bitmap info",
+			repoInfo: stats.RepositoryInfo{
+				Packfiles: stats.PackfilesInfo{
+					MultiPackIndexBitmap: stats.BitmapInfo{
+						Exists:         true,
+						HasHashCache:   false,
+						HasLookupTable: true,
+						Version:        2,
+					},
+				},
+				References: stats.ReferencesInfo{
+					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
+				},
+			},
+			expectedResponse: &gitalypb.RepositoryInfoResponse{
+				References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+					ReferenceBackend: gittest.FilesOrReftables(
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+					),
+				},
+				Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+				MultiPackIndexBitmap: &gitalypb.RepositoryInfoResponse_BitmapInfo{
+					HasHashCache:   false,
+					HasLookupTable: true,
+					Version:        2,
+				},
+			},
+		},
+		{
+			desc: "alternates info",
+			repoInfo: stats.RepositoryInfo{
+				Alternates: stats.AlternatesInfo{
+					Exists:            true,
+					ObjectDirectories: []string{"/path/to/objects", "/another/path"},
+					LastModified:      time.Unix(1234567890, 0),
+				},
+				References: stats.ReferencesInfo{
+					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
+				},
+			},
+			expectedResponse: &gitalypb.RepositoryInfoResponse{
+				References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+					ReferenceBackend: gittest.FilesOrReftables(
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+					),
+				},
+				Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+				Alternates: &gitalypb.RepositoryInfoResponse_AlternatesInfo{
+					ObjectDirectories: []string{"/path/to/objects", "/another/path"},
+					LastModified:      timestamppb.New(time.Unix(1234567890, 0)),
+				},
+			},
+		},
+		{
+			desc: "no full repack",
+			repoInfo: stats.RepositoryInfo{
+				References: stats.ReferencesInfo{
+					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
+				},
+				// LastFullRepack is not set, so it should default to zero
+				Packfiles: stats.PackfilesInfo{
+					// Explicitly using a zero time to simulate no repack
+					LastFullRepack: time.Time{},
+				},
+			},
+			expectedResponse: &gitalypb.RepositoryInfoResponse{
+				References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+					ReferenceBackend: gittest.FilesOrReftables(
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+					),
+				},
+				Objects:        &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+				LastFullRepack: nil, // Should be zero timestamp when no repack has happened
+			},
+		},
+		{
+			desc: "is object pool and last full repack",
+			repoInfo: stats.RepositoryInfo{
+				IsObjectPool: true,
+				Packfiles: stats.PackfilesInfo{
+					LastFullRepack: time.Unix(1234567890, 0),
+				},
+				References: stats.ReferencesInfo{
+					ReferenceBackendName: gittest.DefaultReferenceBackend.Name,
+				},
+			},
+			expectedResponse: &gitalypb.RepositoryInfoResponse{
+				References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
+					ReferenceBackend: gittest.FilesOrReftables(
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+						gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+					),
+				},
+				Objects:        &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+				IsObjectPool:   true,
+				LastFullRepack: timestamppb.New(time.Unix(1234567890, 0)),
 			},
 		},
 	} {
