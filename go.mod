@@ -41,7 +41,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/urfave/cli/v2 v2.27.5
-	gitlab.com/gitlab-org/labkit v1.22.0
+	gitlab.com/gitlab-org/labkit v1.23.1
 	go.etcd.io/etcd/raft/v3 v3.5.19
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/goleak v1.3.0
