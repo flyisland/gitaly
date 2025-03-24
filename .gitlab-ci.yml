@@ -553,6 +553,8 @@ start-rails-specs:
     name: merge-requests/$RAILS_BRANCH_FOR_JOB
     on_stop: rails-specs-cleanup
   rules:
+    - changes:
+      - .tool-versions
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       when: manual
       allow_failure: true
