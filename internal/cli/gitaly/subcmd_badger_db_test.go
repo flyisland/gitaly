@@ -80,6 +80,27 @@ func TestBadgerDBCLI(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, string(output), "Key not found")
 	})
+
+	t.Run("update command", func(t *testing.T) {
+		cmdUpdate := exec.Command(cfg.BinaryPath("gitaly"), "db", "update", "--db-path", dbPath, `p/\x00\x00\x00\x00\x00\x00\x00\x01/applied_lsn`, "100")
+		output, err := cmdUpdate.CombinedOutput()
+		require.NoError(t, err)
+		require.Contains(t, string(output), "Updated key:")
+
+		cmdGet := exec.Command(cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, `p/\x00\x00\x00\x00\x00\x00\x00\x01/applied_lsn`)
+		output, err = cmdGet.CombinedOutput()
+		require.NoError(t, err)
+		require.Contains(t, string(output), "100")
+
+		cmdUpdate = exec.Command(cfg.BinaryPath("gitaly"), "db", "update", "--db-path", dbPath, "partition_id_seq", "10")
+		_, err = cmdUpdate.CombinedOutput()
+		require.NoError(t, err)
+
+		cmdGet = exec.Command(cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, "partition_id_seq")
+		output, err = cmdGet.CombinedOutput()
+		require.NoError(t, err)
+		require.Contains(t, string(output), "10")
+	})
 }
 
 func setupTestDB(t *testing.T) (keyvalue.Store, string, func()) {
