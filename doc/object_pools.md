@@ -27,8 +27,8 @@ Afterwards, any repositories which shall be a member of the pool needs to be
 linked to it. Linking most importantly involves setting up the "alternates" file
 of the pool member, but it also includes deleting all bitmaps for packs of the
 member. This is required by Git because it can only ever use a single bitmap.
-While it's not an error to have multiple bitmaps, Git will print a [user-visible
-warning](https://gitlab.com/gitlab-org/gitaly/-/issues/1728) on clone or fetch
+While it's not an error to have multiple bitmaps, Git will print a
+[user-visible warning](https://gitlab.com/gitlab-org/gitaly/-/issues/1728) on clone or fetch
 if there are. See [`git-multi-pack-index(1)`](https://git-scm.com/docs/multi-pack-index#_future_work)
 for an explanation of this limitation.
 

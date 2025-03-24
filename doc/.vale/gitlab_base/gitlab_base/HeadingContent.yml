@@ -1,0 +1,20 @@
+---
+# Warning: gitlab_base.HeadingContent
+#
+# Checks for generic, unhelpful subheadings.
+#
+# For a list of all options, see https://vale.sh/docs/topics/styles/
+extends: existence
+message: "Rename the heading '%s', or re-purpose the content elsewhere."
+vocab: false
+level: warning
+link: https://docs.gitlab.com/development/documentation/topic_types/concept/#concept-topic-titles
+ignorecase: true
+nonword: true
+scope: raw
+tokens:
+  - '\#+ How it works'
+  - '\#+ Limitations'
+  - '\#+ Overview'
+  - '\#+ Use cases?'
+  - '\#+ Important notes?'

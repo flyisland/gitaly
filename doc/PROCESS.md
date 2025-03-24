@@ -204,7 +204,7 @@ what commits aren't deployed yet:
 
 ```shell
 git fetch
-git shortlog $(curl -s https://gitlab.com/gitlab-org/gitlab/-/raw/HASH/GITALY_SERVER_VERSION)..origin/master
+git shortlog $(curl -s "https://gitlab.com/gitlab-org/gitlab/-/raw/HASH/GITALY_SERVER_VERSION")..origin/master
 ```
 
 See the [documentation on releases below](#gitaly-releases) for more
@@ -397,8 +397,8 @@ Note that you need both the `100` and `true` as separate commands. See
 [the documentation on actor gates][actor-gates]
 
 If the feature is left at `50%` but is also set to `true` by default
-the `50%` will win, even if `OnByDefault: true` is [set for
-it](#feature-lifecycle-after-it-is-live). It'll only be 100% live once
+the `50%` will win, even if `OnByDefault: true` is
+[set for it](#feature-lifecycle-after-it-is-live). It'll only be 100% live once
 the feature flag code is deleted. So make sure you don't skip the
 `100%` step.
 
@@ -661,7 +661,7 @@ Slack channel.
 
 Sometimes, we need to work on both Gitaly and GitLab Rails implementations in parallel. Ideally, we can define and
 publish all Protobuf changes beforehand. In practice, a complicated change might require modifying the Protobuf multiple
-times until reaching a stable state. It's more convenient to let GitLab Rails point the gem to the the developing branch
+times until reaching a stable state. It's more convenient to let GitLab Rails point the gem to the developing branch
 in Gitaly.
 
 In the local environment, we can point it to the developing gem using following steps:
@@ -680,8 +680,8 @@ Unfortunately, the Gitaly repository does not include the gemspec or any auto-ge
 generated on the fly while running `make build-proto-gem`. Thus, we cannot point the `Gemfile` to the developing branch
 directly on CI environment.
 
-As a workaround, we can build and publish the gem under a different name for development purpose only. Here's [an
-example](https://rubygems.org/gems/gitaly-qmnguyen).
+As a workaround, we can build and publish the gem under a different name for development purpose only. Here's
+[an example](https://rubygems.org/gems/gitaly-qmnguyen).
 
 - Run `BUILD_GEM_OPTIONS="--skip-verify-tag" BUILD_GEM_NAME="gitaly-yourname" make build-proto-gem`. This command
   builds the gem under a different name. The resulting gem is located at `_build/gitaly-yourname.gem`.
@@ -710,7 +710,7 @@ by tag creation.
 If a new [major module version update](https://golang.org/doc/modules/major-version) is needed,
 it can be changed by running `upgrade-module` `make` task with desired parameters:
 
-```bash
+```shell
 make upgrade-module FROM_MODULE=v15 TO_MODULE=v16
 ```
 
@@ -753,12 +753,12 @@ In order to add a patch, you can simply add it to the `GIT_PATCHES` array in our
 `Makefile`.
 
 Note: while there is only a single Git distribution which is distributed across
-all of GitLab's official distributions, there may be unofficial ones which use a
+all of the GitLab official distributions, there may be unofficial ones which use a
 different version of Git (most importantly source-based installations). So even
 if you add patches to Gitaly's Makefile, you cannot assume that installations
 will always have these patches. As a result, all code which makes use of
-patched-in features must have fallback code to support the [minimum required Git
-version](../README.md#installation)
+patched-in features must have fallback code to support the
+[minimum required Git version](../README.md#installation).
 
 ## RPC deprecation process
 
@@ -778,7 +778,7 @@ We are deprecating RPC FooBar because **REASONS**.
 
 ## Bumping the major version
 
-When GitLab's major version is updated, we also need to bump Gitaly's module
+When the GitLab major version is updated, we also need to bump Gitaly's module
 version number. Use `make upgrade-module` for this.
 
 Gitaly version numbers match GitLab version numbers for reasons discussed below.
@@ -806,5 +806,5 @@ Changing this would have a large impact on the GitLab release process because mu
 of the tooling relies on the assumption that Gitaly versions match GitLab
 versions.
 
-There are also other challenges to removing the major version, detailed in [this
-issuey](https://gitlab.com/gitlab-org/gitaly/-/issues/4714).
+There are also other challenges to removing the major version, detailed in
+[this issue](https://gitlab.com/gitlab-org/gitaly/-/issues/4714).

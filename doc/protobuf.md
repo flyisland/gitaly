@@ -1,7 +1,7 @@
 # Protobuf specifications and client libraries for Gitaly
 
-Gitaly is part of GitLab. It is a [server
-application](https://gitlab.com/gitlab-org/gitaly) that uses its own
+Gitaly is part of GitLab. It is a
+[server application](https://gitlab.com/gitlab-org/gitaly) that uses its own
 gRPC protocol to communicate with its clients. This repository
 contains the protocol definition and automatically generated wrapper
 code for Go and Ruby.
@@ -97,15 +97,15 @@ new RPC call and start a deprecation procedure (see below) for the old one.
 
 Services, RPCs, messages and their fields declared in `.proto` files must have
 comments. This documentation must be sufficient to let potential callers figure
-out why this RPC exists and what the behaviour of an RPC is without looking up
+out why this RPC exists and what the behavior of an RPC is without looking up
 its implementation. Special error cases should be documented.
 
 ### Errors
 
 Gitaly uses [error codes](https://pkg.go.dev/google.golang.org/grpc/codes) to
 indicate basic error classes. In case error codes are not sufficient for clients
-to make specific error cases actionable, Gitaly uses the [rich error
-model](https://www.grpc.io/docs/guides/error/#richer-error-model) provided by
+to make specific error cases actionable, Gitaly uses the
+[rich error model](https://www.grpc.io/docs/guides/error/#richer-error-model) provided by
 gRPC. With this error model, Gitaly can embed Protobuf messages into returned
 errors and thus provide exact information about error conditions to the client.
 In case the RPC needs to use the rich error model, it should have its own

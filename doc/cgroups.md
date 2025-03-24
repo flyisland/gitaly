@@ -50,7 +50,7 @@ top level CPU limit.
 Gitaly. This number cannot exceed the top level CPU quota.
 
 These cgroups will be created when Gitaly starts up. A circular hashing algorithm
-is used to assign repositories to cgroups. So when  we reach the max number of
+is used to assign repositories to cgroups. So when we reach the max number of
 cgroups we set in `[cgroups.repositories]`, requests from subsequent repositories
 will be assigned to an existing cgroup.
 

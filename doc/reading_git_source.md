@@ -41,8 +41,8 @@ searching the `t/` directory for it.
 
 ## Look at the technical documentation
 
-There is a lot of [technical
-documentation](https://gitlab.com/gitlab-org/git/tree/master/Documentation/technical)
+There is a lot of
+[technical documentation](https://gitlab.com/gitlab-org/git/tree/master/Documentation/technical)
 in the Git source. If you want to know more about file formats, internal Git API's or
 network protocols, this is a good place to start.
 
@@ -88,9 +88,8 @@ declarations of functions.
 
 So if you want to do a top-down walk of a Git sub-command, expect to
 find the main entry point at the bottom of the corresponding
-`builtin/*.c` file. The entry point for e.g. `git blame` will be called
-[`cmd_blame` in
-`builtin/blame.c`](https://gitlab.com/gitlab-org/git/blob/v2.22.0/builtin/blame.c#L778).
+`builtin/*.c` file. The entry point for e.g. `git blame` will be called
+[`cmd_blame` in `builtin/blame.c`](https://gitlab.com/gitlab-org/git/blob/v2.22.0/builtin/blame.c#L778).
 Recall that hyphens are not allowed in function names, so the entry
 point for `git upload-pack` is `cmd_upload_pack`.
 
@@ -103,7 +102,7 @@ The way we write Ruby and Go at GitLab, it is common to bundle and hide
 state in classes (Ruby) or structs (Go). Global state is rare.
 
 Things are different in Git. Builtin commands often use `static`
-(i.e. file-scoped) global state. This reduces the number of arguments
+(i.e. file-scoped) global state. This reduces the number of arguments
 that have to be passed to functions, just like having state in a Ruby
 class does.
 

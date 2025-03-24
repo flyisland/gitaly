@@ -47,7 +47,7 @@ on other view models, as well as more complicated scenarios.
 1. Access the UI dashboard again. The left side includes some filters while the
    right side shows the timeline and corresponding events. Gitaly is not exposed
    directly, so any Remote Procedure Calls (RPCs) originate through entry-point
-   components such as Workhorse, GitLab-Shell, and GitLab Rails. You’ll see the
+   components such as Workhorse, GitLab Shell, and GitLab Rails. You’ll see the
    traces of those services there.
 1. Select a trace to enter the trace detail view. The default view displays
    the timeline of spans (events) in chronological order, through multiple
