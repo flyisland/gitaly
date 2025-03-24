@@ -279,11 +279,22 @@ func TestUpdater_fileDirectoryConflict(t *testing.T) {
 					t.Run("same transaction", func(t *testing.T) {
 						cfg, _, repoPath, updater := setupUpdater(t, ctx)
 
-						expectedErr := InTransactionConflictError{
-							FirstReferenceName:  tc.firstReference.String(),
-							SecondReferenceName: tc.secondReference.String(),
+						// TODO: change this back to a single assertion once Gitaly only supports versions
+						//       of Git containing this change: https://gitlab.com/gitlab-org/git/-/commit/6c90726beb
+						expectedErrOptions := []InTransactionConflictError{
+							{
+								FirstReferenceName:  tc.firstReference.String(),
+								SecondReferenceName: tc.secondReference.String(),
+							},
+							{
+								FirstReferenceName:  tc.secondReference.String(),
+								SecondReferenceName: tc.firstReference.String(),
+							},
 						}
-						defer func() { require.Equal(t, expectedErr, updater.Close()) }()
+
+						defer func() {
+							require.Contains(t, expectedErrOptions, updater.Close())
+						}()
 
 						commitID := gittest.WriteCommit(t, cfg, repoPath)
 
@@ -291,7 +302,7 @@ func TestUpdater_fileDirectoryConflict(t *testing.T) {
 						require.NoError(t, updater.Create(tc.firstReference, commitID))
 						require.NoError(t, updater.Create(tc.secondReference, commitID))
 
-						require.Equal(t, expectedErr, method.finish(updater))
+						require.Contains(t, expectedErrOptions, method.finish(updater))
 					})
 				})
 			}
