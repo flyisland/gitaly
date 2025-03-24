@@ -23,6 +23,7 @@ func TestMain(m *testing.M) {
 type mockRaftManager struct {
 	RaftManager
 	logManager storage.LogManager
+	config     config.Raft
 }
 
 // EntryPath returns an absolute path to a given log entry's WAL files.

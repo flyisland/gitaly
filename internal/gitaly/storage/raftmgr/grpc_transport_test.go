@@ -1,6 +1,7 @@
 package raftmgr
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -57,7 +58,8 @@ func (m mockStorageNode) GetTransport() Transport {
 
 type mockRaftServer struct {
 	gitalypb.UnimplementedRaftServiceServer
-	node mockStorageNode
+	node                mockStorageNode
+	SendSnapshotHandler func(stream gitalypb.RaftService_SendSnapshotServer) error
 }
 
 func (s *mockRaftServer) SendMessage(stream gitalypb.RaftService_SendMessageServer) error {
@@ -80,6 +82,35 @@ func (s *mockRaftServer) SendMessage(stream gitalypb.RaftService_SendMessageServ
 	}
 
 	return stream.SendAndClose(&gitalypb.RaftMessageResponse{})
+}
+
+func (s *mockRaftServer) SendSnapshot(stream gitalypb.RaftService_SendSnapshotServer) error {
+	if s.SendSnapshotHandler != nil {
+		return s.SendSnapshotHandler(stream)
+	}
+
+	// Get the context from the stream
+	ctx := stream.Context()
+
+	// Read all messages from the client with context awareness
+	for {
+		// Check if context is cancelled before attempting to receive
+		select {
+		case <-ctx.Done():
+			return status.Errorf(codes.Canceled, "snapshot streaming cancelled: %v", ctx.Err())
+		default:
+		}
+		_, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return status.Errorf(codes.Internal, "receive error: %v", err)
+		}
+	}
+
+	return stream.SendAndClose(&gitalypb.RaftSnapshotMessageResponse{})
 }
 
 func TestGrpcTransport_SendAndReceive(t *testing.T) {
@@ -126,7 +157,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 			logger := testhelper.NewLogger(t)
 
 			require.Greater(t, tc.numNodes, 1)
-			testCluster := setupCluster(t, logger, tc.numNodes, tc.partitionID)
+			testCluster := setupCluster(t, logger, tc.numNodes, tc.partitionID, nil)
 			leader := testCluster.leader
 
 			if tc.removeConn {
@@ -184,7 +215,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 	}
 }
 
-func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partitionID int) *cluster {
+func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partitionID int, createMockServer func(transport *GrpcTransport) *mockRaftServer) *cluster {
 	dir := t.TempDir()
 	kvStore, err := keyvalue.NewBadgerStore(logger, dir)
 	require.NoError(t, err)
@@ -205,11 +236,20 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		))
 
 		transport := NewGrpcTransport(logger, cfg, routingTable, registry, pool)
-		testRaftServer := &mockRaftServer{
-			node: mockStorageNode{
-				transport: transport,
-			},
+
+		// Use the provided function to create a mock server
+		var testRaftServer *mockRaftServer
+		if createMockServer != nil {
+			testRaftServer = createMockServer(transport)
+		} else {
+			// Default implementation if none provided
+			testRaftServer = &mockRaftServer{
+				node: mockStorageNode{
+					transport: transport,
+				},
+			}
 		}
+
 		gitalypb.RegisterRaftServiceServer(srv, testRaftServer)
 
 		go testhelper.MustServe(t, srv, listener)
@@ -222,9 +262,6 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	}
 
 	registries := []ManagerRegistry{}
-	for i := 0; i < numNodes; i++ {
-		registries = append(registries, NewRaftManagerRegistry())
-	}
 
 	cluster := &cluster{}
 	cluster.leader = &mockStorageNode{}
@@ -232,6 +269,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 
 	// First set up all servers and fill routing table
 	for range numNodes {
+		registries = append(registries, NewRaftManagerRegistry())
 		srv, listener, addr := runServer(t)
 		servers = append(servers, srv)
 		listeners = append(listeners, listener)
@@ -242,6 +280,8 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	for i := range numNodes {
 		config := testcfg.Build(t)
 		config.Raft.ClusterID = clusterID
+		config.Raft.SnapshotDir = testhelper.TempDir(t)
+
 		transport := createTransport(config, servers[i], listeners[i], addresses[i], registries[i])
 		node := &mockStorageNode{
 			transport:       transport,
@@ -314,6 +354,7 @@ func newManager(cfg config.Cfg) RaftManager {
 
 	return &mockRaftManager{
 		logManager: walManager,
+		config:     cfg.Raft,
 	}
 }
 
@@ -365,4 +406,183 @@ func createTestMessages(t *testing.T, cluster *cluster, logReader storage.LogRea
 	}
 
 	return messages
+}
+
+func TestGrpcTransport_SendSnapshot(t *testing.T) {
+	t.Parallel()
+
+	type testCase struct {
+		name                string
+		setupFile           func(t *testing.T) (string, error) // Return file path instead of file
+		cancelContext       bool
+		expectedError       string
+		expectFinished      bool
+		removeConn          bool
+		setupMockRaftServer func(transport *GrpcTransport) *mockRaftServer
+	}
+
+	testCases := []testCase{
+		{
+			name: "Successful snapshot send",
+			setupFile: func(t *testing.T) (string, error) {
+				file, err := os.CreateTemp("", "snapshot.snap")
+				if err != nil {
+					return "", err
+				}
+				defer file.Close()
+
+				_, err = file.Write(make([]byte, 1024*1024*5)) // 5MB
+				if err != nil {
+					return "", err
+				}
+
+				return file.Name(), nil
+			},
+			cancelContext:  false,
+			expectedError:  "",
+			expectFinished: true,
+		},
+		{
+			name: "Cancelled snapshot in midst of streaming",
+			setupFile: func(t *testing.T) (string, error) {
+				file, err := os.CreateTemp("", "snapshot.snap")
+				if err != nil {
+					return "", err
+				}
+				defer file.Close()
+
+				// Must be bigger than the chunk size read in receiver node
+				_, err = file.Write(make([]byte, 1024*1024*10)) // 10MB
+				if err != nil {
+					return "", err
+				}
+
+				return file.Name(), nil
+			},
+			cancelContext:  true,
+			expectedError:  "context canceled",
+			expectFinished: false,
+			setupMockRaftServer: func(transport *GrpcTransport) *mockRaftServer {
+				return &mockRaftServer{
+					node: mockStorageNode{
+						transport: transport,
+					},
+					SendSnapshotHandler: func(stream gitalypb.RaftService_SendSnapshotServer) error {
+						select {
+						case <-stream.Context().Done():
+							return status.Error(codes.Canceled, "streaming snapshot canceled")
+						default:
+							return nil
+						}
+					},
+				}
+			},
+		},
+		{
+			name: "Follower becomes unavailable by severing connection",
+			setupFile: func(t *testing.T) (string, error) {
+				file, err := os.CreateTemp("", "snapshot.snap")
+				if err != nil {
+					return "", err
+				}
+				defer file.Close()
+
+				// Must be bigger than the chunk size read in receiver node
+				_, err = file.Write(make([]byte, 1024*1024*50)) // 50MB
+				if err != nil {
+					return "", err
+				}
+
+				return file.Name(), nil
+			},
+			cancelContext:  false,
+			expectedError:  "Unavailable",
+			expectFinished: false,
+			removeConn:     true,
+			setupMockRaftServer: func(transport *GrpcTransport) *mockRaftServer {
+				return &mockRaftServer{
+					node: mockStorageNode{
+						transport: transport,
+					},
+					SendSnapshotHandler: func(stream gitalypb.RaftService_SendSnapshotServer) error {
+						// Simulate connection drop
+						return status.Error(codes.Unavailable, "connection lost")
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(testhelper.Context(t))
+			defer cancel()
+
+			logger := testhelper.NewLogger(t)
+
+			testCluster := setupCluster(t, logger, 3, 1, tc.setupMockRaftServer)
+			leader := testCluster.leader
+
+			t.Cleanup(func() {
+				for _, follower := range testCluster.followers {
+					require.NoError(t, follower.transport.connectionPool.Close())
+				}
+				require.NoError(t, leader.transport.connectionPool.Close())
+			})
+
+			follower := testCluster.followers[0]
+
+			// Create a test msg
+			msg := raftpb.Message{
+				Type:    raftpb.MsgSnap,
+				From:    leader.id,
+				To:      follower.id,
+				Term:    1,
+				Index:   1,
+				Entries: []raftpb.Entry{},
+			}
+
+			// Get file path and create cleanup
+			filePath, err := tc.setupFile(t)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				require.NoError(t, os.Remove(filePath))
+			})
+
+			// Open the file for reading
+			file, err := os.Open(filePath)
+			require.NoError(t, err)
+			defer file.Close()
+
+			if tc.cancelContext {
+				cancel()
+			}
+
+			snapshot := &Snapshot{
+				file: file,
+				metadata: SnapshotMetadata{
+					term:  msg.Term,
+					index: storage.LSN(msg.Index),
+				},
+			}
+
+			if tc.removeConn {
+				// Simulate follower server stopped at any given time
+				go func() {
+					testCluster.followers[0].server.Stop()
+				}()
+			}
+
+			err = leader.transport.SendSnapshot(ctx, &gitalypb.PartitionKey{
+				AuthorityName: storageName,
+				PartitionId:   1,
+			}, msg, snapshot)
+			if tc.expectedError != "" {
+				require.ErrorContains(t, err, tc.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

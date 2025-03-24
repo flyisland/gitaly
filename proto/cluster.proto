@@ -87,11 +87,37 @@ message RaftMessageRequest {
 message RaftMessageResponse {
 }
 
+// RaftSnapshotMessageRequest is the input to SendSnapshot RPC.
+message RaftSnapshotMessageRequest {
+  oneof raft_snapshot_payload {
+    // raft_msg is a wrapper for raftpb.Message
+    RaftMessageRequest raft_msg = 1;
+    // chunk of snapshot data
+    bytes chunk = 2;
+  }
+}
+
+// RaftSnapshotMessageResponse is the response to SendSnapshot RPC.
+message RaftSnapshotMessageResponse {
+  // destination is where the snapshot is saved.
+  string destination = 1;
+  // snapshot_size is the snapshot size in bytes.
+  uint64 snapshot_size = 2;
+}
+
 // RaftService manages the sending of Raft messages to peers.
 service RaftService {
   // SendMessage processes Raft messages and ensures they are handled by
   // the receiving node to update its Raft state machine.
   rpc SendMessage(stream RaftMessageRequest) returns (RaftMessageResponse) {
+    option (op_type) = {
+      op: MUTATOR
+      scope_level: STORAGE
+    };
+  }
+  // SendSnapshot sends raft snapshots from the leader to the follower node. Typically it 
+  // would be useful for nodes to catch up to the latest state. 
+  rpc SendSnapshot(stream RaftSnapshotMessageRequest) returns (RaftSnapshotMessageResponse) {
     option (op_type) = {
       op: MUTATOR
       scope_level: STORAGE

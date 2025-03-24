@@ -18,6 +18,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v16/streamio"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -33,6 +34,7 @@ type Transport interface {
 	Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error
 	// Receive receives a Raft message and processes it.
 	Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error
+	SendSnapshot(ctx context.Context, partitionKey *gitalypb.PartitionKey, message raftpb.Message, snapshot *Snapshot) error
 }
 
 // GrpcTransport is a gRPC transport implementation for sending Raft messages across nodes.
@@ -279,4 +281,100 @@ func unpackLogData(msg *gitalypb.RaftEntry, logEntryPath string) error {
 	}
 
 	return nil
+}
+
+// SendSnapshot sends a snapshot of a partition to a specified node in the cluster.
+func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.PartitionKey, message raftpb.Message, snapshot *Snapshot) (returnedErr error) {
+	followerNodeID := message.To
+
+	// Find replica's address as recipient of snapshot
+	replica, err := t.routingTable.Translate(pk, followerNodeID)
+	if err != nil {
+		return fmt.Errorf("translate nodeID %d: %w", followerNodeID, err)
+	}
+
+	addr := replica.GetMetadata().GetAddress()
+
+	// Get raft client of follower node
+	client, returnedErr := t.getRaftClient(ctx, addr)
+	if returnedErr != nil {
+		return returnedErr
+	}
+
+	// Create a client stream
+	stream, err := client.SendSnapshot(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create stream: %w", err)
+	}
+
+	// Ensure stream is closed properly
+	defer func() {
+		if _, err := stream.CloseAndRecv(); err != nil {
+			returnedErr = errors.Join(returnedErr, formatError(err, followerNodeID, "close stream"))
+		}
+	}()
+
+	if err := stream.Send(&gitalypb.RaftSnapshotMessageRequest{
+		RaftSnapshotPayload: &gitalypb.RaftSnapshotMessageRequest_RaftMsg{
+			RaftMsg: &gitalypb.RaftMessageRequest{
+				ClusterId: t.cfg.Raft.ClusterID,
+				ReplicaId: &gitalypb.ReplicaID{
+					StorageName: replica.GetStorageName(),
+					PartitionKey: &gitalypb.PartitionKey{
+						AuthorityName: pk.GetAuthorityName(),
+						PartitionId:   pk.GetPartitionId(),
+					},
+				},
+				Message: &message,
+			},
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to send raft message: %w", err)
+	}
+
+	// Send snapshot data in chunks to the server
+	sw := streamio.NewWriter(func(p []byte) error {
+		select {
+		case <-stream.Context().Done():
+			return fmt.Errorf("context cancelled while sending snapshot: %w", ctx.Err())
+		default:
+			return stream.Send(&gitalypb.RaftSnapshotMessageRequest{
+				RaftSnapshotPayload: &gitalypb.RaftSnapshotMessageRequest_Chunk{
+					Chunk: p,
+				},
+			})
+		}
+	})
+	sent, err := io.Copy(sw, snapshot.file)
+	if err != nil {
+		return fmt.Errorf("failed to send chunk, %d bytes sent: %w", sent, err)
+	}
+
+	return
+}
+
+// getRaftClient returns a Raft client connection for the given address
+func (t *GrpcTransport) getRaftClient(ctx context.Context, addr string) (gitalypb.RaftServiceClient, error) {
+	// get the connection to the node
+	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.Token)
+	if err != nil {
+		return nil, fmt.Errorf("get connection to address %s: %w", addr, err)
+	}
+
+	return gitalypb.NewRaftServiceClient(conn), nil
+}
+
+// formatError formats gRPC errors with specific messages based on error codes.
+// It handles common connection-related errors and uses the provided default message for other errors.
+func formatError(err error, nodeID uint64, defaultMsg string) error {
+	switch status.Code(err) {
+	case codes.Unavailable:
+		return fmt.Errorf("connection to node %d lost: %w", nodeID, err)
+	case codes.Canceled:
+		return fmt.Errorf("node %d rejected request: connection canceled: %w", nodeID, err)
+	case codes.Aborted:
+		return fmt.Errorf("node %d aborted request: %w", nodeID, err)
+	default:
+		return fmt.Errorf("%s to node %d: %w", defaultMsg, nodeID, err)
+	}
 }
