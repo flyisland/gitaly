@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,6 +40,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v16/streamio"
 	"gitlab.com/gitlab-org/labkit/correlation"
 	labkitcorrelation "gitlab.com/gitlab-org/labkit/correlation/grpc"
 	labkittracing "gitlab.com/gitlab-org/labkit/tracing"
@@ -844,36 +846,78 @@ func TestGitalyServerReturnsError(t *testing.T) {
 		RetryAfter:   durationpb.New(0),
 	})
 
+	largeErrMsg := strings.Repeat("x", streamio.WriteBufferSize*4)
+
 	for _, tc := range []struct {
+		name           string
 		hook           string
 		args           []string
+		err            error
 		stdin          string
 		expectedStderr string
 	}{
 		{
+			name:           "pre-receive hook; short error",
 			hook:           "pre-receive",
 			stdin:          "abc",
+			err:            resourceExhaustedErr,
 			expectedStderr: "error executing git hook\n",
 		},
 		{
+			name:           "post-receive hook; short error",
 			hook:           "post-receive",
 			stdin:          "abc",
+			err:            resourceExhaustedErr,
 			expectedStderr: "error executing git hook\n",
 		},
 		{
+			name:           "update hook; short error",
 			hook:           "update",
 			args:           []string{"ref", "oldValue", "newValue"},
 			stdin:          "abc",
+			err:            resourceExhaustedErr,
 			expectedStderr: "error executing git hook\n",
 		},
 		{
+			name:           "reference-transaction hook; short error",
 			hook:           "reference-transaction",
 			args:           []string{"prepared"},
 			stdin:          "abc",
+			err:            resourceExhaustedErr,
+			expectedStderr: "error executing git hook\n",
+		},
+		{
+			name:           "pre-receive hook; long error",
+			hook:           "pre-receive",
+			stdin:          "abc",
+			err:            errors.New(largeErrMsg),
+			expectedStderr: "error executing git hook\n",
+		},
+		{
+			name:           "post-receive hook; long error",
+			hook:           "post-receive",
+			stdin:          "abc",
+			err:            errors.New(largeErrMsg),
+			expectedStderr: "error executing git hook\n",
+		},
+		{
+			name:           "update hook; long error",
+			hook:           "update",
+			args:           []string{"ref", "oldValue", "newValue"},
+			stdin:          "abc",
+			err:            errors.New(largeErrMsg),
+			expectedStderr: "error executing git hook\n",
+		},
+		{
+			name:           "reference-transaction hook; long error",
+			hook:           "reference-transaction",
+			args:           []string{"prepared"},
+			stdin:          "abc",
+			err:            errors.New(largeErrMsg),
 			expectedStderr: "error executing git hook\n",
 		},
 	} {
-		t.Run(tc.hook, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx := testhelper.Context(t)
@@ -888,16 +932,16 @@ func TestGitalyServerReturnsError(t *testing.T) {
 
 			runHookServiceWithMockServer(t, cfg, &hookMockServer{
 				preReceiveHook: func(server gitalypb.HookService_PreReceiveHookServer) error {
-					return resourceExhaustedErr
+					return tc.err
 				},
 				postReceiveHook: func(server gitalypb.HookService_PostReceiveHookServer) error {
-					return resourceExhaustedErr
+					return tc.err
 				},
 				updateHook: func(request *gitalypb.UpdateHookRequest, server gitalypb.HookService_UpdateHookServer) error {
-					return resourceExhaustedErr
+					return tc.err
 				},
 				referenceTransactionHook: func(server gitalypb.HookService_ReferenceTransactionHookServer) error {
-					return resourceExhaustedErr
+					return tc.err
 				},
 			})
 
