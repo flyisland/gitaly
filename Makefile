@@ -607,12 +607,21 @@ git: install-git
 
 .PHONY: build-git
 ## Build Git distribution.
+ifdef USE_MESON
+build-git: ${DEPENDENCY_DIR}/git-distribution/build/git
+else
 build-git: ${DEPENDENCY_DIR}/git-distribution/git
+endif
 
 .PHONY: install-git
 ## Install Git distribution.
+ifdef USE_MESON
+install-git: build-git
+	${Q}meson install -C "${DEPENDENCY_DIR}/git-distribution/build"
+else
 install-git: build-git
 	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${DEPENDENCY_DIR}/git-distribution" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} install
+endif
 
 ${SOURCE_DIR}/NOTICE: ${BUILD_DIR}/NOTICE
 	${Q}mv $< $@
@@ -631,9 +640,15 @@ ${TOOLS_DIR}: | ${BUILD_DIR}
 ${DEPENDENCY_DIR}: | ${BUILD_DIR}
 	${Q}mkdir -p ${DEPENDENCY_DIR}
 
-# This target builds a full Git distribution.
+# These targets build a full Git distribution with the Makefile...
 ${DEPENDENCY_DIR}/git-distribution/git: ${DEPENDENCY_DIR}/git-distribution/Makefile
 	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "$(<D)" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS}
+	${Q}touch $@
+# ... and with Meson.
+${DEPENDENCY_DIR}/git-distribution/build/git: ${DEPENDENCY_DIR}/git-distribution/Makefile
+	${Q}rm -rf "${DEPENDENCY_DIR}/git-distribution/build"
+	${Q}meson setup "${DEPENDENCY_DIR}/git-distribution" "${DEPENDENCY_DIR}/git-distribution/build" ${GIT_MESON_BUILD_OPTIONS}
+	${Q}meson compile -C "${DEPENDENCY_DIR}/git-distribution/build"
 	${Q}touch $@
 
 # These targets build specific releases of Git.
