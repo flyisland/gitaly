@@ -190,6 +190,7 @@ ifeq ($(origin GIT_BUILD_OPTIONS),undefined)
     endif
     ## Build options used for Git when building with Meson.
     GIT_MESON_BUILD_OPTIONS ?=
+    GIT_MESON_BUILD_OPTIONS += -Dprefix="${GIT_PREFIX}"
     GIT_MESON_BUILD_OPTIONS += -Dbuildtype=debugoptimized
     GIT_MESON_BUILD_OPTIONS += -Dcurl=enabled
     GIT_MESON_BUILD_OPTIONS += -Dexpat=disabled
@@ -703,7 +704,7 @@ endif
 
 $(patsubst %,${DEPENDENCY_DIR}/git-\%/build/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
 	${Q}rm -rf "$(dir ${@D})"/build
-	${Q}meson setup "$(dir ${@D})" "$(dir ${@D})"/build -Dprefix="${GIT_PREFIX}" ${GIT_MESON_BUILD_OPTIONS}
+	${Q}meson setup "$(dir ${@D})" "$(dir ${@D})"/build ${GIT_MESON_BUILD_OPTIONS}
 	${Q}meson compile -C "$(dir ${@D})/build" $(patsubst %,%:executable,${GIT_EXECUTABLES})
 	${Q}touch $@
 
