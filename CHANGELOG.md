@@ -1,6 +1,14 @@
 # Gitaly changelog
 
+## 17.10.1 (2025-03-26)
+
+No changes.
+
 ## 17.10.0 (2025-03-19)
+
+No changes.
+
+## 17.9.3 (2025-03-26)
 
 No changes.
 
@@ -21,6 +29,10 @@ No changes.
 ### Changed (1 change)
 
 - [Provide a default Git Committer Name and Email with GPGSigning](gitlab-org/gitaly@48ba03b542f2c9f2c631ff68d2bc94290ecc2ea8) ([merge request](gitlab-org/gitaly!7620))
+
+## 17.8.6 (2025-03-26)
+
+No changes.
 
 ## 17.8.5 (2025-03-11)
 
