@@ -22,9 +22,9 @@ default:
   # - https://docs.gitlab.com/development/go_guide/go_upgrade/#supporting-multiple-go-versions
   go_supported: ["1.23", "1.24"]
   macos: "macos-14-xcode-15"
-  pgbouncer: "1.17.0"
-  postgres_default: "14-alpine"
-  postgres_minimum: "11-alpine"
+  pgbouncer: "1.24.0"
+  postgres_default: "16-alpine"
+  postgres_minimum: "14-alpine"
   ruby: "3.2"
   rust: "1.73"
   ubi: "9.5"
