@@ -246,7 +246,7 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 
 	mgr.ctx, mgr.cancel = context.WithCancel(ctx)
 
-	bootstrapped, err := mgr.storage.initialize(ctx, appliedLSN)
+	initStatus, err := mgr.storage.initialize(ctx, appliedLSN)
 	if err != nil {
 		return fmt.Errorf("failed to load raft initial state: %w", err)
 	}
@@ -286,7 +286,7 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 		DisableProposalForwarding: true,
 	}
 
-	if !bootstrapped {
+	if initStatus == InitStatusUnbootstrapped {
 		// For first-time bootstrap, initialize with self as the only peer
 		peers := []raft.Peer{{ID: nodeID}}
 		mgr.node = raft.StartNode(config, peers)
@@ -297,7 +297,7 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 		mgr.node = raft.RestartNode(config)
 	}
 
-	go mgr.run(bootstrapped)
+	go mgr.run(initStatus == InitStatusBootstrapped)
 
 	select {
 	case <-time.After(mgr.options.readyTimeout):

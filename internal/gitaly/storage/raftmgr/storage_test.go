@@ -27,9 +27,9 @@ func setupStorage(t *testing.T, ctx context.Context, cfg config.Cfg) *Storage {
 	rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 	require.NoError(t, err)
 
-	bootstrapped, err := rs.initialize(ctx, 0)
+	initStatus, err := rs.initialize(ctx, 0)
 	require.NoError(t, err)
-	require.False(t, bootstrapped)
+	require.Equal(t, InitStatusUnbootstrapped, initStatus)
 
 	t.Cleanup(func() { require.NoError(t, rs.close()) })
 	return rs
@@ -90,9 +90,9 @@ func TestStorage_Initialize(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { require.NoError(t, rs.close()) }()
 
-		bootstrapped, err := rs.initialize(ctx, 0)
+		initStatus, err := rs.initialize(ctx, 0)
 		require.NoError(t, err)
-		require.False(t, bootstrapped, "expected fresh installation (bootstrapped == false)")
+		require.Equal(t, InitStatusUnbootstrapped, initStatus, "expected fresh installation")
 
 		firstIndex, err := rs.FirstIndex()
 		require.NoError(t, err)
@@ -124,9 +124,9 @@ func TestStorage_Initialize(t *testing.T) {
 		defer func() { require.NoError(t, rs.close()) }()
 
 		// Initialize
-		bootstrapped, err := rs.initialize(ctx, 3)
+		initStatus, err := rs.initialize(ctx, 3)
 		require.NoError(t, err)
-		require.True(t, bootstrapped, "expected bootstrapped installation")
+		require.Equal(t, InitStatusBootstrapped, initStatus, "expected bootstrapped installation")
 		require.NoError(t, rs.localLog.AcknowledgePosition(log.AppliedPosition, 3))
 
 		// Now the populated committedLSN is 3
@@ -171,9 +171,9 @@ func TestStorage_Initialize(t *testing.T) {
 		defer func() { require.NoError(t, rs.close()) }()
 
 		// Initialize with applied LSN 2
-		bootstrapped, err := rs.initialize(ctx, 2)
+		initStatus, err := rs.initialize(ctx, 2)
 		require.NoError(t, err)
-		require.True(t, bootstrapped, "expected bootstrapped installation")
+		require.Equal(t, InitStatusBootstrapped, initStatus, "expected bootstrapped installation")
 
 		// First index is 3 == AppliedLSN + 1. Applied LSN is pruned.
 		firstIndex, err := rs.FirstIndex()

@@ -23,6 +23,22 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
+// InitStatus represents the initialization status of the Raft storage.
+type InitStatus int
+
+const (
+	// InitStatusUnknown indicates an unknown initialization status, typically due to an error.
+	InitStatusUnknown InitStatus = iota
+
+	// InitStatusUnbootstrapped indicates that the Raft storage has not been bootstrapped. This is the case for a
+	// fresh installation.
+	InitStatusUnbootstrapped
+
+	// InitStatusBootstrapped indicates that the Raft storage has been previously bootstrapped.
+	// This means a hard state exists and the Raft group has been initialized before.
+	InitStatusBootstrapped
+)
+
 var (
 	// RaftCommittedPosition tracks the highest log entry known to be committed in the Raft consensus. This position
 	// is used by the log manager for cleaning up committed entries and maintaining cluster consistency.
@@ -184,13 +200,13 @@ func NewStorage(
 
 // initialize loads all states from DB and disk. It also checks whether the leader has completed its initial bootstrap
 // process by verifying the existence of a saved hard state.
-func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (bool, error) {
+func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (InitStatus, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	s.ctx = ctx
 	if err := s.localLog.Initialize(ctx, appliedLSN); err != nil {
-		return false, fmt.Errorf("initializing local log manager: %w", err)
+		return InitStatusUnknown, fmt.Errorf("initializing local log manager: %w", err)
 	}
 
 	// Try to load the previous Raft hard state
@@ -200,10 +216,10 @@ func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (bool,
 	}); err != nil {
 		if errors.Is(err, badger.ErrKeyNotFound) {
 			// No previous state exists - this is a fresh installation
-			return false, nil
+			return InitStatusUnbootstrapped, nil
 		}
 		// If the hard state is never persisted, it means the Raft group is never bootstrapped.
-		return false, err
+		return InitStatusUnknown, err
 	}
 
 	// Load the last committed LSN
@@ -211,10 +227,10 @@ func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (bool,
 	if s.committedLSN != 0 {
 		// Update both commit and snapshot positions to match the last committed LSN
 		if err := s.localLog.AcknowledgePosition(RaftCommittedPosition, s.committedLSN); err != nil {
-			return false, fmt.Errorf("acknowledging committed position: %w", err)
+			return InitStatusUnknown, fmt.Errorf("acknowledging committed position: %w", err)
 		}
 		if err := s.localLog.AcknowledgePosition(RaftSnapshotPosition, s.committedLSN); err != nil {
-			return false, fmt.Errorf("acknowledging committed position: %w", err)
+			return InitStatusUnknown, fmt.Errorf("acknowledging committed position: %w", err)
 		}
 
 		if s.consumer != nil {
@@ -223,7 +239,7 @@ func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (bool,
 	}
 	s.lastTerm = hardState.Term
 
-	return true, nil
+	return InitStatusBootstrapped, nil
 }
 
 func (s *Storage) close() error {
