@@ -286,18 +286,38 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 		DisableProposalForwarding: true,
 	}
 
-	if initStatus == InitStatusUnbootstrapped {
+	switch initStatus {
+	case InitStatusUnbootstrapped:
 		// For first-time bootstrap, initialize with self as the only peer
 		peers := []raft.Peer{{ID: nodeID}}
 		mgr.node = raft.StartNode(config, peers)
-	} else {
+	case InitStatusBootstrapped:
 		// For restarts, set Applied to latest committed LSN
 		// WAL considers entries committed once they are in the Raft log
 		config.Applied = uint64(mgr.storage.readCommittedLSN())
 		mgr.node = raft.RestartNode(config)
+	case InitStatusNeedsBackfill:
+		// For migrations from non-Raft to Raft storage, we need to establish initial Raft state through these
+		// steps: Create a configuration with the node itself as the only voter and set the commit point to
+		// include all existing backfilled entries, ensuring they're considered committed by the Raft protocol.
+		if err := mgr.storage.saveConfState(raftpb.ConfState{
+			Voters: []uint64{nodeID},
+		}); err != nil {
+			return fmt.Errorf("saving conf state: %w", err)
+		}
+		if err := mgr.storage.saveHardState(raftpb.HardState{
+			Vote:   nodeID,
+			Commit: uint64(mgr.storage.readCommittedLSN()),
+		}); err != nil {
+			return fmt.Errorf("saving hard state: %w", err)
+		}
+		config.Applied = uint64(mgr.storage.readCommittedLSN())
+		mgr.node = raft.RestartNode(config)
+	default:
+		return fmt.Errorf("raft bootstrapping returns unknown status without any error")
 	}
 
-	go mgr.run(initStatus == InitStatusBootstrapped)
+	go mgr.run(initStatus)
 
 	select {
 	case <-time.After(mgr.options.readyTimeout):
@@ -308,7 +328,7 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 }
 
 // run executes the main Raft event loop, processing ticks, ready states, and notifications.
-func (mgr *Manager) run(bootstrapped bool) {
+func (mgr *Manager) run(initStatus InitStatus) {
 	mgr.wg.Add(1)
 	defer mgr.wg.Done()
 
@@ -317,7 +337,7 @@ func (mgr *Manager) run(bootstrapped bool) {
 
 	// For bootstrapped clusters, mark ready immediately since state is already established
 	// For new clusters, wait for first config change
-	if bootstrapped {
+	if initStatus != InitStatusUnbootstrapped {
 		mgr.signalReady()
 	}
 
