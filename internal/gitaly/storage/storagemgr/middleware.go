@@ -49,6 +49,16 @@ var NonTransactionalRPCs = map[string]struct{}{
 	gitalypb.RaftService_SendMessage_FullMethodName: {},
 }
 
+// repositoryNotFoundAllowed are the RPCs that normally runs in repository scope but
+// allows the repository to not exist. This is different than the repository creating
+// RPCs as these RPCs do not create the repository.
+var repositoryNotFoundAllowed = map[string]struct{}{
+	// Currently only BackupRepository RPC is fitting this criteria where we still
+	// need to create manifests for not found repositories otherwise server-side
+	// backup and restore returns unnecessary errors.
+	gitalypb.RepositoryService_BackupRepository_FullMethodName: {},
+}
+
 // repositoryCreatingRPCs are all of the RPCs that may create a repository.
 var repositoryCreatingRPCs = map[string]struct{}{
 	gitalypb.ObjectPoolService_CreateObjectPool_FullMethodName:             {},
@@ -419,6 +429,10 @@ func beginTransactionForRepository(ctx context.Context, logger log.Logger, txReg
 	if err != nil {
 		var relativePath relativePathNotFoundError
 		if errors.As(err, &relativePath) {
+			_, isRepositoryNotFoundAllowed := repositoryNotFoundAllowed[methodInfo.FullMethodName()]
+			if isRepositoryNotFoundAllowed {
+				return nonTransactionalRequest(ctx, req), nil
+			}
 			// The partition assigner does not have the storage available and returns thus just an error with the
 			// relative path. Convert the error to the usual repository not found error that the RPCs are returning
 			// to conform to the API.
