@@ -330,7 +330,7 @@ func (c *ProcessCache) getOrCreateProcess(
 		}
 	}
 
-	return process, cancel, nil
+	return process, sync.OnceFunc(cancel), nil
 }
 
 func (c *ProcessCache) reportCacheMembers() {
