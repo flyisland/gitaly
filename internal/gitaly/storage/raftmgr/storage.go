@@ -457,25 +457,6 @@ func (s *Storage) readConfState() (raftpb.ConfState, error) {
 	return confState, nil
 }
 
-// readRaftEntry returns the Raft metadata from the given position in the log.
-func (s *Storage) readRaftEntry(lsn storage.LSN) (raftpb.Entry, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	var raftEntry raftpb.Entry
-
-	marshaledBytes, err := os.ReadFile(raftManifestPath(s.localLog.GetEntryPath(lsn)))
-	if err != nil {
-		return raftEntry, err
-	}
-
-	if err := raftEntry.Unmarshal(marshaledBytes); err != nil {
-		return raftEntry, fmt.Errorf("unmarshal term: %w", err)
-	}
-
-	return raftEntry, nil
-}
-
 // draftLogEntry drafts a log entry and inserts it to WAL at a certain position. The caller passes a callback function
 // for setting the content of the log entry.
 func (s *Storage) draftLogEntry(raftEntry raftpb.Entry, callback func(*wal.Entry) error) (returnedErr error) {
@@ -541,6 +522,19 @@ func (s *Storage) insertLogEntry(raftEntry raftpb.Entry, logEntryPath string) er
 		}
 	}
 
+	if err := s.writeRaftEntry(raftEntry, logEntryPath); err != nil {
+		return fmt.Errorf("writing raft manifest: %w", err)
+	}
+
+	if _, err := s.localLog.CompareAndAppendLogEntry(lsn, logEntryPath); err != nil {
+		return fmt.Errorf("inserting log entry to WAL: %w", err)
+	}
+	s.lastTerm = raftEntry.Term
+	return nil
+}
+
+// writeRaftEntry writes the Raft metadata to the given position in the log.
+func (s *Storage) writeRaftEntry(raftEntry raftpb.Entry, logEntryPath string) error {
 	marshaledEntry, err := raftEntry.Marshal()
 	if err != nil {
 		return fmt.Errorf("marshaling raft entry: %w", err)
@@ -557,11 +551,24 @@ func (s *Storage) insertLogEntry(raftEntry raftpb.Entry, logEntryPath string) er
 	if err := safe.NewSyncer().SyncParent(s.ctx, manifestPath); err != nil {
 		return fmt.Errorf("sync raft manifest parent: %w", err)
 	}
-	if _, err = s.localLog.CompareAndAppendLogEntry(lsn, logEntryPath); err != nil {
-		return fmt.Errorf("inserting log entry to WAL: %w", err)
-	}
-	s.lastTerm = raftEntry.Term
+
 	return nil
+}
+
+// readRaftEntry returns the Raft metadata from the given position in the log.
+func (s *Storage) readRaftEntry(lsn storage.LSN) (raftpb.Entry, error) {
+	var raftEntry raftpb.Entry
+
+	marshaledBytes, err := os.ReadFile(raftManifestPath(s.localLog.GetEntryPath(lsn)))
+	if err != nil {
+		return raftEntry, err
+	}
+
+	if err := raftEntry.Unmarshal(marshaledBytes); err != nil {
+		return raftEntry, fmt.Errorf("unmarshal term: %w", err)
+	}
+
+	return raftEntry, nil
 }
 
 func (s *Storage) readLogEntry(lsn storage.LSN) (*gitalypb.LogEntry, error) {
