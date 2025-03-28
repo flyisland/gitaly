@@ -202,6 +202,13 @@ ifeq ($(origin GIT_BUILD_OPTIONS),undefined)
     GIT_MESON_BUILD_OPTIONS += -Dpython=disabled
     GIT_MESON_BUILD_OPTIONS += -Dtests=false
     GIT_MESON_BUILD_OPTIONS += -Dwrap_mode=nofallback
+
+    # Use non-collision-detecting SHA1 implementation in non-cryptographic scenarios
+    # to improve performance. This is only enabled for Linux platforms.
+    ifeq ($(OS),Linux)
+	    GIT_MESON_BUILD_OPTIONS += -Dsha1_unsafe_backend=openssl
+	    GIT_BUILD_OPTIONS += OPENSSL_SHA1_UNSAFE=YesPlease
+    endif
 endif
 
 ifdef GIT_APPEND_BUILD_OPTIONS
@@ -657,13 +664,6 @@ ${DEPENDENCY_DIR}/git-distribution/build/git: ${DEPENDENCY_DIR}/git-distribution
 
 # These targets build specific releases of Git.
 ${BUILD_DIR}/bin/gitaly-%-v2.48: override GIT_VERSION = ${GIT_VERSION_2_48}
-# Use non-collision-detecting SHA1 implementation in non-cryptographic scenarios
-# to improve performance. For now, this is only enabled for Git version 2.48 on
-# Linux platforms.
-ifeq ($(OS),Linux)
-${BUILD_DIR}/bin/gitaly-%-v2.48: override GIT_MESON_BUILD_OPTIONS += -Dsha1_unsafe_backend=openssl
-${BUILD_DIR}/bin/gitaly-%-v2.48: override GIT_BUILD_OPTIONS += OPENSSL_SHA1_UNSAFE=YesPlease
-endif
 
 ifdef USE_MESON
 ${BUILD_DIR}/bin/gitaly-%-v2.48: ${DEPENDENCY_DIR}/git-v2.48/build/% | ${BUILD_DIR}/bin
