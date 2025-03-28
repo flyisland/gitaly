@@ -2,7 +2,6 @@ package backup_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -73,7 +72,7 @@ func TestServerSideAdapter_Create(t *testing.T) {
 			expectedErr: structerr.NewInvalidArgument("server-side create: rpc error: code = InvalidArgument desc = empty BackupId"),
 		},
 		{
-			desc: "repository with no branches",
+			desc: "success - repository with no branches",
 			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData {
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
 
@@ -84,7 +83,7 @@ func TestServerSideAdapter_Create(t *testing.T) {
 			},
 		},
 		{
-			desc: "repository does not exist",
+			desc: "success - repository does not exist",
 			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg) setupData {
 				repo := &gitalypb.Repository{
 					StorageName:  cfg.Storages[0].Name,
@@ -96,7 +95,6 @@ func TestServerSideAdapter_Create(t *testing.T) {
 					backupID: "abc123",
 				}
 			},
-			expectedErr: fmt.Errorf("server-side create: %w: rpc error: code = NotFound desc = repository not found", backup.ErrSkipped),
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {

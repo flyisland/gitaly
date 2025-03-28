@@ -55,7 +55,7 @@ func (s *server) validateBackupRepositoryRequest(ctx context.Context, in *gitaly
 	if in.GetBackupId() == "" {
 		return fmt.Errorf("empty BackupId")
 	}
-	if err := s.locator.ValidateRepository(ctx, in.GetRepository()); err != nil {
+	if err := s.locator.ValidateRepository(ctx, in.GetRepository(), storage.WithSkipRepositoryExistenceCheck()); err != nil {
 		return err
 	}
 	if err := s.locator.ValidateRepository(ctx, in.GetVanityRepository(),
