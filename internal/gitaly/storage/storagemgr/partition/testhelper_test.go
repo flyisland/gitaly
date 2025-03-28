@@ -1082,8 +1082,8 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		setup.Config.Raft.RTTMilliseconds = 100
 		setup.Config.Raft.SnapshotDir = testhelper.TempDir(t)
 
-		raftFactory = func(storageName string, partitionID storage.PartitionID, raftStorage *raftmgr.Storage, logger logging.Logger) (*raftmgr.Manager, error) {
-			return raftmgr.NewManager(storageName, partitionID, setup.Config.Raft, raftStorage, logger, raftmgr.WithEntryRecorder(raftEntryRecorder))
+		raftFactory = func(storageName string, partitionID storage.PartitionID, raftStorage *raftmgr.Storage, logger logging.Logger, metrics *raftmgr.Metrics) (*raftmgr.Manager, error) {
+			return raftmgr.NewManager(storageName, partitionID, setup.Config.Raft, raftStorage, logger, metrics, raftmgr.WithEntryRecorder(raftEntryRecorder))
 		}
 	}
 

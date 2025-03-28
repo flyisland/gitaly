@@ -104,17 +104,17 @@ var (
                                          Not ready to be used
 */
 type Storage struct {
-	ctx          context.Context
-	mutex        sync.Mutex
-	storageName  string
-	partitionID  storage.PartitionID
-	database     keyvalue.Transactioner
-	localLog     *log.Manager
-	committedLSN storage.LSN
-	lastTerm     uint64
-	consumer     storage.LogConsumer
-	stagingDir   string
-	snapshotter  Snapshotter
+	ctx           context.Context
+	mutex         sync.Mutex
+	authorityName string
+	partitionID   storage.PartitionID
+	database      keyvalue.Transactioner
+	localLog      *log.Manager
+	committedLSN  storage.LSN
+	lastTerm      uint64
+	consumer      storage.LogConsumer
+	stagingDir    string
+	snapshotter   Snapshotter
 
 	// hooks is a collection of hooks, used in test environment to intercept critical events
 	hooks testHooks
@@ -131,16 +131,16 @@ func raftManifestPath(logEntryPath string) string {
 
 // NewStorage creates and initializes a new Storage instance.
 func NewStorage(
-	cfg config.Raft,
-	logger lg.Logger,
-	storageName string,
+	authorityName string,
 	partitionID storage.PartitionID,
+	raftCfg config.Raft,
 	db keyvalue.Transactioner,
 	stagingDirectory string,
 	stateDirectory string,
 	consumer storage.LogConsumer,
 	positionTracker *log.PositionTracker,
-	snapshotterMetrics *Metrics,
+	logger lg.Logger,
+	metrics *Metrics,
 ) (*Storage, error) {
 	if err := positionTracker.Register(RaftCommittedPosition); err != nil {
 		return nil, fmt.Errorf("registering committed position: %w", err)
@@ -152,7 +152,7 @@ func NewStorage(
 	// Initialize the local log manager without a consumer since notifications
 	// should only be sent when entries are committed, not when they're appended
 	localLog := log.NewManager(
-		storageName,
+		authorityName,
 		partitionID,
 		stagingDirectory,
 		stateDirectory,
@@ -162,23 +162,23 @@ func NewStorage(
 
 	logger = logger.WithFields(lg.Fields{
 		"partition_id": partitionID,
-		"storage_name": storageName,
+		"storage_name": authorityName,
 	})
 
-	snapshotter, err := NewRaftSnapshotter(cfg, logger, snapshotterMetrics.Scope(storageName))
+	snapshotter, err := NewRaftSnapshotter(raftCfg, logger, metrics.Scope(authorityName))
 	if err != nil {
 		return nil, fmt.Errorf("create raft snapshotter: %w", err)
 	}
 
 	return &Storage{
-		database:    db,
-		storageName: storageName,
-		partitionID: partitionID,
-		localLog:    localLog,
-		consumer:    consumer,
-		stagingDir:  stagingDirectory,
-		snapshotter: snapshotter,
-		hooks:       noopHooks(),
+		database:      db,
+		authorityName: authorityName,
+		partitionID:   partitionID,
+		localLog:      localLog,
+		consumer:      consumer,
+		stagingDir:    stagingDirectory,
+		snapshotter:   snapshotter,
+		hooks:         noopHooks(),
 	}, nil
 }
 
@@ -218,7 +218,7 @@ func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (bool,
 		}
 
 		if s.consumer != nil {
-			s.consumer.NotifyNewEntries(s.storageName, s.partitionID, s.localLog.LowWaterMark(), s.committedLSN)
+			s.consumer.NotifyNewEntries(s.authorityName, s.partitionID, s.localLog.LowWaterMark(), s.committedLSN)
 		}
 	}
 	s.lastTerm = hardState.Term
@@ -416,7 +416,7 @@ func (s *Storage) saveHardState(hardState raftpb.HardState) error {
 	}
 
 	if s.consumer != nil {
-		s.consumer.NotifyNewEntries(s.storageName, s.partitionID, s.localLog.LowWaterMark(), committedLSN)
+		s.consumer.NotifyNewEntries(s.authorityName, s.partitionID, s.localLog.LowWaterMark(), committedLSN)
 	}
 
 	return nil

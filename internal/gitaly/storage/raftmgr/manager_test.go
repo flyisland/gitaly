@@ -54,11 +54,14 @@ func TestManager_Initialize(t *testing.T) {
 		posTracker := log.NewPositionTracker()
 		recorder := NewEntryRecorder()
 
+		// Create metrics
+		metrics := NewMetrics()
+
 		// Create a raft storage
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics, WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		// Initialize the manager
@@ -70,8 +73,6 @@ func TestManager_Initialize(t *testing.T) {
 		require.NotNil(t, mgr.node)
 
 		// Verify that the first config change is recorded
-		// After initialization, Raft typically creates a config change
-		// entry to establish the initial configuration
 		require.Eventually(t, func() bool {
 			return recorder.Len() > 0
 		}, 5*time.Second, 10*time.Millisecond, "expected at least one entry to be recorded")
@@ -82,6 +83,16 @@ func TestManager_Initialize(t *testing.T) {
 
 		// Close the manager
 		require.NoError(t, mgr.Close())
+
+		testhelper.RequirePromMetrics(t, metrics, `
+			# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+			# TYPE gitaly_raft_log_entries_processed counter
+			gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+			gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+			# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+			# TYPE gitaly_raft_proposal_queue_depth gauge
+			gitaly_raft_proposal_queue_depth{storage="default"} 0
+		`)
 	})
 
 	t.Run("fails when raft is not enabled", func(t *testing.T) {
@@ -100,11 +111,11 @@ func TestManager_Initialize(t *testing.T) {
 		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// Configure manager with Raft disabled
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 		require.Nil(t, mgr)
 		require.ErrorContains(t, err, "raft is not enabled")
 	})
@@ -125,10 +136,10 @@ func TestManager_Initialize(t *testing.T) {
 		posTracker := log.NewPositionTracker()
 
 		// Create a raft storage
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// First initialization should succeed
@@ -159,10 +170,10 @@ func TestManager_Initialize(t *testing.T) {
 		recorder := NewEntryRecorder()
 
 		// Create a raft storage
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		releaseReady := make(chan struct{})
@@ -182,7 +193,7 @@ func TestManager_Initialize(t *testing.T) {
 func TestManager_AppendLogEntry(t *testing.T) {
 	t.Parallel()
 
-	setup := func(t *testing.T, ctx context.Context, cfg config.Cfg) (*Manager, *EntryRecorder) {
+	setup := func(t *testing.T, ctx context.Context, cfg config.Cfg) (*Manager, *Metrics, *EntryRecorder) {
 		logger := testhelper.NewLogger(t)
 		raftCfg := raftConfigsForTest(t)
 
@@ -193,17 +204,18 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 		recorder := NewEntryRecorder()
+		metrics := NewMetrics()
 
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics, WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		err = mgr.Initialize(ctx, 0)
 		require.NoError(t, err)
 
-		return mgr, recorder
+		return mgr, metrics, recorder
 	}
 
 	createLogEntry := func(t *testing.T, ctx context.Context, content string) string {
@@ -231,7 +243,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		ctx := testhelper.Context(t)
 		cfg := testcfg.Build(t)
 
-		mgr, recorder := setup(t, ctx, cfg)
+		mgr, metrics, recorder := setup(t, ctx, cfg)
 		defer func() {
 			require.NoError(t, mgr.Close())
 		}()
@@ -257,6 +269,23 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		require.Len(t, logEntry.GetOperations(), 1)
 		require.Equal(t, []byte("test-key"), logEntry.GetOperations()[0].GetSetKey().GetKey())
 		require.Equal(t, []byte("test-content-1"), logEntry.GetOperations()[0].GetSetKey().GetValue())
+
+		testhelper.RequirePromMetrics(t, metrics, `
+        		# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+        		# TYPE gitaly_raft_log_entries_processed counter
+        		gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 1
+        		# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        		# TYPE gitaly_raft_proposal_queue_depth gauge
+        		gitaly_raft_proposal_queue_depth{storage="default"} 0
+        		# HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+        		# TYPE gitaly_raft_proposals_total counter
+        		gitaly_raft_proposals_total{result="success",storage="default"} 1
+		`)
 	})
 
 	t.Run("append multiple log entries", func(t *testing.T) {
@@ -265,7 +294,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		ctx := testhelper.Context(t)
 		cfg := testcfg.Build(t)
 
-		mgr, recorder := setup(t, ctx, cfg)
+		mgr, metrics, recorder := setup(t, ctx, cfg)
 		defer func() {
 			require.NoError(t, mgr.Close())
 		}()
@@ -296,6 +325,23 @@ func TestManager_AppendLogEntry(t *testing.T) {
 			require.Equal(t, []byte("test-key"), logEntry.GetOperations()[0].GetSetKey().GetKey())
 			require.Equal(t, []byte(fmt.Sprintf("test-content-%d", i+1)), logEntry.GetOperations()[0].GetSetKey().GetValue())
 		}
+
+		testhelper.RequirePromMetrics(t, metrics, `
+        		# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+        		# TYPE gitaly_raft_log_entries_processed counter
+        		gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 3
+        		gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 3
+        		gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 1
+        		# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        		# TYPE gitaly_raft_proposal_queue_depth gauge
+        		gitaly_raft_proposal_queue_depth{storage="default"} 0
+        		# HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+        		# TYPE gitaly_raft_proposals_total counter
+        		gitaly_raft_proposals_total{result="success",storage="default"} 3
+		`)
 	})
 
 	t.Run("append multiple log entries concurrently", func(t *testing.T) {
@@ -304,7 +350,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		ctx := testhelper.Context(t)
 		cfg := testcfg.Build(t)
 
-		mgr, _ := setup(t, ctx, cfg)
+		mgr, metrics, _ := setup(t, ctx, cfg)
 		defer func() {
 			require.NoError(t, mgr.Close())
 		}()
@@ -383,6 +429,23 @@ func TestManager_AppendLogEntry(t *testing.T) {
 			require.Equal(t, []byte("test-key"), logEntry.GetOperations()[0].GetSetKey().GetKey())
 			require.Equal(t, []byte(fmt.Sprintf("test-content-%d", idx)), logEntry.GetOperations()[0].GetSetKey().GetValue())
 		}
+
+		testhelper.RequirePromMetrics(t, metrics, `
+        		# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+        		# TYPE gitaly_raft_log_entries_processed counter
+        		gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 20
+        		gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 20
+        		gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 1
+        		gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 1
+        		# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+        		# TYPE gitaly_raft_proposal_queue_depth gauge
+        		gitaly_raft_proposal_queue_depth{storage="default"} 0
+        		# HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+        		# TYPE gitaly_raft_proposals_total counter
+        		gitaly_raft_proposals_total{result="success",storage="default"} 20
+		`)
 	})
 
 	t.Run("operation timeout", func(t *testing.T) {
@@ -400,9 +463,10 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 		recorder := NewEntryRecorder()
+		metrics := NewMetrics()
 
 		// Create a raft storage
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
 		require.NoError(t, err)
 
 		// Create manager with very short operation timeout
@@ -412,6 +476,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 			raftCfg,
 			raftStorage,
 			logger,
+			metrics,
 			WithEntryRecorder(recorder),
 			WithOpTimeout(1*time.Nanosecond), // Set a very short timeout to force failure
 		)
@@ -429,6 +494,19 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		_, err = mgr.AppendLogEntry(logEntryPath)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "context deadline exceeded")
+
+		testhelper.RequirePromMetrics(t, metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="error",storage="default"} 1
+		`)
 	})
 
 	t.Run("context canceled", func(t *testing.T) {
@@ -438,7 +516,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		cfg := testcfg.Build(t)
 
 		cancelCtx, cancel := context.WithCancel(testhelper.Context(t))
-		mgr, _ := setup(t, cancelCtx, cfg)
+		mgr, metrics, _ := setup(t, cancelCtx, cfg)
 		defer func() {
 			require.NoError(t, mgr.Close())
 		}()
@@ -451,6 +529,19 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		_, err := mgr.AppendLogEntry(logEntryPath)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "context canceled")
+
+		testhelper.RequirePromMetrics(t, metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="error",storage="default"} 1
+		`)
 	})
 }
 
@@ -469,6 +560,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		baseLSN     storage.LSN
 		storageName string
 		partitionID storage.PartitionID
+		metrics     *Metrics
 	}
 
 	// Helper to create a test log entry
@@ -500,17 +592,19 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		stateDir := testhelper.TempDir(t)
 		recorder := NewEntryRecorder()
 
+		metrics := NewMetrics()
+
 		dbMgr := openTestDB(t, ctx, cfg, logger)
 		t.Cleanup(dbMgr.Close)
 
 		db, err := dbMgr.GetDB(cfg.Storages[0].Name)
 		require.NoError(t, err)
 
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, metrics)
 		require.NoError(t, err)
 
 		// Configure manager
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics, WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		for _, f := range setupFuncs {
@@ -538,6 +632,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 			baseLSN:     lsn,
 			storageName: storageName,
 			partitionID: partitionID,
+			metrics:     metrics,
 		}
 	}
 
@@ -554,10 +649,10 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		db, err := dbMgr.GetDB(env.cfg.Storages[0].Name)
 		require.NoError(t, err)
 
-		raftStorage, err := NewStorage(raftCfg, logger, env.storageName, env.partitionID, db, env.stagingDir, env.stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
+		raftStorage, err := NewStorage(env.storageName, env.partitionID, raftCfg, db, env.stagingDir, env.stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, env.metrics)
 		require.NoError(t, err)
 
-		recoveryMgr, err := NewManager(env.storageName, env.partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(env.recorder))
+		recoveryMgr, err := NewManager(env.storageName, env.partitionID, raftCfg, raftStorage, logger, env.metrics, WithEntryRecorder(env.recorder))
 		require.NoError(t, err)
 
 		// Initialize with the last known LSN
@@ -734,6 +829,27 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		// Verify recovery - change should NOT be persisted
 		verifyNonPersistingRecovery(t, ctx, recoveryMgr, env.baseLSN, crashContent)
+
+		// This simulation crashes caller's goroutine, not in Raft manager's life cycle.
+		testhelper.RequirePromMetrics(t, env.metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 2
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="success",storage="default"} 3
+                        # HELP gitaly_raft_event_loop_crashes_total Counter of Raft event loop crashes
+                        # TYPE gitaly_raft_event_loop_crashes_total counter
+                        gitaly_raft_event_loop_crashes_total{storage="default"} 0
+		`)
 	})
 
 	t.Run("AppendLogEntry crash during commit entries", func(t *testing.T) {
@@ -770,6 +886,27 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// Verify recovery - change SHOULD be persisted
 		// Even though client received an error, the entry was persisted before the crash
 		verifyPersistingRecovery(t, ctx, recoveryMgr, env.baseLSN, crashContent)
+
+		testhelper.RequirePromMetrics(t, env.metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 3
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 2
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="error",storage="default"} 1
+                        gitaly_raft_proposals_total{result="success",storage="default"} 2
+                        # HELP gitaly_raft_event_loop_crashes_total Counter of Raft event loop crashes
+                        # TYPE gitaly_raft_event_loop_crashes_total counter
+                        gitaly_raft_event_loop_crashes_total{storage="default"} 1
+		`)
 	})
 
 	t.Run("AppendLogEntry crash during node advance", func(t *testing.T) {
@@ -812,6 +949,26 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		// Verify recovery - change SHOULD be persisted and client already got success
 		verifyPersistingRecovery(t, ctx, recoveryMgr, env.baseLSN, crashContent)
+
+		testhelper.RequirePromMetrics(t, env.metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 3
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 3
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 2
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="success",storage="default"} 3
+                        # HELP gitaly_raft_event_loop_crashes_total Counter of Raft event loop crashes
+                        # TYPE gitaly_raft_event_loop_crashes_total counter
+                        gitaly_raft_event_loop_crashes_total{storage="default"} 1
+		`)
 	})
 
 	t.Run("AppendLogEntry crash during handle ready", func(t *testing.T) {
@@ -849,6 +1006,27 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// In a multi-node setup, this could behave differently as the entry might already
 		// be replicated to other nodes before the crash
 		verifyNonPersistingRecovery(t, ctx, recoveryMgr, env.baseLSN, crashContent)
+
+		testhelper.RequirePromMetrics(t, env.metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 2
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="error",storage="default"} 1
+                        gitaly_raft_proposals_total{result="success",storage="default"} 2
+                        # HELP gitaly_raft_event_loop_crashes_total Counter of Raft event loop crashes
+                        # TYPE gitaly_raft_event_loop_crashes_total counter
+                        gitaly_raft_event_loop_crashes_total{storage="default"} 1
+		`)
 	})
 
 	t.Run("AppendLogEntry crash during insert log entry", func(t *testing.T) {
@@ -886,6 +1064,27 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// In a multi-node setup, this could behave differently as the entry might already
 		// be replicated to other nodes before the crash
 		verifyNonPersistingRecovery(t, ctx, recoveryMgr, env.baseLSN, crashContent)
+
+		testhelper.RequirePromMetrics(t, env.metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 2
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="error",storage="default"} 1
+                        gitaly_raft_proposals_total{result="success",storage="default"} 2
+                        # HELP gitaly_raft_event_loop_crashes_total Counter of Raft event loop crashes
+                        # TYPE gitaly_raft_event_loop_crashes_total counter
+                        gitaly_raft_event_loop_crashes_total{storage="default"} 1
+		`)
 	})
 
 	t.Run("AppendLogEntry crash during save hard state", func(t *testing.T) {
@@ -933,6 +1132,27 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// behavior might differ as entries could be overwritten by entries with higher terms from the new
 		// leader.
 		verifyPersistingRecovery(t, ctx, recoveryMgr, env.baseLSN, crashContent)
+
+		testhelper.RequirePromMetrics(t, env.metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 3
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 3
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 2
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="error",storage="default"} 1
+                        gitaly_raft_proposals_total{result="success",storage="default"} 2
+                        # HELP gitaly_raft_event_loop_crashes_total Counter of Raft event loop crashes
+                        # TYPE gitaly_raft_event_loop_crashes_total counter
+                        gitaly_raft_event_loop_crashes_total{storage="default"} 1
+		`)
 	})
 
 	t.Run("AppendLogEntry multiple crash and recovery cycle", func(t *testing.T) {
@@ -1019,6 +1239,27 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		require.Greater(t, finalLSN, lastKnownLSN+1)
 
 		require.NoError(t, finalRecoveryMgr.Close())
+
+		testhelper.RequirePromMetrics(t, env.metrics, `
+                        # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+                        # TYPE gitaly_raft_log_entries_processed counter
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 5
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 4
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 4
+                        gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 4
+                        # HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+                        # TYPE gitaly_raft_proposal_queue_depth gauge
+                        gitaly_raft_proposal_queue_depth{storage="default"} 0
+                        # HELP gitaly_raft_proposals_total Counter of all Raft proposals.
+                        # TYPE gitaly_raft_proposals_total counter
+                        gitaly_raft_proposals_total{result="error",storage="default"} 1
+                        gitaly_raft_proposals_total{result="success",storage="default"} 5
+                        # HELP gitaly_raft_event_loop_crashes_total Counter of Raft event loop crashes
+                        # TYPE gitaly_raft_event_loop_crashes_total counter
+                        gitaly_raft_event_loop_crashes_total{storage="default"} 1
+		`)
 	})
 }
 
@@ -1047,10 +1288,10 @@ func TestManager_Close(t *testing.T) {
 		posTracker := log.NewPositionTracker()
 
 		// Create a raft storage
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// Initialize the manager
@@ -1088,10 +1329,10 @@ func TestManager_Close(t *testing.T) {
 		posTracker := log.NewPositionTracker()
 
 		// Create a raft storage
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// Close without initializing
@@ -1116,10 +1357,10 @@ func TestManager_Close(t *testing.T) {
 		recorder := NewEntryRecorder()
 
 		// Create a raft storage
-		raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, WithEntryRecorder(recorder))
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		// Initialize the manager
@@ -1174,10 +1415,10 @@ func TestManager_NotImplementedLogMethods(t *testing.T) {
 	posTracker := log.NewPositionTracker()
 
 	// Create a raft storage
-	raftStorage, err := NewStorage(raftCfg, logger, storageName, partitionID, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+	raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 	require.NoError(t, err)
 
-	mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+	mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, NewMetrics())
 	require.NoError(t, err)
 
 	// Initialize the manager

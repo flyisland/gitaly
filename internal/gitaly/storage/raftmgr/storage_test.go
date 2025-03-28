@@ -24,7 +24,7 @@ func setupStorage(t *testing.T, ctx context.Context, cfg config.Cfg) *Storage {
 	logger := testhelper.NewLogger(t)
 	db := getTestDBManager(t, ctx, cfg, logger)
 	posTracker := log.NewPositionTracker()
-	rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+	rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 	require.NoError(t, err)
 
 	bootstrapped, err := rs.initialize(ctx, 0)
@@ -60,7 +60,7 @@ func TestStorage_Initialize(t *testing.T) {
 		// Pre-populate n entries
 		prepopulateEntries(t, ctx, cfg, stagingDir, stateDir, appended)
 
-		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		_, err = rs.initialize(ctx, 0)
@@ -86,7 +86,7 @@ func TestStorage_Initialize(t *testing.T) {
 		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
-		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 		defer func() { require.NoError(t, rs.close()) }()
 
@@ -118,7 +118,7 @@ func TestStorage_Initialize(t *testing.T) {
 		db, stateDir := prepopulateStorage(t, ctx, cfg, 3, 3)
 
 		// Restart the storage using the same state dir
-		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		defer func() { require.NoError(t, rs.close()) }()
@@ -145,7 +145,7 @@ func TestStorage_Initialize(t *testing.T) {
 		// Notify for the first time.
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(4),
 				highWaterMark: storage.LSN(3),
@@ -165,7 +165,7 @@ func TestStorage_Initialize(t *testing.T) {
 		// Simulate a prior session
 		db, stateDir := prepopulateStorage(t, ctx, cfg, 5, 3)
 
-		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		defer func() { require.NoError(t, rs.close()) }()
@@ -188,7 +188,7 @@ func TestStorage_Initialize(t *testing.T) {
 		// Notify from low-water mark to the committedLSN for the first time.
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(3),
 				highWaterMark: storage.LSN(3),
@@ -212,7 +212,7 @@ func TestStorage_InitialState(t *testing.T) {
 		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
-		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, nil, posTracker, NewMetrics())
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, nil, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		hs, cs, err := rs.InitialState()
@@ -238,7 +238,7 @@ func TestStorage_InitialState(t *testing.T) {
 
 		prepopulateEntries(t, ctx, cfg, stagingDir, stateDir, 10)
 
-		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, nil, posTracker, NewMetrics())
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, nil, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		defer func() { require.NoError(t, rs.close()) }()
@@ -635,7 +635,7 @@ func TestStorage_Term(t *testing.T) {
 		logger := testhelper.NewLogger(t)
 		db := getTestDBManager(t, ctx, cfg, logger)
 
-		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		_, err = rs.initialize(ctx, 0)
@@ -648,7 +648,7 @@ func TestStorage_Term(t *testing.T) {
 		require.NoError(t, rs.close())
 
 		// Now restart the storage
-		rs, err = NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), NewMetrics())
+		rs, err = NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 		defer func() { require.NoError(t, rs.close()) }()
 
@@ -965,7 +965,7 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 
 		prepopulateEntries(t, ctx, cfg, stagingDir, stateDir, 10)
 
-		rs, err := NewStorage(cfg.Raft, logger, "test-storage", 1, db, stagingDir, stateDir, &mockConsumer{}, posTracker, NewMetrics())
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 		_, err = rs.initialize(ctx, 0)
 		require.NoError(t, err)
@@ -1027,7 +1027,7 @@ func TestStorage_SaveHardState(t *testing.T) {
 		// Receive notification from low water mark -> 1
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
@@ -1041,13 +1041,13 @@ func TestStorage_SaveHardState(t *testing.T) {
 		// Receive notification from low water mark -> 2
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(2),
@@ -1061,19 +1061,19 @@ func TestStorage_SaveHardState(t *testing.T) {
 		// Receive notification from low water mark -> 3
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(2),
 			},
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(3),
@@ -1109,7 +1109,7 @@ func TestStorage_SaveHardState(t *testing.T) {
 		// Receive notification from 1 -> 1
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
@@ -1127,13 +1127,13 @@ func TestStorage_SaveHardState(t *testing.T) {
 		// Receive notification from 2 -> 2
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(2),
 				highWaterMark: storage.LSN(2),
@@ -1147,19 +1147,19 @@ func TestStorage_SaveHardState(t *testing.T) {
 		// Receive notification from 2 -> 3
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(2),
 				highWaterMark: storage.LSN(2),
 			},
 			{
-				storageName:   rs.storageName,
+				storageName:   rs.authorityName,
 				partitionID:   rs.partitionID,
 				lowWaterMark:  storage.LSN(2),
 				highWaterMark: storage.LSN(3),

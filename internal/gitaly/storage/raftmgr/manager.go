@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
@@ -124,6 +125,7 @@ type Manager struct {
 	wg            sync.WaitGroup      // Goroutine lifecycle management
 	ready         *ready              // Initialization state tracking
 	started       bool                // Indicates if manager has been started
+	metrics       RaftMetrics         // Scoped metrics for this manager
 
 	// notifyQueue signals new changes or errors to clients
 	// Clients must process signals promptly to prevent blocking
@@ -164,6 +166,7 @@ type RaftManagerFactory func(
 	partitionID storage.PartitionID,
 	raftStorage *Storage,
 	logger logging.Logger,
+	metrics *Metrics,
 ) (*Manager, error)
 
 // DefaultFactory returns a RaftManagerFactory that returns a manager from input raft config
@@ -173,8 +176,9 @@ func DefaultFactory(raftCfg config.Raft) RaftManagerFactory {
 		partitionID storage.PartitionID,
 		raftStorage *Storage,
 		logger logging.Logger,
+		metrics *Metrics,
 	) (*Manager, error) {
-		return NewManager(storageName, partitionID, raftCfg, raftStorage, logger)
+		return NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics)
 	}
 }
 
@@ -185,6 +189,7 @@ func NewManager(
 	raftCfg config.Raft,
 	raftStorage *Storage,
 	logger logging.Logger,
+	metrics *Metrics,
 	opts ...OptionFunc,
 ) (*Manager, error) {
 	if !raftCfg.Enabled {
@@ -202,6 +207,8 @@ func NewManager(
 		"raft.partition": partitionID,
 	})
 
+	scopedMetrics := metrics.Scope(authorityName)
+
 	return &Manager{
 		authorityName: authorityName,
 		ptnID:         partitionID,
@@ -209,12 +216,13 @@ func NewManager(
 		options:       options,
 		storage:       raftStorage,
 		logger:        logger,
-		registry:      NewRegistry(),
+		registry:      NewRegistry(scopedMetrics),
 		syncer:        safe.NewSyncer(),
 		leadership:    NewLeadership(),
 		ready:         &ready{c: make(chan error, 1)},
 		notifyQueue:   make(chan error, 1),
 		EntryRecorder: options.entryRecorder,
+		metrics:       scopedMetrics,
 		hooks:         noopHooks(),
 	}, nil
 }
@@ -384,12 +392,11 @@ func (mgr *Manager) safeExec(fn func() error) (err error) {
 func (mgr *Manager) handleFatalError(err error) {
 	// Set back to ready to unlock the caller of Initialize().
 	mgr.signalError(ErrManagerStopped)
-
-	mgr.logger.WithError(err).Error("raft event loop failed")
-
 	// Unlock all waiters of AppendLogEntry about the manager being stopped.
 	mgr.registry.UntrackAll(ErrManagerStopped)
+	mgr.metrics.eventLoopCrashes.Inc()
 
+	mgr.logger.WithError(err).Error("raft event loop failed")
 	// Ensure error is sent to notification queue.
 	mgr.notifyQueue <- err
 }
@@ -441,9 +448,20 @@ func (mgr *Manager) LowWaterMark() storage.LSN {
 
 // AppendLogEntry proposes a new log entry to the cluster.
 // It blocks until the entry is committed, timeout occurs, or the cluster rejects it.
-func (mgr *Manager) AppendLogEntry(logEntryPath string) (storage.LSN, error) {
+func (mgr *Manager) AppendLogEntry(logEntryPath string) (_ storage.LSN, returnedErr error) {
 	mgr.wg.Add(1)
 	defer mgr.wg.Done()
+
+	// Start timing proposal duration
+	proposalTimer := prometheus.NewTimer(mgr.metrics.proposalDurationSec)
+	defer func() {
+		proposalTimer.ObserveDuration()
+		result := "success"
+		if returnedErr != nil {
+			result = "error"
+		}
+		mgr.metrics.proposalsTotal.WithLabelValues(result).Inc()
+	}()
 
 	w := mgr.registry.Register()
 	defer mgr.registry.Untrack(w.ID)
@@ -587,6 +605,10 @@ func (mgr *Manager) saveEntries(rd *raft.Ready) error {
 				if err := mgr.recordEntryIfNeeded(true, lsn); err != nil {
 					return fmt.Errorf("recording log entry: %w", err)
 				}
+
+				if mgr.metrics.logEntriesProcessed != nil {
+					mgr.metrics.logEntriesProcessed.WithLabelValues("append", "verify").Inc()
+				}
 			} else {
 				// Handle normal entries containing RaftMessage data
 				var message gitalypb.RaftEntry
@@ -603,6 +625,10 @@ func (mgr *Manager) saveEntries(rd *raft.Ready) error {
 				}
 
 				mgr.registry.AssignLSN(EventID(message.GetId()), lsn)
+
+				if mgr.metrics.logEntriesProcessed != nil {
+					mgr.metrics.logEntriesProcessed.WithLabelValues("append", "application").Inc()
+				}
 			}
 		case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
 			// Handle configuration change entries
@@ -618,6 +644,9 @@ func (mgr *Manager) saveEntries(rd *raft.Ready) error {
 			}
 			if err := mgr.recordEntryIfNeeded(true, lsn); err != nil {
 				return fmt.Errorf("recording log entry: %w", err)
+			}
+			if mgr.metrics.logEntriesProcessed != nil {
+				mgr.metrics.logEntriesProcessed.WithLabelValues("append", "config_change").Inc()
 			}
 		default:
 			return fmt.Errorf("raft entry type not supported: %s", rd.Entries[i].Type)
@@ -650,11 +679,22 @@ func (mgr *Manager) processCommitEntries(rd *raft.Ready) error {
 			// AppendLogEntry(). Callers must handle concurrent modifications appropriately
 			shouldNotify = !mgr.registry.Untrack(EventID(message.GetId()))
 
+			if mgr.metrics.logEntriesProcessed != nil {
+				if len(rd.CommittedEntries[i].Data) == 0 {
+					mgr.metrics.logEntriesProcessed.WithLabelValues("commit", "verify").Inc()
+				} else {
+					mgr.metrics.logEntriesProcessed.WithLabelValues("commit", "application").Inc()
+				}
+			}
 		case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
 			if err := mgr.processConfChange(rd.CommittedEntries[i]); err != nil {
 				return fmt.Errorf("processing config change: %w", err)
 			}
 			shouldNotify = true
+
+			if mgr.metrics.logEntriesProcessed != nil {
+				mgr.metrics.logEntriesProcessed.WithLabelValues("commit", "config_change").Inc()
+			}
 
 		default:
 			return fmt.Errorf("raft entry type not supported: %s", rd.CommittedEntries[i].Type)

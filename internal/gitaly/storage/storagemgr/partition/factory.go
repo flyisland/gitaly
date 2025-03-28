@@ -61,15 +61,15 @@ func (f Factory) New(
 		}
 
 		raftStorage, err := raftmgr.NewStorage(
-			f.raftCfg,
-			logger,
 			storageName,
 			partitionID,
+			f.raftCfg,
 			db,
 			stagingDir,
 			absoluteStateDir,
 			f.logConsumer,
 			positionTracker,
+			logger,
 			f.partitionMetrics.raft,
 		)
 		if err != nil {
@@ -80,6 +80,7 @@ func (f Factory) New(
 			partitionID,
 			raftStorage,
 			logger,
+			f.partitionMetrics.raft,
 		)
 		if err != nil {
 			panic(fmt.Errorf("creating raft manager: %w", err))
