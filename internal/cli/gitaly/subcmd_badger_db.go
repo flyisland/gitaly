@@ -22,7 +22,10 @@ const (
 	keyAppliedLSN          = `^(p/)(.{8})(/applied_lsn)$`
 )
 
-type decoder func([]byte) (string, error)
+type (
+	decoder func([]byte) (string, error)
+	encoder func([]byte) ([]byte, error)
+)
 
 // keyFormatter defines the interface for formatting keys
 type keyRegexFormatter interface {
@@ -34,6 +37,13 @@ var decoders = map[string]decoder{
 	keyPartitionIDSeq:      decodeUint64("partition_id_seq"),
 	keyPartitionAssignment: decodeUint64("partition_assignment"),
 	keyAppliedLSN:          decodeProtoMessage(&gitalypb.LSN{}),
+}
+
+// encoders are used to encode values before storing them in the database
+var encoders = map[string]encoder{
+	keyPartitionIDSeq:      encodeUint64,
+	keyPartitionAssignment: encodeUint64,
+	keyAppliedLSN:          encodeLSN,
 }
 
 var formatters = map[string]keyRegexFormatter{
@@ -75,6 +85,7 @@ func newBadgerDBCmd() *cli.Command {
 		Subcommands: []*cli.Command{
 			newBadgerDBListCmd(),
 			newBadgerDBGetCmd(),
+			newBadgerDBUpdateCmd(),
 		},
 	}
 	return cmd
@@ -151,6 +162,38 @@ func newBadgerDBGetCmd() *cli.Command {
 	return cmd
 }
 
+func newBadgerDBUpdateCmd() *cli.Command {
+	cmd := &cli.Command{
+		Name:  "update",
+		Usage: "Update a value of a key in the BadgerDB, example usage: gitaly db update --db-path <db-path> <key> <value>",
+		Flags: []cli.Flag{
+			databasePathFlag(),
+		},
+		ArgsUsage: "<key> <value>",
+		Action: func(ctx *cli.Context) (returnErr error) {
+			if ctx.NArg() != 2 {
+				return fmt.Errorf("exactly two arguments required")
+			}
+
+			db, err := openDatabase(ctx, ctx.String("db-path"))
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+
+			defer func() {
+				if err := db.Close(); err != nil {
+					returnErr = errors.Join(returnErr, fmt.Errorf("closing database: %w", err))
+				}
+			}()
+
+			key := ctx.Args().First()
+			value := ctx.Args().Get(1)
+			return updateKey(ctx, db, key, []byte(value))
+		},
+	}
+	return cmd
+}
+
 func listKeys(ctx *cli.Context, db keyvalue.Store, prefix string, formatKeys bool) error {
 	if prefix != "" {
 		var err error
@@ -178,6 +221,36 @@ func listKeys(ctx *cli.Context, db keyvalue.Store, prefix string, formatKeys boo
 	}
 
 	return nil
+}
+
+func updateKey(ctx *cli.Context, db keyvalue.Store, key string, value []byte) error {
+	return db.Update(func(txn keyvalue.ReadWriter) error {
+		// unquote the key to handle escape sequences
+		unquotedKey, err := strconv.Unquote(`"` + key + `"`)
+		if err != nil {
+			return fmt.Errorf("unquote key: %w", err)
+		}
+		// Find appropriate encoder for the key
+		for prefix, encode := range encoders {
+			pattern := regexp.MustCompile(prefix)
+			if pattern.MatchString(unquotedKey) {
+				encodedValue, err := encode(value)
+				if err != nil {
+					return fmt.Errorf("encode value: %w", err)
+				}
+				value = encodedValue
+				break
+			}
+		}
+
+		if err := txn.Set([]byte(unquotedKey), value); err != nil {
+			return fmt.Errorf("set entry: %w", err)
+		}
+
+		fmt.Fprintf(ctx.App.Writer, "Updated key: %q\n", unquotedKey)
+
+		return nil
+	})
 }
 
 func getValue(ctx *cli.Context, db keyvalue.Store, key string) error {
@@ -240,6 +313,27 @@ func decodeProtoMessage(msg proto.Message) decoder {
 		}
 		return prototext.Format(msg), nil
 	}
+}
+
+func encodeUint64(data []byte) ([]byte, error) {
+	value, err := strconv.ParseUint(string(data), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse uint64: %w", err)
+	}
+	result := make([]byte, 8)
+	binary.BigEndian.PutUint64(result, value)
+	return result, nil
+}
+
+func encodeLSN(data []byte) ([]byte, error) {
+	value, err := strconv.ParseUint(string(data), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse LSN value: %w", err)
+	}
+	lsn := &gitalypb.LSN{
+		Value: value,
+	}
+	return proto.Marshal(lsn)
 }
 
 func openDatabase(ctx *cli.Context, storagePath string) (keyvalue.Store, error) {
