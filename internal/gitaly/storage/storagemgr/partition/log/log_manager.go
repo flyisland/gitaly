@@ -317,14 +317,21 @@ func (mgr *Manager) createStateDirectory() error {
 // It ensures efficient storage management by removing redundant entries while maintaining the integrity of the log
 // sequence. The method respects the established low-water mark, ensuring no entries that might still be required for
 // transaction consistency are deleted.
+// If the GITALY_KEEP_WAL_LOG_ENTRIES environment variable is set, log entries will not be deleted.
 func (mgr *Manager) pruneLogEntries() {
 	defer close(mgr.pruningDone)
 
+	_, keepEntries := os.LookupEnv("GITALY_KEEP_WAL_LOG_ENTRIES")
 	for {
 		select {
 		case <-mgr.ctx.Done():
 			return
 		case <-mgr.pruningSignals:
+			// If GITALY_KEEP_WAL_LOG_ENTRIES is set, don't prune log entries.
+			if keepEntries {
+				continue
+			}
+
 			// All log entries below the low-water mark can be removed. However, we would like to maintain the
 			// oldest LSN. The log entries must be removed in order and the oldestLSN advances one by one. This
 			// approach is to prevent a log entry from being forgotten if the manager fails to remove it in a prior

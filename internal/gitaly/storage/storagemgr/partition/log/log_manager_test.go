@@ -494,6 +494,43 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 	})
 }
 
+func TestLogManager_PruneLogEntries_debugEnv(t *testing.T) {
+	// Do not use t.Parallel() here because we're setting an environment variable with t.Setenv()
+	ctx := testhelper.Context(t)
+	logManager := setupLogManager(t, ctx, nil)
+
+	// Set GITALY_KEEP_WAL_LOG_ENTRIES environment variable
+	t.Setenv("GITALY_KEEP_WAL_LOG_ENTRIES", "true")
+
+	// Inject multiple log entries
+	for i := range 5 {
+		appendLogEntry(t, logManager, map[string][]byte{"1": []byte(fmt.Sprintf("content-%d", i+1))})
+	}
+
+	// Set the applied LSN to 5, which would normally prune all entries
+	require.NoError(t, logManager.AcknowledgePosition(AppliedPosition, 5))
+	waitUntilPruningFinish(t, logManager)
+
+	// Assert on-disk state - all entries should still be present
+	assertDirectoryState(t, logManager, testhelper.DirectoryState{
+		"/":                    {Mode: mode.Directory},
+		"/wal":                 {Mode: mode.Directory},
+		"/wal/0000000000001":   {Mode: mode.Directory},
+		"/wal/0000000000001/1": {Mode: mode.File, Content: []byte("content-1")},
+		"/wal/0000000000002":   {Mode: mode.Directory},
+		"/wal/0000000000002/1": {Mode: mode.File, Content: []byte("content-2")},
+		"/wal/0000000000003":   {Mode: mode.Directory},
+		"/wal/0000000000003/1": {Mode: mode.File, Content: []byte("content-3")},
+		"/wal/0000000000004":   {Mode: mode.Directory},
+		"/wal/0000000000004/1": {Mode: mode.File, Content: []byte("content-4")},
+		"/wal/0000000000005":   {Mode: mode.Directory},
+		"/wal/0000000000005/1": {Mode: mode.File, Content: []byte("content-5")},
+	})
+
+	// Verify oldestLSN hasn't changed
+	require.Equal(t, storage.LSN(1), logManager.oldestLSN)
+}
+
 func TestLogManager_AppendLogEntry(t *testing.T) {
 	t.Parallel()
 
