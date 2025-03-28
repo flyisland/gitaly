@@ -1,5 +1,7 @@
 package raftmgr
 
+import "go.etcd.io/raft/v3/raftpb"
+
 // testHooks defines insertion points for testing various stages of Raft operations.
 type testHooks struct {
 	// BeforeInsertLogEntry is called before inserting a log entry at the specified index.
@@ -12,7 +14,7 @@ type testHooks struct {
 	BeforePropose func(path string)
 
 	// BeforeProcessCommittedEntries is called before processing committed entries from a Ready state.
-	BeforeProcessCommittedEntries func()
+	BeforeProcessCommittedEntries func([]raftpb.Entry)
 
 	// BeforeNodeAdvance is called before advancing the Raft node's state.
 	BeforeNodeAdvance func()
@@ -30,7 +32,7 @@ func noopHooks() testHooks {
 		BeforeInsertLogEntry:          func(uint64) {},
 		BeforeSaveHardState:           func() {},
 		BeforePropose:                 func(string) {},
-		BeforeProcessCommittedEntries: func() {},
+		BeforeProcessCommittedEntries: func([]raftpb.Entry) {},
 		BeforeNodeAdvance:             func() {},
 		BeforeSendMessages:            func() {},
 		BeforeHandleReady:             func() {},

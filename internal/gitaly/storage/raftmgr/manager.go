@@ -15,8 +15,8 @@ import (
 	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"go.etcd.io/etcd/raft/v3"
-	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/raft/v3"
+	"go.etcd.io/raft/v3/raftpb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -523,7 +523,7 @@ func (mgr *Manager) NotifyNewEntries() {
 // 1. Persist states (SoftState, HardState, and uncommitted Entries)
 // 2. Send messages to other members via Transport
 // 3. Process committed entries (entries acknowledged by the majority)
-// See: https://pkg.go.dev/go.etcd.io/etcd/raft/v3#section-readme
+// See: https://pkg.go.dev/go.etcd.io/raft/v3#section-readme
 func (mgr *Manager) handleReady(rd *raft.Ready) error {
 	mgr.hooks.BeforeHandleReady()
 
@@ -532,7 +532,7 @@ func (mgr *Manager) handleReady(rd *raft.Ready) error {
 		return fmt.Errorf("handling soft state: %w", err)
 	}
 
-	// In https://pkg.go.dev/go.etcd.io/etcd/raft/v3#section-readme, the
+	// In https://pkg.go.dev/go.etcd.io/raft/v3#section-readme, the
 	// library recommends saving entries, hard state, and snapshots
 	// atomically. We can't currently do this because we use different
 	// backends to persist these items:
@@ -658,7 +658,7 @@ func (mgr *Manager) saveEntries(rd *raft.Ready) error {
 // processCommitEntries processes entries that have been committed by the Raft consensus
 // and updates the system state accordingly.
 func (mgr *Manager) processCommitEntries(rd *raft.Ready) error {
-	mgr.hooks.BeforeProcessCommittedEntries()
+	mgr.hooks.BeforeProcessCommittedEntries(rd.CommittedEntries)
 
 	for i := range rd.CommittedEntries {
 		var shouldNotify bool

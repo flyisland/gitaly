@@ -21,6 +21,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 func raftConfigsForTest(t *testing.T) config.Raft {
@@ -859,7 +860,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		env := setupTest(t, ctx, storage.PartitionID(2))
 
 		// Set up hook to panic during commit entries
-		env.mgr.hooks.BeforeProcessCommittedEntries = func() {
+		env.mgr.hooks.BeforeProcessCommittedEntries = func([]raftpb.Entry) {
 			panic("simulated crash during commit entries")
 		}
 
@@ -891,7 +892,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
                         # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
                         # TYPE gitaly_raft_log_entries_processed counter
                         gitaly_raft_log_entries_processed{entry_type="application",operation="append",storage="default"} 3
-                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 2
+                        gitaly_raft_log_entries_processed{entry_type="application",operation="commit",storage="default"} 3
                         gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 1
                         gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 1
                         gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 2
@@ -909,7 +910,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		`)
 	})
 
-	t.Run("AppendLogEntry crash during node advance", func(t *testing.T) {
+	t.Run("AppendLogEntry crash during node advance, after committed", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
@@ -926,7 +927,11 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		// Create a test entry that will trigger the panic
 		crashContent := "crash-during-node-advance"
-		trigger.Store(true)
+		env.mgr.hooks.BeforeProcessCommittedEntries = func(committed []raftpb.Entry) {
+			if len(committed) > 0 {
+				trigger.Store(true)
+			}
+		}
 		logEntryPath := createTestLogEntry(t, ctx, crashContent)
 
 		// Try to append - should return nil error since entry is committed before crash
@@ -1124,7 +1129,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// during propose, handle ready, or insert log entry. This is because the entry is already
 		// physically written to disk in Storage.insertLogEntry (including fsync calls) before
 		// saveHardState is invoked. This behavior follows the guideline:
-		// https://pkg.go.dev/go.etcd.io/etcd/raft/v3#section-readme.
+		// https://pkg.go.dev/go.etcd.io/raft/v3#section-readme.
 		// The hard state update merely records metadata about what's committed, but doesn't affect the entry's
 		// persistence. During recovery, Raft will find the entry on disk even though the hard state wasn't
 		// updated to reflect it. In a single-node setup, this entry will be considered valid and retained
@@ -1200,8 +1205,10 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		lastKnownLSN = lsn2
 
 		// Set up hook to crash during commit
-		secondRecoveryMgr.hooks.BeforeProcessCommittedEntries = func() {
-			panic("simulated crash during second recovery")
+		secondRecoveryMgr.hooks.BeforeProcessCommittedEntries = func(committed []raftpb.Entry) {
+			if len(committed) > 0 {
+				panic("simulated crash during second recovery")
+			}
 		}
 
 		// Attempt that will crash
