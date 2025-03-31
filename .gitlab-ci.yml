@@ -497,7 +497,7 @@ secret_detection:
 
 build-proto-gem:
   needs: []
-  image: ruby:${RUBY_VERSION}
+  image: ${GITLAB_DEPENDENCY_PROXY}ruby:${RUBY_VERSION}
   stage: publish
   before_script: []
   variables:
@@ -514,7 +514,7 @@ build-proto-gem:
 
 publish-proto-gem:
   needs: []
-  image: ruby:${RUBY_VERSION}
+  image: ${GITLAB_DEPENDENCY_PROXY}ruby:${RUBY_VERSION}
   stage: publish
   before_script: []
   script:
