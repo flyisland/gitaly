@@ -47,7 +47,7 @@ func TestServer_SendSnapshot_Success(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(nodeMgr.Close)
 
-	mockNode, err := raftmgr.NewNode(cfg, nodeMgr, log.LogrusLogger{}, dbMgr, nil)
+	mockNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
 	require.NoError(t, err)
 
 	// Register storage one
@@ -245,7 +245,7 @@ func TestServer_SendSnapshot_Errors(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(nodeMgr.Close)
 
-			mockNode, err := raftmgr.NewNode(cfg, nodeMgr, log.LogrusLogger{}, dbMgr, nil)
+			mockNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
 			require.NoError(t, err)
 
 			// Register storage one

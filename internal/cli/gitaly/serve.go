@@ -410,8 +410,15 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 		}
 
 		var raftFactory raftmgr.RaftManagerFactory
+		var raftNode *raftmgr.Node
+
 		if cfg.Raft.Enabled {
-			raftFactory = raftmgr.DefaultFactory(cfg.Raft)
+			raftNode, err = raftmgr.NewNode(cfg, logger, dbMgr, conns)
+			if err != nil {
+				return fmt.Errorf("new raft node: %w", err)
+			}
+
+			raftFactory = raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
 		}
 
 		nodeMgr, err := nodeimpl.NewManager(
@@ -436,15 +443,21 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			),
 		)
 		if err != nil {
-			return fmt.Errorf("new node: %w", err)
+			return fmt.Errorf("new node manager: %w", err)
 		}
 		defer nodeMgr.Close()
 
 		if cfg.Raft.Enabled {
-			node, err = raftmgr.NewNode(cfg, nodeMgr, logger, dbMgr, conns)
-			if err != nil {
-				return fmt.Errorf("new raft node: %w", err)
+			for _, storageCfg := range cfg.Storages {
+				baseStorage, err := nodeMgr.GetStorage(storageCfg.Name)
+				if err != nil {
+					return fmt.Errorf("get base storage %q from node manager: %w", storageCfg.Name, err)
+				}
+				if err := raftNode.SetBaseStorage(storageCfg.Name, baseStorage); err != nil {
+					return fmt.Errorf("set base storage for raft node %q: %w", storageCfg.Name, err)
+				}
 			}
+			node = raftNode
 		} else {
 			node = nodeMgr
 		}

@@ -127,6 +127,9 @@ type Manager struct {
 	started       bool                // Indicates if manager has been started
 	metrics       RaftMetrics         // Scoped metrics for this manager
 
+	// Reference to the RaftEnabledStorage that contains this manager
+	raftEnabledStorage *RaftStorageWrapper
+
 	// notifyQueue signals new changes or errors to clients
 	// Clients must process signals promptly to prevent blocking
 	notifyQueue chan error
@@ -168,6 +171,41 @@ type RaftManagerFactory func(
 	logger logging.Logger,
 	metrics *Metrics,
 ) (*Manager, error)
+
+// DefaultFactoryWithNode enhances the factory to connect newly created managers with raft-enabled storage
+func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node) RaftManagerFactory {
+	return func(
+		storageName string,
+		partitionID storage.PartitionID,
+		raftStorage *Storage,
+		logger logging.Logger,
+		metrics *Metrics,
+	) (*Manager, error) {
+		storage, err := raftNode.GetStorage(storageName)
+		if err != nil {
+			return nil, fmt.Errorf("get storage wrapper for storage %q: %w", storageName, err)
+		}
+
+		raftEnabledStorage, ok := storage.(*RaftStorageWrapper)
+		if !ok {
+			return nil, fmt.Errorf("storage %q is not a RaftStorageWrapper", storageName)
+		}
+
+		manager, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics)
+		if err != nil {
+			return nil, fmt.Errorf("create manager %q: %w", storageName, err)
+		}
+
+		if err := raftEnabledStorage.RegisterManager(partitionID, manager); err != nil {
+			return nil, fmt.Errorf("register manager for partition %d in storage %q: %w",
+				partitionID, storageName, err)
+		}
+
+		manager.raftEnabledStorage = raftEnabledStorage
+
+		return manager, nil
+	}
+}
 
 // DefaultFactory returns a RaftManagerFactory that returns a manager from input raft config
 func DefaultFactory(raftCfg config.Raft) RaftManagerFactory {
@@ -799,6 +837,15 @@ func (mgr *Manager) signalReady() {
 
 func (mgr *Manager) signalError(err error) {
 	mgr.ready.set(err)
+}
+
+// Step processes a Raft message from a remote node
+func (mgr *Manager) Step(ctx context.Context, msg raftpb.Message) error {
+	if !mgr.started {
+		return fmt.Errorf("raft manager not started")
+	}
+
+	return mgr.node.Step(ctx, msg)
 }
 
 var _ = (storage.LogManager)(&Manager{})
