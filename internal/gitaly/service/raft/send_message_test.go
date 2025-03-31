@@ -53,7 +53,7 @@ func TestServer_SendMessage(t *testing.T) {
 	storage, err := mockNode.GetStorage(storageNameOne)
 	require.NoError(t, err)
 
-	registry := storage.(*raftmgr.RaftStorageWrapper).GetManagerRegistry()
+	registry := storage.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
 	raftMgr := &mockRaftManager{}
 
 	partitionKey := &gitalypb.PartitionKey{
@@ -67,7 +67,7 @@ func TestServer_SendMessage(t *testing.T) {
 	storageTwo, err := mockNode.GetStorage(storageNameTwo)
 	require.NoError(t, err)
 
-	registryTwo := storageTwo.(*raftmgr.RaftStorageWrapper).GetManagerRegistry()
+	registryTwo := storageTwo.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
 	raftMgrTwo := &mockRaftManager{}
 	err = registryTwo.RegisterManager(partitionKey, raftMgrTwo)
 	require.NoError(t, err)

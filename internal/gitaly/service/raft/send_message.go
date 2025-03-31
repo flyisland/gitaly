@@ -36,7 +36,7 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 			return structerr.NewInternal("get storage manager: %w", err)
 		}
 
-		raftStorage, ok := storageManager.(*raftmgr.RaftStorageWrapper)
+		raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)
 		if !ok {
 			return structerr.NewInternal("storage is not Raft-enabled")
 		}

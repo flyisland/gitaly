@@ -128,7 +128,7 @@ type Manager struct {
 	metrics       RaftMetrics         // Scoped metrics for this manager
 
 	// Reference to the RaftEnabledStorage that contains this manager
-	raftEnabledStorage *RaftStorageWrapper
+	raftEnabledStorage *RaftEnabledStorage
 
 	// notifyQueue signals new changes or errors to clients
 	// Clients must process signals promptly to prevent blocking
@@ -183,12 +183,12 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node) RaftManagerFact
 	) (*Manager, error) {
 		storage, err := raftNode.GetStorage(storageName)
 		if err != nil {
-			return nil, fmt.Errorf("get storage wrapper for storage %q: %w", storageName, err)
+			return nil, fmt.Errorf("get storage %q: %w", storageName, err)
 		}
 
-		raftEnabledStorage, ok := storage.(*RaftStorageWrapper)
+		raftEnabledStorage, ok := storage.(*RaftEnabledStorage)
 		if !ok {
-			return nil, fmt.Errorf("storage %q is not a RaftStorageWrapper", storageName)
+			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
 
 		manager, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics)
