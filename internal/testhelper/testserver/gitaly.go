@@ -360,13 +360,16 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		tb.Cleanup(dbMgr.Close)
 
 		var raftFactory raftmgr.RaftManagerFactory
+		var raftNode *raftmgr.Node
 		if testhelper.IsRaftEnabled() && !testhelper.IsPraefectEnabled() {
 			cfg.Raft = config.DefaultRaftConfig(uuid.New().String())
 			// Speed up initial election overhead in the test setup
 			cfg.Raft.ElectionTicks = 5
 			cfg.Raft.RTTMilliseconds = 100
 			cfg.Raft.SnapshotDir = testhelper.TempDir(tb)
-			raftFactory = raftmgr.DefaultFactory(cfg.Raft)
+			raftNode, err = raftmgr.NewNode(cfg, gsd.logger, dbMgr, gsd.conns)
+			require.NoError(tb, err)
+			raftFactory = raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
 		}
 
 		nodeMgr, err := nodeimpl.NewManager(
@@ -393,7 +396,16 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		require.NoError(tb, err)
 		tb.Cleanup(nodeMgr.Close)
 
-		node = nodeMgr
+		if testhelper.IsRaftEnabled() && !testhelper.IsPraefectEnabled() {
+			for _, storageCfg := range cfg.Storages {
+				baseStorage, err := nodeMgr.GetStorage(storageCfg.Name)
+				require.NoError(tb, err)
+				require.NoError(tb, raftNode.SetBaseStorage(storageCfg.Name, baseStorage))
+			}
+			node = raftNode
+		} else {
+			node = nodeMgr
+		}
 	}
 
 	// This is to allow building a bundle generation from a Sink

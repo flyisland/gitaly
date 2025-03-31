@@ -18,6 +18,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
+	logrus "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -1442,4 +1444,108 @@ func TestManager_NotImplementedLogMethods(t *testing.T) {
 	// Test DeleteLogEntry - should not be implemented
 	err = mgr.DeleteLogEntry(1)
 	require.ErrorContains(t, err, "raft manager does not support DeleteLogEntry")
+}
+
+func TestManager_StorageConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+	logger := testhelper.NewLogger(t)
+
+	cfg.Raft = config.Raft{
+		Enabled:         true,
+		ElectionTicks:   5,
+		RTTMilliseconds: 100,
+		SnapshotDir:     testhelper.TempDir(t),
+	}
+
+	dbPath := testhelper.TempDir(t)
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(log logrus.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(log, filepath.Join(dbPath, path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	storageName := cfg.Storages[0].Name
+	db, err := dbMgr.GetDB(storageName)
+	require.NoError(t, err)
+
+	partitionID := storage.PartitionID(1)
+	stagingDir := testhelper.TempDir(t)
+	stateDir := testhelper.TempDir(t)
+	posTracker := log.NewPositionTracker()
+
+	raftStorage, err := NewStorage(
+		storageName,
+		partitionID,
+		cfg.Raft,
+		db,
+		stagingDir,
+		stateDir,
+		nil,
+		posTracker,
+		logger,
+		NewMetrics(),
+	)
+	require.NoError(t, err)
+
+	raftNode, err := NewNode(cfg, logger, dbMgr, nil)
+	require.NoError(t, err)
+
+	// Create wrapped factory that connects managers to storage
+	wrappedFactory := DefaultFactoryWithNode(cfg.Raft, raftNode)
+
+	raftManager, err := wrappedFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, raftManager.Close()) })
+
+	raftManagerStorage := raftManager.raftEnabledStorage
+	require.NotNil(t, raftManagerStorage, "manager should have a raft-enabled storage")
+
+	gitalyStorage, err := raftNode.GetStorage(storageName)
+	require.NoError(t, err)
+	require.NotNil(t, gitalyStorage, "raft node should have a storage")
+
+	raftNodeStorage, ok := gitalyStorage.(*RaftEnabledStorage)
+	require.True(t, ok, "storage should be a RaftEnabledStorage")
+
+	require.Same(t, raftNodeStorage, raftManagerStorage, "manager should point to correct storage")
+
+	t.Run("manager connection is bidirectional", func(t *testing.T) {
+		registry := raftNodeStorage.GetManagerRegistry()
+		require.NotNil(t, registry)
+
+		partitionKey := &gitalypb.PartitionKey{
+			PartitionId:   uint64(partitionID),
+			AuthorityName: storageName,
+		}
+
+		registeredManager, err := registry.GetManager(partitionKey)
+		require.NoError(t, err)
+
+		// Verify bidirectional connection
+		require.Same(t, raftManager, registeredManager,
+			"manager->storage->manager should return same instance")
+	})
+
+	t.Run("multiple managers for same partition key", func(t *testing.T) {
+		duplicateManager, err := wrappedFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "manager already registered for partition key")
+		require.Nil(t, duplicateManager)
+	})
+
+	t.Run("Register different managers for different partition keys", func(t *testing.T) {
+		partitionID := storage.PartitionID(2)
+		managerTwo, err := wrappedFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
+		require.NoError(t, err)
+		require.NotNil(t, managerTwo)
+	})
 }
