@@ -1,4 +1,6 @@
 # options for analysis running
+version: "2"
+
 run:
   # timeout for analysis, e.g. 30s, 5m, default is 1m
   timeout: 10m
@@ -6,11 +8,10 @@ run:
 
 # list of useful linters could be found at https://github.com/golangci/awesome-go-linters
 linters:
-  disable-all: true
+  default: none
   enable:
-    # These are enabled by default, but since we disable-all, worthwhile to re-enable them.
+    # These are enabled by default, but since we default to none, worthwhile to re-enable them.
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
@@ -21,13 +22,7 @@ linters:
     - errname
     - errorlint
     - forbidigo
-    - gci
     - gitaly-linters
-    # We use both gofmt and gofumpt because gofumpt doesn't seem to be linting
-    # for simplifications, while gofmt does.
-    - gofmt
-    - gofumpt
-    - goimports
     - importas
     - makezero
     - mirror
@@ -40,159 +35,202 @@ linters:
     - rowserrcheck
     - spancheck
     - sqlclosecheck
-    - stylecheck
     - tagalign
-    - tenv
     - thelper
     - unconvert
     - wastedassign
-
-linters-settings:
-  errcheck:
-    # The following are functions for which we are currently not consistently
-    # checking returned errors. This is not intended as a list of known-okay
-    # cases to skip the checks, but rather as a list of things we should
-    # eventually fix.
-    exclude-functions:
-      - (*database/sql.DB).Close
-      - (*database/sql.Rows).Close
-      - (*gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel.ServerConn).Close
-      - (*gitlab.com/gitlab-org/gitaly/v16/internal/streamcache.pipe).Close
-      - (*gitlab.com/gitlab-org/gitaly/v16/internal/streamcache.pipeReader).Close
-      - (*google.golang.org/grpc.ClientConn).Close
-      - (*google.golang.org/grpc.ServerConn).Close
-      - (*io.PipeReader).Close
-      - (*io.PipeWriter).Close
-      - (*os.File).Close
-      - (io.Closer).Close
-      - (net.Conn).Close
-      - (net.Listener).Close
-  forbidigo:
-    forbid:
-      - p: ^logrus\.(Debug|Error|Fatal|Info|Panic|Print|Trace|Warn|Warning)(f|ln)?$
-        msg: Use an injected logger or `ctxlogrus.Extract()`.
-      - p: ^logrus\.StandardLogger$
-        msg: Use an injected logger or `ctxlogrus.Extract()`.
-      - p: ^logrus\.New$
-        msg: Use an injected logger or `ctxlogrus.Extract()`.
-      - p: ^logrus\.With(Context|Error|Field|Fields|Time)$
-        msg: Use an injected logger or `ctxlogrus.Extract()`.
-    analyze-types: true
-  gci:
-    sections:
-      - standard
-      - default
-      - blank
-  paralleltest:
-    # Ignore missing calls to `t.Parallel()` and only report incorrect uses of it.
-    ignore-missing: true
-  revive:
-    # Specifying any rule explicitly will disable the default-enabled rules.
-    # Manually specify the defaults along with `context-as-argument`.
+  settings:
+    errcheck:
+      # The following are functions for which we are currently not consistently
+      # checking returned errors. This is not intended as a list of known-okay
+      # cases to skip the checks, but rather as a list of things we should
+      # eventually fix.
+      exclude-functions:
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel.ServerConn).Close
+        - (*gitlab.com/gitlab-org/gitaly/v16/internal/streamcache.pipe).Close
+        - (*gitlab.com/gitlab-org/gitaly/v16/internal/streamcache.pipeReader).Close
+        - (*google.golang.org/grpc.ClientConn).Close
+        - (*google.golang.org/grpc.ServerConn).Close
+        - (*io.PipeReader).Close
+        - (*io.PipeWriter).Close
+        - (*os.File).Close
+        - (io.Closer).Close
+        - (net.Conn).Close
+        - (net.Listener).Close
+    forbidigo:
+      forbid:
+        - pattern: ^logrus\.(Debug|Error|Fatal|Info|Panic|Print|Trace|Warn|Warning)(f|ln)?$
+          msg: Use an injected logger or `ctxlogrus.Extract()`.
+        - pattern: ^logrus\.StandardLogger$
+          msg: Use an injected logger or `ctxlogrus.Extract()`.
+        - pattern: ^logrus\.New$
+          msg: Use an injected logger or `ctxlogrus.Extract()`.
+        - pattern: ^logrus\.With(Context|Error|Field|Fields|Time)$
+          msg: Use an injected logger or `ctxlogrus.Extract()`.
+      analyze-types: true
+    paralleltest:
+      # Ignore missing calls to `t.Parallel()` and only report incorrect uses of it.
+      ignore-missing: true
+    revive:
+      # Specifying any rule explicitly will disable the default-enabled rules.
+      # Manually specify the defaults along with `context-as-argument`.
+      rules:
+        - name: blank-imports
+          disabled: false
+        - name: context-as-argument
+          arguments:
+            # The context should always be first, except in our testing packages.
+            - allowTypesBefore: '*testing.T,*testing.B,testing.TB'
+        - name: dot-imports
+          disabled: false
+        - name: error-naming
+          disabled: false
+        - name: error-return
+          disabled: false
+        - name: error-strings
+          disabled: false
+        - name: exported
+          disabled: false
+        - name: increment-decrement
+          disabled: false
+        - name: indent-error-flow
+          disabled: false
+        - name: receiver-naming
+          disabled: false
+        - name: range
+          disabled: false
+        - name: var-naming
+          disabled: false
+    staticcheck:
+      checks:
+        - all
+        # ST1000 checks for missing package comments. We don't use these for most
+        # packages, so let's disable this check.
+        - -ST1000
+        # These are new checks introduced with the upgrade to golangci-lint v2.
+        # They flag multiple locations in our code base. Disable them to proceed
+        # with the upgrade.
+        #
+        # Issue: https://gitlab.com/gitlab-org/gitaly/-/issues/6691
+        - -ST1005
+        - -QF1001
+        - -QF1003
+        - -QF1004
+        - -QF1005
+        - -QF1006
+        - -QF1008
+        - -QF1012
+    tagalign:
+      # Align and sort can be used together or separately.
+      #
+      # Whether enable align. If true, the struct tags will be aligned.
+      # e.g.:
+      # type FooBar struct {
+      #     Bar    string `json:"bar" validate:"required"`
+      #     FooFoo int8   `json:"foo_foo" validate:"required"`
+      # }
+      # will be formatted to:
+      # type FooBar struct {
+      #     Bar    string `json:"bar"     validate:"required"`
+      #     FooFoo int8   `json:"foo_foo" validate:"required"`
+      # }
+      # Default: true.
+      align: true
+      # Whether enable tags sort.
+      # If true, the tags will be sorted by name in ascending order.
+      # e.g.: `xml:"bar" json:"bar" validate:"required"` -> `json:"bar" validate:"required" xml:"bar"`
+      # Default: true
+      sort: true
+      # Whether enable strict style.
+      # In this style, the tags will be sorted and aligned in the dictionary order,
+      # and the tags with the same name will be aligned together.
+      # Note: This option will be ignored if 'align' or 'sort' is false.
+      # Default: false
+      strict: true
+    thelper:
+      test:
+        # The following linter would check whether we always call `t.Helper()` in
+        # functions that are not the top-level testcase. While this is nice in
+        # theory, in practice it would also impact e.g. usecases like
+        # `testhelper.NewFeatureSets(...).Run(t, testWithFeatures)`. This isn't
+        # really what we want, so we just leave these as disabled for the time
+        # being.
+        begin: false
+      benchmark:
+        begin: false
+      tb:
+        begin: false
+    custom:
+      gitaly-linters:
+        path: ./_build/tools/gitaly-linters.so
+        description: A collection of linters tailored for Gitaly
+        original-url: gitlab.com/gitlab-org/gitaly
+        settings:
+          error_wrap:
+            included-functions:
+              - fmt.Errorf
+              - gitlab.com/gitlab-org/gitaly/v16/internal/structerr.*
+          string_interpolation_quote:
+            included-functions:
+              - fmt.*
+          testhelper_run:
+            included-functions:
+              - gitlab.com/gitlab-org/gitaly/v16/internal/testhelper.Run
+          unavailable_code:
+            included-functions:
+              - gitlab.com/gitlab-org/gitaly/v16/internal/structerr.NewUnavailable
+  exclusions:
+    generated: lax
     rules:
-      - name: blank-imports
-        disabled: false
-      - name: context-as-argument
-        arguments:
-          # The context should always be first, except in our testing packages.
-          allowTypesBefore: "*testing.T,*testing.B,testing.TB"
-      - name: dot-imports
-        disabled: false
-      - name: error-naming
-        disabled: false
-      - name: error-return
-        disabled: false
-      - name: error-strings
-        disabled: false
-      - name: exported
-        disabled: false
-      - name: increment-decrement
-        disabled: false
-      - name: indent-error-flow
-        disabled: false
-      - name: receiver-naming
-        disabled: false
-      - name: range
-        disabled: false
-      - name: var-naming
-        disabled: false
-  stylecheck:
-    # ST1000 checks for missing package comments. We don't use these for most
-    # packages, so let's disable this check.
-    checks: ["all", "-ST1000"]
-  tagalign:
-    # Align and sort can be used together or separately.
-    #
-    # Whether enable align. If true, the struct tags will be aligned.
-    # e.g.:
-    # type FooBar struct {
-    #     Bar    string `json:"bar" validate:"required"`
-    #     FooFoo int8   `json:"foo_foo" validate:"required"`
-    # }
-    # will be formatted to:
-    # type FooBar struct {
-    #     Bar    string `json:"bar"     validate:"required"`
-    #     FooFoo int8   `json:"foo_foo" validate:"required"`
-    # }
-    # Default: true.
-    align: true
-    # Whether enable tags sort.
-    # If true, the tags will be sorted by name in ascending order.
-    # e.g.: `xml:"bar" json:"bar" validate:"required"` -> `json:"bar" validate:"required" xml:"bar"`
-    # Default: true
-    sort: true
-    # Whether enable strict style.
-    # In this style, the tags will be sorted and aligned in the dictionary order,
-    # and the tags with the same name will be aligned together.
-    # Note: This option will be ignored if 'align' or 'sort' is false.
-    # Default: false
-    strict: true
-  thelper:
-    test:
-      # The following linter would check whether we always call `t.Helper()` in
-      # functions that are not the top-level testcase. While this is nice in
-      # theory, in practice it would also impact e.g. usecases like
-      # `testhelper.NewFeatureSets(...).Run(t, testWithFeatures)`. This isn't
-      # really what we want, so we just leave these as disabled for the time
-      # being.
-      begin: false
-    benchmark:
-      begin: false
-    tb:
-      begin: false
-  custom:
-    gitaly-linters:
-      path: ./_build/tools/gitaly-linters.so
-      description: A collection of linters tailored for Gitaly
-      original-url: gitlab.com/gitlab-org/gitaly
-      settings:
-        string_interpolation_quote:
-          included-functions:
-            - fmt.*
-        error_wrap:
-          included-functions:
-            - fmt.Errorf
-            - gitlab.com/gitlab-org/gitaly/v16/internal/structerr.*
-        unavailable_code:
-          included-functions:
-            - gitlab.com/gitlab-org/gitaly/v16/internal/structerr.NewUnavailable
-        testhelper_run:
-          included-functions:
-            - gitlab.com/gitlab-org/gitaly/v16/internal/testhelper.Run
-
+      # Issue: https://gitlab.com/gitlab-org/gitaly/-/issues/6100
+      - path: (.+)\.go$
+        text: Error return value of `fmt.Fprint` is not checked
+      - path: (.+)\.go$
+        text: Error return value of `fmt.Fprintf` is not checked
+      - path: (.+)\.go$
+        text: Error return value of `fmt.Fprintln` is not checked
+      # Migration issue: https://gitlab.com/gitlab-org/gitaly/-/issues/5971
+      - path: (.+)\.go$
+        text: 'grpc.Dial is deprecated: use NewClient instead.  Will be supported throughout 1.x.'
+      - path: (.+)\.go$
+        text: 'grpc.DialContext is deprecated: use NewClient instead.  Will be supported throughout 1.x.'
+      - path: (.+)\.go$
+        text: 'grpc.WithBlock is deprecated: this DialOption is not supported by NewClient. Will be supported throughout 1.x.'
+      - path: (.+)\.go$
+        text: 'grpc.FailOnNonTempDialError is deprecated: this DialOption is not supported by NewClient. This API may be changed or removed in a later release.'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-use-default: false
   # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
   max-issues-per-linter: 0
   # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
   max-same-issues: 0
-  exclude:
-    # Issue: https://gitlab.com/gitlab-org/gitaly/-/issues/6100
-    - "Error return value of `fmt.Fprint` is not checked"
-    - "Error return value of `fmt.Fprintf` is not checked"
-    - "Error return value of `fmt.Fprintln` is not checked"
-    # Migration issue: https://gitlab.com/gitlab-org/gitaly/-/issues/5971
-    - "grpc.Dial is deprecated: use NewClient instead.  Will be supported throughout 1.x."
-    - "grpc.DialContext is deprecated: use NewClient instead.  Will be supported throughout 1.x."
-    - "grpc.WithBlock is deprecated: this DialOption is not supported by NewClient. Will be supported throughout 1.x."
-    - "grpc.FailOnNonTempDialError is deprecated: this DialOption is not supported by NewClient. This API may be changed or removed in a later release."
+formatters:
+  enable:
+    - gci
+    # We use both gofmt and gofumpt because gofumpt doesn't seem to be linting
+    # for simplifications, while gofmt does.
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - blank
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+outputs:
+  formats:
+    tab:
+      path: stdout

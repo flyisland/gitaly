@@ -50,7 +50,7 @@ func (f File) Resolve(resolution Resolution) ([]byte, error) {
 
 		r, ok := resolution.Sections[sectionID]
 		if !ok {
-			return nil, fmt.Errorf("Missing resolution for section ID: %s", sectionID) //nolint
+			return nil, fmt.Errorf("Missing resolution for section ID: %s", sectionID)
 		}
 
 		switch r {
@@ -63,7 +63,7 @@ func (f File) Resolve(resolution Resolution) ([]byte, error) {
 				continue
 			}
 		default:
-			return nil, fmt.Errorf("Missing resolution for section ID: %s", sectionID) //nolint
+			return nil, fmt.Errorf("Missing resolution for section ID: %s", sectionID)
 		}
 
 		resolvedLines = append(resolvedLines, l.payload)

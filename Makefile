@@ -479,12 +479,12 @@ ${TOOLS_DIR}/gitaly-linters.so: ${SOURCE_DIR}/tools/golangci-lint/go.sum $(wildc
 .PHONY: lint
 ## Run Go linter.
 lint: ${GOLANGCI_LINT} ${GITALY_PACKED_EXECUTABLES} ${GIT_PACKED_EXECUTABLES} ${TOOLS_DIR}/gitaly-linters.so lint-gitaly-linters
-	${Q}${GOLANGCI_LINT} run --build-tags "${SERVER_BUILD_TAGS}" --out-format tab --config ${GOLANGCI_LINT_CONFIG} ${GOLANGCI_LINT_OPTIONS}
+	${Q}${GOLANGCI_LINT} run --build-tags "${SERVER_BUILD_TAGS}" --config ${GOLANGCI_LINT_CONFIG} ${GOLANGCI_LINT_OPTIONS}
 
 .PHONY: lint-fix
 ## Run Go linter and write back fixes to the files (not supported by all linters).
 lint-fix: ${GOLANGCI_LINT} ${GITALY_PACKED_EXECUTABLES} ${GIT_PACKED_EXECUTABLES} ${TOOLS_DIR}/gitaly-linters.so
-	${Q}${GOLANGCI_LINT} run --fix --build-tags "${SERVER_BUILD_TAGS}" --out-format tab --config ${GOLANGCI_LINT_CONFIG} ${GOLANGCI_LINT_OPTIONS}
+	${Q}${GOLANGCI_LINT} run --fix --build-tags "${SERVER_BUILD_TAGS}" --config ${GOLANGCI_LINT_CONFIG} ${GOLANGCI_LINT_OPTIONS}
 
 .PHONY: lint-docs
 ## Run markdownlint-cli2-config to lint the documentation and lychee to check for broken links.
@@ -503,7 +503,7 @@ lint-docs-fix:
 ## Test Go tests in tools/golangci-lint/gitaly folder
 ## That folder has its own go.mod file. Hence linter must run the context of that folder.
 lint-gitaly-linters: ${GOLANGCI_LINT} ${TOOLS_DIR}/gitaly-linters.so
-	${Q}cd ${SOURCE_DIR}/tools/golangci-lint/gitaly && ${GOLANGCI_LINT} run --out-format tab --config ${GOLANGCI_LINT_CONFIG} .
+	${Q}cd ${SOURCE_DIR}/tools/golangci-lint/gitaly && ${GOLANGCI_LINT} run --config ${GOLANGCI_LINT_CONFIG} .
 
 .PHONY: format
 ## Run Go formatter and adjust imports.
@@ -783,7 +783,7 @@ ${TOOLS_DIR}/%: ${SOURCE_DIR}/tools/%/tool.go ${SOURCE_DIR}/tools/%/go.mod ${SOU
 ${GOCOVER_COBERTURA}: TOOL_PACKAGE = github.com/t-yuki/gocover-cobertura
 ${GOFUMPT}:           TOOL_PACKAGE = mvdan.cc/gofumpt
 ${GOIMPORTS}:         TOOL_PACKAGE = golang.org/x/tools/cmd/goimports
-${GOLANGCI_LINT}:     TOOL_PACKAGE = github.com/golangci/golangci-lint/cmd/golangci-lint
+${GOLANGCI_LINT}:     TOOL_PACKAGE = github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 ${PROTOLINT}:         TOOL_PACKAGE = github.com/yoheimuta/protolint/cmd/protolint
 ${GOTESTSUM}:         TOOL_PACKAGE = gotest.tools/gotestsum
 ${GO_LICENSES}:       TOOL_PACKAGE = github.com/google/go-licenses

@@ -220,7 +220,7 @@ func Resolve(src io.Reader, ours, theirs git.ObjectID, path string, resolution R
 
 		r, ok := resolution.Sections[sectionID]
 		if !ok {
-			return nil, fmt.Errorf("Missing resolution for section ID: %s", sectionID) //nolint
+			return nil, fmt.Errorf("Missing resolution for section ID: %s", sectionID)
 		}
 
 		switch r {
@@ -233,7 +233,7 @@ func Resolve(src io.Reader, ours, theirs git.ObjectID, path string, resolution R
 				continue
 			}
 		default:
-			return nil, fmt.Errorf("Missing resolution for section ID: %s", sectionID) //nolint
+			return nil, fmt.Errorf("Missing resolution for section ID: %s", sectionID)
 		}
 
 		resolvedLines = append(resolvedLines, l.payload)

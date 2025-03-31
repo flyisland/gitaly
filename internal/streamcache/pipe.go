@@ -182,9 +182,9 @@ type pipeReader struct {
 
 	// golangci-lint does not like this struct field because it is only used
 	// on Linux. On macOS, it complains the field is unused. On Linux, it
-	// complains that "nolint:unused" is unused. So we need "unused" and "structcheck" for
+	// complains that "nolint:unused" is unused. So we need "unused" for
 	// platforms other than Linux, and "nolintlint" for Linux.
-	sendfileCalledSuccessfully bool //nolint:structcheck,unused,nolintlint
+	sendfileCalledSuccessfully bool //nolint:unused,nolintlint
 }
 
 func (pr *pipeReader) Close() error {
