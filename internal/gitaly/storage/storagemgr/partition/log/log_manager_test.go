@@ -465,6 +465,8 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			}
 		}()
 		wg.Wait()
+		// The test needs this last ack because the `done` channel might be closed before desired location is acked.
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, logManager.AppendedLSN()-5))
 		require.NoError(t, logManager.Close())
 
 		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, tracker)
@@ -495,12 +497,12 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 }
 
 func TestLogManager_PruneLogEntries_debugEnv(t *testing.T) {
+	// Set GITALY_KEEP_WAL_LOG_ENTRIES environment variable
+	t.Setenv("GITALY_KEEP_WAL_LOG_ENTRIES", "true")
+
 	// Do not use t.Parallel() here because we're setting an environment variable with t.Setenv()
 	ctx := testhelper.Context(t)
 	logManager := setupLogManager(t, ctx, nil)
-
-	// Set GITALY_KEEP_WAL_LOG_ENTRIES environment variable
-	t.Setenv("GITALY_KEEP_WAL_LOG_ENTRIES", "true")
 
 	// Inject multiple log entries
 	for i := range 5 {
