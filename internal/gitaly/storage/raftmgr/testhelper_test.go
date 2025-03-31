@@ -13,7 +13,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	logger "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
-	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 func TestMain(m *testing.M) {

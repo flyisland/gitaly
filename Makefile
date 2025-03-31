@@ -533,9 +533,9 @@ proto: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GO_GRPC} ${PROTOC_GEN_GITALY_PROT
 		--plugin=${PROTOC_GEN_GO_GRPC} \
 		--plugin=${PROTOC_GEN_GITALY_PROTOLIST} \
 		--go_opt=paths=source_relative \
-		--go_opt=Mraftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb \
+		--go_opt=Mraftpb/raft.proto=go.etcd.io/raft/v3/raftpb \
 		--go-grpc_opt=paths=source_relative \
-		--go-grpc_opt=Mraftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb \
+		--go-grpc_opt=Mraftpb/raft.proto=go.etcd.io/raft/v3/raftpb \
 		--go_out=${PROTO_DEST_DIR}/gitalypb \
 		--gitaly-protolist_out=proto_dir=${SOURCE_DIR}/proto,gitalypb_dir=${PROTO_DEST_DIR}/gitalypb:${SOURCE_DIR} \
 		--go-grpc_out=${PROTO_DEST_DIR}/gitalypb \

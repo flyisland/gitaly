@@ -3,7 +3,7 @@ syntax = "proto3";
 package gitaly;
 
 import "lint.proto";
-import "raftpb/raft.proto"; // Upstream go.etcd.io/etcd/raft/v3/raftpb/raft.proto
+import "raftpb/raft.proto"; // Upstream go.etcd.io/raft/v3/raftpb/raft.proto
 
 option go_package = "gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb";
 
@@ -115,8 +115,8 @@ service RaftService {
       scope_level: STORAGE
     };
   }
-  // SendSnapshot sends raft snapshots from the leader to the follower node. Typically it 
-  // would be useful for nodes to catch up to the latest state. 
+  // SendSnapshot sends raft snapshots from the leader to the follower node. Typically it
+  // would be useful for nodes to catch up to the latest state.
   rpc SendSnapshot(stream RaftSnapshotMessageRequest) returns (RaftSnapshotMessageResponse) {
     option (op_type) = {
       op: MUTATOR

@@ -170,4 +170,4 @@ raftmgr.Manager                          etcd/raft state machine
 - [Raft-based decentralized architecture for Gitaly Cluster](https://gitlab.com/groups/gitlab-org/-/epics/8903)
 - [In Search of an Understandable Consensus Algorithm](https://raft.github.io/raft.pdf)
 - [Consensus: Bridging Theory and Practice](https://github.com/ongardie/dissertation)
-- [etcd/raft package documentation](https://pkg.go.dev/go.etcd.io/etcd/raft/v3)
+- [etcd/raft package documentation](https://pkg.go.dev/go.etcd.io/raft/v3)
