@@ -465,6 +465,8 @@ func TestLogManager_PruneLogEntries(t *testing.T) {
 			}
 		}()
 		wg.Wait()
+		// The test needs this last ack because the `done` channel might be closed before desired location is acked.
+		require.NoError(t, logManager.AcknowledgePosition(ConsumerPosition, logManager.AppendedLSN()-5))
 		require.NoError(t, logManager.Close())
 
 		logManager = NewManager("test-storage", 1, stagingDir, stateDir, nil, tracker)
