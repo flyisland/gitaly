@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"net/url"
 	"time"
 
@@ -112,7 +111,9 @@ func New(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Clie
 	var err error
 	var secure bool
 
-	switch getConnectionType(rawAddress) {
+	connType := getConnectionType(rawAddress)
+
+	switch connType {
 	case invalidConnection:
 		return nil, fmt.Errorf("invalid connection string: %q", rawAddress)
 	case tlsConnection:
@@ -134,22 +135,7 @@ func New(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Clie
 		}
 		canonicalAddress = rawAddress // DNS Resolver will handle this
 	case unixConnection:
-		canonicalAddress = rawAddress // This will be overridden by the custom dialer...
-		connOpts = append(
-			connOpts,
-			// Use a custom dialer to ensure that we don't experience
-			// issues in environments that have proxy configurations
-			// https://gitlab.com/gitlab-org/gitaly/merge_requests/1072#note_140408512
-			grpc.WithContextDialer(func(ctx context.Context, addr string) (conn net.Conn, err error) {
-				path, err := extractPathFromSocketURL(addr)
-				if err != nil {
-					return nil, fmt.Errorf("failed to extract host for 'unix' connection: %w", err)
-				}
-
-				d := net.Dialer{}
-				return d.DialContext(ctx, "unix", path)
-			}),
-		)
+		canonicalAddress = rawAddress
 	}
 
 	transportCredentials := dialCfg.creds
@@ -208,6 +194,13 @@ func New(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Clie
 		// https://gitlab.com/groups/gitlab-org/-/epics/8971#note_1207008162
 		grpc.WithDefaultServiceConfig(defaultServiceConfig()),
 	)
+
+	// https://github.com/grpc/grpc-go/issues/8207 prevents Unix connections from working
+	// correctly if the http_proxy or https_proxy environment variables are set. Explicitly
+	// provide the grpc.WithNoProxy() option to workaround this bug.
+	if connType == unixConnection {
+		connOpts = append(connOpts, grpc.WithNoProxy())
+	}
 
 	conn, err := grpc.NewClient(canonicalAddress, connOpts...)
 	if err != nil {

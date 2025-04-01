@@ -51,47 +51,64 @@ func TestConnectivity(t *testing.T) {
 
 	testCases := []struct {
 		name  string
-		addr  func(t *testing.T, cfg config.Cfg) (string, string)
-		proxy bool
+		setup func(t *testing.T, cfg config.Cfg) (addr string, certPath string, envVars []string)
 	}{
 		{
 			name: "tcp",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				cfg.ListenAddr = "localhost:0"
-				return runGitaly(t, cfg), ""
+				return runGitaly(t, cfg), "", nil
+			},
+		},
+		{
+			name: "tcp with no_proxy",
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
+				cfg.ListenAddr = "localhost:0"
+
+				addr := runGitaly(t, cfg)
+
+				return addr, "", []string{
+					"http_proxy=http://invalid:1234",
+					"https_proxy=https://invalid:1234",
+					fmt.Sprintf("no_proxy=%s", strings.TrimPrefix(addr, "tls://")),
+				}
 			},
 		},
 		{
 			name: "unix absolute",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
-				return runGitaly(t, cfg), ""
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
+				return runGitaly(t, cfg), "", nil
 			},
 		},
 		{
 			name: "unix abs with proxy",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
-				return runGitaly(t, cfg), ""
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
+				return runGitaly(t, cfg), "", []string{
+					"http_proxy=http://invalid:1234",
+					"https_proxy=https://invalid:1234",
+				}
 			},
-			proxy: true,
 		},
 		{
 			name: "unix relative",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				cfg.SocketPath = fmt.Sprintf("unix:%s", relativeSocketPath)
-				return runGitaly(t, cfg), ""
+				return runGitaly(t, cfg), "", nil
 			},
 		},
 		{
 			name: "unix relative with proxy",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				cfg.SocketPath = fmt.Sprintf("unix:%s", relativeSocketPath)
-				return runGitaly(t, cfg), ""
+				return runGitaly(t, cfg), "", []string{
+					"http_proxy=http://invalid:1234",
+					"https_proxy=https://invalid:1234",
+				}
 			},
-			proxy: true,
 		},
 		{
 			name: "tls",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				certificate := testhelper.GenerateCertificate(t)
 				t.Setenv(x509.SSLCertFile, certificate.CertPath)
 
@@ -100,12 +117,12 @@ func TestConnectivity(t *testing.T) {
 					CertPath: certificate.CertPath,
 					KeyPath:  certificate.KeyPath,
 				}
-				return runGitaly(t, cfg), certificate.CertPath
+				return runGitaly(t, cfg), certificate.CertPath, nil
 			},
 		},
 		{
 			name: "dns",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				// Configure a Gitaly server that listens over TCP.
 				cfg.ListenAddr = "localhost:0"
 				gitalyAddr := runGitaly(t, cfg)
@@ -116,29 +133,29 @@ func TestConnectivity(t *testing.T) {
 					return []string{"127.0.0.1"}
 				}).Start()
 
-				return fmt.Sprintf("dns://%s/%s", dnsServer.Addr(), "localhost:"+gitalyPort), ""
+				return fmt.Sprintf("dns://%s/%s", dnsServer.Addr(), "localhost:"+gitalyPort), "", nil
 			},
 		},
 		{
 			name: "dns (no authority)",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				// Configure a Gitaly server that listens over TCP.
 				cfg.ListenAddr = "localhost:0"
 				gitalyAddr := runGitaly(t, cfg)
 				gitalyPort := strings.Split(gitalyAddr, ":")[2]
 
-				return "dns:///localhost:" + gitalyPort, ""
+				return "dns:///localhost:" + gitalyPort, "", nil
 			},
 		},
 		{
 			name: "tcp with dns address (no authority)",
-			addr: func(t *testing.T, cfg config.Cfg) (string, string) {
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				// Configure a Gitaly server that listens over TCP.
 				cfg.ListenAddr = "localhost:0"
 				gitalyAddr := runGitaly(t, cfg)
 				gitalyPort := strings.Split(gitalyAddr, ":")[2]
 
-				return fmt.Sprintf("tcp://localhost:%s", gitalyPort), ""
+				return fmt.Sprintf("tcp://localhost:%s", gitalyPort), "", nil
 			},
 		},
 	}
@@ -150,7 +167,7 @@ func TestConnectivity(t *testing.T) {
 	require.NoError(t, err)
 	for _, testcase := range testCases {
 		t.Run(testcase.name, func(t *testing.T) {
-			addr, certFile := testcase.addr(t, cfg)
+			addr, certFile, envVars := testcase.setup(t, cfg)
 
 			env := []string{
 				fmt.Sprintf("GITALY_PAYLOAD=%s", payload),
@@ -160,11 +177,9 @@ func TestConnectivity(t *testing.T) {
 				fmt.Sprintf("GIT_SSH_COMMAND=%s upload-pack", cfg.BinaryPath("gitaly-ssh")),
 				fmt.Sprintf("SSL_CERT_FILE=%s", certFile),
 			}
-			if testcase.proxy {
-				env = append(env,
-					"http_proxy=http://invalid:1234",
-					"https_proxy=https://invalid:1234",
-				)
+
+			if envVars != nil {
+				env = append(env, envVars...)
 			}
 
 			output := gittest.ExecOpts(t, cfg, gittest.ExecConfig{
