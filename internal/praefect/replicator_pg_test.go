@@ -2,6 +2,7 @@ package praefect
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"path/filepath"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testdb"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestReplicatorInvalidSourceRepository(t *testing.T) {
@@ -93,7 +93,7 @@ func TestReplicatorDestroy(t *testing.T) {
 			go testhelper.MustServe(t, srv, ln)
 			defer srv.Stop()
 
-			clientConn, err := grpc.Dial(ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			clientConn, err := client.New(ctx, fmt.Sprintf("tcp://%s", ln.Addr().String()))
 			require.NoError(t, err)
 			defer clientConn.Close()
 

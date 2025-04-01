@@ -34,7 +34,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -173,10 +172,11 @@ func testUploadPackWithSidechannelClient(t *testing.T, ctx context.Context) {
 
 	registry := sidechannel.NewRegistry()
 	clientHandshaker := sidechannel.NewClientHandshaker(testhelper.SharedLogger(t), registry)
-	conn, err := grpc.Dial(cfg.SocketPath,
-		grpc.WithTransportCredentials(clientHandshaker.ClientHandshake(insecure.NewCredentials())),
-		grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(cfg.Auth.Token)),
-	)
+	conn, err := client.New(ctx, cfg.SocketPath,
+		client.WithHandshaker(clientHandshaker),
+		client.WithGrpcOptions([]grpc.DialOption{
+			grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(cfg.Auth.Token)),
+		}))
 	require.NoError(t, err)
 
 	client := gitalypb.NewSSHServiceClient(conn)

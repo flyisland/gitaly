@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/proxy"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/nodes/tracker"
@@ -17,7 +18,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type repositoryService struct {
@@ -68,11 +68,11 @@ func TestStreamInterceptor(t *testing.T) {
 			fullMethodName string,
 			peeker proxy.StreamPeeker,
 		) (*proxy.StreamParameters, error) {
-			cc, err := grpc.Dial("unix://"+internalServerSocketPath,
-				grpc.WithDefaultCallOptions(grpc.ForceCodec(proxy.NewCodec())),
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithStreamInterceptor(StreamErrorHandler(protoregistry.GitalyProtoPreregistered, errTracker, nodeName)),
-			)
+			cc, err := client.New(ctx, "unix://"+internalServerSocketPath,
+				client.WithGrpcOptions([]grpc.DialOption{
+					grpc.WithDefaultCallOptions(grpc.ForceCodec(proxy.NewCodec())),
+					grpc.WithStreamInterceptor(StreamErrorHandler(protoregistry.GitalyProtoPreregistered, errTracker, nodeName)),
+				}))
 			require.NoError(t, err)
 			t.Cleanup(func() { testhelper.MustClose(t, cc) })
 			f, err := peeker.Peek()
@@ -89,7 +89,7 @@ func TestStreamInterceptor(t *testing.T) {
 	defer praefectSrv.Stop()
 	go testhelper.MustServe(t, praefectSrv, praefectLis)
 
-	praefectCC, err := grpc.Dial("unix://"+praefectSocket, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	praefectCC, err := client.New(ctx, "unix://"+praefectSocket)
 	defer testhelper.MustClose(t, praefectCC)
 	require.NoError(t, err)
 

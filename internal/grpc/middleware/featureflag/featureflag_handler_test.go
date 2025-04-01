@@ -2,17 +2,18 @@ package featureflag
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 
 	grpcmwlogrus "github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/loghandler"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/interop/grpc_testing"
 )
 
@@ -54,9 +55,7 @@ func TestFeatureFlagLogs(t *testing.T) {
 	go testhelper.MustServe(t, server, listener)
 	defer server.Stop()
 
-	conn, err := grpc.Dial(listener.Addr().String(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	conn, err := client.New(testhelper.Context(t), fmt.Sprintf("tcp://%s", listener.Addr().String()))
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, conn)
 

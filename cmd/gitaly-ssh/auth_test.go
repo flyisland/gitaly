@@ -70,7 +70,7 @@ func TestConnectivity(t *testing.T) {
 				return addr, "", []string{
 					"http_proxy=http://invalid:1234",
 					"https_proxy=https://invalid:1234",
-					fmt.Sprintf("no_proxy=%s", strings.TrimPrefix(addr, "tls://")),
+					fmt.Sprintf("no_proxy=%s", strings.TrimPrefix(addr, "tcp://")),
 				}
 			},
 		},

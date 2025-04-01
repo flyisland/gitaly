@@ -16,8 +16,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/promtest"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 )
@@ -61,10 +59,9 @@ func TestNodeStatus(t *testing.T) {
 	socket := testhelper.GetTemporaryGitalySocketFileName(t)
 	healthSvr := testhelper.NewServerWithHealth(t, socket)
 
-	cc, err := grpc.Dial(
-		"unix://"+socket,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	cc, err := client.New(
+		testhelper.Context(t),
+		"unix://"+socket)
 	defer testhelper.MustClose(t, cc)
 
 	require.NoError(t, err)

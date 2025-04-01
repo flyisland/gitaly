@@ -2,18 +2,19 @@ package praefect
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	grpcmwlogrus "github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testdb"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type mockObjectPoolService struct {
@@ -60,11 +61,11 @@ func TestDeleteObjectPoolHandler(t *testing.T) {
 		rs.CreateRepository(ctx, 1, repo.GetStorageName(), repo.GetRelativePath(), "replica-path", "primary", []string{"secondary", "unconfigured_storage"}, nil, true, true),
 	)
 
-	primaryConn, err := grpc.Dial(primaryAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	primaryConn, err := client.New(ctx, fmt.Sprintf("tcp://%s", primaryAddr))
 	require.NoError(t, err)
 	defer primaryConn.Close()
 
-	secondaryConn, err := grpc.Dial(secondaryAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	secondaryConn, err := client.New(ctx, fmt.Sprintf("tcp://%s", secondaryAddr))
 	require.NoError(t, err)
 	defer secondaryConn.Close()
 
@@ -95,7 +96,7 @@ func TestDeleteObjectPoolHandler(t *testing.T) {
 	defer praefectSrv.Stop()
 	go testhelper.MustServe(t, praefectSrv, praefectLn)
 
-	praefectConn, err := grpc.Dial(praefectAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	praefectConn, err := client.New(ctx, fmt.Sprintf("tcp://%s", praefectAddr))
 	require.NoError(t, err)
 	defer praefectConn.Close()
 

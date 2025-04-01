@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/interop/grpc_testing"
 	"google.golang.org/protobuf/proto"
 )
@@ -97,10 +97,7 @@ func runServer(t *testing.T, s *server, opt ...grpc.ServerOption) (*grpc.Server,
 }
 
 func newClient(t *testing.T, serverSocketPath string) (grpc_testing.TestServiceClient, *grpc.ClientConn) {
-	connOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-	conn, err := grpc.Dial(serverSocketPath, connOpts...)
+	conn, err := client.New(testhelper.Context(t), serverSocketPath)
 	if err != nil {
 		t.Fatal(err)
 	}

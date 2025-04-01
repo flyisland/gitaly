@@ -339,7 +339,9 @@ func TestDnsResolver_grpcCallWithOurDNSResolver(t *testing.T) {
 
 	// This scheme uses our DNS resolver
 	target := buildResolverTarget(fakeServer, fmt.Sprintf("grpc.test:%s", serverPort))
-	conn, err := grpc.Dial(
+	// Ideally we'd use our own client.New() constructor, but that results in an import cycle between the
+	// client and dnsresolver packages.
+	conn, err := grpc.NewClient(
 		target.URL.String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithResolvers(NewBuilder(&BuilderConfig{

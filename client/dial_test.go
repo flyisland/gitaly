@@ -770,7 +770,7 @@ func TestWithGitalyDNSResolver_zeroAddresses(t *testing.T) {
 
 			client := gitalypb.NewCommitServiceClient(conn)
 			_, err = client.FindCommit(testhelper.Context(t), &gitalypb.FindCommitRequest{})
-			require.Equal(t, err, status.Error(codes.Unavailable, "last resolver error: produced zero addresses"))
+			require.Equal(t, status.Error(codes.Unavailable, "no children to pick from"), err)
 		})
 	}
 }
