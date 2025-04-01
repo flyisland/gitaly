@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	expcredentials "google.golang.org/grpc/experimental/credentials"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/interop/grpc_testing"
 	"google.golang.org/grpc/status"
@@ -584,7 +585,7 @@ func startTLSListener(tb testing.TB, factory func(credentials.TransportCredentia
 	require.NoError(tb, err)
 
 	grpcServer := factory(
-		credentials.NewTLS(&tls.Config{
+		expcredentials.NewTLSWithALPNDisabled(&tls.Config{
 			Certificates: []tls.Certificate{cert},
 			MinVersion:   tls.VersionTLS12,
 		}),

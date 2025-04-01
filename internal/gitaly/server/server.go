@@ -27,8 +27,8 @@ import (
 	grpccorrelation "gitlab.com/gitlab-org/labkit/correlation/grpc"
 	grpctracing "gitlab.com/gitlab-org/labkit/tracing/grpc"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	expcredentials "google.golang.org/grpc/experimental/credentials"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -77,7 +77,7 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 			secureCiphers = append(secureCiphers, cipher.ID)
 		}
 
-		transportCredentials = credentials.NewTLS(&tls.Config{
+		transportCredentials = expcredentials.NewTLSWithALPNDisabled(&tls.Config{
 			Certificates: []tls.Certificate{cert},
 			MinVersion:   s.cfg.TLS.MinVersion.ProtocolVersion(),
 			CipherSuites: secureCiphers,

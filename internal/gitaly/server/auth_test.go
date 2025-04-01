@@ -34,8 +34,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
+	expcredentials "google.golang.org/grpc/experimental/credentials"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
@@ -61,12 +60,10 @@ func TestTLSSanity(t *testing.T) {
 	ok := certPool.AppendCertsFromPEM(cert)
 	require.True(t, ok)
 
-	connOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			RootCAs:    certPool,
-			MinVersion: tls.VersionTLS12,
-		})),
-	}
+	creds := expcredentials.NewTLSWithALPNDisabled(&tls.Config{
+		RootCAs:    certPool,
+		MinVersion: tls.VersionTLS12,
+	})
 
 	conn, err := dial(addr, connOpts)
 	require.NoError(t, err)

@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	expcredentials "google.golang.org/grpc/experimental/credentials"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -161,7 +162,7 @@ func New(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Clie
 				return nil, fmt.Errorf("failed to get system certificate pool for 'tls' connection: %w", err)
 			}
 
-			transportCredentials = credentials.NewTLS(&tls.Config{
+			transportCredentials = expcredentials.NewTLSWithALPNDisabled(&tls.Config{
 				RootCAs:    certPool,
 				MinVersion: tls.VersionTLS12,
 			})
