@@ -321,6 +321,8 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.NewRepoReftableBackend, newRepoReftableEnabled == "reftable")
 	// Randomly use non-repeating catfile cache keys.
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.CatfileCacheNonrepeating, rnd.Int()%2 == 0)
+	// Randomly enable either Git version 2.48 or 2.49.
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.GitV249, rnd.Int()%2 == 0)
 
 	for _, opt := range opts {
 		ctx = opt(ctx)
