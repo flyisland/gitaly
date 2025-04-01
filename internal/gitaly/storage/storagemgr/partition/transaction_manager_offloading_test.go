@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
@@ -56,6 +57,9 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 	require.NoError(t, err)
 	afterOffloadingAlternatesFileContent := fmt.Sprintf("%s\n%s\n", originalAlternatesFileContent, relCachePath)
 
+	// pathUUID is a unique path prefix for when uploading
+	pathUUID := uuid.New().String()
+
 	return []transactionTestCase{
 		{
 			desc:        "offload a repository",
@@ -81,6 +85,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						CachePath: absCachePath,
 						SinkURL:   sinkURL,
 						Filter:    filter,
+						Prefix:    filepath.Join(relativePath, pathUUID),
 						// Other fields are determined at wrapOffloadingConfig()
 					},
 				},
@@ -138,8 +143,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 					},
 				},
 				OffloadingStorage: OffloadingStorageStates{
-					// The prefix is relativePath/txnID
-					filepath.Join(relativePath, strconv.Itoa(1)): OffloadingStorageState{
+					filepath.Join(relativePath, pathUUID): OffloadingStorageState{
 						Sink:      sink,
 						Kind:      packFile,
 						FileTotal: 3,
@@ -165,6 +169,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						CachePath: absCachePath,
 						SinkURL:   sinkURL,
 						Filter:    filter,
+						Prefix:    filepath.Join(relativePath, pathUUID),
 						// Other fields are determined at wrapOffloadingConfig()
 					},
 				},
@@ -251,6 +256,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						CachePath: absCachePath,
 						SinkURL:   unstableSinkURL,
 						Filter:    filter,
+						Prefix:    filepath.Join(relativePath, pathUUID),
 						// Other fields are determined at wrapOffloadingConfig()
 					},
 				},
@@ -306,8 +312,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 					},
 				},
 				OffloadingStorage: OffloadingStorageStates{
-					// The prefix is relativePath/txnID
-					filepath.Join(relativePath, strconv.Itoa(1)): OffloadingStorageState{
+					filepath.Join(relativePath, pathUUID): OffloadingStorageState{
 						Sink:      unstableSink,
 						Kind:      packFile,
 						FileTotal: 0,
@@ -336,9 +341,8 @@ func setupEmptyLocalBucket(t *testing.T, localBucketDir string, stable bool) (*o
 }
 
 // wrapOffloadingConfig
-func wrapOffloadingConfig(_ context.Context, txnID int, in *housekeepingcfg.OffloadingConfig, setup testTransactionSetup) housekeepingcfg.OffloadingConfig {
+func wrapOffloadingConfig(_ context.Context, in *housekeepingcfg.OffloadingConfig, setup testTransactionSetup) housekeepingcfg.OffloadingConfig {
 	in.OriginalRepo = setup.RepositoryPath
-	in.Prefix = filepath.Join(setup.RelativePath, strconv.Itoa(txnID))
 	return *in
 }
 

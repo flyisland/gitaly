@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	housekeepingcfg "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
@@ -13,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/tracing"
 	"gocloud.dev/gcerrors"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -92,7 +94,17 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 	}
 	packFilesToUpload, err := mgr.collectPackFiles(ctx, filterToBase)
 	if err != nil {
-		return fmt.Errorf("collect old pack files: %w", err)
+		return fmt.Errorf("collect pack files to upload: %w", err)
+	}
+	if len(packFilesToUpload) == 0 {
+		return fmt.Errorf("no pack files to upload")
+	}
+	newPackFilesToStay, err := mgr.collectPackFiles(ctx, workingRepoPath)
+	if err != nil {
+		return fmt.Errorf("collect new pack files: %w", err)
+	}
+	if slices.Equal(maps.Keys(oldPackFiles), maps.Keys(newPackFilesToStay)) {
+		return fmt.Errorf("same packs after offloading repacking")
 	}
 
 	uploadedPackFiles := make([]string, 0, len(packFilesToUpload))
@@ -117,12 +129,18 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		uploadedPackFiles = append(uploadedPackFiles, file)
 	}
 
+	// Update git config file
 	promisorRemoteURL := filepath.Join(cfg.SinkURL, cfg.Prefix)
 	if err := housekeeping.SetOffloadingGitConfig(ctx, workingRepository, promisorRemoteURL, cfg.Filter, nil); err != nil {
 		return fmt.Errorf("setting offloading git config: %w", err)
 	}
 
 	// Add cache entry
+	// shouldRemoveOriginalAlternates tells if we should log a directory removal entry for the original alternates file.
+	shouldRemoveOriginalAlternates := false
+	if _, err := os.Stat(stats.AlternatesFilePath(workingRepoPath)); !os.IsNotExist(err) {
+		shouldRemoveOriginalAlternates = true
+	}
 	alternatesInWorkingRepo := stats.AlternatesFilePath(workingRepoPath)
 	// We are calculating the relative path of the cache entry based on the original repo path instead of the
 	// snapshot repo path here. This is because the alternate file will eventually be copied back to the
@@ -136,14 +154,11 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		return fmt.Errorf("adding cache alternate entry: %w", err)
 	}
 
+	// Record WAL entry
 	for file := range oldPackFiles {
 		transaction.walEntry.RemoveDirectoryEntry(filepath.Join(transaction.relativePath, objectsDir, packFileDir, file))
 	}
 
-	newPackFilesToStay, err := mgr.collectPackFiles(ctx, workingRepoPath)
-	if err != nil {
-		return fmt.Errorf("collect new pack files: %w", err)
-	}
 	for file := range newPackFilesToStay {
 		fileRelativePath := filepath.Join(transaction.relativePath, objectsDir, packFileDir, file)
 		if err := transaction.walEntry.CreateFile(
@@ -162,7 +177,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		return fmt.Errorf("record config file replacement: %w", err)
 	}
 
-	if _, err := os.Stat(stats.AlternatesFilePath(workingRepoPath)); !os.IsNotExist(err) {
+	if shouldRemoveOriginalAlternates {
 		transaction.walEntry.RemoveDirectoryEntry(stats.AlternatesFilePath(transaction.relativePath))
 	}
 
