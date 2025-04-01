@@ -10,6 +10,10 @@ replace github.com/go-enry/go-license-detector/v4 => github.com/gl-gitaly/go-lic
 require (
 	cloud.google.com/go/storage v1.44.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.0
+	// +gitaly pinVersion github.com/ProtonMail/go-crypto v1.0.0
+	// The upstream introduced a significant rework on signature verification. This might affect commit signing feature
+	// in Gitaly.
+	// For more information: https://gitlab.com/gitlab-org/gitaly/-/issues/6520
 	github.com/ProtonMail/go-crypto v1.0.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.63.1
 	github.com/cloudflare/tableflip v1.2.3
@@ -53,9 +57,11 @@ require (
 	golang.org/x/text v0.23.0
 	golang.org/x/time v0.11.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240930140551-af27646dc61f
-	// Please upgrade grpc-go with caution. Newer grpc-go versions contain some known issues:
-	// - https://gitlab.com/gitlab-com/request-for-help/-/issues/2127
-	// - https://gitlab.com/gitlab-org/gitaly/-/issues/6385
+	// +gitaly pinVersion google.golang.org/grpc v1.66.3
+	// Versions starting from v1.67.0 are known to have 2 major issues with Gitaly:
+	// - This version introduced a bug related to window header
+	// - Clients and servers will now reject TLS connections that don't support ALPN.
+	// For more information: https://gitlab.com/gitlab-org/gitaly/-/merge_requests/7531
 	google.golang.org/grpc v1.67.1
 	google.golang.org/protobuf v1.36.5
 )
