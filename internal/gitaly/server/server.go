@@ -79,7 +79,7 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 
 		transportCredentials = credentials.NewTLS(&tls.Config{
 			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
+			MinVersion:   s.cfg.TLS.MinVersion.ProtocolVersion(),
 			CipherSuites: secureCiphers,
 		})
 	}

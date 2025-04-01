@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"os"
@@ -268,8 +269,9 @@ func TestConfigParsing(t *testing.T) {
 			expected: Config{
 				TLSListenAddr: "0.0.0.0:2306",
 				TLS: config.TLS{
-					CertPath: "/home/git/cert.cert",
-					KeyPath:  "/home/git/key.pem",
+					CertPath:   "/home/git/cert.cert",
+					KeyPath:    "/home/git/key.pem",
+					MinVersion: tls.VersionTLS12,
 				},
 				Logging: log.Config{
 					Level:  "info",
@@ -381,6 +383,7 @@ func TestConfigParsing(t *testing.T) {
 				BackgroundVerification: DefaultBackgroundVerificationConfig(),
 				Yamux:                  DefaultYamuxConfig(),
 				Logging:                DefaultLoggingConfig(),
+				TLS:                    config.TLS{MinVersion: tls.VersionTLS13},
 			},
 		},
 		{
@@ -405,6 +408,7 @@ func TestConfigParsing(t *testing.T) {
 				BackgroundVerification: DefaultBackgroundVerificationConfig(),
 				Yamux:                  DefaultYamuxConfig(),
 				Logging:                DefaultLoggingConfig(),
+				TLS:                    config.NewTLS(),
 			},
 		},
 		{
