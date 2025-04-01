@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"gitlab.com/gitlab-org/gitaly/v16/internal/offloading"
+)
 
 // WriteCommitGraphConfig contains configuration that can be passed to WriteCommitGraph to alter its
 // default behaviour.
@@ -52,4 +56,20 @@ type RepackObjectsConfig struct {
 	// CruftExpireBefore determines the cutoff date before which unreachable cruft objects shall
 	// be expired and thus deleted.
 	CruftExpireBefore time.Time
+}
+
+// OffloadingConfig contains configuration that can be passed to housekeeping manager's OffloadRepository function.
+type OffloadingConfig struct {
+	// Filter is the filter used to do git-repack
+	Filter string
+	// CachePath is the absolute path of the cache folder.
+	CachePath string
+	// Prefix is the prefix used when uploading to the sink.
+	Prefix string
+	// OriginalRepo is the absolute path of the repository being offloaded. It is NOT the snapshot repo's path.
+	OriginalRepo string
+	// SinkURL is the URL for the sink of the upload.
+	SinkURL string
+	// Sink is the sink where to upload the object or pack files.
+	Sink *offloading.Sink
 }

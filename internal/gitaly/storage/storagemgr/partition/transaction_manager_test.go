@@ -367,6 +367,7 @@ func TestTransactionManager(t *testing.T) {
 		"Housekeeping/CommitGraphs":        generateHousekeepingCommitGraphsTests(t, ctx, setup),
 		"Consumer":                         generateConsumerTests(t, setup),
 		"KeyValue":                         generateKeyValueTests(t, setup),
+		"Offloading":                       generateOffloadingTests(t, ctx, testPartitionID, relativePath),
 	}
 
 	for desc, tests := range subTests {

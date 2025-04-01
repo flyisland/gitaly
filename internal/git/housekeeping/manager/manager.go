@@ -6,6 +6,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -23,6 +24,8 @@ type Manager interface {
 	OptimizeRepository(context.Context, *localrepo.Repo, ...OptimizeRepositoryOption) error
 	// AddPackRefsInhibitor allows clients to block housekeeping from running git-pack-refs(1).
 	AddPackRefsInhibitor(ctx context.Context, repo storage.Repository) (bool, func(), error)
+	// OffloadRepository offloads the repository objects onto a second storage
+	OffloadRepository(context.Context, *localrepo.Repo, config.OffloadingConfig) error
 }
 
 // repositoryState holds the housekeeping state for individual repositories. This structure can be

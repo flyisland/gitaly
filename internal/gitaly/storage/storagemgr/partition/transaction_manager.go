@@ -247,6 +247,7 @@ type Transaction struct {
 	deleteRepository       bool
 	includedObjects        map[git.ObjectID]struct{}
 	runHousekeeping        *runHousekeeping
+	runOffloading          *runOffloading
 
 	// objectDependencies are the object IDs this transaction depends on in
 	// the repository. The dependencies are used to guard against invalid packs
@@ -1106,6 +1107,10 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 			return fmt.Errorf("preparing housekeeping: %w", err)
 		}
 
+		if err := mgr.prepareOffloading(ctx, transaction); err != nil {
+			return fmt.Errorf("preparing offloading: %w", err)
+		}
+
 		// If there were objects packed that should be committed, record the packfile's creation.
 		if transaction.packPrefix != "" {
 			packDir := filepath.Join(transaction.relativePath, "objects", "pack")
@@ -1747,7 +1752,7 @@ func (mgr *TransactionManager) prepareRepacking(ctx context.Context, transaction
 	}
 
 	// Capture the list of packfiles and their baggages before repacking.
-	beforeFiles, err := mgr.collectPackfiles(ctx, repoPath)
+	beforeFiles, err := mgr.collectPackFiles(ctx, repoPath)
 	if err != nil {
 		return fmt.Errorf("collecting existing packfiles: %w", err)
 	}
@@ -1825,7 +1830,7 @@ func (mgr *TransactionManager) prepareRepacking(ctx context.Context, transaction
 	}
 
 	// Re-capture the list of packfiles and their baggages after repacking.
-	afterFiles, err := mgr.collectPackfiles(ctx, repoPath)
+	afterFiles, err := mgr.collectPackFiles(ctx, repoPath)
 	if err != nil {
 		return fmt.Errorf("collecting new packfiles: %w", err)
 	}
@@ -1946,10 +1951,11 @@ var packfileExtensions = map[string]struct{}{
 	".rev":             {},
 	".mtimes":          {},
 	".bitmap":          {},
+	".promisor":        {},
 }
 
-// collectPackfiles collects the list of packfiles and their luggage files.
-func (mgr *TransactionManager) collectPackfiles(ctx context.Context, repoPath string) (map[string]struct{}, error) {
+// collectPackFiles collects the list of packfiles and their luggage files.
+func (mgr *TransactionManager) collectPackFiles(ctx context.Context, repoPath string) (map[string]struct{}, error) {
 	files, err := os.ReadDir(filepath.Join(repoPath, "objects", "pack"))
 	if err != nil {
 		return nil, fmt.Errorf("reading objects/pack dir: %w", err)

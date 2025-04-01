@@ -1276,7 +1276,7 @@ func setupEmptyLocalBucket(t *testing.T) *Sink {
 	localBucketURI := fmt.Sprintf("file://%s", localBucket)
 	bucket, err := blob.OpenBucket(ctx, localBucketURI)
 	require.NoError(t, err)
-	// sink, err := NewSinkWithDefaults(bucket)
+
 	sink, err := NewSink(bucket, WithOverallTimeout(defaultOverallTimeout),
 		WithMaxRetry(defaultMaxRetry), WithRetryTimeout(defaultRetryTimeout),
 		WithBackoffStrategy(&constantBackoff{}))
@@ -1291,7 +1291,7 @@ func setupLocalBucketWithData(t *testing.T, prefix string, objectsToUpload []fil
 	localBucketURI := fmt.Sprintf("file://%s", bucket)
 	localBucket, err := blob.OpenBucket(ctx, localBucketURI)
 	require.NoError(t, err)
-	// sink, err := NewSinkWithDefaults(localBucket)
+
 	sink, err := NewSink(localBucket, WithOverallTimeout(defaultOverallTimeout),
 		WithMaxRetry(defaultMaxRetry), WithRetryTimeout(defaultRetryTimeout),
 		WithBackoffStrategy(&constantBackoff{}))

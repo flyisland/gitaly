@@ -42,6 +42,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/offloading"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/proto"
@@ -705,6 +706,77 @@ func RequireDatabase(tb testing.TB, ctx context.Context, database keyvalue.Trans
 	testhelper.ProtoEqual(tb, expectedState, actualState)
 }
 
+// OffloadingStorageState represent a state of the storage under a prefix
+type OffloadingStorageState struct {
+	Sink      *offloading.Sink
+	Kind      OffloadingObjectStorageFormat
+	FileTotal int
+	Objects   []git.ObjectID
+}
+
+func RequireOffloadingStorageState(tb testing.TB, ctx context.Context, setup testTransactionSetup, prefix string, expected *OffloadingStorageState) {
+	tb.Helper()
+	sink := expected.Sink
+	objects, err := sink.List(ctx, prefix)
+	require.NoError(tb, err)
+	require.Len(tb, objects, expected.FileTotal)
+	if expected.FileTotal == 0 {
+		// expecting empty objects in the prefix
+		return
+	}
+	switch expected.Kind {
+	case packFile:
+		// For pack file-based storage, download the pack files and
+		// verify object hashes match those extracted from the pack files
+		tempDir := testhelper.TempDir(tb)
+		indexObjCount := 0
+		var localIndexFilePath string
+
+		for _, obj := range objects {
+			err := sink.Download(ctx, filepath.Join(prefix, obj), filepath.Join(tempDir, obj))
+			require.NoError(tb, err)
+			if filepath.Ext(obj) == ".idx" {
+				indexObjCount++
+				localIndexFilePath = filepath.Join(tempDir, obj)
+			}
+		}
+		require.Equal(tb, indexObjCount, 1, "expect one and only one idx file")
+
+		logger := testhelper.NewLogger(tb)
+		index, err := packfile.ReadIndexWithGitCmdFactory(setup.CommandFactory, setup.Repo, logger, localIndexFilePath)
+		require.NoError(tb, err)
+		actualObjects := make([]git.ObjectID, 0, len(index.Objects))
+		for _, obj := range index.Objects {
+			actualObjects = append(actualObjects, git.ObjectID(obj.OID))
+		}
+		require.ElementsMatch(tb, actualObjects, expected.Objects)
+	case looseObject:
+		// For loose object-based storage, verify a one-to-one correspondence between
+		// expected objects and those stored in the offloading storage
+		require.Len(tb, objects, len(expected.Objects))
+		actualObjects := make([]git.ObjectID, 0, len(expected.Objects))
+		for _, obj := range objects {
+			actualObjects = append(actualObjects, git.ObjectID(obj))
+		}
+		require.ElementsMatch(tb, actualObjects, expected.Objects)
+	default:
+		require.Fail(tb, "Unknown offloading storage file kind")
+	}
+}
+
+type OffloadingStorageStates map[string]OffloadingStorageState
+
+// Assert each prefix defined in the OffloadingStorageStates
+func RequireOffloadingStorage(tb testing.TB, ctx context.Context, setup testTransactionSetup, expected OffloadingStorageStates) {
+	if len(expected) == 0 {
+		// we don't care comparing offloading storage, skip assertion
+		return
+	}
+	for prefix, state := range expected {
+		RequireOffloadingStorageState(tb, ctx, setup, prefix, &state)
+	}
+}
+
 type testTransactionCommit struct {
 	OID  git.ObjectID
 	Pack []byte
@@ -823,6 +895,12 @@ type RunRepack struct {
 	TransactionID int
 	// Config is the desired repacking config for the task.
 	Config housekeepingcfg.RepackObjectsConfig
+}
+
+// RunOffloading calls prepare offloading task on a transaction
+type RunOffloading struct {
+	TransactionID int
+	Config        housekeepingcfg.OffloadingConfig
 }
 
 // WriteCommitGraphs calls commit-graphs writing housekeeping task on a transaction.
@@ -989,6 +1067,9 @@ type StateAssertion struct {
 	// Repositories is the expected state of the repositories in the storage. The key is
 	// the repository's relative path and the value describes its expected state.
 	Repositories RepositoryStates
+
+	// OffloadingStorage: the state the offloading bucket.
+	OffloadingStorage OffloadingStorageStates
 }
 
 // AdhocAssertion allows a test to add some custom assertions apart from the built-in assertions above.
@@ -1525,6 +1606,11 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			}
 
 			require.Equal(t, step, actualMetricAssertion)
+		case RunOffloading:
+			require.Contains(t, openTransactions, step.TransactionID, "test error: offloading task aborted on committed before beginning it")
+
+			transaction := openTransactions[step.TransactionID]
+			transaction.OffloadRepository(wrapOffloadingConfig(ctx, step.TransactionID, &step.Config, setup))
 		default:
 			t.Fatalf("unhandled step type: %T", step)
 		}
@@ -1605,6 +1691,8 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 	// Wait for these tasks to complete before asserting the storage directory's state as they would
 	// still be visible there otherwise.
 	RequireRepositories(t, ctx, setup.Config, setup.Config.Storages[0].Path, storageScopedFactory.Build, expectedRepositories)
+
+	RequireOffloadingStorage(t, ctx, setup, tc.expectedState.OffloadingStorage)
 
 	expectedDirectory := tc.expectedState.Directory
 	if expectedDirectory == nil {
