@@ -329,7 +329,7 @@ func (s *server) resolveConflictsWithGit(
 
 		for conflictedFile, checked := range checkedConflictedFiles {
 			if !checked {
-				return "", fmt.Errorf("Missing resolutions for the following files: %s", conflictedFile) //nolint // this is to stay consistent with rugged-rails error
+				return "", fmt.Errorf("Missing resolutions for the following files: %s", conflictedFile) // this is to stay consistent with rugged-rails error
 			}
 		}
 
