@@ -34,7 +34,10 @@ type runOffloading struct {
 // OffloadRepository configures a transaction to run an offloading task
 // by setting the runOffloading struct.
 func (txn *Transaction) OffloadRepository(cfg housekeepingcfg.OffloadingConfig) {
-	txn.runOffloading = &runOffloading{
+	if txn.runHousekeeping == nil {
+		txn.runHousekeeping = &runHousekeeping{}
+	}
+	txn.runHousekeeping.runOffloading = &runOffloading{
 		config: cfg,
 	}
 }
@@ -52,7 +55,7 @@ func (txn *Transaction) OffloadRepository(cfg housekeepingcfg.OffloadingConfig) 
 //
 //   - Records all file changes in the WAL.
 func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transaction *Transaction) (returnedErr error) {
-	if transaction.runOffloading == nil {
+	if transaction.runHousekeeping.runOffloading == nil {
 		return nil
 	}
 
@@ -60,7 +63,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 	defer span.Finish()
 
 	// Loading configurations for offloading
-	cfg := transaction.runOffloading.config
+	cfg := transaction.runHousekeeping.runOffloading.config
 
 	workingRepository := mgr.repositoryFactory.Build(transaction.snapshot.RelativePath(transaction.relativePath))
 	// workingRepoPath is the current repository path which we are performing operations on.

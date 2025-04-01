@@ -248,7 +248,6 @@ type Transaction struct {
 	deleteRepository       bool
 	includedObjects        map[git.ObjectID]struct{}
 	runHousekeeping        *runHousekeeping
-	runOffloading          *runOffloading
 
 	// objectDependencies are the object IDs this transaction depends on in
 	// the repository. The dependencies are used to guard against invalid packs
@@ -1109,10 +1108,6 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 
 		if err := mgr.prepareHousekeeping(ctx, transaction); err != nil {
 			return fmt.Errorf("preparing housekeeping: %w", err)
-		}
-
-		if err := mgr.prepareOffloading(ctx, transaction); err != nil {
-			return fmt.Errorf("preparing offloading: %w", err)
 		}
 
 		// If there were objects packed that should be committed, record the packfile's creation.
