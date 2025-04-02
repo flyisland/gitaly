@@ -120,8 +120,11 @@ func (s *ServerHandshaker) Handshake(conn net.Conn, authInfo credentials.AuthInf
 
 	// The address does not actually matter but we set it so clientConn.Target returns a meaningful value.
 	// Insecure credentials are used as the multiplexer operates within a TLS session already if one is configured.
-	backchannelConn, err := grpc.Dial(
-		"multiplexed/"+conn.RemoteAddr().String(),
+	//
+	// We can't use our client.New() constructor here due to the custom scheme. We also need to prefix the address
+	// with the passthrough:// scheme so grpc.NewClient() doesn't attempt DNS resolution.
+	backchannelConn, err := grpc.NewClient(
+		"passthrough://multiplexed/"+conn.RemoteAddr().String(),
 		append(
 			s.dialOpts,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
