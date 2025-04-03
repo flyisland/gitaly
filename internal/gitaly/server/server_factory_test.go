@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -31,11 +33,11 @@ func TestGitalyServerFactory(t *testing.T) {
 	grp, ctx := errgroup.WithContext(ctx)
 	t.Cleanup(func() { assert.NoError(t, grp.Wait()) })
 
-	checkHealth := func(t *testing.T, sf *GitalyServerFactory, schema, addr string, cert *testhelper.Certificate) healthpb.HealthClient {
+	newHealthClient := func(t *testing.T, sf *GitalyServerFactory, schema, addr string, creds credentials.TransportCredentials) healthpb.HealthClient {
 		t.Helper()
 
 		var cc *grpc.ClientConn
-		if cert != nil {
+		if creds != nil {
 			srv, err := sf.CreateExternal(true)
 			require.NoError(t, err)
 			t.Cleanup(srv.Stop)
@@ -45,8 +47,6 @@ func TestGitalyServerFactory(t *testing.T) {
 			listener, err := net.Listen(starter.TCP, addr)
 			require.NoError(t, err)
 			grp.Go(func() error { return srv.Serve(listener) })
-
-			creds := cert.TransportCredentials(t)
 
 			cc, err = grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(creds))
 			require.NoError(t, err)
@@ -69,7 +69,12 @@ func TestGitalyServerFactory(t *testing.T) {
 		}
 		t.Cleanup(func() { assert.NoError(t, cc.Close()) })
 
-		healthClient := healthpb.NewHealthClient(cc)
+		return healthpb.NewHealthClient(cc)
+	}
+
+	checkHealth := func(t *testing.T, sf *GitalyServerFactory, schema, addr string, creds credentials.TransportCredentials) healthpb.HealthClient {
+		healthClient := newHealthClient(t, sf, schema, addr, creds)
+
 		resp, err := healthClient.Check(ctx, &healthpb.HealthCheckRequest{})
 		require.NoError(t, err)
 		require.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.GetStatus())
@@ -109,7 +114,41 @@ func TestGitalyServerFactory(t *testing.T) {
 		)
 		t.Cleanup(sf.Stop)
 
-		checkHealth(t, sf, starter.TLS, "localhost:0", &certificate)
+		checkHealth(t, sf, starter.TLS, "localhost:0", certificate.TransportCredentials(t))
+	})
+
+	t.Run("secure with minimum protocol version", func(t *testing.T) {
+		certificate := testhelper.GenerateCertificate(t)
+
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{TLS: config.TLS{
+			CertPath:   certificate.CertPath,
+			KeyPath:    certificate.KeyPath,
+			MinVersion: tls.VersionTLS13,
+		}}))
+
+		sf := NewGitalyServerFactory(
+			cfg,
+			testhelper.SharedLogger(t),
+			backchannel.NewRegistry(),
+			cache.New(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t)),
+			nil,
+			TransactionMiddleware{},
+		)
+		t.Cleanup(sf.Stop)
+
+		t.Run("unsupported client", func(t *testing.T) {
+			tlsCfg := certificate.TLSConfig(t)
+			tlsCfg.MaxVersion = tls.VersionTLS12
+
+			client := newHealthClient(t, sf, starter.TLS, "localhost:0", credentials.NewTLS(tlsCfg))
+
+			_, err := client.Check(ctx, &healthpb.HealthCheckRequest{})
+			testhelper.RequireGrpcError(t, status.Error(codes.Unavailable, `connection error: desc = "transport: authentication handshake failed: remote error: tls: protocol version not supported"`), err)
+		})
+
+		t.Run("supported client", func(t *testing.T) {
+			checkHealth(t, sf, starter.TLS, "localhost:0", certificate.TransportCredentials(t))
+		})
 	})
 
 	t.Run("all services must be stopped", func(t *testing.T) {

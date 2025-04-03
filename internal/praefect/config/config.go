@@ -324,6 +324,7 @@ func FromReader(reader io.Reader) (Config, error) {
 		RepositoriesCleanup: DefaultRepositoriesCleanup(),
 		Yamux:               DefaultYamuxConfig(),
 		Logging:             DefaultLoggingConfig(),
+		TLS:                 config.NewTLS(),
 	}
 	if err := toml.NewDecoder(reader).Decode(conf); err != nil {
 		return Config{}, err

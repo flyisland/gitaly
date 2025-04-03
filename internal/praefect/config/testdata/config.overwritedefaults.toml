@@ -17,3 +17,6 @@ monitor_interval = "10s"
 check_interval = "1s"
 run_interval = "4s"
 repositories_in_batch = 11
+
+[tls]
+min_version = "TLS 1.3"

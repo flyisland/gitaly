@@ -165,12 +165,49 @@ type TimeoutConfig struct {
 	UploadArchiveNegotiation duration.Duration `json:"upload_archive_negotiation,omitempty" toml:"upload_archive_negotiation,omitempty"`
 }
 
+// TLSVersion represents a version of the TLS protocol.
+type TLSVersion uint16
+
+// UnmarshalText unmarshals a string representation of a version.
+func (v *TLSVersion) UnmarshalText(data []byte) error {
+	switch string(data) {
+	case "TLS 1.2":
+		*v = tls.VersionTLS12
+	case "TLS 1.3":
+		*v = tls.VersionTLS13
+	default:
+		return fmt.Errorf("unsupported TLS version: %q", data)
+	}
+
+	return nil
+}
+
+// MarshalText returns the human readable text representation of the protocol version.
+func (v TLSVersion) MarshalText() ([]byte, error) {
+	if v == 0 {
+		// tls.VersionName below returns the protocol number as 0x0000 if it's unconfigured.
+		// Special case so omitempty applies correctly and the field is not marshaled out when
+		// unconfigured.
+		return nil, nil
+	}
+
+	return []byte(tls.VersionName(v.ProtocolVersion())), nil
+}
+
+// ProtocolVersion returns the version as used by the protocol.
+func (v TLSVersion) ProtocolVersion() uint16 { return uint16(v) }
+
 // TLS configuration
 type TLS struct {
 	CertPath string `json:"cert_path" toml:"certificate_path,omitempty"`
 	KeyPath  string `json:"key_path"  toml:"key_path,omitempty"`
 	Key      string `json:"key"       toml:"key,omitempty"`
+	// MinVersion configures the minimum offered TLS version.
+	MinVersion TLSVersion `json:"min_version,omitempty" toml:"min_version,omitempty"`
 }
+
+// NewTLS returns a new TLS configuration with defaults configured.
+func NewTLS() TLS { return TLS{MinVersion: tls.VersionTLS12} }
 
 // Validate runs validation on all fields and compose all found errors.
 func (t TLS) Validate() error {
@@ -703,6 +740,7 @@ func Load(file io.Reader) (Cfg, error) {
 		Prometheus:          prometheus.DefaultConfig(),
 		PackObjectsCache:    defaultPackObjectsCacheConfig(),
 		PackObjectsLimiting: defaultPackObjectsLimiting(),
+		TLS:                 NewTLS(),
 	}
 
 	if err := toml.NewDecoder(file).Decode(&cfg); err != nil {

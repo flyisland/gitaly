@@ -86,7 +86,7 @@ func (s *ServerFactory) Create(secure bool) (*grpc.Server, error) {
 
 	s.secure = append(s.secure, s.createGRPC(credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
+		MinVersion:   s.deps.Config.TLS.MinVersion.ProtocolVersion(),
 		CipherSuites: secureCiphers,
 	})))
 

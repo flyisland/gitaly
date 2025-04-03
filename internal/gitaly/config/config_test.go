@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -59,6 +60,7 @@ func TestLoadEmptyConfig(t *testing.T) {
 		Prometheus:          prometheus.DefaultConfig(),
 		PackObjectsCache:    defaultPackObjectsCacheConfig(),
 		PackObjectsLimiting: defaultPackObjectsLimiting(),
+		TLS:                 NewTLS(),
 	}
 	require.NoError(t, expectedCfg.Sanitize())
 
@@ -68,6 +70,45 @@ func TestLoadEmptyConfig(t *testing.T) {
 	expectedCfg.RuntimeDir = cfg.RuntimeDir
 
 	require.Equal(t, expectedCfg, cfg)
+}
+
+func TestLoadTLS(t *testing.T) {
+	for _, tc := range []struct {
+		desc                    string
+		configuredVersion       string
+		expectedProtocolVersion uint16
+		expectedErrorMessage    string
+	}{
+		{
+			desc:                 "invalid version",
+			configuredVersion:    "TLS 1.1",
+			expectedErrorMessage: `load toml: toml: unsupported TLS version: "TLS 1.1"`,
+		},
+		{
+			desc:                    "TLS 1.2",
+			configuredVersion:       "TLS 1.2",
+			expectedProtocolVersion: tls.VersionTLS12,
+		},
+		{
+			desc:                    "TLS 1.3",
+			configuredVersion:       "TLS 1.3",
+			expectedProtocolVersion: tls.VersionTLS13,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			cfg, err := Load(strings.NewReader(fmt.Sprintf(`
+				[tls]
+				min_version = %q
+				`, tc.configuredVersion)))
+			if tc.expectedErrorMessage != "" {
+				require.EqualError(t, err, tc.expectedErrorMessage)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedProtocolVersion, cfg.TLS.MinVersion.ProtocolVersion())
+		})
+	}
 }
 
 func TestTimeout(t *testing.T) {
@@ -267,6 +308,7 @@ func TestLoadConfigCommand(t *testing.T) {
 			Prometheus:          prometheus.DefaultConfig(),
 			PackObjectsCache:    defaultPackObjectsCacheConfig(),
 			PackObjectsLimiting: defaultPackObjectsLimiting(),
+			TLS:                 NewTLS(),
 		}
 		require.NoError(t, cfg.Sanitize())
 		modify(cfg)
