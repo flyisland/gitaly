@@ -40,6 +40,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal/reftree"
 	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/offloading"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/tracing"
@@ -1004,6 +1005,9 @@ type TransactionManager struct {
 
 	// metrics stores reporters which facilitate metric recording of transactional operations.
 	metrics ManagerMetrics
+
+	// sink points to the offloading storage used during offloading tasks.
+	sink *offloading.Sink
 }
 
 // testHooks defines hooks for testing various stages of WAL log operations.

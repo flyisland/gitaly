@@ -2,8 +2,6 @@ package config
 
 import (
 	"time"
-
-	"gitlab.com/gitlab-org/gitaly/v16/internal/offloading"
 )
 
 // WriteCommitGraphConfig contains configuration that can be passed to WriteCommitGraph to alter its
@@ -70,6 +68,4 @@ type OffloadingConfig struct {
 	OriginalRepo string
 	// SinkURL is the URL for the sink of the upload.
 	SinkURL string
-	// Sink is the sink where to upload the object or pack files.
-	Sink *offloading.Sink
 }

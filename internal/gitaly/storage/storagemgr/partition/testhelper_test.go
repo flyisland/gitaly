@@ -837,6 +837,9 @@ type StartManager struct {
 	// may be necessary to test some states that can be reached from hard crashes
 	// but not during the tests.
 	ModifyStorage func(tb testing.TB, cfg config.Cfg, storagePath string)
+
+	// Sink is the destination for objects during offloading operations.
+	Sink *offloading.Sink
 }
 
 // CloseManager closes a TransactionManager.
@@ -1224,6 +1227,8 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
 			transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
+			transactionManager.sink = step.Sink
+
 			installHooks(transactionManager, &inflightTransactions, step.Hooks, raftEntryRecorder)
 
 			go func() {

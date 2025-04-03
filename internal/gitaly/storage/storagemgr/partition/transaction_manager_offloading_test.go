@@ -69,6 +69,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
+					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -78,7 +79,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 					TransactionID: 1,
 					Config: housekeepingcfg.OffloadingConfig{
 						CachePath: absCachePath,
-						Sink:      sink,
 						SinkURL:   sinkURL,
 						Filter:    filter,
 						// Other fields are determined at wrapOffloadingConfig()
@@ -152,7 +152,9 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 			desc:        "cannot offload a repository with loose objects",
 			customSetup: customSetup,
 			steps: steps{
-				StartManager{},
+				StartManager{
+					Sink: sink,
+				},
 				Begin{
 					TransactionID: 1,
 					RelativePaths: []string{relativePath},
@@ -161,7 +163,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 					TransactionID: 1,
 					Config: housekeepingcfg.OffloadingConfig{
 						CachePath: absCachePath,
-						Sink:      sink,
 						SinkURL:   sinkURL,
 						Filter:    filter,
 						// Other fields are determined at wrapOffloadingConfig()
@@ -238,6 +239,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
+					Sink: unstableSink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -247,7 +249,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 					TransactionID: 1,
 					Config: housekeepingcfg.OffloadingConfig{
 						CachePath: absCachePath,
-						Sink:      unstableSink,
 						SinkURL:   unstableSinkURL,
 						Filter:    filter,
 						// Other fields are determined at wrapOffloadingConfig()

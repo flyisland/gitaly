@@ -49,9 +49,6 @@ func validateOffloadingConfig(cfg config.OffloadingConfig) error {
 	if cfg.SinkURL == "" {
 		return fmt.Errorf("offloading configuration missing sink URL")
 	}
-	if cfg.Sink == nil {
-		return fmt.Errorf("offloading configuration missing sink")
-	}
 	if cfg.OriginalRepo == "" {
 		return fmt.Errorf("offloading configuration missing the absolute original repo path")
 	}

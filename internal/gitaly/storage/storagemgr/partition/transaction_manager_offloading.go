@@ -99,7 +99,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		// If there is an error, the error is returned to the caller together with the returnedErr.
 		// Any undeleted files will eventually be removed by the garbage collection job.
 		if returnedErr != nil {
-			deletionErrors := cfg.Sink.DeleteObjects(ctx, cfg.Prefix, uploadedPackFiles)
+			deletionErrors := mgr.sink.DeleteObjects(ctx, cfg.Prefix, uploadedPackFiles)
 			for _, err := range deletionErrors {
 				if gcerrors.Code(err) != gcerrors.NotFound {
 					returnedErr = errors.Join(returnedErr, err)
@@ -108,7 +108,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		}
 	}()
 	for file := range packFilesToUpload {
-		if err := cfg.Sink.Upload(ctx, filepath.Join(filterToDir, file), cfg.Prefix); err != nil {
+		if err := mgr.sink.Upload(ctx, filepath.Join(filterToDir, file), cfg.Prefix); err != nil {
 			return errors.Join(errOffloadingObjectUpload, err)
 		}
 		uploadedPackFiles = append(uploadedPackFiles, file)
