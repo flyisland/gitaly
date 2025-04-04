@@ -164,7 +164,6 @@ func (s *server) GetLFSPointers(req *gitalypb.GetLFSPointersRequest, stream gita
 	if err != nil {
 		return structerr.NewInternal("creating object info iterator: %w", err)
 	}
-	defer cancel()
 
 	catfileObjectIter, err := gitpipe.CatfileObject(ctx, objectReader, catfileInfoIter)
 	if err != nil {
