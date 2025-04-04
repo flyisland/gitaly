@@ -274,7 +274,7 @@ func TestManager_Initialize(t *testing.T) {
 		newLSN, err := mgr.AppendLogEntry(logEntryPath)
 		require.NoError(t, err)
 		require.Equal(t, highestLSN+1, mgr.LowWaterMark())
-		require.Equal(t, newLSN, recorder.OffsetRight(highestLSN+1))
+		require.Equal(t, newLSN, recorder.WithoutRaftEntries(highestLSN+1))
 	})
 
 	t.Run("enable Raft on an existing partition with some entrires have not been applied", func(t *testing.T) {
@@ -346,7 +346,7 @@ func TestManager_Initialize(t *testing.T) {
 		newLSN, err := mgr.AppendLogEntry(logEntryPath)
 		require.NoError(t, err)
 		require.Equal(t, appliedLSN+1, mgr.LowWaterMark())
-		require.Equal(t, newLSN, recorder.OffsetRight(highestLSN+1))
+		require.Equal(t, newLSN, recorder.WithoutRaftEntries(highestLSN+1))
 	})
 
 	t.Run("enable raft -> disable raft -> enable raft again", func(t *testing.T) {
@@ -439,14 +439,14 @@ func TestManager_Initialize(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify that all entries are recognized
-		require.Equal(t, recorder.OffsetLeft(highestDirectLSN), mgr2.AppendedLSN(),
+		require.Equal(t, recorder.WithRaftEntries(highestDirectLSN), mgr2.AppendedLSN(),
 			"Re-enabled Raft should see highest LSN from direct WAL phase")
 
 		// Append one more entry with re-enabled Raft
 		logEntryPath := createTestLogEntry(t, ctx, "raft-phase3-entry")
 		finalLSN, err := mgr2.AppendLogEntry(logEntryPath)
 		require.NoError(t, err)
-		require.Greater(t, recorder.OffsetLeft(finalLSN), recorder.OffsetLeft(highestDirectLSN)+1,
+		require.Greater(t, recorder.WithRaftEntries(finalLSN), recorder.WithRaftEntries(highestDirectLSN)+1,
 			"Final LSN should be greater than highest direct WAL LSN")
 
 		// Verify Phase 3 entry (re-enabled Raft). Entries from phase 1 and phase 2 are properly pruned.
