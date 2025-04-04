@@ -25,6 +25,17 @@ func TestConnectivity(t *testing.T) {
 	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
 
+	// It's important that the certificate referenced by SSL_CERT_FILE remains valid
+	// for the lifetime of the Go process that consumes it (i.e. the test binary). This
+	// is because the standard library (https://github.com/golang/go/blob/release-branch.go1.23/src/crypto/x509/cert_pool.go?name=release#L117-L123)
+	// only loads the root pool once (see the systemRootsPool() function that gets
+	// called), so any changes to SSL_CERT_FILE won't be picked up by the same process.
+	//
+	// Since we have two TLS-enabled tests in the table test below, the second test will
+	// always hang during the TLS handshake if we replace the SSL_CERT_FILE.
+	certificate := testhelper.GenerateCertificate(t)
+	t.Setenv(x509.SSLCertFile, certificate.CertPath)
+
 	testcfg.BuildGitalySSH(t, cfg)
 	testcfg.BuildGitalyHooks(t, cfg)
 
@@ -109,9 +120,17 @@ func TestConnectivity(t *testing.T) {
 		{
 			name: "tls",
 			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
-				certificate := testhelper.GenerateCertificate(t)
-				t.Setenv(x509.SSLCertFile, certificate.CertPath)
-
+				cfg.TLSListenAddr = "localhost:0"
+				cfg.TLS = config.TLS{
+					CertPath: certificate.CertPath,
+					KeyPath:  certificate.KeyPath,
+				}
+				return runGitaly(t, cfg), certificate.CertPath, nil
+			},
+		},
+		{
+			name: "tls (multiple TLS tests work correctly)",
+			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				cfg.TLSListenAddr = "localhost:0"
 				cfg.TLS = config.TLS{
 					CertPath: certificate.CertPath,
