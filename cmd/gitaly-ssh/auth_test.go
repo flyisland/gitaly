@@ -1,23 +1,35 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/miekg/dns"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/client"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/cache"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/server"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
+	serverservice "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/server"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/x509"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -129,17 +141,6 @@ func TestConnectivity(t *testing.T) {
 			},
 		},
 		{
-			name: "tls (multiple TLS tests work correctly)",
-			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
-				cfg.TLSListenAddr = "localhost:0"
-				cfg.TLS = config.TLS{
-					CertPath: certificate.CertPath,
-					KeyPath:  certificate.KeyPath,
-				}
-				return runGitaly(t, cfg), certificate.CertPath, nil
-			},
-		},
-		{
 			name: "dns",
 			setup: func(t *testing.T, cfg config.Cfg) (string, string, []string) {
 				// Configure a Gitaly server that listens over TCP.
@@ -207,4 +208,168 @@ func TestConnectivity(t *testing.T) {
 			require.True(t, strings.HasSuffix(strings.TrimSpace(string(output)), git.DefaultRef.String()))
 		})
 	}
+
+	// The ALPN tests are a subtest of TestConnectivity because we can only generate TLS certificates _once_ per
+	// package under Linux. This isn't elegant, but correctly tests the functionality.
+	t.Run("ALPN tests", func(t *testing.T) {
+		ctx := testhelper.Context(t)
+		cfg := testcfg.Build(t)
+
+		var wg sync.WaitGroup
+		defer wg.Wait()
+
+		setupDummyServer := func(t *testing.T) (string, func()) {
+			logger := testhelper.SharedLogger(t)
+
+			listener, err := net.Listen("tcp", "localhost:0")
+			require.NoError(t, err)
+
+			serverCert, err := tls.LoadX509KeyPair(certificate.CertPath, certificate.KeyPath)
+			require.NoError(t, err)
+
+			tlsListener := tls.NewListener(listener, &tls.Config{
+				Certificates: []tls.Certificate{serverCert},
+				NextProtos:   []string{},
+			})
+
+			serverAddr := tlsListener.Addr().String()
+
+			srv := grpc.NewServer()
+
+			// Register the server service
+			gitalypb.RegisterServerServiceServer(srv, serverservice.NewServer(&service.Dependencies{
+				Logger:        logger,
+				GitCmdFactory: gittest.NewCommandFactory(t, cfg),
+				Cfg:           cfg,
+			}))
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				testhelper.MustServe(t, srv, tlsListener)
+			}()
+
+			return serverAddr, srv.Stop
+		}
+
+		setupGitalyServer := func(t *testing.T) (string, func()) {
+			listener, err := net.Listen("tcp", "localhost:0")
+			require.NoError(t, err)
+
+			cfg.TLS = config.TLS{
+				CertPath: certificate.CertPath,
+				KeyPath:  certificate.KeyPath,
+			}
+
+			serverAddr := listener.Addr().String()
+			sf := server.NewGitalyServerFactory(
+				cfg,
+				testhelper.SharedLogger(t),
+				backchannel.NewRegistry(),
+				cache.New(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t)),
+				nil,
+				server.TransactionMiddleware{},
+			)
+			t.Cleanup(sf.Stop)
+
+			externalServer, err := sf.CreateExternal(true)
+			require.NoError(t, err)
+
+			gitalypb.RegisterServerServiceServer(externalServer, serverservice.NewServer(&service.Dependencies{
+				Logger:        testhelper.SharedLogger(t),
+				GitCmdFactory: gittest.NewCommandFactory(t, cfg),
+				Cfg:           cfg,
+			}))
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				assert.NoError(t, externalServer.Serve(listener), "failure to serve external gRPC")
+			}()
+
+			return serverAddr, sf.Stop
+		}
+
+		callWithDummyClient := func(t *testing.T, serverAddr string) (func(), error) {
+			certPool, err := x509.SystemCertPool()
+			require.NoError(t, err)
+
+			cert := testhelper.MustReadFile(t, certificate.CertPath)
+			ok := certPool.AppendCertsFromPEM(cert)
+			require.True(t, ok)
+
+			tlsConfig := &tls.Config{
+				RootCAs:    certPool,
+				MinVersion: tls.VersionTLS12,
+				NextProtos: []string{},
+			}
+
+			conn, err := grpc.NewClient(
+				serverAddr,
+				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+			)
+			require.NoError(t, err)
+
+			c := gitalypb.NewServerServiceClient(conn)
+			_, err = c.ServerInfo(ctx, &gitalypb.ServerInfoRequest{})
+
+			return func() { require.NoError(t, conn.Close()) }, err
+		}
+
+		callWithGitalyDialer := func(t *testing.T, serverAddr string) (func(), error) {
+			conn, err := client.Dial(fmt.Sprintf("tls://%s", serverAddr), []grpc.DialOption{})
+			require.NoError(t, err)
+
+			// Verify connection works by making a simple RPC call
+			c := gitalypb.NewServerServiceClient(conn)
+
+			_, err = c.ServerInfo(ctx, &gitalypb.ServerInfoRequest{})
+
+			return func() { require.NoError(t, conn.Close()) }, err
+		}
+
+		for _, tc := range []struct {
+			desc        string
+			setupServer func(*testing.T) (string, func())
+			clientCall  func(*testing.T, string) (func(), error)
+			errorString string
+		}{
+			{
+				desc:        "Client (No ALPN) -> Server (No ALPN dummy)",
+				setupServer: setupDummyServer,
+				clientCall:  callWithDummyClient,
+				errorString: "ALPN enforcement",
+			},
+			{
+				desc:        "Client (client.Dial) -> Server (No ALPN dummy)",
+				setupServer: setupDummyServer,
+				clientCall:  callWithGitalyDialer,
+			},
+			{
+				desc:        "Client (No ALPN) -> Server (Gitaly)",
+				setupServer: setupGitalyServer,
+				clientCall:  callWithDummyClient,
+			},
+			{
+				desc:        "Client (client.Dial) -> Server (Gitaly)",
+				setupServer: setupGitalyServer,
+				clientCall:  callWithGitalyDialer,
+			},
+		} {
+			t.Run(tc.desc, func(t *testing.T) {
+				serverAddr, stopServer := tc.setupServer(t)
+				defer stopServer()
+
+				closeClient, err := tc.clientCall(t, serverAddr)
+				defer closeClient()
+
+				if len(tc.errorString) == 0 {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					require.ErrorContains(t, err, tc.errorString)
+				}
+			})
+		}
+	})
 }
