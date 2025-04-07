@@ -1,10 +1,11 @@
 package praefect
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -34,7 +35,7 @@ Examples:
 		HideHelpCommand: true,
 		Action:          metadataAction,
 		Flags: []cli.Flag{
-			&cli.Int64Flag{
+			&cli.IntFlag{
 				Name:  "repository-id",
 				Usage: "the repository's ID",
 			},
@@ -47,27 +48,27 @@ Examples:
 				Usage: "the repository's relative path in the virtual storage",
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func metadataAction(appCtx *cli.Context) error {
+func metadataAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	repositoryID := appCtx.Int64("repository-id")
-	virtualStorage := appCtx.String(paramVirtualStorage)
-	relativePath := appCtx.String("relative-path")
+	repositoryID := cmd.Int("repository-id")
+	virtualStorage := cmd.String(paramVirtualStorage)
+	relativePath := cmd.String("relative-path")
 
 	var request gitalypb.GetRepositoryMetadataRequest
 	switch {
@@ -97,27 +98,27 @@ func metadataAction(appCtx *cli.Context) error {
 		return fmt.Errorf("get node address: %w", err)
 	}
 
-	conn, err := subCmdDial(appCtx.Context, nodeAddr, conf.Auth.Token, defaultDialTimeout)
+	conn, err := subCmdDial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer conn.Close()
 
-	metadata, err := gitalypb.NewPraefectInfoServiceClient(conn).GetRepositoryMetadata(appCtx.Context, &request)
+	metadata, err := gitalypb.NewPraefectInfoServiceClient(conn).GetRepositoryMetadata(ctx, &request)
 	if err != nil {
 		return fmt.Errorf("get metadata: %w", err)
 	}
 
-	fmt.Fprintf(appCtx.App.Writer, "Repository ID: %d\n", metadata.GetRepositoryId())
-	fmt.Fprintf(appCtx.App.Writer, "Virtual Storage: %q\n", metadata.GetVirtualStorage())
-	fmt.Fprintf(appCtx.App.Writer, "Relative Path: %q\n", metadata.GetRelativePath())
-	fmt.Fprintf(appCtx.App.Writer, "Replica Path: %q\n", metadata.GetReplicaPath())
-	fmt.Fprintf(appCtx.App.Writer, "Primary: %q\n", metadata.GetPrimary())
-	fmt.Fprintf(appCtx.App.Writer, "Generation: %d\n", metadata.GetGeneration())
-	fmt.Fprintf(appCtx.App.Writer, "Replicas:\n")
+	fmt.Fprintf(cmd.Writer, "Repository ID: %d\n", metadata.GetRepositoryId())
+	fmt.Fprintf(cmd.Writer, "Virtual Storage: %q\n", metadata.GetVirtualStorage())
+	fmt.Fprintf(cmd.Writer, "Relative Path: %q\n", metadata.GetRelativePath())
+	fmt.Fprintf(cmd.Writer, "Replica Path: %q\n", metadata.GetReplicaPath())
+	fmt.Fprintf(cmd.Writer, "Primary: %q\n", metadata.GetPrimary())
+	fmt.Fprintf(cmd.Writer, "Generation: %d\n", metadata.GetGeneration())
+	fmt.Fprintf(cmd.Writer, "Replicas:\n")
 	for _, replica := range metadata.GetReplicas() {
-		fmt.Fprintf(appCtx.App.Writer, "- Storage: %q\n", replica.GetStorage())
-		fmt.Fprintf(appCtx.App.Writer, "  Assigned: %v\n", replica.GetAssigned())
+		fmt.Fprintf(cmd.Writer, "- Storage: %q\n", replica.GetStorage())
+		fmt.Fprintf(cmd.Writer, "  Assigned: %v\n", replica.GetAssigned())
 
 		generationText := fmt.Sprintf("%d, fully up to date", replica.GetGeneration())
 		if replica.GetGeneration() == -1 {
@@ -131,10 +132,10 @@ func metadataAction(appCtx *cli.Context) error {
 			verifiedAt = replica.GetVerifiedAt().AsTime().String()
 		}
 
-		fmt.Fprintf(appCtx.App.Writer, "  Generation: %s\n", generationText)
-		fmt.Fprintf(appCtx.App.Writer, "  Healthy: %v\n", replica.GetHealthy())
-		fmt.Fprintf(appCtx.App.Writer, "  Valid Primary: %v\n", replica.GetValidPrimary())
-		fmt.Fprintf(appCtx.App.Writer, "  Verified At: %s\n", verifiedAt)
+		fmt.Fprintf(cmd.Writer, "  Generation: %s\n", generationText)
+		fmt.Fprintf(cmd.Writer, "  Healthy: %v\n", replica.GetHealthy())
+		fmt.Fprintf(cmd.Writer, "  Valid Primary: %v\n", replica.GetValidPrimary())
+		fmt.Fprintf(cmd.Writer, "  Verified At: %s\n", verifiedAt)
 	}
 	return nil
 }

@@ -1,10 +1,11 @@
 package praefect
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -56,34 +57,33 @@ Example: praefect --config praefect.config.toml set-replication-factor --virtual
 				Required: true,
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func setReplicationFactorAction(appCtx *cli.Context) error {
+func setReplicationFactorAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	virtualStorage := appCtx.String(paramVirtualStorage)
-	relativePath := appCtx.String(paramRelativePath)
-	replicationFactor := appCtx.Uint(paramReplicationFactor)
+	virtualStorage := cmd.String(paramVirtualStorage)
+	relativePath := cmd.String(paramRelativePath)
+	replicationFactor := cmd.Uint(paramReplicationFactor)
 
 	nodeAddr, err := getNodeAddress(conf)
 	if err != nil {
 		return err
 	}
 
-	ctx := appCtx.Context
 	conn, err := subCmdDial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
 	if err != nil {
 		return fmt.Errorf("error dialing: %w", err)
@@ -100,7 +100,7 @@ func setReplicationFactorAction(appCtx *cli.Context) error {
 		return err
 	}
 
-	fmt.Fprintf(appCtx.App.Writer, "current assignments: %v\n", strings.Join(resp.GetStorages(), ", "))
+	fmt.Fprintf(cmd.Writer, "current assignments: %v\n", strings.Join(resp.GetStorages(), ", "))
 
 	return nil
 }

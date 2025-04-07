@@ -1,8 +1,10 @@
 package gitaly
 
 import (
-	"github.com/urfave/cli/v2"
-	"gitlab.com/gitlab-org/gitaly/v16/cmd"
+	"context"
+
+	"github.com/urfave/cli/v3"
+	gitalycmd "gitlab.com/gitlab-org/gitaly/v16/cmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
@@ -19,7 +21,7 @@ Provides the following subcommand:
 
 - validate`,
 		HideHelpCommand: true,
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:  "validate",
 				Usage: "validate Gitaly configuration",
@@ -39,19 +41,19 @@ Prints all configuration problems to stdout in JSON format. The output's structu
 	}
 }
 
-func validateConfigurationAction(ctx *cli.Context) error {
+func validateConfigurationAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	cfg, err := config.Load(ctx.App.Reader)
+	cfg, err := config.Load(cmd.Reader)
 	if err != nil {
-		if cmd.WriteTomlReadError(err, ctx.App.Writer, ctx.App.ErrWriter) {
+		if gitalycmd.WriteTomlReadError(err, cmd.Writer, cmd.ErrWriter) {
 			return cli.Exit("", validationErrorCode)
 		}
 
 		return cli.Exit("", 1)
 	}
 
-	if !cmd.Validate(&cfg, ctx.App.Writer, ctx.App.ErrWriter) {
+	if !gitalycmd.Validate(&cfg, cmd.Writer, cmd.ErrWriter) {
 		return cli.Exit("", validationErrorCode)
 	}
 

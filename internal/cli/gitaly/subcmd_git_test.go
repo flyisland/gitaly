@@ -46,18 +46,18 @@ func TestGitalyGitCommand(t *testing.T) {
 	}{
 		{
 			name:           "git log",
-			args:           []string{"log", "-1", "--pretty=format:%s"},
+			args:           []string{"--", "log", "-1", "--pretty=format:%s"},
 			expectedOutput: "First commit",
 		},
 		{
 			name:           "git rev-list with --stdin",
-			args:           []string{"rev-list", "--stdin"},
+			args:           []string{"--", "rev-list", "--stdin"},
 			input:          "HEAD",
 			expectedOutput: commitID.String() + "\n",
 		},
 		{
 			name:           "git rev-parse --is-inside-work-tree",
-			args:           []string{"rev-parse", "--is-inside-work-tree"},
+			args:           []string{"--", "rev-parse", "--is-inside-work-tree"},
 			expectedOutput: "false\n",
 		},
 		{
@@ -95,7 +95,7 @@ func TestGitalyGitCommand(t *testing.T) {
 			if tt.expectedError != "" {
 				require.Error(t, err)
 			} else {
-				require.NoError(t, err)
+				require.NoError(t, err, stderr.String())
 			}
 
 			require.Equal(t, tt.expectedError, stderr.String())

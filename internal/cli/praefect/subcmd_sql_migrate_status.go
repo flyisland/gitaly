@@ -1,10 +1,11 @@
 package praefect
 
 import (
+	"context"
 	"sort"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
 )
@@ -19,20 +20,20 @@ func newSQLMigrateStatusCommand() *cli.Command {
 			"with the timestamp for each when it was applied.",
 		HideHelpCommand: true,
 		Action:          sqlMigrateStatusAction,
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func sqlMigrateStatusAction(appCtx *cli.Context) error {
+func sqlMigrateStatusAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
@@ -42,7 +43,7 @@ func sqlMigrateStatusAction(appCtx *cli.Context) error {
 		return err
 	}
 
-	table := tablewriter.NewWriter(appCtx.App.Writer)
+	table := tablewriter.NewWriter(cmd.Writer)
 	table.SetHeader([]string{"Migration", "Applied"})
 	table.SetColWidth(60)
 

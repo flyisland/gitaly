@@ -1,6 +1,8 @@
 package praefect
 
-import "github.com/urfave/cli/v2"
+import (
+	"github.com/urfave/cli/v3"
+)
 
 const configurationCmdName = "configuration"
 
@@ -14,7 +16,7 @@ Provides the following subcommand:
 
 - validate`,
 		HideHelpCommand: true,
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newConfigurationValidateCommand(),
 		},
 	}

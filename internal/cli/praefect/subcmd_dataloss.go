@@ -1,13 +1,14 @@
 package praefect
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"sort"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -47,27 +48,27 @@ Example: praefect --config praefect.config.toml dataloss`,
 					"increases the chance of data loss on primary failure",
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func datalossAction(ctx *cli.Context) error {
+func datalossAction(ctx context.Context, cmd *cli.Command) error {
 	logger := log.ConfigureCommand()
 
-	conf, err := readConfig(ctx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	includePartiallyAvailable := ctx.Bool("partially-unavailable")
+	includePartiallyAvailable := cmd.Bool("partially-unavailable")
 
-	virtualStorages := []string{ctx.String(paramVirtualStorage)}
+	virtualStorages := []string{cmd.String(paramVirtualStorage)}
 	if virtualStorages[0] == "" {
 		virtualStorages = make([]string, len(conf.VirtualStorages))
 		for i := range conf.VirtualStorages {
@@ -81,7 +82,7 @@ func datalossAction(ctx *cli.Context) error {
 		return err
 	}
 
-	conn, err := subCmdDial(ctx.Context, nodeAddr, conf.Auth.Token, defaultDialTimeout)
+	conn, err := subCmdDial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
 	if err != nil {
 		return fmt.Errorf("error dialing: %w", err)
 	}
@@ -94,7 +95,7 @@ func datalossAction(ctx *cli.Context) error {
 	client := gitalypb.NewPraefectInfoServiceClient(conn)
 
 	for _, vs := range virtualStorages {
-		stream, err := client.Dataloss(ctx.Context, &gitalypb.DatalossRequest{
+		stream, err := client.Dataloss(ctx, &gitalypb.DatalossRequest{
 			VirtualStorage:             vs,
 			IncludePartiallyReplicated: includePartiallyAvailable,
 		})
@@ -104,7 +105,7 @@ func datalossAction(ctx *cli.Context) error {
 
 		var foundUnavailableRepos bool
 
-		indentPrintln(ctx.App.Writer, 0, "Virtual storage: %s", vs)
+		indentPrintln(cmd.Writer, 0, "Virtual storage: %s", vs)
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
@@ -116,7 +117,7 @@ func datalossAction(ctx *cli.Context) error {
 			}
 
 			if len(resp.GetRepositories()) > 0 {
-				indentPrintln(ctx.App.Writer, 1, "Repositories:")
+				indentPrintln(cmd.Writer, 1, "Repositories:")
 			}
 
 			for _, repo := range resp.GetRepositories() {
@@ -127,28 +128,28 @@ func datalossAction(ctx *cli.Context) error {
 					unavailable = " (unavailable)"
 				}
 
-				indentPrintln(ctx.App.Writer, 2, "%s%s:", repo.GetRelativePath(), unavailable)
+				indentPrintln(cmd.Writer, 2, "%s%s:", repo.GetRelativePath(), unavailable)
 
 				primary := repo.GetPrimary()
 				if primary == "" {
 					primary = "No Primary"
 				}
-				indentPrintln(ctx.App.Writer, 3, "Primary: %s", primary)
+				indentPrintln(cmd.Writer, 3, "Primary: %s", primary)
 
-				indentPrintln(ctx.App.Writer, 3, "In-Sync Storages:")
+				indentPrintln(cmd.Writer, 3, "In-Sync Storages:")
 				for _, storage := range repo.GetStorages() {
 					if storage.GetBehindBy() != 0 {
 						continue
 					}
 
-					indentPrintln(ctx.App.Writer, 4, "%s%s%s",
+					indentPrintln(cmd.Writer, 4, "%s%s%s",
 						storage.GetName(),
 						assignedMessage(storage.GetAssigned()),
 						unhealthyMessage(storage.GetHealthy()),
 					)
 				}
 
-				indentPrintln(ctx.App.Writer, 3, "Outdated Storages:")
+				indentPrintln(cmd.Writer, 3, "Outdated Storages:")
 				for _, storage := range repo.GetStorages() {
 					if storage.GetBehindBy() == 0 {
 						continue
@@ -159,7 +160,7 @@ func datalossAction(ctx *cli.Context) error {
 						plural = "s"
 					}
 
-					indentPrintln(ctx.App.Writer, 4, "%s is behind by %d change%s or less%s%s",
+					indentPrintln(cmd.Writer, 4, "%s is behind by %d change%s or less%s%s",
 						storage.GetName(),
 						storage.GetBehindBy(),
 						plural,
@@ -176,7 +177,7 @@ func datalossAction(ctx *cli.Context) error {
 				msg = "All repositories are fully available on all assigned storages!"
 			}
 
-			indentPrintln(ctx.App.Writer, 1, "%s", msg)
+			indentPrintln(cmd.Writer, 1, "%s", msg)
 			continue
 		}
 	}

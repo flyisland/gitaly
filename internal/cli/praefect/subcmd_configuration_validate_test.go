@@ -66,7 +66,7 @@ election_strategy = invalid`)
    praefect configuration validate - validates configuration
 
 USAGE:
-   praefect configuration validate command [command options]
+   praefect configuration validate
 
 DESCRIPTION:
    Validate Praefect configuration.

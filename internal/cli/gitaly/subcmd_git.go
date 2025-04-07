@@ -1,6 +1,7 @@
 package gitaly
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -44,10 +45,10 @@ invariants, and lead to unavailability or data loss.
 	}
 }
 
-func gitAction(ctx *cli.Context) (returnErr error) {
+func gitAction(ctx context.Context, cmd *cli.Command) (returnErr error) {
 	logger := log.ConfigureCommand()
 
-	cfg, err := loadConfig(ctx.String(flagConfig))
+	cfg, err := loadConfig(cmd.String(flagConfig))
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -77,12 +78,12 @@ func gitAction(ctx *cli.Context) (returnErr error) {
 	}
 	defer cleanup()
 
-	gitBinaryPath := gitCmdFactory.GetExecutionEnvironment(ctx.Context).BinaryPath
+	gitBinaryPath := gitCmdFactory.GetExecutionEnvironment(ctx).BinaryPath
 
-	cmd := exec.Command(gitBinaryPath, ctx.Args().Slice()...)
-	cmd.Stdin = ctx.App.Reader
-	cmd.Stdout = ctx.App.Writer
-	cmd.Stderr = ctx.App.ErrWriter
+	gitCommand := exec.Command(gitBinaryPath, cmd.Args().Slice()...)
+	gitCommand.Stdin = cmd.Reader
+	gitCommand.Stdout = cmd.Writer
+	gitCommand.Stderr = cmd.ErrWriter
 
 	// Disable automatic garbage collection and maintenance
 	gitConfig := []gitcmd.ConfigPair{
@@ -90,13 +91,13 @@ func gitAction(ctx *cli.Context) (returnErr error) {
 		{Key: "maintenance.auto", Value: "0"},
 	}
 
-	cmd.Env = os.Environ()
+	gitCommand.Env = os.Environ()
 
-	cmd.Env = append(cmd.Env,
+	gitCommand.Env = append(gitCommand.Env,
 		fmt.Sprintf("GIT_EXEC_PATH=%s", filepath.Dir(gitBinaryPath)))
-	cmd.Env = append(cmd.Env, gitcmd.ConfigPairsToGitEnvironment(gitConfig)...)
+	gitCommand.Env = append(gitCommand.Env, gitcmd.ConfigPairsToGitEnvironment(gitConfig)...)
 
-	err = cmd.Run()
+	err = gitCommand.Run()
 	if err != nil {
 		var exitError *exec.ExitError
 		if errors.As(err, &exitError) {

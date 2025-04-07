@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/service"
 )
@@ -27,65 +27,65 @@ Example: praefect --config praefect.config.toml check`,
 			},
 		},
 		Action: checkAction(checkFuncs),
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
 var errFatalChecksFailed = errors.New("checks failed")
 
-func checkAction(checkFuncs []service.CheckFunc) func(ctx *cli.Context) error {
-	return func(ctx *cli.Context) error {
+func checkAction(checkFuncs []service.CheckFunc) cli.ActionFunc {
+	return func(ctx context.Context, cmd *cli.Command) error {
 		log.ConfigureCommand()
 
-		conf, err := readConfig(ctx.String(configFlagName))
+		conf, err := readConfig(cmd.String(configFlagName))
 		if err != nil {
 			return err
 		}
 
-		quiet := ctx.Bool("q")
+		quiet := cmd.Bool("q")
 		var allChecks []*service.Check
 		for _, checkFunc := range checkFuncs {
-			allChecks = append(allChecks, checkFunc(conf, ctx.App.Writer, quiet))
+			allChecks = append(allChecks, checkFunc(conf, cmd.Writer, quiet))
 		}
 
 		passed := true
 		var failedChecks int
 		for _, check := range allChecks {
 			func() {
-				timeCtx, cancel := context.WithTimeout(ctx.Context, 5*time.Second)
+				timeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				defer cancel()
 
-				printCheckDetails(quiet, ctx.App.Writer, check)
+				printCheckDetails(quiet, cmd.Writer, check)
 
 				if err := check.Run(timeCtx); err != nil {
 					failedChecks++
 					if check.Severity == service.Fatal {
 						passed = false
 					}
-					fmt.Fprintf(ctx.App.Writer, "Failed (%s) error: %s\n", check.Severity, err.Error())
+					fmt.Fprintf(cmd.Writer, "Failed (%s) error: %s\n", check.Severity, err.Error())
 				} else {
-					fmt.Fprintf(ctx.App.Writer, "Passed\n")
+					fmt.Fprintf(cmd.Writer, "Passed\n")
 				}
 			}()
 		}
 
-		fmt.Fprintf(ctx.App.Writer, "\n")
+		fmt.Fprintf(cmd.Writer, "\n")
 
 		if !passed {
-			fmt.Fprintf(ctx.App.Writer, "%d check(s) failed, at least one was fatal.\n", failedChecks)
+			fmt.Fprintf(cmd.Writer, "%d check(s) failed, at least one was fatal.\n", failedChecks)
 			return errFatalChecksFailed
 		}
 
 		if failedChecks > 0 {
-			fmt.Fprintf(ctx.App.Writer, "%d check(s) failed, but none are fatal.\n", failedChecks)
+			fmt.Fprintf(cmd.Writer, "%d check(s) failed, but none are fatal.\n", failedChecks)
 		} else {
-			fmt.Fprintf(ctx.App.Writer, "All checks passed.\n")
+			fmt.Fprintf(cmd.Writer, "All checks passed.\n")
 		}
 
 		return nil

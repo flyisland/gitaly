@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"container/list"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
@@ -42,7 +43,7 @@ const (
 )
 
 type recoveryContext struct {
-	cliCtx        *cli.Context
+	cmd           *cli.Command
 	parallel      int
 	nodeStorage   storage.Storage
 	storageName   string
@@ -59,7 +60,7 @@ func newRecoveryCommand() *cli.Command {
 		Flags: []cli.Flag{
 			gitalyConfigFlag(),
 		},
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:  "status",
 				Usage: "shows the status of a partition",
@@ -126,8 +127,8 @@ Example: gitaly recovery --config gitaly.config.toml status --storage default --
 	}
 }
 
-func recoveryStatusAction(ctx *cli.Context) (returnErr error) {
-	recoveryContext, err := setupRecoveryContext(ctx)
+func recoveryStatusAction(ctx context.Context, cmd *cli.Command) (returnErr error) {
+	recoveryContext, err := setupRecoveryContext(ctx, cmd)
 	if err != nil {
 		return fmt.Errorf("setup recovery context: %w", err)
 	}
@@ -135,15 +136,15 @@ func recoveryStatusAction(ctx *cli.Context) (returnErr error) {
 		returnErr = errors.Join(returnErr, recoveryContext.Cleanup())
 	}()
 
-	g, _ := errgroup.WithContext(ctx.Context)
+	g, _ := errgroup.WithContext(ctx)
 	g.SetLimit(recoveryContext.parallel)
 
 	var successCount, errCount atomic.Uint64
 	for _, partitionID := range recoveryContext.partitions {
 		g.Go(func() error {
-			err := recoveryContext.printPartitionStatus(partitionID)
+			err := recoveryContext.printPartitionStatus(ctx, partitionID)
 			if err != nil {
-				fmt.Fprintf(ctx.App.ErrWriter, "restore status for partition %d failed: %v\n", partitionID, err)
+				fmt.Fprintf(cmd.ErrWriter, "restore status for partition %d failed: %v\n", partitionID, err)
 				errCount.Add(1)
 			} else {
 				successCount.Add(1)
@@ -156,7 +157,7 @@ func recoveryStatusAction(ctx *cli.Context) (returnErr error) {
 
 	success := successCount.Load()
 	failure := errCount.Load()
-	fmt.Fprintf(recoveryContext.cliCtx.App.Writer, "recovery status completed: %d succeeded, %d failed", success, failure)
+	fmt.Fprintf(recoveryContext.cmd.Writer, "recovery status completed: %d succeeded, %d failed", success, failure)
 
 	if err == nil && errCount.Load() > 0 {
 		err = fmt.Errorf("recovery status failed for %d out of %d partition(s)", failure, success+failure)
@@ -165,17 +166,17 @@ func recoveryStatusAction(ctx *cli.Context) (returnErr error) {
 	return err
 }
 
-func (rc *recoveryContext) printPartitionStatus(partitionID storage.PartitionID) (returnErr error) {
+func (rc *recoveryContext) printPartitionStatus(ctx context.Context, partitionID storage.PartitionID) (returnErr error) {
 	var appliedLSN storage.LSN
 	var relativePaths []string
 
-	ptn, err := rc.nodeStorage.GetPartition(rc.cliCtx.Context, partitionID)
+	ptn, err := rc.nodeStorage.GetPartition(ctx, partitionID)
 	if err != nil {
 		return fmt.Errorf("getting partition %s: %w", partitionID.String(), err)
 	}
 	defer ptn.Close()
 
-	txn, err := ptn.Begin(rc.cliCtx.Context, storage.BeginOptions{
+	txn, err := ptn.Begin(ctx, storage.BeginOptions{
 		Write:         false,
 		RelativePaths: []string{},
 	})
@@ -184,7 +185,7 @@ func (rc *recoveryContext) printPartitionStatus(partitionID storage.PartitionID)
 	}
 	appliedLSN = txn.SnapshotLSN()
 	relativePaths = txn.PartitionRelativePaths()
-	err = txn.Rollback(rc.cliCtx.Context)
+	err = txn.Rollback(ctx)
 	if err != nil {
 		return fmt.Errorf("rollback: %w", err)
 	}
@@ -207,7 +208,7 @@ func (rc *recoveryContext) printPartitionStatus(partitionID storage.PartitionID)
 
 	var lastLSN storage.LSN
 	discontinuity := false
-	for entries.Next(rc.cliCtx.Context) {
+	for entries.Next(ctx) {
 		currentLSN := entries.LSN()
 
 		// First iteration
@@ -234,7 +235,7 @@ func (rc *recoveryContext) printPartitionStatus(partitionID storage.PartitionID)
 		}
 	}
 
-	_, _ = buffer.WriteTo(rc.cliCtx.App.Writer)
+	_, _ = buffer.WriteTo(rc.cmd.Writer)
 
 	if err := entries.Err(); err != nil {
 		return fmt.Errorf("query log entry store: %w", err)
@@ -243,8 +244,8 @@ func (rc *recoveryContext) printPartitionStatus(partitionID storage.PartitionID)
 	return nil
 }
 
-func recoveryReplayAction(ctx *cli.Context) (returnErr error) {
-	recoveryContext, err := setupRecoveryContext(ctx)
+func recoveryReplayAction(ctx context.Context, cmd *cli.Command) (returnErr error) {
+	recoveryContext, err := setupRecoveryContext(ctx, cmd)
 	if err != nil {
 		return fmt.Errorf("setup recovery context: %w", err)
 	}
@@ -262,16 +263,16 @@ func recoveryReplayAction(ctx *cli.Context) (returnErr error) {
 		}
 	}()
 
-	g, _ := errgroup.WithContext(ctx.Context)
+	g, _ := errgroup.WithContext(ctx)
 	g.SetLimit(recoveryContext.parallel)
 
 	var successCount, errCount atomic.Uint64
 	for _, partitionID := range recoveryContext.partitions {
 		g.Go(func() error {
-			fmt.Fprintf(ctx.App.Writer, "started processing partition %d\n", partitionID)
-			err := recoveryContext.processPartition(tempDir, partitionID)
+			fmt.Fprintf(cmd.Writer, "started processing partition %d\n", partitionID)
+			err := recoveryContext.processPartition(ctx, tempDir, partitionID)
 			if err != nil {
-				fmt.Fprintf(ctx.App.ErrWriter, "restore replay for partition %d failed: %v\n", partitionID, err)
+				fmt.Fprintf(cmd.ErrWriter, "restore replay for partition %d failed: %v\n", partitionID, err)
 				errCount.Add(1)
 			} else {
 				successCount.Add(1)
@@ -284,7 +285,7 @@ func recoveryReplayAction(ctx *cli.Context) (returnErr error) {
 
 	success := successCount.Load()
 	failure := errCount.Load()
-	fmt.Fprintf(recoveryContext.cliCtx.App.Writer, "recovery replay completed: %d succeeded, %d failed", success, failure)
+	fmt.Fprintf(recoveryContext.cmd.Writer, "recovery replay completed: %d succeeded, %d failed", success, failure)
 
 	if err == nil && errCount.Load() > 0 {
 		err = fmt.Errorf("recovery replay failed for %d out of %d partition(s)", failure, success+failure)
@@ -293,16 +294,16 @@ func recoveryReplayAction(ctx *cli.Context) (returnErr error) {
 	return err
 }
 
-func (rc *recoveryContext) processPartition(tempDir string, partitionID storage.PartitionID) error {
+func (rc *recoveryContext) processPartition(ctx context.Context, tempDir string, partitionID storage.PartitionID) error {
 	var appliedLSN storage.LSN
 
-	ptn, err := rc.nodeStorage.GetPartition(rc.cliCtx.Context, partitionID)
+	ptn, err := rc.nodeStorage.GetPartition(ctx, partitionID)
 	if err != nil {
 		return fmt.Errorf("getting partition %s: %w", partitionID.String(), err)
 	}
 	defer ptn.Close()
 
-	txn, err := ptn.Begin(rc.cliCtx.Context, storage.BeginOptions{
+	txn, err := ptn.Begin(ctx, storage.BeginOptions{
 		Write:         false,
 		RelativePaths: []string{},
 	})
@@ -310,7 +311,7 @@ func (rc *recoveryContext) processPartition(tempDir string, partitionID storage.
 		return fmt.Errorf("begin: %w", err)
 	}
 	appliedLSN = txn.SnapshotLSN()
-	err = txn.Rollback(rc.cliCtx.Context)
+	err = txn.Rollback(ctx)
 	if err != nil {
 		return fmt.Errorf("rollback: %w", err)
 	}
@@ -323,12 +324,12 @@ func (rc *recoveryContext) processPartition(tempDir string, partitionID storage.
 	finalLSN := appliedLSN
 
 	iterator := rc.logEntryStore.Query(partitionInfo, nextLSN)
-	for iterator.Next(rc.cliCtx.Context) {
+	for iterator.Next(ctx) {
 		if nextLSN != iterator.LSN() {
 			return fmt.Errorf("there is discontinuity in the WAL entries. Expected LSN: %s, Got: %s", nextLSN.String(), iterator.LSN().String())
 		}
 
-		reader, err := rc.logEntryStore.GetReader(rc.cliCtx.Context, partitionInfo, nextLSN)
+		reader, err := rc.logEntryStore.GetReader(ctx, partitionInfo, nextLSN)
 		if err != nil {
 			return fmt.Errorf("get reader for entry with LSN %s: %w", nextLSN, err)
 		}
@@ -340,7 +341,7 @@ func (rc *recoveryContext) processPartition(tempDir string, partitionID storage.
 		reader.Close()
 
 		// Wait for the log entry to be applied and verify the result
-		txn, err = ptn.Begin(rc.cliCtx.Context, storage.BeginOptions{
+		txn, err = ptn.Begin(ctx, storage.BeginOptions{
 			Write:         false,
 			RelativePaths: []string{},
 		})
@@ -368,7 +369,7 @@ func (rc *recoveryContext) processPartition(tempDir string, partitionID storage.
 	buffer.WriteString("---------------------------------------------\n")
 	buffer.WriteString(fmt.Sprintf("Partition ID: %s - Applied LSN: %s\n", partitionID.String(), appliedLSN.String()))
 	buffer.WriteString(fmt.Sprintf("Successfully processed log entries up to LSN: %s\n", finalLSN.String()))
-	_, _ = buffer.WriteTo(rc.cliCtx.App.Writer)
+	_, _ = buffer.WriteTo(rc.cmd.Writer)
 
 	return nil
 }
@@ -472,9 +473,9 @@ func extractArchive(path string) error {
 	return nil
 }
 
-func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error) {
+func setupRecoveryContext(ctx context.Context, cmd *cli.Command) (rc recoveryContext, returnErr error) {
 	recoveryContext := recoveryContext{
-		cliCtx:       ctx,
+		cmd:          cmd,
 		partitions:   make([]storage.PartitionID, 0),
 		cleanupFuncs: list.New(),
 	}
@@ -484,15 +485,15 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 		}
 	}()
 
-	parallel := ctx.Int(flagParallel)
+	parallel := cmd.Int(flagParallel)
 	if parallel < 1 {
 		parallel = 1
 	}
-	recoveryContext.parallel = parallel
+	recoveryContext.parallel = int(parallel)
 
 	logger := log.ConfigureCommand()
 
-	cfg, err := loadConfig(ctx.String(flagConfig))
+	cfg, err := loadConfig(cmd.String(flagConfig))
 	if err != nil {
 		return recoveryContext, fmt.Errorf("load config: %w", err)
 	}
@@ -500,7 +501,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	if cfg.Backup.WALGoCloudURL == "" {
 		return recoveryContext, fmt.Errorf("write-ahead log backup is not configured")
 	}
-	sink, err := backup.ResolveSink(ctx.Context, cfg.Backup.WALGoCloudURL)
+	sink, err := backup.ResolveSink(ctx, cfg.Backup.WALGoCloudURL)
 	if err != nil {
 		return recoveryContext, fmt.Errorf("resolve sink: %w", err)
 	}
@@ -522,7 +523,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	}
 
 	dbMgr, err := databasemgr.NewDBManager(
-		ctx.Context,
+		ctx,
 		cfg.Storages,
 		keyvalue.NewBadgerStore,
 		helper.NewTimerTickerFactory(time.Minute),
@@ -580,7 +581,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 		return nil
 	})
 
-	storageName := ctx.String(flagStorage)
+	storageName := cmd.String(flagStorage)
 	if storageName == "" {
 		if len(cfg.Storages) != 1 {
 			return recoveryContext, fmt.Errorf("multiple storages configured: use --storage to specify the one you want")
@@ -595,7 +596,7 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 	recoveryContext.storageName = storageName
 	recoveryContext.nodeStorage = nodeStorage
 
-	if ctx.Bool("all") {
+	if cmd.Bool("all") {
 		iter, err := nodeStorage.ListPartitions(storage.PartitionID(0))
 		if err != nil {
 			return recoveryContext, fmt.Errorf("list partitions: %w", err)
@@ -610,8 +611,8 @@ func setupRecoveryContext(ctx *cli.Context) (rc recoveryContext, returnErr error
 			return recoveryContext, fmt.Errorf("partition iterator: %w", err)
 		}
 	} else {
-		partitionString := ctx.String(flagPartition)
-		repositoryPath := ctx.String(flagRepository)
+		partitionString := cmd.String(flagPartition)
+		repositoryPath := cmd.String(flagRepository)
 
 		if partitionString != "" && repositoryPath != "" {
 			return recoveryContext, fmt.Errorf("--partition and --repository flags can not be provided at the same time")

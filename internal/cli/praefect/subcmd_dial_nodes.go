@@ -3,7 +3,7 @@ package praefect
 import (
 	"context"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/nodes"
 )
@@ -27,31 +27,31 @@ Example: praefect --config praefect.config.toml dial-nodes`,
 				Value: 0,
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func dialNodesAction(ctx *cli.Context) error {
+func dialNodesAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	conf, err := readConfig(ctx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	timeout := ctx.Duration("timeout")
+	timeout := cmd.Duration("timeout")
 	if timeout == 0 {
 		timeout = defaultDialTimeout
 	}
 
-	timeCtx, cancel := context.WithTimeout(ctx.Context, timeout)
+	timeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	return nodes.PingAll(timeCtx, conf, nodes.NewTextPrinter(ctx.App.Writer), false)
+	return nodes.PingAll(timeCtx, conf, nodes.NewTextPrinter(cmd.Writer), false)
 }

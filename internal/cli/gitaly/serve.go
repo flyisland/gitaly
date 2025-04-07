@@ -10,7 +10,7 @@ import (
 	"github.com/go-enry/go-license-detector/v4/licensedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/bootstrap"
@@ -98,12 +98,12 @@ func loadConfig(configPath string) (config.Cfg, error) {
 	return cfg, nil
 }
 
-func serveAction(ctx *cli.Context) error {
-	if ctx.NArg() != 1 || ctx.Args().First() == "" {
-		cli.ShowSubcommandHelpAndExit(ctx, 2)
+func serveAction(ctx context.Context, cmd *cli.Command) error {
+	if cmd.NArg() != 1 || cmd.Args().First() == "" {
+		cli.ShowSubcommandHelpAndExit(cmd, 2)
 	}
 
-	cfg, logger, err := configure(ctx.Args().First())
+	cfg, logger, err := configure(cmd.Args().First())
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
@@ -115,7 +115,7 @@ func serveAction(ctx *cli.Context) error {
 	logger.WithField("version", version.GetVersion()).Info("Starting Gitaly")
 	fips.Check()
 
-	if err := run(ctx, cfg, logger); err != nil {
+	if err := run(cmd, cfg, logger); err != nil {
 		return cli.Exit(fmt.Errorf("unclean Gitaly shutdown: %w", err), 1)
 	}
 
@@ -179,7 +179,7 @@ func preloadLicenseDatabase(logger log.Logger) {
 	}()
 }
 
-func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
+func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

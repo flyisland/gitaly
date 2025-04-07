@@ -1,10 +1,11 @@
 package gitaly
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -33,15 +34,15 @@ Example: gitaly bundle-uri --storage=default --repository=ab/cd/ef01234567890123
 	}
 }
 
-func bundleURIAction(ctx *cli.Context) error {
+func bundleURIAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	cfg, err := loadConfig(ctx.String(flagConfig))
+	cfg, err := loadConfig(cmd.String(flagConfig))
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	storage := ctx.String(flagStorage)
+	storage := cmd.String(flagStorage)
 	if storage == "" {
 		if len(cfg.Storages) != 1 {
 			return fmt.Errorf("multiple storages configured: use --storage to target storage explicitly")
@@ -55,7 +56,7 @@ func bundleURIAction(ctx *cli.Context) error {
 		return fmt.Errorf("get Gitaly address: %w", err)
 	}
 
-	conn, err := dial(ctx.Context, address, cfg.Auth.Token, 10*time.Second)
+	conn, err := dial(ctx, address, cfg.Auth.Token, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("connect to Gitaly: %w", err)
 	}
@@ -64,12 +65,12 @@ func bundleURIAction(ctx *cli.Context) error {
 	req := gitalypb.GenerateBundleURIRequest{
 		Repository: &gitalypb.Repository{
 			StorageName:  storage,
-			RelativePath: ctx.String(flagRepository),
+			RelativePath: cmd.String(flagRepository),
 		},
 	}
 
 	repoClient := gitalypb.NewRepositoryServiceClient(conn)
-	_, err = repoClient.GenerateBundleURI(ctx.Context, &req)
+	_, err = repoClient.GenerateBundleURI(ctx, &req)
 
 	return err
 }

@@ -1,17 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
-func checker(appCtx *cli.Context) error {
-	thresholdMB := appCtx.Int64("binary-size-threshold")
-	gitalyDir := appCtx.String("gitaly-directory")
+func checker(ctx context.Context, cmd *cli.Command) error {
+	thresholdMB := cmd.Int("binary-size-threshold")
+	gitalyDir := cmd.String("gitaly-directory")
 	gitalyBinary := filepath.Join(gitalyDir, "_build", "bin", "gitaly")
 
 	info, _ := os.Stat(gitalyBinary)
@@ -24,18 +25,18 @@ func checker(appCtx *cli.Context) error {
 }
 
 func main() {
-	app := cli.App{
+	app := cli.Command{
 		Name:            "binary-size-checker",
 		Usage:           "check the size of Gitaly binary is less than a threshold",
 		Action:          checker,
 		HideHelpCommand: true,
 		Flags: []cli.Flag{
-			&cli.PathFlag{
+			&cli.StringFlag{
 				Name:  "gitaly-directory",
 				Usage: "Path of the Gitaly directory.",
 				Value: ".",
 			},
-			&cli.Int64Flag{
+			&cli.IntFlag{
 				Name:  "binary-size-threshold",
 				Usage: "Binary size threshold in MB.",
 				Value: 250,
@@ -43,7 +44,7 @@ func main() {
 		},
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		log.Fatal(err)
 	}
 }

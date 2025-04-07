@@ -1,9 +1,10 @@
 package praefect
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -38,19 +39,19 @@ Example: praefect --config praefect.config.toml accept-dataloss --virtual-storag
 			},
 		},
 		Action: acceptDatalossAction,
-		Before: func(context *cli.Context) error {
-			if context.Args().Present() {
-				return unexpectedPositionalArgsError{Command: context.Command.Name}
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				return nil, unexpectedPositionalArgsError{Command: cmd.Name}
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func acceptDatalossAction(ctx *cli.Context) error {
+func acceptDatalossAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	conf, err := readConfig(ctx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
@@ -60,17 +61,17 @@ func acceptDatalossAction(ctx *cli.Context) error {
 		return err
 	}
 
-	conn, err := subCmdDial(ctx.Context, nodeAddr, conf.Auth.Token, defaultDialTimeout)
+	conn, err := subCmdDial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
 	if err != nil {
 		return fmt.Errorf("error dialing: %w", err)
 	}
 	defer conn.Close()
 
 	client := gitalypb.NewPraefectInfoServiceClient(conn)
-	if _, err := client.SetAuthoritativeStorage(ctx.Context, &gitalypb.SetAuthoritativeStorageRequest{
-		VirtualStorage:       ctx.String(paramVirtualStorage),
-		RelativePath:         ctx.String(paramRelativePath),
-		AuthoritativeStorage: ctx.String(paramAuthoritativeStorage),
+	if _, err := client.SetAuthoritativeStorage(ctx, &gitalypb.SetAuthoritativeStorageRequest{
+		VirtualStorage:       cmd.String(paramVirtualStorage),
+		RelativePath:         cmd.String(paramRelativePath),
+		AuthoritativeStorage: cmd.String(paramAuthoritativeStorage),
 	}); err != nil {
 		return cli.Exit(fmt.Errorf("set authoritative storage: %w", err), 1)
 	}

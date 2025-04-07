@@ -13,7 +13,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 )
 
@@ -130,12 +130,10 @@ func spawnAndWait(ctx context.Context, gitalyBin, configPath, socketPath string)
 	return fmt.Errorf("failed to connect to gitaly after %v", time.Since(start))
 }
 
-func testBoot(appCtx *cli.Context) error {
-	ctx := appCtx.Context
+func testBoot(ctx context.Context, cmd *cli.Command) error {
+	useBundledGit := cmd.Bool("bundled-git")
 
-	useBundledGit := appCtx.Bool("bundled-git")
-
-	gitalyDir := appCtx.String("gitaly-directory")
+	gitalyDir := cmd.String("gitaly-directory")
 	buildDir := filepath.Join(gitalyDir, "_build")
 	binDir := filepath.Join(buildDir, "bin")
 
@@ -180,7 +178,7 @@ func testBoot(appCtx *cli.Context) error {
 }
 
 func main() {
-	app := cli.App{
+	app := cli.Command{
 		Name:            "test-boot",
 		Usage:           "smoke-test the bootup process of Gitaly",
 		Action:          testBoot,
@@ -190,23 +188,23 @@ func main() {
 				Name:  "bundled-git",
 				Usage: "Set up Gitaly with bundled Git binaries",
 			},
-			&cli.PathFlag{
+			&cli.StringFlag{
 				Name:  "gitaly-directory",
 				Usage: "Path of the Gitaly directory.",
 				Value: ".",
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit("this command does not accept positional arguments", 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit("this command does not accept positional arguments", 1)
 			}
 
-			return nil
+			return ctx, nil
 		},
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		log.Fatal(err)
 	}
 }

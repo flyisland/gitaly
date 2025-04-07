@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"time"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
@@ -34,10 +34,10 @@ type createSubcommand struct {
 	serverSide      bool
 }
 
-func (cmd *createSubcommand) flags(ctx *cli.Context) {
+func (cmd *createSubcommand) flags(ctx *cli.Command) {
 	cmd.backupPath = ctx.String("path")
-	cmd.parallel = ctx.Int("parallel")
-	cmd.parallelStorage = ctx.Int("parallel-storage")
+	cmd.parallel = int(ctx.Int("parallel"))
+	cmd.parallelStorage = int(ctx.Int("parallel-storage"))
 	cmd.layout = ctx.String("layout")
 	cmd.incremental = ctx.Bool("incremental")
 	cmd.backupID = ctx.String("id")
@@ -53,7 +53,7 @@ func createFlags() []cli.Flag {
 		&cli.IntFlag{
 			Name:  "parallel",
 			Usage: "maximum number of parallel backups",
-			Value: runtime.NumCPU(),
+			Value: int64(runtime.NumCPU()),
 		},
 		&cli.IntFlag{
 			Name:  "parallel-storage",
@@ -92,14 +92,14 @@ func newCreateCommand() *cli.Command {
 	}
 }
 
-func createAction(cctx *cli.Context) error {
-	logger, err := log.Configure(cctx.App.Writer, "json", "info")
+func createAction(ctx context.Context, cmd *cli.Command) error {
+	logger, err := log.Configure(cmd.Writer, "json", "info")
 	if err != nil {
 		fmt.Printf("configuring logger failed: %v", err)
 		return err
 	}
 
-	ctx, err := storage.InjectGitalyServersEnv(context.Background())
+	ctx, err = storage.InjectGitalyServersEnv(ctx)
 	if err != nil {
 		logger.Error(err.Error())
 		return err
@@ -107,9 +107,9 @@ func createAction(cctx *cli.Context) error {
 
 	subcmd := createSubcommand{}
 
-	subcmd.flags(cctx)
+	subcmd.flags(cmd)
 
-	if err := subcmd.run(ctx, logger, cctx.App.Reader); err != nil {
+	if err := subcmd.run(ctx, logger, cmd.Reader); err != nil {
 		logger.Error(err.Error())
 		return err
 	}

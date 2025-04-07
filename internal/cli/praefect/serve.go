@@ -14,7 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/bootstrap"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/bootstrap/starter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/sentry"
@@ -49,23 +49,23 @@ func newServeCommand() *cli.Command {
 Example: praefect --config praefect.config.toml serve`,
 		Action:          serveAction,
 		HideHelpCommand: true,
-		Before: func(context *cli.Context) error {
-			if context.Args().Present() {
-				return unexpectedPositionalArgsError{Command: context.Command.Name}
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				return nil, unexpectedPositionalArgsError{Command: cmd.Name}
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func serveAction(ctx *cli.Context) error {
-	if ctx.Args().Present() {
-		return unexpectedPositionalArgsError{Command: ctx.Command.Name}
+func serveAction(ctx context.Context, cmd *cli.Command) error {
+	if cmd.Args().Present() {
+		return unexpectedPositionalArgsError{Command: cmd.Name}
 	}
 
-	// The ctx.Command.Name can't be used here because if `praefect -config FILE` is used
+	// The cmd.Command.Name can't be used here because if `praefect -config FILE` is used
 	// it will be set to 'praefect' instead of 'serve'.
-	configPath := mustProvideConfigFlag(ctx, "serve")
+	configPath := mustProvideConfigFlag(ctx, cmd, "serve")
 
 	conf, err := readConfig(configPath)
 	if err != nil {
@@ -84,7 +84,7 @@ func serveAction(ctx *cli.Context) error {
 			"ignoring configured election strategy as failover is disabled")
 	}
 
-	if err := run(conf, ctx.App.Name, logger); err != nil {
+	if err := run(conf, cmd.Name, logger); err != nil {
 		logger.WithError(err).Error("Praefect shutdown")
 		return cli.Exit("", 1)
 	}

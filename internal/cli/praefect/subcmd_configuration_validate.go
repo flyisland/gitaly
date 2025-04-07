@@ -1,9 +1,10 @@
 package praefect
 
 import (
+	"context"
 	"io"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/cmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
@@ -26,15 +27,15 @@ Example: praefect configuration validate < praefect.config.toml`,
 	}
 }
 
-func configurationValidateAction(ctx *cli.Context) error {
+func configurationValidateAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	if ctx.Args().Present() {
-		_ = cli.ShowSubcommandHelp(ctx)
+	if cmd.Args().Present() {
+		_ = cli.ShowSubcommandHelp(cmd)
 		return cli.Exit("invalid argument(s)", 1)
 	}
 
-	if code := validateConfiguration(ctx.App.Reader, ctx.App.Writer, ctx.App.ErrWriter); code != 0 {
+	if code := validateConfiguration(cmd.Reader, cmd.Writer, cmd.ErrWriter); code != 0 {
 		return cli.Exit("", code)
 	}
 

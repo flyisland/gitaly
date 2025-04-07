@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	glcli "gitlab.com/gitlab-org/gitaly/v16/internal/cli"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -64,12 +64,12 @@ func newTrackRepositoryCommand() *cli.Command {
 				Usage: "kick off a replication immediately",
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
@@ -83,19 +83,19 @@ type trackRepositoryRequest struct {
 
 var errAuthoritativeRepositoryNotExist = errors.New("authoritative repository does not exist")
 
-func trackRepositoryAction(appCtx *cli.Context) error {
+func trackRepositoryAction(ctx context.Context, cmd *cli.Command) error {
 	logger := log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	virtualStorage := appCtx.String(paramVirtualStorage)
-	relativePath := appCtx.String(paramRelativePath)
-	replicaPath := appCtx.String(paramReplicaPath)
-	authoritativeStorage := appCtx.String(paramAuthoritativeStorage)
-	replicateImmediately := appCtx.Bool("replicate-immediately")
+	virtualStorage := cmd.String(paramVirtualStorage)
+	relativePath := cmd.String(paramRelativePath)
+	replicaPath := cmd.String(paramReplicaPath)
+	authoritativeStorage := cmd.String(paramAuthoritativeStorage)
+	replicateImmediately := cmd.Bool("replicate-immediately")
 
 	if authoritativeStorage == "" {
 		if conf.Failover.ElectionStrategy == config.ElectionStrategyPerRepository {
@@ -103,7 +103,7 @@ func trackRepositoryAction(appCtx *cli.Context) error {
 		}
 	}
 
-	ctx := correlation.ContextWithCorrelation(context.Background(), correlation.SafeRandomID())
+	ctx = correlation.ContextWithCorrelation(ctx, correlation.SafeRandomID())
 
 	openDBCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -121,7 +121,7 @@ func trackRepositoryAction(appCtx *cli.Context) error {
 	}
 
 	logger = logger.WithField("correlation_id", correlation.ExtractFromContext(ctx))
-	return req.execRequest(ctx, db, conf, appCtx.App.Writer, logger, replicateImmediately)
+	return req.execRequest(ctx, db, conf, cmd.Writer, logger, replicateImmediately)
 }
 
 const trackRepoErrorPrefix = "attempting to track repository in praefect database"

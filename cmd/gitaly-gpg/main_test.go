@@ -46,6 +46,8 @@ func TestApp(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			ctx := testhelper.Context(t)
+
 			app := gpgApp()
 			var stdout, stderr bytes.Buffer
 
@@ -53,7 +55,7 @@ func TestApp(t *testing.T) {
 			app.ErrWriter = &stderr
 			app.Reader = bytes.NewBufferString(tc.input)
 
-			require.Equal(t, tc.expectedError, app.Run(tc.args))
+			require.Equal(t, tc.expectedError, app.Run(ctx, tc.args))
 			if tc.expectedError != nil {
 				return
 			}
