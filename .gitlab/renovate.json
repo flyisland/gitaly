@@ -1,8 +1,0 @@
-{
-  "extends": ["config:base"],
-  "ignoreDeps": [
-    "google.golang.org/grpc",
-    "github.com/grpc-ecosystem/go-grpc-middleware",
-    "github.com/ProtonMail/go-crypto"
-  ]
-}

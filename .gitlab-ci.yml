@@ -144,10 +144,11 @@ workflow:
     # proper attention to permission bits and that we don't modify the source
     # directory.
     - setpriv --reuid=${TEST_UID} --regid=${TEST_UID} --clear-groups --no-new-privs env HOME=/tmp/home make ${TEST_TARGET}
-    # Run the linter tests under a privileged user. These tests sometimes trigger
+    # Run tool tests under a privileged user. These tests sometimes trigger
     # a Go toolchain to be downloaded, and that seems to cause permissions issues
     # when it's executed under `setpriv` below.
     - make test-gitaly-linters
+    - make test-mod-validator
   coverage: /^total:\t+\(statements\)\t+\d+\.\d+%$/
   after_script: &test_after_script
     - go run "${CI_PROJECT_DIR}/tools/panic-parser"

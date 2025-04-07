@@ -414,6 +414,13 @@ test-gitaly-linters: TEST_PACKAGES := .
 test-gitaly-linters: ${GOTESTSUM}
 	${Q}cd ${SOURCE_DIR}/tools/golangci-lint/gitaly && $(call run_go_tests)
 
+.PHONY: test-mod-validator
+## Test Go tests in tools/mod-validator folder
+## That folder has its own go.mod file. Hence tests must run the context of that folder.
+test-mod-validator: TEST_PACKAGES := .
+test-mod-validator: ${GOTESTSUM}
+	${Q}cd ${SOURCE_DIR}/tools/mod-validator && $(call run_go_tests)
+
 .PHONY: test-go
 ## Run Go tests.
 test-go: prepare-tests ${GOCOVER_COBERTURA}
@@ -489,8 +496,13 @@ ${TOOLS_DIR}/gitaly-linters.so: ${SOURCE_DIR}/tools/golangci-lint/go.sum $(wildc
 
 .PHONY: lint
 ## Run Go linter.
-lint: ${GOLANGCI_LINT} ${GITALY_PACKED_EXECUTABLES} ${GIT_PACKED_EXECUTABLES} ${TOOLS_DIR}/gitaly-linters.so lint-gitaly-linters
+lint: ${GOLANGCI_LINT} ${GITALY_PACKED_EXECUTABLES} ${GIT_PACKED_EXECUTABLES} ${TOOLS_DIR}/gitaly-linters.so lint-gitaly-linters lint-go-mod
 	${Q}${GOLANGCI_LINT} run --build-tags "${SERVER_BUILD_TAGS}" --config ${GOLANGCI_LINT_CONFIG} ${GOLANGCI_LINT_OPTIONS}
+
+.PHONY: lint-go-mod
+## Lint Golang dependencies
+lint-go-mod:
+	${Q}go run ${SOURCE_DIR}/tools/mod-validator/main.go --file ${SOURCE_DIR}/go.mod
 
 .PHONY: lint-fix
 ## Run Go linter and write back fixes to the files (not supported by all linters).
@@ -800,6 +812,7 @@ ${PROTOC_GEN_GO}:     TOOL_PACKAGE = google.golang.org/protobuf/cmd/protoc-gen-g
 ${PROTOC_GEN_GO_GRPC}:TOOL_PACKAGE = google.golang.org/grpc/cmd/protoc-gen-go-grpc
 ${PROTOC_GEN_DOC}:    TOOL_PACKAGE = github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc
 ${DELVE}:             TOOL_PACKAGE = github.com/go-delve/delve/cmd/dlv
+${GOVULNCHECK}:       TOOL_PACKAGE = golang.org/x/vuln/cmd/govulncheck
 ${GOVULNCHECK}:       TOOL_PACKAGE = golang.org/x/vuln/cmd/govulncheck
 
 ${BENCHMARK_REPO}:
