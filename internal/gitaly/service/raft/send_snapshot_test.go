@@ -47,14 +47,14 @@ func TestServer_SendSnapshot_Success(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(nodeMgr.Close)
 
-	mockNode, err := raftmgr.NewNode(cfg, nodeMgr, log.LogrusLogger{}, dbMgr, nil)
+	mockNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
 	require.NoError(t, err)
 
 	// Register storage one
 	storage, err := mockNode.GetStorage(storageNameOne)
 	require.NoError(t, err)
 
-	registry := storage.(*raftmgr.RaftStorageWrapper).GetManagerRegistry()
+	registry := storage.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
 	raftMgr := &mockRaftManager{}
 
 	partitionKey := &gitalypb.PartitionKey{
@@ -245,14 +245,14 @@ func TestServer_SendSnapshot_Errors(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(nodeMgr.Close)
 
-			mockNode, err := raftmgr.NewNode(cfg, nodeMgr, log.LogrusLogger{}, dbMgr, nil)
+			mockNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
 			require.NoError(t, err)
 
 			// Register storage one
 			storage, err := mockNode.GetStorage(storageNameOne)
 			require.NoError(t, err)
 
-			registry := storage.(*raftmgr.RaftStorageWrapper).GetManagerRegistry()
+			registry := storage.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
 			raftMgr := &mockRaftManager{}
 
 			partitionKey := &gitalypb.PartitionKey{

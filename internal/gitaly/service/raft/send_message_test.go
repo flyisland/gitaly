@@ -7,9 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/node"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
@@ -48,19 +46,14 @@ func TestServer_SendMessage(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(dbMgr.Close)
 
-	metrics := storagemgr.NewMetrics(cfg.Prometheus)
-	nodeMgr, err := node.NewManager(cfg.Storages, storagemgr.NewFactory(logger, dbMgr, nil, 2, metrics))
-	require.NoError(t, err)
-	t.Cleanup(nodeMgr.Close)
-
-	mockNode, err := raftmgr.NewNode(cfg, nodeMgr, log.LogrusLogger{}, dbMgr, nil)
+	mockNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
 	require.NoError(t, err)
 
 	// Register storage one
 	storage, err := mockNode.GetStorage(storageNameOne)
 	require.NoError(t, err)
 
-	registry := storage.(*raftmgr.RaftStorageWrapper).GetManagerRegistry()
+	registry := storage.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
 	raftMgr := &mockRaftManager{}
 
 	partitionKey := &gitalypb.PartitionKey{
@@ -74,7 +67,7 @@ func TestServer_SendMessage(t *testing.T) {
 	storageTwo, err := mockNode.GetStorage(storageNameTwo)
 	require.NoError(t, err)
 
-	registryTwo := storageTwo.(*raftmgr.RaftStorageWrapper).GetManagerRegistry()
+	registryTwo := storageTwo.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
 	raftMgrTwo := &mockRaftManager{}
 	err = registryTwo.RegisterManager(partitionKey, raftMgrTwo)
 	require.NoError(t, err)
