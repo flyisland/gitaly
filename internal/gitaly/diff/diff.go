@@ -194,7 +194,9 @@ func (parser *Parser) Parse() bool {
 		} else if bytes.HasPrefix(line, []byte("@@")) {
 			parser.consumeChunkLine(false)
 		} else if helper.ByteSliceHasAnyPrefix(line, "---", "+++") && !parser.isParsingChunkLines() {
-			parser.consumeLine(false)
+			if err := discardLine(parser.patchReader); err != nil {
+				parser.err = err
+			}
 		} else if bytes.HasPrefix(line, []byte("~\n")) {
 			parser.consumeChunkLine(true)
 		} else if bytes.HasPrefix(line, []byte("Binary")) {
@@ -203,7 +205,9 @@ func (parser *Parser) Parse() bool {
 		} else if helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\") {
 			parser.consumeChunkLine(true)
 		} else {
-			parser.consumeLine(false)
+			if err := discardLine(parser.patchReader); err != nil {
+				parser.err = err
+			}
 		}
 
 		if parser.err != nil {
@@ -482,18 +486,12 @@ func (parser *Parser) consumeChunkLine(updateLineStats bool) {
 	}
 }
 
-func (parser *Parser) consumeLine(updateStats bool) {
-	line, err := parser.patchReader.ReadBytes('\n')
+func discardLine(reader *bufio.Reader) error {
+	_, err := reader.ReadBytes('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
-		parser.err = fmt.Errorf("read line: %w", err)
-		return
+		return fmt.Errorf("read line: %w", err)
 	}
-
-	if updateStats {
-		parser.currentDiff.lineCount++
-		parser.linesProcessed++
-		parser.bytesProcessed += len(line)
-	}
+	return nil
 }
 
 func (parser *Parser) isParsingChunkLines() bool {
