@@ -156,8 +156,17 @@ func (parser *Parser) Parse() bool {
 		return false
 	}
 
-	if err := parser.findNextPatchFromPath(); err != nil {
-		return false
+	// The patch being parsed may not correspond to the current expected diff. In such cases, this
+	// indicates the current diff has no patch output and is empty. Since we can only go forward
+	// when reading from a bufio.Reader, we save the matched FromPath we parsed until we reach its
+	// counterpart in raw diff.
+	if parser.nextPatchFromPath == nil {
+		path, err := readDiffHeaderFromPath(parser.patchReader)
+		if err != nil {
+			parser.err = err
+			return false
+		}
+		parser.nextPatchFromPath = path
 	}
 
 	if !bytes.Equal(parser.nextPatchFromPath, parser.currentDiff.FromPath) {
@@ -362,28 +371,19 @@ func (parser *Parser) initializeCurrentDiff() error {
 	return nil
 }
 
-func (parser *Parser) findNextPatchFromPath() error {
-	// Since we can only go forward when reading from a bufio.Reader, we save the matched FromPath we parsed until we
-	// reach its counterpart in raw diff.
-	if parser.nextPatchFromPath != nil {
-		return nil
-	}
-
-	line, err := parser.patchReader.ReadBytes('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		parser.err = fmt.Errorf("read diff header line: %w", err)
-		return parser.err
-	} else if errors.Is(err, io.EOF) {
-		return nil
+func readDiffHeaderFromPath(reader *bufio.Reader) ([]byte, error) {
+	line, err := reader.ReadBytes('\n')
+	if errors.Is(err, io.EOF) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("read diff header line: %w", err)
 	}
 
 	if matches := diffHeaderRegexp.FindSubmatch(line); len(matches) > 0 {
-		parser.nextPatchFromPath = unescape(matches[1])
-		return nil
+		return unescape(matches[1]), nil
 	}
 
-	parser.err = fmt.Errorf("diff header regexp mismatch")
-	return parser.err
+	return nil, fmt.Errorf("diff header regexp mismatch")
 }
 
 func (parser *Parser) handleTypeChangeDiff() {
