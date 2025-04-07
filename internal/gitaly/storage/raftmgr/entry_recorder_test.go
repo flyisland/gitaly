@@ -7,7 +7,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 )
 
-func TestLogEntryRecorder_OffsetRight(t *testing.T) {
+func TestLogEntryRecorder_WithoutRaftEntries(t *testing.T) {
 	testCases := []struct {
 		desc    string
 		records []bool
@@ -62,7 +62,7 @@ func TestLogEntryRecorder_OffsetRight(t *testing.T) {
 			}
 
 			for i := range len(tc.before) {
-				after := recorder.OffsetRight(tc.before[i])
+				after := recorder.WithoutRaftEntries(tc.before[i])
 				assert.Equalf(
 					t, tc.after[i], after,
 					"expected offset right: %d -> %d, actual: %d -> %d",
@@ -73,7 +73,7 @@ func TestLogEntryRecorder_OffsetRight(t *testing.T) {
 	}
 }
 
-func TestLogEntryRecorder_OffsetLeft(t *testing.T) {
+func TestLogEntryRecorder_WithRaftEntries(t *testing.T) {
 	testCases := []struct {
 		desc    string
 		records []bool
@@ -128,7 +128,7 @@ func TestLogEntryRecorder_OffsetLeft(t *testing.T) {
 			}
 
 			for i := range len(tc.before) {
-				after := recorder.OffsetLeft(tc.before[i])
+				after := recorder.WithRaftEntries(tc.before[i])
 				assert.Equalf(
 					t, tc.after[i], after,
 					"expected offset left: %d -> %d, actual: %d -> %d",

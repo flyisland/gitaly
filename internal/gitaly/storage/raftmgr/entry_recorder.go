@@ -55,8 +55,9 @@ func (r *EntryRecorder) Record(fromRaft bool, lsn storage.LSN, entry *gitalypb.L
 	})
 }
 
-// OffsetRight adjusts the log sequence number (LSN) by excluding internal Raft entries occupying LSN slots.
-func (r *EntryRecorder) OffsetRight(lsn storage.LSN) storage.LSN {
+// WithoutRaftEntries adjusts the log sequence number (LSN) by
+// excluding internal Raft entries occupying LSN slots.
+func (r *EntryRecorder) WithoutRaftEntries(lsn storage.LSN) storage.LSN {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -97,8 +98,8 @@ func (r *EntryRecorder) OffsetRight(lsn storage.LSN) storage.LSN {
 	return offset
 }
 
-// OffsetLeft adjusts the log sequence number (LSN) by including internal Raft entries occupying LSN slots.
-func (r *EntryRecorder) OffsetLeft(lsn storage.LSN) storage.LSN {
+// WithRaftEntries adjusts the log sequence number (LSN) by including internal Raft entries occupying LSN slots.
+func (r *EntryRecorder) WithRaftEntries(lsn storage.LSN) storage.LSN {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

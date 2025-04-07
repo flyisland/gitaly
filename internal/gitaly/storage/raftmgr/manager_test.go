@@ -36,6 +36,27 @@ func raftConfigsForTest(t *testing.T) config.Raft {
 	}
 }
 
+func createTestLogEntry(t *testing.T, ctx context.Context, content string) string {
+	t.Helper()
+
+	entryDir := testhelper.TempDir(t)
+	entry := wal.NewEntry(entryDir)
+	entry.SetKey([]byte("test-key"), []byte(content))
+
+	// Create a few files in the directory to simulate actual log entry data
+	for i := 1; i <= 3; i++ {
+		filePath := filepath.Join(entryDir, fmt.Sprintf("file-%d", i))
+		require.NoError(t, os.WriteFile(filePath, []byte(content), 0o644))
+	}
+
+	// Write the manifest
+	require.NoError(t, wal.WriteManifest(ctx, entryDir, &gitalypb.LogEntry{
+		Operations: entry.Operations(),
+	}))
+
+	return entryDir
+}
+
 func TestManager_Initialize(t *testing.T) {
 	t.Parallel()
 
@@ -189,6 +210,254 @@ func TestManager_Initialize(t *testing.T) {
 		close(releaseReady)
 		require.NoError(t, mgr.Close())
 	})
+
+	t.Run("enable Raft on an existing partition with all entrires applied", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		cfg := testcfg.Build(t)
+		logger := testhelper.NewLogger(t)
+		raftCfg := raftConfigsForTest(t)
+
+		storageName := cfg.Storages[0].Name
+		partitionID := storage.PartitionID(1)
+		stagingDir := testhelper.TempDir(t)
+		stateDir := testhelper.TempDir(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
+		posTracker := log.NewPositionTracker()
+		recorder := NewEntryRecorder()
+		metrics := NewMetrics()
+
+		// First, create a local log manager and add some entries
+		localLog := log.NewManager(
+			storageName,
+			partitionID,
+			stagingDir,
+			stateDir,
+			nil,
+			posTracker,
+		)
+
+		// Initialize the local log manager
+		err := localLog.Initialize(ctx, 0)
+		require.NoError(t, err)
+
+		// Create and append some log entries
+		var highestLSN storage.LSN
+		for i := 1; i <= 3; i++ {
+			logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("pre-raft-entry-%d", i))
+			lsn, err := localLog.AppendLogEntry(logEntryPath)
+			require.NoError(t, err)
+			highestLSN = lsn
+		}
+
+		require.NoError(t, localLog.AcknowledgePosition(log.AppliedPosition, highestLSN))
+		require.NoError(t, localLog.Close())
+
+		// Now create a Raft storage pointing to the same directories
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		require.NoError(t, err)
+
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics, WithEntryRecorder(recorder))
+		require.NoError(t, err)
+		defer func() { require.NoError(t, mgr.Close()) }()
+
+		// Initialize the Raft manager with the highest LSN
+		err = mgr.Initialize(ctx, highestLSN)
+		require.NoError(t, err)
+
+		// Verify that the existing entries are recognized and accessible
+		require.Equal(t, highestLSN, mgr.AppendedLSN(), "AppendedLSN should match the highest pre-existing LSN")
+
+		// Append a new entry to verify normal operation
+		logEntryPath := createTestLogEntry(t, ctx, "post-raft-entry")
+		newLSN, err := mgr.AppendLogEntry(logEntryPath)
+		require.NoError(t, err)
+		require.Equal(t, highestLSN+1, mgr.LowWaterMark())
+		require.Equal(t, newLSN, recorder.WithoutRaftEntries(highestLSN+1))
+	})
+
+	t.Run("enable Raft on an existing partition with some entrires have not been applied", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		cfg := testcfg.Build(t)
+		logger := testhelper.NewLogger(t)
+		raftCfg := raftConfigsForTest(t)
+
+		storageName := cfg.Storages[0].Name
+		partitionID := storage.PartitionID(1)
+		stagingDir := testhelper.TempDir(t)
+		stateDir := testhelper.TempDir(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
+		posTracker := log.NewPositionTracker()
+		recorder := NewEntryRecorder()
+		metrics := NewMetrics()
+
+		// First, create a local log manager and add some entries
+		localLog := log.NewManager(
+			storageName,
+			partitionID,
+			stagingDir,
+			stateDir,
+			nil,
+			posTracker,
+		)
+
+		// Initialize the local log manager
+		err := localLog.Initialize(ctx, 0)
+		require.NoError(t, err)
+
+		// Create and append 5 log entries
+		var lsns []storage.LSN
+		for i := 1; i <= 5; i++ {
+			logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("pre-raft-entry-%d", i))
+			lsn, err := localLog.AppendLogEntry(logEntryPath)
+			require.NoError(t, err)
+			lsns = append(lsns, lsn)
+		}
+		require.Len(t, lsns, 5, "expected 5 entries to be appended")
+		highestLSN := lsns[len(lsns)-1]
+
+		// Set the applied LSN to be the 3rd entry (not the highest)
+		appliedLSN := lsns[2]
+		require.NoError(t, localLog.AcknowledgePosition(log.AppliedPosition, appliedLSN))
+
+		// Close the local log manager
+		require.NoError(t, localLog.Close())
+
+		// Now create a Raft storage pointing to the same directories
+		raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		require.NoError(t, err)
+
+		mgr, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics, WithEntryRecorder(recorder))
+		require.NoError(t, err)
+		defer func() { require.NoError(t, mgr.Close()) }()
+
+		// Initialize the Raft manager with the applied LSN (not the highest)
+		err = mgr.Initialize(ctx, appliedLSN)
+		require.NoError(t, err)
+
+		// Verify that all existing entries (including unapplied ones) are recognized
+		require.Equal(t, highestLSN, mgr.AppendedLSN(), "AppendedLSN should match the highest pre-existing LSN")
+
+		// Append a new entry to verify normal operation
+		logEntryPath := createTestLogEntry(t, ctx, "post-raft-entry")
+		newLSN, err := mgr.AppendLogEntry(logEntryPath)
+		require.NoError(t, err)
+		require.Equal(t, appliedLSN+1, mgr.LowWaterMark())
+		require.Equal(t, newLSN, recorder.WithoutRaftEntries(highestLSN+1))
+	})
+
+	t.Run("enable raft -> disable raft -> enable raft again", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		cfg := testcfg.Build(t)
+		logger := testhelper.NewLogger(t)
+		raftCfg := raftConfigsForTest(t)
+
+		storageName := cfg.Storages[0].Name
+		partitionID := storage.PartitionID(1)
+		stagingDir := testhelper.TempDir(t)
+		stateDir := testhelper.TempDir(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
+		recorder := NewEntryRecorder()
+		metrics := NewMetrics()
+
+		// PHASE 1: Create a new partition with Raft enabled
+		raftStorage1, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		require.NoError(t, err)
+
+		mgr1, err := NewManager(storageName, partitionID, raftCfg, raftStorage1, logger, metrics, WithEntryRecorder(recorder))
+		require.NoError(t, err)
+
+		// Initialize the Raft manager
+		err = mgr1.Initialize(ctx, 0)
+		require.NoError(t, err)
+
+		// Append 3 entries using Raft
+		for i := 1; i <= 3; i++ {
+			logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("raft-phase1-entry-%d", i))
+			_, err = mgr1.AppendLogEntry(logEntryPath)
+			require.NoError(t, err)
+		}
+
+		// Get the highest LSN after Raft phase
+		highestRaftLSN := mgr1.AppendedLSN()
+
+		// Close the Raft manager (simulate disabling Raft)
+		require.NoError(t, mgr1.Close())
+
+		// PHASE 2: Use direct WAL
+		localLog := log.NewManager(
+			storageName,
+			partitionID,
+			stagingDir,
+			stateDir,
+			nil,
+			log.NewPositionTracker(),
+		)
+
+		// Initialize the local log manager with the last applied LSN
+		err = localLog.Initialize(ctx, highestRaftLSN)
+		require.NoError(t, err)
+
+		require.Equal(t, highestRaftLSN, localLog.AppendedLSN(),
+			"Highest direct WAL LSN should be equal to highest Raft LSN from previous session")
+
+		// Append 2 more entries directly to WAL
+		for i := 1; i <= 2; i++ {
+			logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("direct-wal-entry-%d", i))
+			_, err = localLog.AppendLogEntry(logEntryPath)
+			require.NoError(t, err)
+		}
+
+		highestDirectLSN := localLog.AppendedLSN()
+		require.Equal(t, highestDirectLSN, highestRaftLSN+2,
+			"Highest direct WAL LSN should be equal than highest Raft LSN + 2 new entries")
+
+		// Close the local log manager
+		require.NoError(t, localLog.Close())
+
+		// Verify we can read the entry appended.
+		for i := 1; i <= 2; i++ {
+			entry, err := wal.ReadManifest(localLog.GetEntryPath(highestRaftLSN + storage.LSN(i)))
+			require.NoError(t, err)
+			require.NotNil(t, entry, "Should be able to read entry appended under Raft")
+		}
+
+		// PHASE 3: Re-enable Raft
+		raftStorage2, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		require.NoError(t, err)
+
+		mgr2, err := NewManager(storageName, partitionID, raftCfg, raftStorage2, logger, metrics, WithEntryRecorder(recorder))
+		require.NoError(t, err)
+
+		// Re-initialize Raft with the highest LSN
+		err = mgr2.Initialize(ctx, highestDirectLSN)
+		require.NoError(t, err)
+
+		// Verify that all entries are recognized
+		require.Equal(t, recorder.WithRaftEntries(highestDirectLSN), mgr2.AppendedLSN(),
+			"Re-enabled Raft should see highest LSN from direct WAL phase")
+
+		// Append one more entry with re-enabled Raft
+		logEntryPath := createTestLogEntry(t, ctx, "raft-phase3-entry")
+		finalLSN, err := mgr2.AppendLogEntry(logEntryPath)
+		require.NoError(t, err)
+		require.Greater(t, recorder.WithRaftEntries(finalLSN), recorder.WithRaftEntries(highestDirectLSN)+1,
+			"Final LSN should be greater than highest direct WAL LSN")
+
+		// Verify Phase 3 entry (re-enabled Raft). Entries from phase 1 and phase 2 are properly pruned.
+		entry, err := wal.ReadManifest(mgr2.GetEntryPath(finalLSN))
+		require.NoError(t, err)
+		require.Contains(t, string(entry.GetOperations()[0].GetSetKey().GetValue()),
+			"raft-phase3-entry", "Should be able to read final Raft entry")
+
+		// Clean up
+		require.NoError(t, mgr2.Close())
+	})
 }
 
 func TestManager_AppendLogEntry(t *testing.T) {
@@ -219,25 +488,6 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		return mgr, metrics, recorder
 	}
 
-	createLogEntry := func(t *testing.T, ctx context.Context, content string) string {
-		entryDir := testhelper.TempDir(t)
-		entry := wal.NewEntry(entryDir)
-		entry.SetKey([]byte("test-key"), []byte(content))
-
-		// Create a few files in the directory to simulate actual log entry data
-		for i := 1; i <= 3; i++ {
-			filePath := filepath.Join(entryDir, fmt.Sprintf("file-%d", i))
-			require.NoError(t, os.WriteFile(filePath, []byte(content), 0o644))
-		}
-
-		// Write the manifest
-		require.NoError(t, wal.WriteManifest(ctx, entryDir, &gitalypb.LogEntry{
-			Operations: entry.Operations(),
-		}))
-
-		return entryDir
-	}
-
 	t.Run("append single log entry", func(t *testing.T) {
 		t.Parallel()
 
@@ -249,7 +499,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 			require.NoError(t, mgr.Close())
 		}()
 
-		logEntryPath := createLogEntry(t, ctx, "test-content-1")
+		logEntryPath := createTestLogEntry(t, ctx, "test-content-1")
 		lsn, err := mgr.AppendLogEntry(logEntryPath)
 		require.NoError(t, err)
 		require.Greater(t, lsn, storage.LSN(0), "expected a valid LSN")
@@ -304,7 +554,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		var lsns []storage.LSN
 
 		for i := 1; i <= 3; i++ {
-			logEntryPath := createLogEntry(t, ctx, fmt.Sprintf("test-content-%d", i))
+			logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("test-content-%d", i))
 			lsn, err := mgr.AppendLogEntry(logEntryPath)
 			require.NoError(t, err)
 			lsns = append(lsns, lsn)
@@ -383,7 +633,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 				<-startGate
 
 				// Create and append log entry
-				logEntryPath := createLogEntry(t, ctx, fmt.Sprintf("test-content-%d", idx))
+				logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("test-content-%d", idx))
 				lsn, err := mgr.AppendLogEntry(logEntryPath)
 
 				// Send the result back
@@ -491,7 +741,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		}()
 
 		// Attempting to append should time out
-		logEntryPath := createLogEntry(t, ctx, "timeout-test")
+		logEntryPath := createTestLogEntry(t, ctx, "timeout-test")
 		_, err = mgr.AppendLogEntry(logEntryPath)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "context deadline exceeded")
@@ -526,7 +776,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		cancel()
 
 		// Attempt to append should fail with context canceled
-		logEntryPath := createLogEntry(t, ctx, "cancel-test")
+		logEntryPath := createTestLogEntry(t, ctx, "cancel-test")
 		_, err := mgr.AppendLogEntry(logEntryPath)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "context canceled")
@@ -562,22 +812,6 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		storageName string
 		partitionID storage.PartitionID
 		metrics     *Metrics
-	}
-
-	// Helper to create a test log entry
-	createTestLogEntry := func(t *testing.T, ctx context.Context, content string) string {
-		t.Helper()
-
-		entryDir := testhelper.TempDir(t)
-		entry := wal.NewEntry(entryDir)
-		entry.SetKey([]byte("test-key"), []byte(content))
-
-		// Write the manifest
-		require.NoError(t, wal.WriteManifest(ctx, entryDir, &gitalypb.LogEntry{
-			Operations: entry.Operations(),
-		}))
-
-		return entryDir
 	}
 
 	// Helper for setting up a test environment
@@ -796,12 +1030,6 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		}
 		require.True(t, recoveryContentFound, "recovery content should be found in new entry")
 	}
-
-	// Register a cleanup function to close the DB manager at the end of each test
-	t.Cleanup(func() {
-		// The individual test cases will close their own managers and DB connections,
-		// but we need to ensure any shared DB managers are also closed at the end
-	})
 
 	t.Run("AppendLogEntry crash during propose", func(t *testing.T) {
 		t.Parallel()

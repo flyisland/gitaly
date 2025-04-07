@@ -27,9 +27,9 @@ func setupStorage(t *testing.T, ctx context.Context, cfg config.Cfg) *Storage {
 	rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
 	require.NoError(t, err)
 
-	bootstrapped, err := rs.initialize(ctx, 0)
+	initStatus, err := rs.initialize(ctx, 0)
 	require.NoError(t, err)
-	require.False(t, bootstrapped)
+	require.Equal(t, InitStatusUnbootstrapped, initStatus)
 
 	t.Cleanup(func() { require.NoError(t, rs.close()) })
 	return rs
@@ -49,6 +49,67 @@ func prepopulateEntries(t *testing.T, ctx context.Context, cfg config.Cfg, stagi
 
 func TestStorage_Initialize(t *testing.T) {
 	t.Parallel()
+
+	t.Run("raft initially errors out with InitStatusUnknown then bootstraps", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
+
+		stagingDir := testhelper.TempDir(t)
+		stateDir := testhelper.TempDir(t)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
+		posTracker := log.NewPositionTracker()
+
+		// Create a storage instance but make the log manager fail during initialize
+		// by providing a context that's already been cancelled
+		canceledCtx, cancel := context.WithCancel(ctx)
+		cancel() // Cancel immediately to force failure
+
+		rs, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		require.NoError(t, err)
+
+		// Initialize with canceled context should fail with InitStatusUnknown
+		initStatus, err := rs.initialize(canceledCtx, 0)
+		require.Error(t, err)
+		require.Equal(t, InitStatusUnknown, initStatus)
+
+		// Now try initializing again with a valid context, which should succeed
+		initStatus, err = rs.initialize(ctx, 0)
+		require.NoError(t, err)
+		require.Equal(t, InitStatusUnbootstrapped, initStatus)
+
+		// Verify the storage is functional by checking its indices
+		firstIndex, err := rs.FirstIndex()
+		require.NoError(t, err)
+		require.Equal(t, uint64(1), firstIndex)
+
+		lastIndex, err := rs.LastIndex()
+		require.NoError(t, err)
+		require.Equal(t, uint64(0), lastIndex)
+
+		// Now, bootstrap the storage by saving a hard state
+		require.NoError(t, rs.saveHardState(raftpb.HardState{Term: 1, Vote: 1, Commit: 0}))
+
+		// Create a brand new storage instance using the same state directory
+		// to verify it properly bootstraps from the saved state
+		// Use a new position tracker to avoid "already registered" errors
+		posTracker2 := log.NewPositionTracker()
+		rs2, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker2, logger, NewMetrics())
+		require.NoError(t, err)
+
+		// It should now initialize as bootstrapped
+		initStatus, err = rs2.initialize(ctx, 0)
+		require.NoError(t, err)
+		require.Equal(t, InitStatusBootstrapped, initStatus)
+
+		// Cleanup
+		require.NoError(t, rs.close())
+		require.NoError(t, rs2.close())
+	})
 
 	prepopulateStorage := func(t *testing.T, ctx context.Context, cfg config.Cfg, appended int, committed uint64) (keyvalue.Transactioner, string) {
 		stagingDir := testhelper.TempDir(t)
@@ -90,9 +151,9 @@ func TestStorage_Initialize(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { require.NoError(t, rs.close()) }()
 
-		bootstrapped, err := rs.initialize(ctx, 0)
+		initStatus, err := rs.initialize(ctx, 0)
 		require.NoError(t, err)
-		require.False(t, bootstrapped, "expected fresh installation (bootstrapped == false)")
+		require.Equal(t, InitStatusUnbootstrapped, initStatus, "expected fresh installation")
 
 		firstIndex, err := rs.FirstIndex()
 		require.NoError(t, err)
@@ -124,9 +185,9 @@ func TestStorage_Initialize(t *testing.T) {
 		defer func() { require.NoError(t, rs.close()) }()
 
 		// Initialize
-		bootstrapped, err := rs.initialize(ctx, 3)
+		initStatus, err := rs.initialize(ctx, 3)
 		require.NoError(t, err)
-		require.True(t, bootstrapped, "expected bootstrapped installation")
+		require.Equal(t, InitStatusBootstrapped, initStatus, "expected bootstrapped installation")
 		require.NoError(t, rs.localLog.AcknowledgePosition(log.AppliedPosition, 3))
 
 		// Now the populated committedLSN is 3
@@ -171,9 +232,9 @@ func TestStorage_Initialize(t *testing.T) {
 		defer func() { require.NoError(t, rs.close()) }()
 
 		// Initialize with applied LSN 2
-		bootstrapped, err := rs.initialize(ctx, 2)
+		initStatus, err := rs.initialize(ctx, 2)
 		require.NoError(t, err)
-		require.True(t, bootstrapped, "expected bootstrapped installation")
+		require.Equal(t, InitStatusBootstrapped, initStatus, "expected bootstrapped installation")
 
 		// First index is 3 == AppliedLSN + 1. Applied LSN is pruned.
 		firstIndex, err := rs.FirstIndex()
@@ -194,6 +255,222 @@ func TestStorage_Initialize(t *testing.T) {
 				highWaterMark: storage.LSN(3),
 			},
 		}, rs.consumer.(*mockConsumer).GetNotifications())
+	})
+}
+
+func TestStorage_InitializeExistingPartition(t *testing.T) {
+	t.Parallel()
+
+	createTestLogEntry := func(t *testing.T, ctx context.Context, content string) string {
+		t.Helper()
+
+		entryDir := testhelper.TempDir(t)
+		entry := wal.NewEntry(entryDir)
+		entry.SetKey([]byte("test-key"), []byte(content))
+
+		require.NoError(t, wal.WriteManifest(ctx, entryDir, &gitalypb.LogEntry{
+			Operations: entry.Operations(),
+		}))
+
+		return entryDir
+	}
+
+	t.Run("detects existing partition and backfills metadata", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
+
+		// Setup directories and utilities
+		stagingDir := testhelper.TempDir(t)
+		stateDir := testhelper.TempDir(t)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
+		posTracker := log.NewPositionTracker()
+		metrics := NewMetrics()
+
+		// First, create a local (non-Raft) log manager and add some entries
+		localLog := log.NewManager("test-storage", 1, stagingDir, stateDir, nil, posTracker)
+
+		// Initialize the local log manager
+		err := localLog.Initialize(ctx, 0)
+		require.NoError(t, err)
+
+		// Create and append some log entries
+		var lsns []storage.LSN
+		for i := 1; i <= 5; i++ {
+			logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("pre-raft-entry-%d", i))
+			lsn, err := localLog.AppendLogEntry(logEntryPath)
+			require.NoError(t, err)
+			lsns = append(lsns, lsn)
+		}
+		require.Len(t, lsns, 5, "expected 5 entries to be appended")
+
+		// Set the applied LSN to the 3rd entry (index 2)
+		appliedLSN := lsns[2]
+		require.NoError(t, localLog.AcknowledgePosition(log.AppliedPosition, appliedLSN))
+		require.NoError(t, localLog.Close())
+
+		// Now initialize a Raft storage on the same directories
+		raftStorage, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, raftStorage.close()) }()
+
+		// When initializing, it should detect the existing entries and return NeedsBackfill status
+		initStatus, err := raftStorage.initialize(ctx, appliedLSN)
+		require.NoError(t, err)
+		require.Equal(t, InitStatusNeedsBackfill, initStatus,
+			"should detect the existing log entries and report NeedsBackfill status")
+
+		// Verify that the existing entries are recognized
+		firstIndex, err := raftStorage.FirstIndex()
+		require.NoError(t, err)
+		require.Equal(t, uint64(appliedLSN+1), firstIndex,
+			"FirstIndex should be appliedLSN+1 (entries up to appliedLSN are pruned)")
+
+		lastIndex, err := raftStorage.LastIndex()
+		require.NoError(t, err)
+		require.Equal(t, uint64(lsns[len(lsns)-1]), lastIndex,
+			"LastIndex should match the highest existing LSN")
+
+		// Verify we can fetch all non-pruned entries
+		// Add one as the upper boundary is non-inclusive
+		entries, err := raftStorage.Entries(firstIndex, lastIndex+1, 0)
+		require.NoError(t, err)
+		require.Equal(t, int(lastIndex+1-firstIndex), len(entries),
+			"should return all entries from firstIndex to lastIndex")
+
+		// Check that the entries have been backfilled with proper Raft metadata
+		for i, entry := range entries {
+			require.Equal(t, raftStorage.lastTerm, entry.Term,
+				"entries should be assigned the current term during backfill")
+			require.Equal(t, firstIndex+uint64(i), entry.Index,
+				"entry index should match its position")
+		}
+	})
+
+	t.Run("enable raft -> disable raft -> re-enable raft", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+			Raft: config.Raft{SnapshotDir: testhelper.TempDir(t)},
+		}))
+
+		// Setup directories and utilities
+		stagingDir := testhelper.TempDir(t)
+		stateDir := testhelper.TempDir(t)
+		logger := testhelper.NewLogger(t)
+		db := getTestDBManager(t, ctx, cfg, logger)
+		posTracker := log.NewPositionTracker()
+		metrics := NewMetrics()
+
+		// PHASE 1: Initialize with Raft enabled
+		raftStorage1, err := NewStorage("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+		require.NoError(t, err)
+
+		initStatus, err := raftStorage1.initialize(ctx, 0)
+		require.NoError(t, err)
+		require.Equal(t, InitStatusUnbootstrapped, initStatus)
+
+		// Append entries using Raft
+		for i := 1; i <= 3; i++ {
+			logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("raft-phase1-entry-%d", i))
+
+			entry := raftpb.Entry{
+				Term:  1,
+				Index: uint64(i),
+				Type:  raftpb.EntryNormal,
+				Data:  []byte(fmt.Sprintf("raft-phase1-data-%d", i)),
+			}
+
+			require.NoError(t, raftStorage1.insertLogEntry(entry, logEntryPath))
+		}
+
+		// Save commit state and close
+		highestRaftLSN := storage.LSN(3)
+		require.NoError(t, raftStorage1.saveHardState(raftpb.HardState{
+			Term:   1,
+			Vote:   1,
+			Commit: uint64(highestRaftLSN),
+		}))
+		require.NoError(t, raftStorage1.close())
+
+		// PHASE 2: Use direct WAL
+		localLog := log.NewManager(
+			"test-storage",
+			1,
+			stagingDir,
+			stateDir,
+			nil,
+			log.NewPositionTracker(),
+		)
+
+		// Initialize with the highest LSN from Raft phase
+		err = localLog.Initialize(ctx, highestRaftLSN)
+		require.NoError(t, err)
+
+		// Add more entries directly to WAL
+		for i := 1; i <= 2; i++ {
+			logEntryPath := createTestLogEntry(t, ctx, fmt.Sprintf("direct-wal-entry-%d", i))
+			_, err = localLog.AppendLogEntry(logEntryPath)
+			require.NoError(t, err)
+		}
+
+		highestDirectLSN := localLog.AppendedLSN()
+		require.Equal(t, highestRaftLSN+2, highestDirectLSN,
+			"highest direct WAL LSN should be equal to highest Raft LSN + 2 new entries")
+		require.NoError(t, localLog.AcknowledgePosition(log.AppliedPosition, highestDirectLSN))
+		require.NoError(t, localLog.Close())
+
+		// PHASE 3: Re-enable Raft
+		raftStorage2, err := NewStorage(
+			"test-storage",
+			1,
+			cfg.Raft,
+			db,
+			stagingDir,
+			stateDir,
+			&mockConsumer{},
+			log.NewPositionTracker(), // Create a new position tracker
+			logger,
+			metrics,
+		)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, raftStorage2.close()) }()
+
+		// Re-initialize Raft with the highest LSN
+		initStatus, err = raftStorage2.initialize(ctx, highestDirectLSN)
+		require.NoError(t, err)
+
+		// Since we had a previous Raft state, it should be detected as bootstrapped
+		require.Equal(t, InitStatusBootstrapped, initStatus,
+			"should be detected as bootstrapped since we have previous Raft state")
+
+		// Check that the direct WAL entries are recognized in the re-enabled Raft storage
+		lastIndex, err := raftStorage2.LastIndex()
+		require.NoError(t, err)
+		require.Equal(t, uint64(highestDirectLSN), lastIndex,
+			"LastIndex should match highest direct WAL LSN")
+
+		// Try to append a new entry after re-enabling Raft
+		logEntryPath := createTestLogEntry(t, ctx, "raft-phase3-entry")
+		entry := raftpb.Entry{
+			Term:  2,
+			Index: uint64(highestDirectLSN) + 1,
+			Type:  raftpb.EntryNormal,
+			Data:  []byte("raft-phase3-data"),
+		}
+		require.NoError(t, raftStorage2.insertLogEntry(entry, logEntryPath))
+
+		// Verify the new entry is added
+		entries, err := raftStorage2.Entries(lastIndex+1, lastIndex+2, 0)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "should have one new entry")
+		require.Equal(t, entry.Term, entries[0].Term)
+		require.Equal(t, entry.Index, entries[0].Index)
 	})
 }
 

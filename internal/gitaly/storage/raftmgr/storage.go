@@ -21,6 +21,30 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
+	"google.golang.org/protobuf/proto"
+)
+
+// InitStatus represents the initialization status of the Raft storage.
+type InitStatus int
+
+const (
+	// InitStatusUnknown indicates an unknown initialization status, typically due to an error.
+	InitStatusUnknown InitStatus = iota
+
+	// InitStatusUnbootstrapped indicates that the Raft storage has not been bootstrapped yet
+	// and contains no log entries. This is the state of a completely new installation where
+	// no data exists and the Raft group needs to be initialized for the first time.
+	InitStatusUnbootstrapped
+
+	// InitStatusNeedsBackfill indicates that Raft is being enabled for an existing partition that
+	// already contains log entries. In this state, the system needs to backfill Raft metadata
+	// for these pre-existing entries before bootstrapping the Raft group. This happens when
+	// migrating a non-Raft storage system to use Raft consensus.
+	InitStatusNeedsBackfill
+
+	// InitStatusBootstrapped indicates that the Raft storage has been previously bootstrapped.
+	// This means a hard state exists and the Raft group has been initialized before.
+	InitStatusBootstrapped
 )
 
 var (
@@ -184,46 +208,99 @@ func NewStorage(
 
 // initialize loads all states from DB and disk. It also checks whether the leader has completed its initial bootstrap
 // process by verifying the existence of a saved hard state.
-func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (bool, error) {
+func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (InitStatus, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	s.ctx = ctx
 	if err := s.localLog.Initialize(ctx, appliedLSN); err != nil {
-		return false, fmt.Errorf("initializing local log manager: %w", err)
+		return InitStatusUnknown, fmt.Errorf("initializing local log manager: %w", err)
 	}
 
 	// Try to load the previous Raft hard state
+	status := InitStatusUnknown
 	var hardState raftpb.HardState
+
 	if err := s.readKey(KeyHardState, func(value []byte) error {
 		return hardState.Unmarshal(value)
-	}); err != nil {
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			// No previous state exists - this is a fresh installation
-			return false, nil
+	}); err == nil {
+		// If there's a previously persisted hard state, the cluster was bootstrapped. The storage loads persisted data
+		// and resumes from there.
+		s.committedLSN = storage.LSN(hardState.Commit)
+		s.lastTerm = hardState.Term
+		status = InitStatusBootstrapped
+	} else if errors.Is(err, badger.ErrKeyNotFound) {
+		// No previous state exists - this is a fresh installation. As Raft feature is optional, there's
+		// a chance that Raft is enabled for an existing partition. When so, all appended log entries
+		// are considered to be committed. Raft storage needs to backfill Raft manifest to such entries.
+		s.committedLSN = s.localLog.AppendedLSN()
+		if s.committedLSN == 0 {
+			status = InitStatusUnbootstrapped
+		} else {
+			status = InitStatusNeedsBackfill
 		}
-		// If the hard state is never persisted, it means the Raft group is never bootstrapped.
-		return false, err
+	} else {
+		return status, err
 	}
 
-	// Load the last committed LSN
-	s.committedLSN = storage.LSN(hardState.Commit)
+	// This loop iterates through all existing log entries to ensure each has the required Raft metadata.
+	// When initializing a Raft system on an existing partition, each entry needs Raft-specific metadata.
+	// This backfilling process occurs when migrating from a non-Raft to a Raft-enabled system to ensure
+	// existing data remains accessible without requiring a full data migration or risking data loss.
+	// Now we backfill heading entries regardless of initialization status. While it's not ideal, Gitaly supports
+	// toggling Raft support multiple times. When Raft feature becomes stable in the future, we should only
+	// back-fill if the init status is
+	// InitStatusNeedsBackfill.
+	for lsn := s.localLog.LowWaterMark(); lsn <= s.localLog.AppendedLSN(); lsn++ {
+		// Check if the current log entry already has Raft metadata
+		exist, err := s.hasRaftEntry(lsn)
+		if err != nil {
+			return InitStatusUnknown, fmt.Errorf("checking raft manifest existence: %w", err)
+		}
+		if exist {
+			continue
+		}
+
+		logEntryPath := s.localLog.GetEntryPath(lsn)
+		message := &gitalypb.RaftEntry{
+			Data: &gitalypb.RaftEntry_LogData{
+				LocalPath: []byte(logEntryPath),
+			},
+		}
+
+		data, err := proto.Marshal(message)
+		if err != nil {
+			return InitStatusUnknown, fmt.Errorf("marshaling Raft message: %w", err)
+		}
+
+		// Write the Raft metadata alongside the existing log entry This effectively "converts" regular log
+		// entries into Raft-managed entries by associating them with the current term and their sequential
+		// index.
+		if err := s.writeRaftEntry(raftpb.Entry{
+			Term:  s.lastTerm,
+			Index: uint64(lsn),
+			Type:  raftpb.EntryNormal,
+			Data:  data,
+		}, logEntryPath); err != nil {
+			return InitStatusUnknown, fmt.Errorf("backfilling Raft metadata: %w", err)
+		}
+	}
+
 	if s.committedLSN != 0 {
 		// Update both commit and snapshot positions to match the last committed LSN
 		if err := s.localLog.AcknowledgePosition(RaftCommittedPosition, s.committedLSN); err != nil {
-			return false, fmt.Errorf("acknowledging committed position: %w", err)
+			return InitStatusUnknown, fmt.Errorf("acknowledging committed position: %w", err)
 		}
 		if err := s.localLog.AcknowledgePosition(RaftSnapshotPosition, s.committedLSN); err != nil {
-			return false, fmt.Errorf("acknowledging committed position: %w", err)
+			return InitStatusUnknown, fmt.Errorf("acknowledging committed position: %w", err)
 		}
 
 		if s.consumer != nil {
 			s.consumer.NotifyNewEntries(s.authorityName, s.partitionID, s.localLog.LowWaterMark(), s.committedLSN)
 		}
 	}
-	s.lastTerm = hardState.Term
 
-	return true, nil
+	return status, nil
 }
 
 func (s *Storage) close() error {
@@ -457,25 +534,6 @@ func (s *Storage) readConfState() (raftpb.ConfState, error) {
 	return confState, nil
 }
 
-// readRaftEntry returns the Raft metadata from the given position in the log.
-func (s *Storage) readRaftEntry(lsn storage.LSN) (raftpb.Entry, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	var raftEntry raftpb.Entry
-
-	marshaledBytes, err := os.ReadFile(raftManifestPath(s.localLog.GetEntryPath(lsn)))
-	if err != nil {
-		return raftEntry, err
-	}
-
-	if err := raftEntry.Unmarshal(marshaledBytes); err != nil {
-		return raftEntry, fmt.Errorf("unmarshal term: %w", err)
-	}
-
-	return raftEntry, nil
-}
-
 // draftLogEntry drafts a log entry and inserts it to WAL at a certain position. The caller passes a callback function
 // for setting the content of the log entry.
 func (s *Storage) draftLogEntry(raftEntry raftpb.Entry, callback func(*wal.Entry) error) (returnedErr error) {
@@ -541,6 +599,19 @@ func (s *Storage) insertLogEntry(raftEntry raftpb.Entry, logEntryPath string) er
 		}
 	}
 
+	if err := s.writeRaftEntry(raftEntry, logEntryPath); err != nil {
+		return fmt.Errorf("writing raft manifest: %w", err)
+	}
+
+	if _, err := s.localLog.CompareAndAppendLogEntry(lsn, logEntryPath); err != nil {
+		return fmt.Errorf("inserting log entry to WAL: %w", err)
+	}
+	s.lastTerm = raftEntry.Term
+	return nil
+}
+
+// writeRaftEntry writes the Raft metadata to the given position in the log.
+func (s *Storage) writeRaftEntry(raftEntry raftpb.Entry, logEntryPath string) error {
 	marshaledEntry, err := raftEntry.Marshal()
 	if err != nil {
 		return fmt.Errorf("marshaling raft entry: %w", err)
@@ -557,11 +628,34 @@ func (s *Storage) insertLogEntry(raftEntry raftpb.Entry, logEntryPath string) er
 	if err := safe.NewSyncer().SyncParent(s.ctx, manifestPath); err != nil {
 		return fmt.Errorf("sync raft manifest parent: %w", err)
 	}
-	if _, err = s.localLog.CompareAndAppendLogEntry(lsn, logEntryPath); err != nil {
-		return fmt.Errorf("inserting log entry to WAL: %w", err)
-	}
-	s.lastTerm = raftEntry.Term
+
 	return nil
+}
+
+// readRaftEntry returns the Raft metadata from the given position in the log.
+func (s *Storage) readRaftEntry(lsn storage.LSN) (raftpb.Entry, error) {
+	var raftEntry raftpb.Entry
+
+	marshaledBytes, err := os.ReadFile(raftManifestPath(s.localLog.GetEntryPath(lsn)))
+	if err != nil {
+		return raftEntry, err
+	}
+
+	if err := raftEntry.Unmarshal(marshaledBytes); err != nil {
+		return raftEntry, fmt.Errorf("unmarshal term: %w", err)
+	}
+
+	return raftEntry, nil
+}
+
+func (s *Storage) hasRaftEntry(lsn storage.LSN) (bool, error) {
+	_, err := os.Stat(raftManifestPath(s.localLog.GetEntryPath(lsn)))
+	if err == nil {
+		return true, nil
+	} else if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 func (s *Storage) readLogEntry(lsn storage.LSN) (*gitalypb.LogEntry, error) {
