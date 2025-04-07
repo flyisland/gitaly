@@ -63,6 +63,7 @@ index %[2]s..%[4]s
 			Status:    'A',
 			Collapsed: true,
 			lineCount: 100000,
+			byteCount: 12500000,
 			PatchSize: 12500021,
 		},
 		{
@@ -76,6 +77,7 @@ index %[2]s..%[4]s
 			Collapsed: false,
 			Patch:     []byte("@@ -0,0 +1 @@\n+Lorem ipsum\n"),
 			lineCount: 1,
+			byteCount: 13,
 			PatchSize: 27,
 		},
 	}
@@ -121,6 +123,7 @@ index %[1]s..%[3]s 100644
 			Status:    'M',
 			Collapsed: false,
 			lineCount: 0,
+			byteCount: 0,
 		},
 		{
 			OldMode:   0o100644,
@@ -133,6 +136,7 @@ index %[1]s..%[3]s 100644
 			Collapsed: false,
 			Patch:     []byte("@@ -1 +1,2 @@\n Lorem ipsum\n+Lorem ipsum\n"),
 			lineCount: 2,
+			byteCount: 26,
 			PatchSize: 40,
 		},
 	}
@@ -179,6 +183,7 @@ index %[1]s..%[2]s 100644
 			Collapsed: false,
 			Patch:     []byte("@@ -1 +1,2 @@\n Lorem ipsum\n+Lorem ipsum\n"),
 			lineCount: 2,
+			byteCount: 26,
 			PatchSize: 40,
 		},
 		{
@@ -191,6 +196,7 @@ index %[1]s..%[2]s 100644
 			Status:    'M',
 			Collapsed: false,
 			lineCount: 0,
+			byteCount: 0,
 		},
 	}
 
@@ -241,6 +247,7 @@ index %s..%s
 			Collapsed: false,
 			Patch:     []byte("@@ -0,0 +1,3 @@\n+A\n~\n+B\n+C\n~\n"),
 			lineCount: 5,
+			byteCount: 13,
 			PatchSize: 29,
 		},
 	}
@@ -295,6 +302,7 @@ index %[2]s..%[4]s
 			Status:    'A',
 			Collapsed: false,
 			lineCount: 100000,
+			byteCount: 12500000,
 			TooLarge:  true,
 			PatchSize: 12500021,
 		},
@@ -309,6 +317,7 @@ index %[2]s..%[4]s
 			Collapsed: false,
 			Patch:     []byte("@@ -0,0 +1 @@\n+Lorem ipsum\n"),
 			lineCount: 1,
+			byteCount: 13,
 			PatchSize: 27,
 		},
 	}
@@ -363,6 +372,7 @@ index %[2]s..%[4]s
 			Collapsed: false,
 			Patch:     []byte(bigPatch),
 			lineCount: 1000,
+			byteCount: 124000,
 			TooLarge:  false,
 			PatchSize: 124021,
 		},
@@ -377,6 +387,7 @@ index %[2]s..%[4]s
 			Collapsed: false,
 			Patch:     []byte("@@ -0,0 +1 @@\n+Lorem ipsum\n"),
 			lineCount: 1,
+			byteCount: 13,
 			PatchSize: 27,
 		},
 	}
@@ -430,6 +441,7 @@ index %s..%s
 			Collapsed: false,
 			Patch:     []byte(patch),
 			lineCount: 5,
+			byteCount: 35,
 			PatchSize: 51,
 		},
 		{
@@ -443,6 +455,7 @@ index %s..%s
 			Collapsed: false,
 			Patch:     []byte(patch),
 			lineCount: 5,
+			byteCount: 35,
 			PatchSize: 51,
 		},
 		{
@@ -456,6 +469,7 @@ index %s..%s
 			Collapsed: true,
 			Patch:     nil,
 			lineCount: 5,
+			byteCount: 35,
 			PatchSize: 51,
 		},
 	}
@@ -493,6 +507,7 @@ index %[1]s..%[2]s
 			Collapsed: false,
 			Patch:     []byte(patch),
 			lineCount: 1,
+			byteCount: 100001,
 			PatchSize: 100019,
 		},
 	}

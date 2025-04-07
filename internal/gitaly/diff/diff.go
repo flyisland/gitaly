@@ -24,6 +24,7 @@ type Diff struct {
 	CollectAllPaths bool
 	Status          byte
 	lineCount       int
+	byteCount       int
 	FromID          string
 	ToID            string
 	OldMode         int32
@@ -189,22 +190,30 @@ func (parser *Parser) Parse() bool {
 			return false
 		}
 
+		// If the next diff header is detected, the current patch is complete.
 		if bytes.HasPrefix(line, []byte("diff --git")) {
 			break
-		} else if bytes.HasPrefix(line, []byte("@@")) {
-			parser.consumeChunkLine(false)
-		} else if helper.ByteSliceHasAnyPrefix(line, "---", "+++") && !parser.isParsingChunkLines() {
+		}
+
+		switch {
+		case helper.ByteSliceHasAnyPrefix(line, "---", "+++") && !parser.isParsingChunkLines():
 			if err := discardLine(parser.patchReader); err != nil {
 				parser.err = err
 			}
-		} else if bytes.HasPrefix(line, []byte("~\n")) {
-			parser.consumeChunkLine(true)
-		} else if bytes.HasPrefix(line, []byte("Binary")) {
+		case bytes.HasPrefix(line, []byte("@@")):
+			// Hunk headers do not count towards limits.
+			if err := consumeChunkLine(parser.patchReader, &parser.currentDiff, parser.stopPatchCollection, false); err != nil {
+				parser.err = err
+			}
+		case bytes.HasPrefix(line, []byte("Binary")):
 			parser.currentDiff.Binary = true
-			parser.consumeChunkLine(true)
-		} else if helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\") {
-			parser.consumeChunkLine(true)
-		} else {
+			fallthrough
+		case bytes.HasPrefix(line, []byte("~\n")),
+			helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\"):
+			if err := consumeChunkLine(parser.patchReader, &parser.currentDiff, parser.stopPatchCollection, true); err != nil {
+				parser.err = err
+			}
+		default:
 			if err := discardLine(parser.patchReader); err != nil {
 				parser.err = err
 			}
@@ -214,6 +223,10 @@ func (parser *Parser) Parse() bool {
 			return false
 		}
 	}
+
+	// Update parser line and byte counts.
+	parser.linesProcessed += parser.currentDiff.lineCount
+	parser.bytesProcessed += parser.currentDiff.byteCount
 
 	// PatchSize is needed for clients to determine if patch exceeded the soft or hard limit when patch was pruned.
 	parser.currentDiff.PatchSize = int32(len(parser.currentDiff.Patch))
@@ -451,39 +464,37 @@ func parseRawLine(objectHash git.ObjectHash, line []byte, diff *Diff) error {
 	return nil
 }
 
-func (parser *Parser) consumeChunkLine(updateLineStats bool) {
-	var line []byte
-	var err error
-
+func consumeChunkLine(reader *bufio.Reader, diff *Diff, skipPatch, updateStats bool) error {
 	// The code that follows would be much simpler if we used
 	// bufio.Reader.ReadBytes, but that allocates an intermediate copy of
 	// each line which adds up to a lot of allocations. By using ReadSlice we
 	// can copy bytes into currentDiff.Patch without intermediate
 	// allocations.
-	n := 0
+	var byteCount int
 	for done := false; !done; {
-		line, err = parser.patchReader.ReadSlice('\n')
-		n += len(line)
+		line, err := reader.ReadSlice('\n')
+		byteCount += len(line)
 
 		switch {
-		case err == nil || errors.Is(err, io.EOF):
-			done = true
 		case errors.Is(err, bufio.ErrBufferFull):
 			// long line: keep reading
+		case err != nil && !errors.Is(err, io.EOF):
+			return fmt.Errorf("read chunk line: %w", err)
 		default:
-			parser.err = fmt.Errorf("read chunk line: %w", err)
-			return
+			done = true
 		}
-		if !parser.stopPatchCollection {
-			parser.currentDiff.Patch = append(parser.currentDiff.Patch, line...)
+
+		if !skipPatch {
+			diff.Patch = append(diff.Patch, line...)
 		}
 	}
 
-	if updateLineStats {
-		parser.bytesProcessed += n
-		parser.currentDiff.lineCount++
-		parser.linesProcessed++
+	if updateStats {
+		diff.byteCount += byteCount
+		diff.lineCount++
 	}
+
+	return nil
 }
 
 func discardLine(reader *bufio.Reader) error {
