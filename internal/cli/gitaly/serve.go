@@ -458,6 +458,11 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 				}
 			}
 			node = raftNode
+
+			// Start partition worker synchronously as it is a pre-requisite for Raft.
+			if err := storagemgr.AssignmentWorker(ctx, cfg, node, dbMgr, locator); err != nil {
+				return fmt.Errorf("partition assignment worker: %w", err)
+			}
 		} else {
 			node = nodeMgr
 		}

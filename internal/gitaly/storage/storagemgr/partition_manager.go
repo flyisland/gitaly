@@ -655,6 +655,11 @@ func (sm *StorageManager) GetAssignedPartitionID(relativePath string) (storage.P
 	return sm.partitionAssigner.partitionAssignmentTable.getPartitionID(relativePath)
 }
 
+// MaybeAssignToPartition ensures that the repository at relativePath is assigned to a partition.
+func (sm *StorageManager) MaybeAssignToPartition(ctx context.Context, relativePath string) (storage.PartitionID, error) {
+	return sm.partitionAssigner.getPartitionID(ctx, relativePath, "", false)
+}
+
 // deriveStateDirectory hashes the partition ID and returns the state
 // directory where state related to the partition should be stored.
 func deriveStateDirectory(id storage.PartitionID) string {
