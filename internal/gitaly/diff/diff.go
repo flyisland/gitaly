@@ -196,7 +196,9 @@ func (parser *Parser) Parse() bool {
 		}
 
 		switch {
-		case helper.ByteSliceHasAnyPrefix(line, "---", "+++") && !parser.isParsingChunkLines():
+		case helper.ByteSliceHasAnyPrefix(line, "---", "+++") && len(parser.currentDiff.Patch) == 0:
+			// File headers occur before the first hunk header and therefore before any patch data
+			// has been recorded.
 			if err := discardLine(parser.patchReader); err != nil {
 				parser.err = err
 			}
@@ -503,10 +505,6 @@ func discardLine(reader *bufio.Reader) error {
 		return fmt.Errorf("read line: %w", err)
 	}
 	return nil
-}
-
-func (parser *Parser) isParsingChunkLines() bool {
-	return len(parser.currentDiff.Patch) > 0
 }
 
 // unescape unescapes the escape codes used by 'git diff'
