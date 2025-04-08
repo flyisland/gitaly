@@ -178,52 +178,9 @@ func (parser *Parser) Parse() bool {
 	// We are consuming this patch so it is no longer 'next'
 	parser.nextPatchFromPath = nil
 
-	for currentPatchDone := false; !currentPatchDone || parser.patchReader.Buffered() > 0; {
-		// We cannot use bufio.Scanner because the line may be very long.
-		line, err := parser.patchReader.Peek(10)
-		if errors.Is(err, io.EOF) {
-			// If the last diff has an empty patch (e.g. --ignore-space-change),
-			// patchReader will read EOF, but Parser not finished.
-			currentPatchDone = true
-		} else if err != nil {
-			parser.err = fmt.Errorf("peek diff line: %w", err)
-			return false
-		}
-
-		// If the next diff header is detected, the current patch is complete.
-		if bytes.HasPrefix(line, []byte("diff --git")) {
-			break
-		}
-
-		switch {
-		case helper.ByteSliceHasAnyPrefix(line, "---", "+++") && len(parser.currentDiff.Patch) == 0:
-			// File headers occur before the first hunk header and therefore before any patch data
-			// has been recorded.
-			if err := discardLine(parser.patchReader); err != nil {
-				parser.err = err
-			}
-		case bytes.HasPrefix(line, []byte("@@")):
-			// Hunk headers do not count towards limits.
-			if err := consumeChunkLine(parser.patchReader, &parser.currentDiff, parser.stopPatchCollection, false); err != nil {
-				parser.err = err
-			}
-		case bytes.HasPrefix(line, []byte("Binary")):
-			parser.currentDiff.Binary = true
-			fallthrough
-		case bytes.HasPrefix(line, []byte("~\n")),
-			helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\"):
-			if err := consumeChunkLine(parser.patchReader, &parser.currentDiff, parser.stopPatchCollection, true); err != nil {
-				parser.err = err
-			}
-		default:
-			if err := discardLine(parser.patchReader); err != nil {
-				parser.err = err
-			}
-		}
-
-		if parser.err != nil {
-			return false
-		}
+	if err := readNextDiff(parser.patchReader, &parser.currentDiff, parser.stopPatchCollection); err != nil {
+		parser.err = err
+		return false
 	}
 
 	// Update parser line and byte counts.
@@ -270,6 +227,51 @@ func (parser *Parser) Parse() bool {
 	}
 
 	return true
+}
+
+func readNextDiff(reader *bufio.Reader, diff *Diff, skipPatch bool) error {
+	for currentPatchDone := false; !currentPatchDone || reader.Buffered() > 0; {
+		// We cannot use bufio.Scanner because the line may be very long.
+		line, err := reader.Peek(10)
+		if errors.Is(err, io.EOF) {
+			// If the last diff has an empty patch (e.g. --ignore-space-change),
+			// patchReader will read EOF, but Parser not finished.
+			currentPatchDone = true
+		} else if err != nil {
+			return fmt.Errorf("peek diff line: %w", err)
+		}
+
+		switch {
+		case bytes.HasPrefix(line, []byte("diff --git")):
+			// If the next diff header is detected, the current patch is complete.
+			return nil
+		case helper.ByteSliceHasAnyPrefix(line, "---", "+++") && len(diff.Patch) == 0:
+			// File headers occur before the first hunk header and therefore before any patch data
+			// has been recorded.
+			if err := discardLine(reader); err != nil {
+				return err
+			}
+		case bytes.HasPrefix(line, []byte("@@")):
+			// Hunk headers do not count towards limits.
+			if err := consumeChunkLine(reader, diff, skipPatch, false); err != nil {
+				return err
+			}
+		case bytes.HasPrefix(line, []byte("Binary")):
+			diff.Binary = true
+			fallthrough
+		case bytes.HasPrefix(line, []byte("~\n")),
+			helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\"):
+			if err := consumeChunkLine(reader, diff, skipPatch, true); err != nil {
+				return err
+			}
+		default:
+			if err := discardLine(reader); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // enforceUpperBound ensures every limit value is within its corresponding upperbound
