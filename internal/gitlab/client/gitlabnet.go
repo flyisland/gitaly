@@ -162,8 +162,11 @@ func (c *GitlabNetClient) DoRequest(ctx context.Context, method, path string, da
 		request.Header.Add("X-Forwarded-For", originalRemoteIP)
 	}
 
+	correlationID := correlation.ExtractFromContextOrGenerate(ctx)
+
 	request.Header.Add("Content-Type", "application/json")
 	request.Header.Add("User-Agent", c.userAgent)
+	request.Header.Add("X-Request-ID", correlationID)
 	request.Close = true
 
 	start := time.Now()
@@ -173,7 +176,7 @@ func (c *GitlabNetClient) DoRequest(ctx context.Context, method, path string, da
 		"method":              method,
 		"url":                 request.URL.String(),
 		"duration_ms":         time.Since(start) / time.Millisecond,
-		correlation.FieldName: correlation.ExtractFromContextOrGenerate(ctx),
+		correlation.FieldName: correlationID,
 	})
 
 	if err != nil {
