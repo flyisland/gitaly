@@ -319,8 +319,6 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Enable reftable backend, if env variable set
 	newRepoReftableEnabled := env.GetString("GIT_DEFAULT_REF_FORMAT", "files")
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.NewRepoReftableBackend, newRepoReftableEnabled == "reftable")
-	// Randomly use non-repeating catfile cache keys.
-	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.CatfileCacheNonrepeating, rnd.Int()%2 == 0)
 	// Randomly enable either Git version 2.48 or 2.49.
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.GitV249, rnd.Int()%2 == 0)
 
