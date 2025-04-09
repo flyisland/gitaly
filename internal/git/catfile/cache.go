@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -226,11 +225,8 @@ func (c *ProcessCache) ObjectInfoReader(ctx context.Context, repo gitcmd.Reposit
 
 // Calculate the nearest 5-minute interval. For our cache key, we want to
 // enforce expiry after 5 minutes.
-func roundToNearestFiveMinute(ctx context.Context, t time.Time) int64 {
-	if featureflag.CatfileCacheNonrepeating.IsDisabled(ctx) {
-		return ((int64(t.Minute()) / 5) + 1) * 5
-	}
-	return t.Truncate(5 * time.Minute).Unix()
+func roundToNearestFiveMinute(t time.Time) int {
+	return ((t.Minute() / 5) + 1) * 5
 }
 
 func (c *ProcessCache) getOrCreateProcess(
@@ -245,7 +241,7 @@ func (c *ProcessCache) getOrCreateProcess(
 	span, ctx := tracing.StartSpanIfHasParent(ctx, spanName, nil)
 	defer span.Finish()
 
-	cacheKey, isCacheable := newCacheKey(fmt.Sprintf("%d", roundToNearestFiveMinute(ctx, time.Now())), repo)
+	cacheKey, isCacheable := newCacheKey(fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now())), repo)
 
 	if isCacheable {
 		// We only try to look up cached processes in case it is cacheable, which requires a
