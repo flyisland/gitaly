@@ -133,9 +133,8 @@ func TestServerFactory(t *testing.T) {
 		}
 
 		clientHandshaker := backchannel.NewClientHandshaker(logger, factory, backchannel.DefaultConfiguration())
-		dialOpt := grpc.WithTransportCredentials(clientHandshaker.ClientHandshake(creds))
 
-		cc, err := grpc.Dial(addr, dialOpt)
+		cc, err := client.New(ctx, fmt.Sprintf("tcp://%s", addr), client.WithTransportCredentials(creds), client.WithHandshaker(clientHandshaker))
 		require.NoError(t, err)
 		defer func() { require.NoError(t, cc.Close()) }()
 

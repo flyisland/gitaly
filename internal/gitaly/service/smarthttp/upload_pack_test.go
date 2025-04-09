@@ -35,7 +35,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -717,11 +716,10 @@ func dialSmartHTTPServerWithSidechannel(t *testing.T, serverSocketPath, token st
 
 	clientHandshaker := sidechannel.NewClientHandshaker(testhelper.SharedLogger(t), registry)
 	connOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(clientHandshaker.ClientHandshake(insecure.NewCredentials())),
 		grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(token)),
 	}
 
-	conn, err := grpc.Dial(serverSocketPath, connOpts...)
+	conn, err := client.New(testhelper.Context(t), serverSocketPath, client.WithHandshaker(clientHandshaker), client.WithGrpcOptions(connOpts))
 	require.NoError(t, err)
 
 	return conn

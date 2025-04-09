@@ -18,7 +18,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestMain(m *testing.M) {
@@ -47,10 +46,10 @@ func runSmartHTTPServer(t *testing.T, cfg config.Cfg, opts ...ServerOpt) string 
 func newSmartHTTPClient(t *testing.T, serverSocketPath, token string) gitalypb.SmartHTTPServiceClient {
 	t.Helper()
 
-	conn, err := grpc.Dial(serverSocketPath,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(token)),
-	)
+	conn, err := client.New(testhelper.Context(t), serverSocketPath,
+		client.WithGrpcOptions([]grpc.DialOption{
+			grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(token)),
+		}))
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

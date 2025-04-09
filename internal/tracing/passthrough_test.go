@@ -10,10 +10,10 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 	"github.com/uber/jaeger-client-go"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	grpctracing "gitlab.com/gitlab-org/labkit/tracing/grpc"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/interop/grpc_testing"
 )
 
@@ -272,12 +272,13 @@ func startFakeGitalyServer(t *testing.T, svc *testSvc, spanContext opentracing.S
 	go testhelper.MustServe(t, srv, listener)
 	t.Cleanup(srv.Stop)
 
-	conn, err := grpc.Dial(
-		listener.Addr().String(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(UnaryPassthroughInterceptor(spanContext)),
-		grpc.WithStreamInterceptor(StreamPassthroughInterceptor(spanContext)),
-	)
+	conn, err := client.New(
+		testhelper.Context(t),
+		fmt.Sprintf("tcp://%s", listener.Addr().String()),
+		client.WithGrpcOptions([]grpc.DialOption{
+			grpc.WithUnaryInterceptor(UnaryPassthroughInterceptor(spanContext)),
+			grpc.WithStreamInterceptor(StreamPassthroughInterceptor(spanContext)),
+		}))
 	require.NoError(t, err)
 	t.Cleanup(func() { testhelper.MustClose(t, conn) })
 

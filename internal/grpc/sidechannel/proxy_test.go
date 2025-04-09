@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/listenmux"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -192,7 +193,10 @@ func dialProxy(tb testing.TB, upstreamAddr string) (*grpc.ClientConn, error) {
 		grpc.WithStreamInterceptor(NewStreamProxy(registry, testhelper.SharedLogger(tb))),
 	}
 
-	return grpc.Dial(upstreamAddr, dialOpts...)
+	return client.New(testhelper.Context(tb), fmt.Sprintf("tcp://%s", upstreamAddr),
+		client.WithGrpcOptions(dialOpts),
+		client.WithHandshaker(clientHandshaker),
+	)
 }
 
 func TestStreamProxy(t *testing.T) { testStreamProxy(t, true) }

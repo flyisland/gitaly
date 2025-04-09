@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/credentials"
+	expcredentials "google.golang.org/grpc/experimental/credentials"
 )
 
 // Certificate is a generated certificate.
@@ -103,7 +104,7 @@ func GenerateCertificate(tb testing.TB) Certificate {
 
 // TransportCredentials creates new transport credentials that contain the generated certificates.
 func (c Certificate) TransportCredentials(tb testing.TB) credentials.TransportCredentials {
-	return credentials.NewTLS(c.TLSConfig(tb))
+	return expcredentials.NewTLSWithALPNDisabled(c.TLSConfig(tb))
 }
 
 // TLSConfig returns TLS configuration that contains the certificate.

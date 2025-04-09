@@ -25,6 +25,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mdfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/listenmux"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/proxy"
@@ -1048,7 +1049,7 @@ func TestErrorThreshold(t *testing.T) {
 			go testhelper.MustServe(t, server, listener)
 			defer server.Stop()
 
-			conn, err := dial("unix://"+socket, []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())})
+			conn, err := client.New(ctx, "unix://"+socket)
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, conn)
 			cli := gitalypb.NewRepositoryServiceClient(conn)
@@ -1099,7 +1100,7 @@ func TestErrorThreshold(t *testing.T) {
 func newSmartHTTPClient(t *testing.T, serverSocketPath string) (gitalypb.SmartHTTPServiceClient, *grpc.ClientConn) {
 	t.Helper()
 
-	conn, err := grpc.Dial(serverSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := client.New(testhelper.Context(t), serverSocketPath)
 	require.NoError(t, err)
 	t.Cleanup(func() { testhelper.MustClose(t, conn) })
 

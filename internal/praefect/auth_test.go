@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/auth"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
@@ -20,7 +21,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestAuthFailures(t *testing.T) {
@@ -53,8 +53,7 @@ func TestAuthFailures(t *testing.T) {
 			defer srv.Stop()
 			defer cleanup()
 
-			connOpts := append(tc.opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-			conn, err := dial(serverSocketPath, connOpts)
+			conn, err := client.New(testhelper.Context(t), serverSocketPath, client.WithGrpcOptions(tc.opts))
 			require.NoError(t, err, tc.desc)
 			defer conn.Close()
 
@@ -102,8 +101,7 @@ func TestAuthSuccess(t *testing.T) {
 			defer srv.Stop()
 			defer cleanup()
 
-			connOpts := append(tc.opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-			conn, err := dial(serverSocketPath, connOpts)
+			conn, err := client.New(testhelper.Context(t), serverSocketPath, client.WithGrpcOptions(tc.opts))
 			require.NoError(t, err, tc.desc)
 			defer conn.Close()
 
@@ -121,10 +119,6 @@ type brokenAuth struct{}
 func (brokenAuth) RequireTransportSecurity() bool { return false }
 func (brokenAuth) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
 	return map[string]string{"authorization": "Bearer blablabla"}, nil
-}
-
-func dial(serverSocketPath string, opts []grpc.DialOption) (*grpc.ClientConn, error) {
-	return grpc.Dial(serverSocketPath, opts...)
 }
 
 func runServer(t *testing.T, token string, required bool) (*grpc.Server, string, func()) {

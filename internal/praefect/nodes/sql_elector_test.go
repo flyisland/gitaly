@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/listenmux"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
@@ -44,10 +45,9 @@ func TestGetPrimaryAndSecondaries(t *testing.T) {
 	internalSocket0 := testhelper.GetTemporaryGitalySocketFileName(t)
 	testhelper.NewServerWithHealth(t, internalSocket0)
 
-	cc0, err := grpc.Dial(
-		"unix://"+internalSocket0,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	cc0, err := client.New(
+		testhelper.Context(t),
+		"unix://"+internalSocket0)
 	defer testhelper.MustClose(t, cc0)
 	require.NoError(t, err)
 
@@ -81,10 +81,9 @@ func TestSqlElector_slow_execution(t *testing.T) {
 	gitalySocket := testhelper.GetTemporaryGitalySocketFileName(t)
 	testhelper.NewServerWithHealth(t, gitalySocket)
 
-	gitalyConn, err := grpc.Dial(
-		"unix://"+gitalySocket,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	gitalyConn, err := client.New(
+		testhelper.Context(t),
+		"unix://"+gitalySocket)
 	defer testhelper.MustClose(t, gitalyConn)
 	require.NoError(t, err)
 
@@ -122,19 +121,19 @@ func TestBasicFailover(t *testing.T) {
 	healthSrv0 := testhelper.NewServerWithHealth(t, internalSocket0)
 	healthSrv1 := testhelper.NewServerWithHealth(t, internalSocket1)
 
+	ctx := testhelper.Context(t)
+
 	addr0 := "unix://" + internalSocket0
-	cc0, err := grpc.Dial(
-		addr0,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	cc0, err := client.New(
+		ctx,
+		addr0)
 	defer testhelper.MustClose(t, cc0)
 	require.NoError(t, err)
 
 	addr1 := "unix://" + internalSocket1
-	cc1, err := grpc.Dial(
-		addr1,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	cc1, err := client.New(
+		ctx,
+		addr1)
 	defer testhelper.MustClose(t, cc1)
 
 	require.NoError(t, err)
@@ -146,7 +145,6 @@ func TestBasicFailover(t *testing.T) {
 
 	ns := []*nodeStatus{cs0, cs1}
 	elector := newSQLElector(shardName, conf, db.DB, logger, ns)
-	ctx := testhelper.Context(t)
 	err = elector.checkNodes(ctx)
 	require.NoError(t, err)
 	db.RequireRowsInTable(t, "node_status", 2)

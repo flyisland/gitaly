@@ -15,12 +15,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/repository"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestMain(m *testing.M) {
@@ -51,10 +51,7 @@ func startTestServices(tb testing.TB, cfg config.Cfg, opts ...testserver.GitalyS
 func dial(tb testing.TB, serviceSocketPath string) *grpc.ClientConn {
 	tb.Helper()
 
-	connOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-	conn, err := grpc.Dial(serviceSocketPath, connOpts...)
+	conn, err := client.New(testhelper.Context(tb), serviceSocketPath)
 	require.NoError(tb, err)
 	tb.Cleanup(func() { conn.Close() })
 

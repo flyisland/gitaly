@@ -16,6 +16,7 @@ import (
 	gitalycfg "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -31,7 +32,6 @@ import (
 	"gitlab.com/gitlab-org/labkit/correlation"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
@@ -206,11 +206,12 @@ func TestDefaultReplicator_Replicate(t *testing.T) {
 	newGitalyConn := func(t *testing.T, config gitalycfg.Cfg) *grpc.ClientConn {
 		t.Helper()
 
-		conn, err := grpc.Dial(
+		conn, err := client.New(
+			ctx,
 			config.SocketPath,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(config.Auth.Token)),
-		)
+			client.WithGrpcOptions([]grpc.DialOption{
+				grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(config.Auth.Token)),
+			}))
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -500,10 +501,9 @@ func TestConfirmReplication(t *testing.T) {
 	})
 
 	connOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(cfg.Auth.Token)),
 	}
-	conn, err := grpc.Dial(srvSocketPath, connOpts...)
+	conn, err := client.New(ctx, srvSocketPath, client.WithGrpcOptions(connOpts))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -950,11 +950,12 @@ func TestBackoffFactory(t *testing.T) {
 func newRepositoryClient(t *testing.T, serverSocketPath, token string) gitalypb.RepositoryServiceClient {
 	t.Helper()
 
-	conn, err := grpc.Dial(
+	conn, err := client.New(
+		testhelper.Context(t),
 		serverSocketPath,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(token)),
-	)
+		client.WithGrpcOptions([]grpc.DialOption{
+			grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(token)),
+		}))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
