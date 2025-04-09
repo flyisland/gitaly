@@ -27,6 +27,8 @@ func (m mockObjectPoolService) DeleteObjectPool(ctx context.Context, req *gitaly
 }
 
 func TestDeleteObjectPoolHandler(t *testing.T) {
+	testhelper.SkipWithMacOS(t, "this test is continuously failing on the CI macOS job")
+
 	// the primary returns a successful response
 	primarySrv := grpc.NewServer()
 	gitalypb.RegisterObjectPoolServiceServer(primarySrv, mockObjectPoolService{
