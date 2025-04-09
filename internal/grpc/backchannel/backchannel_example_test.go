@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/listenmux"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -123,20 +124,21 @@ func invokeWithMuxedClient(logger log.Logger, address string) error {
 		}))
 	}, backchannel.DefaultConfiguration())
 
-	return invokeWithOpts(address, grpc.WithTransportCredentials(clientHandshaker.ClientHandshake(insecure.NewCredentials())))
+	return invokeWithOpts(address, client.WithHandshaker(clientHandshaker))
 }
 
 func invokeWithNormalClient(address string) error {
-	return invokeWithOpts(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	return invokeWithOpts(address)
 }
 
-func invokeWithOpts(address string, opts ...grpc.DialOption) error {
-	clientConn, err := grpc.Dial(address, opts...)
+func invokeWithOpts(address string, opts ...client.DialOption) error {
+	ctx := context.Background()
+	clientConn, err := client.New(ctx, fmt.Sprintf("tcp://%s", address), opts...)
 	if err != nil {
 		return fmt.Errorf("dial server: %w", err)
 	}
 
-	if err := clientConn.Invoke(context.Background(), "/Gitaly/Mutator", &gitalypb.UserCreateBranchRequest{}, &gitalypb.UserCreateBranchResponse{}); err != nil {
+	if err := clientConn.Invoke(ctx, "/Gitaly/Mutator", &gitalypb.UserCreateBranchRequest{}, &gitalypb.UserCreateBranchResponse{}); err != nil {
 		return fmt.Errorf("call server: %w", err)
 	}
 

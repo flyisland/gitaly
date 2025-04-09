@@ -17,6 +17,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -24,9 +25,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/voting"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/proto"
 )
@@ -122,7 +121,7 @@ func TestFetchIntoObjectPool_transactional(t *testing.T) {
 
 	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
-	conn, err := grpc.Dial(cfg.SocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := client.New(ctx, cfg.SocketPath)
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, conn)
 
@@ -222,7 +221,7 @@ func TestFetchIntoObjectPool_CollectLogStatistics(t *testing.T) {
 	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("branch"))
 
-	conn, err := grpc.Dial(cfg.SocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := client.New(ctx, cfg.SocketPath)
 	require.NoError(t, err)
 	t.Cleanup(func() { testhelper.MustClose(t, conn) })
 	client := gitalypb.NewObjectPoolServiceClient(conn)

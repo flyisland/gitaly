@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	expcredentials "google.golang.org/grpc/experimental/credentials"
 )
 
 // NewServerFactory returns factory object for initialization of praefect gRPC servers.
@@ -84,7 +85,7 @@ func (s *ServerFactory) Create(secure bool) (*grpc.Server, error) {
 		secureCiphers = append(secureCiphers, cipher.ID)
 	}
 
-	s.secure = append(s.secure, s.createGRPC(credentials.NewTLS(&tls.Config{
+	s.secure = append(s.secure, s.createGRPC(expcredentials.NewTLSWithALPNDisabled(&tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   s.deps.Config.TLS.MinVersion.ProtocolVersion(),
 		CipherSuites: secureCiphers,

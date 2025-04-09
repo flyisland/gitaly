@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/listenmux"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -84,7 +85,7 @@ func TestBackchannel_concurrentRequestsFromMultipleClients(t *testing.T) {
 			defer wg.Done()
 
 			<-start
-			client, err := grpc.Dial(ln.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			client, err := client.New(testhelper.Context(t), fmt.Sprintf("tcp://%s", ln.Addr().String()))
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -114,9 +115,8 @@ func TestBackchannel_concurrentRequestsFromMultipleClients(t *testing.T) {
 			}, DefaultConfiguration())
 
 			<-start
-			client, err := grpc.Dial(ln.Addr().String(),
-				grpc.WithTransportCredentials(clientHandshaker.ClientHandshake(insecure.NewCredentials())),
-			)
+			client, err := client.New(ctx, fmt.Sprintf("tcp://%s", ln.Addr().String()),
+				client.WithHandshaker(clientHandshaker))
 			if !assert.NoError(t, err) {
 				return
 			}

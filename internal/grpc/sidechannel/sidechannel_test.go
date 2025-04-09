@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/listenmux"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"google.golang.org/grpc"
@@ -171,9 +173,8 @@ func startServer(t *testing.T, th testHandler, opts ...grpc.ServerOption) string
 func dial(t *testing.T, addr string) (*grpc.ClientConn, *Registry) {
 	registry := NewRegistry()
 	clientHandshaker := NewClientHandshaker(testhelper.SharedLogger(t), registry)
-	dialOpt := grpc.WithTransportCredentials(clientHandshaker.ClientHandshake(insecure.NewCredentials()))
 
-	conn, err := grpc.Dial(addr, dialOpt)
+	conn, err := client.New(testhelper.Context(t), fmt.Sprintf("tcp://%s", addr), client.WithHandshaker(clientHandshaker))
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.Close() })
 

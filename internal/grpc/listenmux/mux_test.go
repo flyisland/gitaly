@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -65,7 +66,7 @@ func TestMux_normalClientNoMux(t *testing.T) {
 
 	addr := serverWithHandshaker(t, nil)
 
-	cc, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cc, err := client.New(ctx, fmt.Sprintf("tcp://%s", addr))
 	require.NoError(t, err)
 	defer cc.Close()
 
@@ -82,7 +83,7 @@ func TestMux_normalClientMuxIgnored(t *testing.T) {
 		}),
 	)
 
-	cc, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cc, err := client.New(ctx, fmt.Sprintf("tcp://%s", addr))
 	require.NoError(t, err)
 	defer cc.Close()
 
@@ -101,9 +102,7 @@ func TestMux_muxClientPassesThrough(t *testing.T) {
 		}),
 	)
 
-	cc, err := grpc.Dial(
-		"ignored",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	opts := []grpc.DialOption{
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 			c, err := net.Dial("tcp", addr)
 			if err != nil {
@@ -116,6 +115,12 @@ func TestMux_muxClientPassesThrough(t *testing.T) {
 
 			return c, nil
 		}),
+	}
+
+	cc, err := client.New(
+		ctx,
+		fmt.Sprintf("tcp://%s", addr),
+		client.WithGrpcOptions(opts),
 	)
 	require.NoError(t, err)
 	defer cc.Close()
@@ -257,7 +262,7 @@ func TestMux_concurrency(t *testing.T) {
 		go func() {
 			<-start
 			grpcHealthErrors <- func() error {
-				cc, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+				cc, err := client.New(ctx, fmt.Sprintf("tcp://%s", addr))
 				if err != nil {
 					return err
 				}

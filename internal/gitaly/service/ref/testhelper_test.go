@@ -12,13 +12,13 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
 	hookservice "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/repository"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/lines"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestMain(m *testing.M) {
@@ -53,10 +53,7 @@ func runRefServiceServer(tb testing.TB, cfg config.Cfg) string {
 }
 
 func newRefServiceClient(tb testing.TB, serverSocketPath string) (gitalypb.RefServiceClient, *grpc.ClientConn) {
-	connOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-	conn, err := grpc.Dial(serverSocketPath, connOpts...)
+	conn, err := client.New(testhelper.Context(tb), serverSocketPath)
 	require.NoError(tb, err)
 
 	return gitalypb.NewRefServiceClient(conn), conn

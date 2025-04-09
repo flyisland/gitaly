@@ -6,21 +6,20 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/promtest"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func setupElector(t *testing.T) (*localElector, []*nodeStatus, *grpc.ClientConn) {
 	socket := testhelper.GetTemporaryGitalySocketFileName(t)
 	testhelper.NewServerWithHealth(t, socket)
 
-	cc, err := grpc.Dial(
-		"unix://"+socket,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	cc, err := client.New(
+		testhelper.Context(t),
+		"unix://"+socket)
 	t.Cleanup(func() { testhelper.MustClose(t, cc) })
 
 	require.NoError(t, err)
