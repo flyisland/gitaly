@@ -3,9 +3,9 @@ golang 1.23.6
 ruby 3.3.7
 
 # For linting documentation
-nodejs 20.18.0 # Dependency for markdownlint-cli2
-markdownlint-cli2 0.17.1
-vale 3.10.0
+nodejs 22.14.0 # Dependency for markdownlint-cli2
+markdownlint-cli2 0.17.2
+vale 3.11.2
 
 # For building Git
 meson 1.7.0
