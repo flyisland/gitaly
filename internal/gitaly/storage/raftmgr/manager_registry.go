@@ -17,6 +17,8 @@ type ManagerRegistry interface {
 	GetManager(key *gitalypb.PartitionKey) (RaftManager, error)
 	// RegisterManager registers a manager for a given partition key.
 	RegisterManager(key *gitalypb.PartitionKey, manager RaftManager) error
+	// DeregisterManager removes the manager with the given key from the registry.
+	DeregisterManager(key *gitalypb.PartitionKey)
 }
 
 // RaftManagerRegistry is a concrete implementation of the ManagerRegistry interface.
@@ -43,4 +45,9 @@ func (r *raftManagerRegistry) RegisterManager(key *gitalypb.PartitionKey, manage
 		return fmt.Errorf("manager already registered for partition key %+v", key)
 	}
 	return nil
+}
+
+// DeregisterManager removes the manager with the given key from the registry.
+func (r *raftManagerRegistry) DeregisterManager(key *gitalypb.PartitionKey) {
+	r.managers.Delete(partitionKeyToString(key))
 }

@@ -472,6 +472,11 @@ func (mgr *Manager) Close() error {
 	mgr.cancel()
 	mgr.wg.Wait()
 
+	if mgr.raftEnabledStorage != nil {
+		// Mostly for tests; raftEnabledStorage should never be nil in practice.
+		mgr.raftEnabledStorage.DeregisterManager(mgr)
+	}
+
 	return mgr.storage.close()
 }
 

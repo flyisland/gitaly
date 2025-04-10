@@ -48,6 +48,16 @@ func (s *RaftEnabledStorage) RegisterManager(partitionID storage.PartitionID, ma
 	return nil
 }
 
+// DeregisterManager removes a Manager from this RaftEnabledStorage.
+// This should be called when the manager is closing.
+func (s *RaftEnabledStorage) DeregisterManager(manager *Manager) {
+	partitionKey := &gitalypb.PartitionKey{
+		PartitionId:   uint64(manager.ptnID),
+		AuthorityName: manager.authorityName,
+	}
+	s.managerRegistry.DeregisterManager(partitionKey)
+}
+
 // Node adds Raft functionality to each storage
 type Node struct {
 	storages map[string]*RaftEnabledStorage
