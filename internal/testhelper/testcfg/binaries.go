@@ -56,6 +56,11 @@ func BuildGitaly(tb testing.TB, cfg config.Cfg) string {
 	return buildGitalyCommand(tb, cfg, "gitaly")
 }
 
+// BuildGitalyBackup builds the gitaly-backup binary and installs it into the binary directory.
+func BuildGitalyBackup(tb testing.TB, cfg config.Cfg) string {
+	return buildGitalyCommand(tb, cfg, "gitaly-backup")
+}
+
 // buildGitalyCommand builds an executable and places it in the correct directory depending
 // whether it is packed in the production build or not.
 func buildGitalyCommand(tb testing.TB, cfg config.Cfg, executableName string) string {

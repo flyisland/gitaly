@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -15,7 +14,9 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
@@ -86,10 +87,14 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 		}))
 	}
 
-	ctx = testhelper.MergeIncomingMetadata(ctx, testcfg.GitalyServersMetadataFromCfg(t, cfg))
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
 
-	args := []string{
-		progname,
+	ctx, err := storage.InjectGitalyServers(ctx, "default", cfg.SocketPath, cfg.Auth.Token)
+	require.NoError(t, err)
+	t.Setenv("GITALY_SERVERS", metadata.GetValue(metadata.OutgoingToIncoming(ctx), "gitaly-servers"))
+
+	_, stderr, exitCode := runGitalyBackup(t, ctx, cfg, &stdin,
 		"restore",
 		"--path",
 		backupDir,
@@ -101,15 +106,9 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 		"pointer",
 		"--remove-all-repositories",
 		existingRepo.GetStorageName(),
-	}
-	cmd := NewApp()
-	cmd.Reader = &stdin
-	cmd.Writer = io.Discard
-
-	require.True(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
-	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
-
-	require.NoError(t, cmd.RunContext(ctx, args))
+	)
+	require.Empty(t, stderr)
+	require.Zero(t, exitCode)
 
 	require.False(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
 	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
@@ -193,10 +192,14 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 		}))
 	}
 
-	ctx = testhelper.MergeIncomingMetadata(ctx, testcfg.GitalyServersMetadataFromCfg(t, cfg))
+	ctx, err = storage.InjectGitalyServers(ctx, "default", cfg.SocketPath, cfg.Auth.Token)
+	require.NoError(t, err)
+	t.Setenv("GITALY_SERVERS", metadata.GetValue(metadata.OutgoingToIncoming(ctx), "gitaly-servers"))
 
-	args := []string{
-		progname,
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
+	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
+
+	_, stderr, exitCode := runGitalyBackup(t, ctx, cfg, &stdin,
 		"restore",
 		"--parallel",
 		strconv.Itoa(runtime.NumCPU()),
@@ -208,15 +211,9 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 		existingRepo.GetStorageName(),
 		"--server-side",
 		"true",
-	}
-	cmd := NewApp()
-	cmd.Reader = &stdin
-	cmd.Writer = io.Discard
-
-	require.True(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
-	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))
-
-	require.NoError(t, cmd.RunContext(ctx, args))
+	)
+	require.Empty(t, stderr)
+	require.Zero(t, exitCode)
 
 	require.False(t, gittest.RepositoryExists(t, ctx, conn, existingRepo))
 	require.True(t, gittest.RepositoryExists(t, ctx, conn, poolRepo))

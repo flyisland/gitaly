@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,7 +34,7 @@ func TestCreateSubcommand(t *testing.T) {
 			ServerOpts: func(ctx context.Context, backupRoot string) []testserver.GitalyServerOpt {
 				return nil
 			},
-			ExpectedErrMessage: "create: pipeline: 1 failures encountered:\n - invalid: manager: could not dial source: invalid connection string: \"invalid\"\n",
+			ExpectedErrMessage: `create: pipeline: 1 failures encountered:\n - invalid: manager: could not dial source: invalid connection string: \"invalid\"\n`,
 		},
 		{
 			Name: "when a server-side backup is created",
@@ -54,7 +53,7 @@ func TestCreateSubcommand(t *testing.T) {
 					testserver.WithBackupLocator(backupLocator),
 				}
 			},
-			ExpectedErrMessage: "create: pipeline: 1 failures encountered:\n - invalid: server-side create: could not dial source: invalid connection string: \"invalid\"\n",
+			ExpectedErrMessage: `create: pipeline: 1 failures encountered:\n - invalid: server-side create: could not dial source: invalid connection string: \"invalid\"\n`,
 		},
 		{
 			Name: "when a server-side incremental backup is created",
@@ -73,7 +72,7 @@ func TestCreateSubcommand(t *testing.T) {
 					testserver.WithBackupLocator(backupLocator),
 				}
 			},
-			ExpectedErrMessage: "create: pipeline: 1 failures encountered:\n - invalid: server-side create: could not dial source: invalid connection string: \"invalid\"\n",
+			ExpectedErrMessage: `create: pipeline: 1 failures encountered:\n - invalid: server-side create: could not dial source: invalid connection string: \"invalid\"\n`,
 		},
 	}
 
@@ -111,15 +110,13 @@ func TestCreateSubcommand(t *testing.T) {
 				"relative_path": "invalid",
 			}))
 
-			args := append([]string{progname, "create"}, tc.Flags(path)...)
+			args := append([]string{"create"}, tc.Flags(path)...)
 			args = append(args, "--layout", "pointer")
-			cmd := NewApp()
-			cmd.Reader = &stdin
-			cmd.Writer = io.Discard
 
-			require.EqualError(t,
-				cmd.RunContext(ctx, args),
-				tc.ExpectedErrMessage)
+			stdout, stderr, exitCode := runGitalyBackup(t, ctx, cfg, &stdin, args...)
+			require.Empty(t, stderr)
+			require.Contains(t, stdout, tc.ExpectedErrMessage)
+			require.Equal(t, 1, exitCode)
 
 			for _, repo := range repos {
 				bundlePath := filepath.Join(path, strings.TrimSuffix(repo.GetRelativePath(), ".git"), "the-new-backup", "001.bundle")

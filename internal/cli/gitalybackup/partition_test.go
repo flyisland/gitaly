@@ -1,8 +1,8 @@
 package gitalybackup
 
 import (
+	"bytes"
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,7 +42,7 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 				}
 			},
 			envSetup:           func(ctx context.Context, cfg config.Cfg) {},
-			expectedErrMessage: "extract gitaly servers: empty gitaly-servers metadata",
+			expectedErrMessage: "extract gitaly servers: empty metadata",
 		},
 		{
 			name: "when gitaly server is empty",
@@ -57,7 +57,7 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 			envSetup: func(ctx context.Context, cfg config.Cfg) {
 				t.Setenv("GITALY_SERVERS", "")
 			},
-			expectedErrMessage: "extract gitaly servers: empty gitaly-servers metadata",
+			expectedErrMessage: "extract gitaly servers: empty metadata",
 		},
 		{
 			name: "when gitaly server is correctly configured",
@@ -92,23 +92,22 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 				SkipSnapshotInvalidation: true,
 			})
 
-			cmd := NewApp()
-			cmd.Writer = io.Discard
-
-			args := append([]string{progname, "partition"}, "create")
-			args = append(args, "--parallel", "2")
-			err := cmd.RunContext(ctx, args)
+			stdout, stderr, exitCode := runGitalyBackup(t, ctx, cfg, bytes.NewReader(nil),
+				"partition", "create", "--parallel", "2",
+			)
+			require.Empty(t, stderr)
 
 			// The test relies on the interceptor being configured in the test server. If WAL is not enabled, the interceptor won't be configured,
 			// and as a result the transaction won't be initialized.
-			if !testhelper.IsWALEnabled() && tc.expectedErrMessage != "extract gitaly servers: empty gitaly-servers metadata" {
+			if !testhelper.IsWALEnabled() && tc.expectedErrMessage != "extract gitaly servers: empty metadata" {
 				tc.expectedErrMessage = "partition create: list partitions: rpc error: code = Internal desc = transactions not enabled"
 			}
 			if tc.expectedErrMessage != "" {
-				require.EqualError(t, err, tc.expectedErrMessage)
+				require.Contains(t, stdout, tc.expectedErrMessage)
+				require.Equal(t, 1, exitCode)
 				return
 			}
-			require.NoError(t, err)
+			require.Zero(t, exitCode)
 
 			testhelper.SkipWithRaft(t, `The test asserts the existence of backup files based on the latest
 				LSN. When Raft is not enabled, the LSN is not static. The test should fetch the latest
