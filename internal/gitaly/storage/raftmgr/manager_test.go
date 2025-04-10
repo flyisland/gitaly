@@ -24,6 +24,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3/raftpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func raftConfigsForTest(t *testing.T) config.Raft {
@@ -1700,4 +1701,75 @@ func TestManager_StorageConnection(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, managerTwo)
 	})
+}
+
+func TestManager_ProcessConfChange(t *testing.T) {
+	t.Parallel()
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+	raftCfg := raftConfigsForTest(t)
+
+	partitionID := storage.PartitionID(1)
+	storageName := cfg.Storages[0].Name
+
+	metrics := NewMetrics()
+
+	manager, err := createRaftManager(t, ctx, raftCfg, partitionID, metrics)
+	require.NoError(t, err)
+
+	t.Cleanup(func() { require.NoError(t, manager.Close()) })
+
+	err = manager.Initialize(ctx, 0)
+	require.NoError(t, err)
+
+	raftEnabledStorage := manager.raftEnabledStorage
+	require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
+
+	routingTable := raftEnabledStorage.GetRoutingTable()
+
+	partitionKey := &gitalypb.PartitionKey{
+		AuthorityName: storageName,
+		PartitionId:   uint64(partitionID),
+	}
+
+	addNodeID := uint64(2) // Avoid conflict with bootstrap node
+	addNodeAddress := "gitaly-node-2:8075"
+
+	marshaledAddress, err := proto.Marshal(&gitalypb.ReplicaID_Metadata{
+		Address: addNodeAddress,
+	})
+	require.NoError(t, err, "failed to marshal node address")
+
+	confChangeAddV1 := raftpb.ConfChange{
+		Type:    raftpb.ConfChangeAddNode,
+		NodeID:  addNodeID,
+		Context: marshaledAddress,
+	}
+
+	err = manager.node.ProposeConfChange(ctx, confChangeAddV1)
+	require.NoError(t, err, "proposing add node config change failed")
+
+	require.Eventually(t, func() bool {
+		entry, err := routingTable.GetEntry(partitionKey)
+		if err != nil {
+			return false
+		}
+		replica := entry.Replicas[1]
+
+		return replica.GetNodeId() == addNodeID &&
+			replica.GetMetadata().GetAddress() == addNodeAddress
+	}, 5*time.Second, 100*time.Millisecond, "routing table did not update after adding node")
+
+	// Verify persisted ConfState
+	_, confState, err := manager.storage.InitialState()
+	require.NoError(t, err)
+	require.Contains(t, confState.Voters, addNodeID, "persisted conf state should contain added node")
+	require.Len(t, confState.Voters, 2, "persisted conf state should have 2 nodes (bootstrap + added)")
+
+	routingTableEntry, err := routingTable.GetEntry(partitionKey)
+	require.NoError(t, err)
+
+	require.Equal(t, routingTableEntry.LeaderID, uint64(1), "leader ID should be 1")
+	require.Equal(t, routingTableEntry.Replicas[0].GetNodeId(), uint64(1), "bootstrap node should be recorded")
+	require.Len(t, routingTableEntry.Replicas, 2, "routing table entry should have 2 replicas (bootstrap + added)")
 }

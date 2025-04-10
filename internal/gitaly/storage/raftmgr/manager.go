@@ -782,6 +782,21 @@ func (mgr *Manager) processConfChange(entry raftpb.Entry) error {
 		return fmt.Errorf("saving config state: %w", err)
 	}
 
+	partitionKey := &gitalypb.PartitionKey{
+		AuthorityName: mgr.authorityName,
+		PartitionId:   uint64(mgr.ptnID),
+	}
+
+	routingTable := mgr.raftEnabledStorage.GetRoutingTable()
+	if routingTable == nil {
+		return fmt.Errorf("routing table not found")
+	}
+
+	err := routingTable.ApplyConfChange(entry.Term, entry.Index, mgr.leadership.GetLeaderID(), partitionKey, cc)
+	if err != nil {
+		return fmt.Errorf("applying conf change: %w", err)
+	}
+
 	// Signal readiness after first config change. Applies only to new clusters that have not been bootstrapped. Not
 	// needed for subsequent restarts
 	mgr.signalReady()
@@ -794,7 +809,7 @@ func (mgr *Manager) sendMessages(rd *raft.Ready) error {
 	if len(rd.Messages) > 0 {
 		// This code path will be properly implemented when network communication is added
 		// See https://gitlab.com/gitlab-org/gitaly/-/issues/6304
-		return fmt.Errorf("networking for raft cluster is not implemented yet")
+		mgr.logger.Error("networking for raft cluster is not implemented yet")
 	}
 	return nil
 }
