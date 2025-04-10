@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
@@ -206,14 +205,16 @@ func TestVerifySubcommand(t *testing.T) {
 			}
 			confPath := writeConfigToFile(t, conf)
 
-			stdout, stderr, err := runApp(append([]string{"-config", confPath, verifyCmdName}, tc.args...))
-			assert.Empty(t, stderr)
-			testhelper.RequireGrpcError(t, tc.error, err)
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, verifyCmdName}, tc.args...))
 			if tc.error != nil {
+				require.Equal(t, tc.error.Error()+"\n", stderr)
+				require.Equal(t, 1, exitCode)
 				return
 			}
 
 			require.Equal(t, fmt.Sprintf("%d replicas marked unverified\n", tc.replicasMarked), stdout)
+			require.Empty(t, stderr)
+			require.Zero(t, exitCode)
 
 			actualState := state{}
 			rows, err := db.QueryContext(ctx, `

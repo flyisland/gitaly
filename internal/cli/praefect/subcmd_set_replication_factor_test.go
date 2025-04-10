@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect"
@@ -114,12 +113,16 @@ func TestSetReplicationFactorSubcommand(t *testing.T) {
 			}
 
 			confPath := writeConfigToFile(t, conf)
-			stdout, stderr, err := runApp(append([]string{"-config", confPath, setReplicationFactorCmdName}, tc.args...))
-			assert.Empty(t, stderr)
-			testhelper.RequireGrpcError(t, tc.error, err)
-			if tc.stdout != "" {
-				require.Equal(t, tc.stdout, stdout)
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, setReplicationFactorCmdName}, tc.args...))
+			if tc.error != nil {
+				require.Equal(t, tc.error.Error()+"\n", stderr)
+				require.Equal(t, 1, exitCode)
+				return
 			}
+
+			require.Equal(t, tc.stdout, stdout)
+			require.Empty(t, stderr)
+			require.Zero(t, exitCode)
 		})
 	}
 }

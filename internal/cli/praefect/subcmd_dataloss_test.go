@@ -3,7 +3,6 @@ package praefect
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
@@ -83,12 +82,14 @@ func TestDatalossSubcommand(t *testing.T) {
 		virtualStorages []*config.VirtualStorage
 		output          string
 		error           error
+		exitCode        int
 	}{
 		{
 			desc:            "positional arguments",
 			args:            []string{"-virtual-storage=virtual-storage-1", "positional-arg"},
 			virtualStorages: []*config.VirtualStorage{{Name: "virtual-storage", Nodes: []*config.Node{{Storage: "s", Address: "a"}}}},
 			error:           cli.Exit(unexpectedPositionalArgsError{Command: "dataloss"}, 1),
+			exitCode:        1,
 		},
 		{
 			desc:            "data loss with unavailable repositories",
@@ -178,12 +179,15 @@ Virtual storage: virtual-storage-2
 			cfg.VirtualStorages = tc.virtualStorages
 			confPath := writeConfigToFile(t, cfg)
 
-			stdout, stderr, err := runApp(append([]string{"-config", confPath, "dataloss"}, tc.args...))
-			require.Equal(t, tc.error, err, err)
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, "dataloss"}, tc.args...))
 			if tc.error == nil {
 				require.Equal(t, tc.output, stdout)
+				require.Zero(t, exitCode)
+				return
 			}
-			assert.Empty(t, stderr)
+
+			require.Equal(t, tc.error.Error()+"\n", stderr)
+			require.Equal(t, tc.exitCode, exitCode)
 		})
 	}
 }

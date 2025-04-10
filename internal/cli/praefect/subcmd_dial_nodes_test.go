@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
@@ -57,7 +57,7 @@ func TestSubCmdDialNodes(t *testing.T) {
 		{
 			name:   "positional arguments",
 			args:   []string{"positional-arg"},
-			errMsg: cli.Exit(unexpectedPositionalArgsError{Command: "dial-nodes"}, 1).Error(),
+			errMsg: cli.Exit(unexpectedPositionalArgsError{Command: "dial-nodes"}, 1).Error() + "\n",
 		},
 		{
 			name: "2 virtuals, 2 storages, 1 node",
@@ -128,22 +128,25 @@ func TestSubCmdDialNodes(t *testing.T) {
 			},
 			resp:   nil,
 			logs:   "",
-			errMsg: "the following nodes are not healthy: unix:///unreachable/socket",
+			errMsg: "the following nodes are not healthy: unix:///unreachable/socket\n",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := testhelper.Context(t)
+
 			resp = tt.resp
 			confPath := writeConfigToFile(t, tt.conf)
 
-			stdout, stderr, err := runApp(append([]string{"-config", confPath, "dial-nodes", "-timeout", time.Second.String()}, tt.args...))
-			assert.Empty(t, stderr)
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, "dial-nodes", "-timeout", time.Second.String()}, tt.args...))
 			if tt.errMsg == "" {
-				require.NoError(t, err)
+				require.Empty(t, stderr)
 				require.Equal(t, tt.logs, stdout)
+				require.Zero(t, exitCode)
 				return
 			}
 
-			require.Equal(t, tt.errMsg, err.Error())
+			require.Equal(t, stderr, tt.errMsg)
+			require.Equal(t, 1, exitCode)
 		})
 	}
 }

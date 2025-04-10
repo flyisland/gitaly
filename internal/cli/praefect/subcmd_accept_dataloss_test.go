@@ -59,12 +59,13 @@ func TestAcceptDatalossSubcommand(t *testing.T) {
 	conf.SocketPath = ln.Addr().String()
 	confPath := writeConfigToFile(t, conf)
 
-	type errorMatcher func(t *testing.T, err error)
+	type errorMatcher func(t *testing.T, stderr string, exitCode int)
 
 	matchErrorMsg := func(expected string) errorMatcher {
-		return func(t *testing.T, actual error) {
+		return func(t *testing.T, actual string, exitCode int) {
 			t.Helper()
-			require.EqualError(t, actual, expected)
+			require.Equal(t, expected+"\n", actual)
+			require.Equal(t, 1, exitCode)
 		}
 	}
 
@@ -97,9 +98,10 @@ func TestAcceptDatalossSubcommand(t *testing.T) {
 		{
 			desc: "positional arguments",
 			args: []string{"-virtual-storage", "test-virtual-storage-1", "-relative-path", "test-repository-1", "-authoritative-storage", "test-physical-storage-2", "positional-arg"},
-			matchError: func(t *testing.T, actual error) {
+			matchError: func(t *testing.T, stderr string, exitCode int) {
 				t.Helper()
-				require.Equal(t, unexpectedPositionalArgsError{Command: "accept-dataloss"}, actual)
+				require.Equal(t, unexpectedPositionalArgsError{Command: "accept-dataloss"}.Error()+"\n", stderr)
+				require.Equal(t, 1, exitCode)
 			},
 			expectedGenerations: startingGenerations,
 		},
@@ -124,16 +126,17 @@ func TestAcceptDatalossSubcommand(t *testing.T) {
 		{
 			desc: "success",
 			args: []string{"-virtual-storage", "test-virtual-storage-1", "-relative-path", "test-repository-1", "-authoritative-storage", "test-physical-storage-2"},
-			matchError: func(t *testing.T, actual error) {
+			matchError: func(t *testing.T, actual string, exitCode int) {
 				t.Helper()
-				require.NoError(t, actual)
+				require.Empty(t, actual)
+				require.Zero(t, exitCode)
 			},
 			expectedGenerations: map[string]int{st1: 1, st2: 2, st3: datastore.GenerationUnknown},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			_, _, err := runApp(append([]string{"-config", confPath, "accept-dataloss"}, tc.args...))
-			tc.matchError(t, err)
+			_, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, "accept-dataloss"}, tc.args...))
+			tc.matchError(t, stderr, exitCode)
 
 			for storage, expected := range tc.expectedGenerations {
 				actual, err := rs.GetGeneration(ctx, 1, storage)
