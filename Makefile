@@ -93,7 +93,7 @@ ifdef FIPS_MODE
 endif
 
 # protoc target
-PROTOC_VERSION      ?= v23.1
+PROTOC_VERSION      ?= v30.2
 PROTOC_REPO_URL     ?= https://github.com/protocolbuffers/protobuf
 PROTOC_SOURCE_DIR   ?= ${DEPENDENCY_DIR}/protobuf/source
 PROTOC_BUILD_DIR    ?= ${DEPENDENCY_DIR}/protobuf/build
@@ -105,7 +105,7 @@ ifeq ($(origin PROTOC_BUILD_OPTIONS),undefined)
     PROTOC_BUILD_OPTIONS += -DBUILD_SHARED_LIBS=NO
     PROTOC_BUILD_OPTIONS += -DCMAKE_INSTALL_PREFIX=${PROTOC_INSTALL_DIR}
     PROTOC_BUILD_OPTIONS += -Dprotobuf_BUILD_TESTS=OFF
-    PROTOC_BUILD_OPTIONS += -DCMAKE_CXX_STANDARD=14
+    PROTOC_BUILD_OPTIONS += -DCMAKE_CXX_STANDARD=17
 endif
 
 # This target is a part of the pipeline because some of Gitaly's protobufs consist of etcd's raftpb.
