@@ -24,6 +24,27 @@ func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.D
 		return err
 	}
 
+	var cmdOpts []gitcmd.Option
+
+	switch request.GetWhitespaceChanges() {
+	case gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE_ALL:
+		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--ignore-all-space"})
+	case gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE:
+		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--ignore-space-change"})
+	}
+
+	if request.GetDiffMode() == gitalypb.DiffBlobsRequest_DIFF_MODE_WORD {
+		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--word-diff=porcelain"})
+	}
+
+	return s.diffBlobs(ctx, request, stream, cmdOpts)
+}
+
+func (s *server) diffBlobs(ctx context.Context,
+	request *gitalypb.DiffBlobsRequest,
+	stream gitalypb.DiffService_DiffBlobsServer,
+	cmdOpts []gitcmd.Option,
+) error {
 	// Unfortunately, git-diff(1) does not support generating a blob diff using a null OID as an
 	// input argument. When a blob is added/deleted, there is no pre-image/post-image respectively.
 	// To generate diffs for additions and deletions, the empty blob ID is used as either the left
@@ -49,19 +70,6 @@ func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.D
 	blobInfoPairs, err := s.blobInfoPairs(ctx, repo, objectHash, request.GetBlobPairs())
 	if err != nil {
 		return err
-	}
-
-	var cmdOpts []gitcmd.Option
-
-	switch request.GetWhitespaceChanges() {
-	case gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE_ALL:
-		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--ignore-all-space"})
-	case gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE:
-		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--ignore-space-change"})
-	}
-
-	if request.GetDiffMode() == gitalypb.DiffBlobsRequest_DIFF_MODE_WORD {
-		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--word-diff=porcelain"})
 	}
 
 	var limits diff.Limits
