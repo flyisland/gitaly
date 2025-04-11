@@ -132,6 +132,44 @@ require github.com/stretchr/testify v1.7.0
 			expectedError: "",
 			expectedCode:  0,
 		},
+		{
+			name: "no mismatch in replace directive",
+			goModContent: `module test
+
+go 1.19
+
+// +gitaly pinVersion github.com/stretchr/testify v1.8.1
+// Because that's how it is
+replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.1
+`,
+			expectedOutput: "",
+			expectedCode:   0,
+		},
+		{
+			name: "mismatch in replace directive",
+			goModContent: `module test
+
+go 1.19
+
+// +gitaly pinVersion github.com/stretchr/testify v1.8.1
+// Because that's how it is
+replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.2
+`,
+			expectedOutput: `
+❌ VERSION PINNING VALIDATION FAILED
+   1 dependencies violate version pinning requirements:
+
+[1/1] Module: github.com/stretchr/testify
+   ✓ Expected version: v1.8.1
+   ✗ Current version:  v1.8.2
+
+   Reason:
+   Because that's how it is
+
+   To resolve: Update dependency in go.mod to version v1.8.1
+`,
+			expectedCode: 1,
+		},
 	}
 
 	for _, tc := range testCases {

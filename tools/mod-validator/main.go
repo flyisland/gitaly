@@ -103,7 +103,8 @@ func runValidator(cfg config, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	// Parse the go.mod file
-	f, err := modfile.ParseLax(cfg.modFilePath, data, nil)
+
+	f, err := modfile.Parse(cfg.modFilePath, data, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to parse go.mod file %s: %v", cfg.modFilePath, err)
 		return 1
@@ -134,17 +135,17 @@ func runValidator(cfg config, stdout io.Writer, stderr io.Writer) int {
 func extractGitalyDirectives(f *modfile.File) ([]pinnedDependency, error) {
 	var dependencies []pinnedDependency
 
-	for _, require := range f.Require {
-		comments := require.Syntax.Before
+	analyseDependencies := func(syntax *modfile.Line, mod module.Version) error {
+		comments := syntax.Before
 		if len(comments) == 0 {
-			continue
+			return nil
 		}
 
 		// Extract and validate the directive
 		directive := strings.TrimSpace(strings.TrimPrefix(comments[0].Token, "//"))
 		matches := pinVersionDirective.FindStringSubmatch(directive)
 		if len(matches) != 3 {
-			continue
+			return nil
 		}
 
 		// Parse pinned module information
@@ -154,16 +155,16 @@ func extractGitalyDirectives(f *modfile.File) ([]pinnedDependency, error) {
 		}
 
 		// Verify module path matches
-		if require.Mod.Path != pinned.Path {
-			return nil, fmt.Errorf(
+		if mod.Path != pinned.Path {
+			return fmt.Errorf(
 				"mismatched pinned dependency path: expected %s, found %s",
-				require.Mod.Path,
+				mod.Path,
 				pinned.Path,
 			)
 		}
 
 		// Check if version matches pinning directive
-		if require.Mod.Version != pinned.Version {
+		if mod.Version != pinned.Version {
 			// Extract reason from comments (if any)
 			var reason []string
 			for i := 1; i < len(comments); i++ {
@@ -173,11 +174,24 @@ func extractGitalyDirectives(f *modfile.File) ([]pinnedDependency, error) {
 
 			// Add to list of mismatched dependencies
 			dependencies = append(dependencies, pinnedDependency{
-				path:   require.Mod.Path,
-				found:  require.Mod.Version,
+				path:   mod.Path,
+				found:  mod.Version,
 				pinned: pinned.Version,
 				reason: strings.Join(reason, "\n"),
 			})
+		}
+		return nil
+	}
+
+	for _, require := range f.Require {
+		if err := analyseDependencies(require.Syntax, require.Mod); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, replace := range f.Replace {
+		if err := analyseDependencies(replace.Syntax, replace.New); err != nil {
+			return nil, err
 		}
 	}
 
