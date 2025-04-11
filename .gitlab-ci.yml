@@ -223,12 +223,14 @@ build:
     - chown -R ${TEST_UID}:${TEST_UID} _build
     - setpriv --reuid=${TEST_UID} --regid=${TEST_UID} --clear-groups --no-new-privs env HOME=/tmp/home make build $(test "${GIT_VERSION}" = default && echo build-bundled-git || echo build-git)
     - go run ./tools/test-boot ${TEST_BOOT_ARGS}
+    - go run ./tools/binary-size-checker ${BINARY_SIZE_CHECKER_ARGS}
   parallel:
     matrix:
       - GO_VERSION: !reference [.versions, go_supported]
         TEST_BOOT_ARGS: "--bundled-git"
+        BINARY_SIZE_CHECKER_ARGS: "--binary-size-threshold 350"
       - GIT_VERSION: !reference [.versions, git_minimum]
-
+        BINARY_SIZE_CHECKER_ARGS: "--binary-size-threshold 350"
 build:binaries:
   needs: []
   stage: build
