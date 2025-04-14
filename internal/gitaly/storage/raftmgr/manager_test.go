@@ -1765,9 +1765,8 @@ func TestManager_StorageConnection(t *testing.T) {
 
 	t.Run("multiple managers for same partition key", func(t *testing.T) {
 		duplicateManager, err := wrappedFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "manager already registered for partition key")
-		require.Nil(t, duplicateManager)
+		require.NoError(t, err)
+		require.NotNil(t, duplicateManager)
 	})
 
 	t.Run("Register different managers for different partition keys", func(t *testing.T) {

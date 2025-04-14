@@ -60,8 +60,7 @@ func TestServer_SendMessage(t *testing.T) {
 		AuthorityName: authorityName,
 		PartitionId:   1,
 	}
-	err = registry.RegisterManager(partitionKey, raftMgr)
-	require.NoError(t, err)
+	registry.RegisterManager(partitionKey, raftMgr)
 
 	// Register storage two
 	storageTwo, err := mockNode.GetStorage(storageNameTwo)
@@ -69,8 +68,7 @@ func TestServer_SendMessage(t *testing.T) {
 
 	registryTwo := storageTwo.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
 	raftMgrTwo := &mockRaftManager{}
-	err = registryTwo.RegisterManager(partitionKey, raftMgrTwo)
-	require.NoError(t, err)
+	registryTwo.RegisterManager(partitionKey, raftMgrTwo)
 
 	client := runRaftServer(t, ctx, cfg, mockNode)
 

@@ -300,7 +300,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		}
 
 		// Register the manager with the registry
-		require.NoError(t, registries[i].RegisterManager(partitionKey, manager))
+		registries[i].RegisterManager(partitionKey, manager)
 
 		nodeID := uint64(i + 1)
 		if i == 0 {
