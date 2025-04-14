@@ -56,9 +56,6 @@ func (f Factory) New(
 	var logManager storage.LogManager
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
-		if factory == nil {
-			factory = raftmgr.DefaultFactory(f.raftCfg)
-		}
 
 		raftStorage, err := raftmgr.NewStorage(
 			storageName,

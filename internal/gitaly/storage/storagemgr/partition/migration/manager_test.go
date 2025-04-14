@@ -18,9 +18,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"google.golang.org/grpc/metadata"
@@ -154,12 +157,17 @@ func TestMigrationManager_Begin(t *testing.T) {
 
 			testPartitionID := storage.PartitionID(1)
 			logger := testhelper.NewLogger(t)
-			database, err := keyvalue.NewBadgerStore(testhelper.SharedLogger(t), t.TempDir())
-			require.NoError(t, err)
-			defer testhelper.MustClose(t, database)
 
 			storageName := cfg.Storages[0].Name
 			storagePath := cfg.Storages[0].Path
+
+			dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
+			require.NoError(t, err)
+			defer dbMgr.Close()
+
+			database, err := dbMgr.GetDB(storageName)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, database)
 
 			stateDir := filepath.Join(storagePath, "state")
 			require.NoError(t, os.MkdirAll(stateDir, mode.Directory))
@@ -174,8 +182,12 @@ func TestMigrationManager_Begin(t *testing.T) {
 			repositoryFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, cache)
 
 			m := partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))
+			raftNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+			require.NoError(t, err)
 
-			factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil, cfg.Raft, nil)
+			raftFactory := raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
+
+			factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil, cfg.Raft, raftFactory)
 			tm := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
 
 			ctx, cancel := context.WithCancel(ctx)

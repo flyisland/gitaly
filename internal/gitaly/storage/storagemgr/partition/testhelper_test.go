@@ -9,13 +9,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -38,10 +38,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
-	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
+	logrus "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/offloading"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -677,15 +679,18 @@ func RequireDatabase(tb testing.TB, ctx context.Context, database keyvalue.Trans
 				continue
 			}
 
-			// Unmarshal the actual value to the same type as the expected value.
-			actualValue := reflect.New(reflect.TypeOf(expectedValue).Elem()).Interface().(proto.Message)
-			require.NoErrorf(tb, proto.Unmarshal(value, actualValue), "unmarshalling value in db: %q", key)
-
 			if _, isAny := expectedValue.(*anypb.Any); isAny {
 				// Verify if the database contains the key, but the content does not matter.
 				actualState[string(key)] = expectedValue
 				continue
 			}
+
+			// Unmarshal the actual value to the same type as the expected value.
+			actualValue := proto.Clone(expectedValue.(proto.Message))
+			proto.Reset(actualValue)
+
+			require.NoErrorf(tb, proto.Unmarshal(value, actualValue), "unmarshalling value in db: %q", key)
+
 			actualState[string(key)] = actualValue
 		}
 
@@ -1141,7 +1146,19 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 	repoPath, err := repo.Path(ctx)
 	require.NoError(t, err)
 
-	database, err := keyvalue.NewBadgerStore(testhelper.SharedLogger(t), t.TempDir())
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		setup.Config.Storages,
+		func(log logrus.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(log, filepath.Join(testhelper.TempDir(t), path))
+		},
+		helper.NewTimerTickerFactory(time.Minute),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	database, err := dbMgr.GetDB(storageName)
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, database)
 
@@ -1166,9 +1183,10 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		setup.Config.Raft.RTTMilliseconds = 100
 		setup.Config.Raft.SnapshotDir = testhelper.TempDir(t)
 
-		raftFactory = func(storageName string, partitionID storage.PartitionID, raftStorage *raftmgr.Storage, logger logging.Logger, metrics *raftmgr.Metrics) (*raftmgr.Manager, error) {
-			return raftmgr.NewManager(storageName, partitionID, setup.Config.Raft, raftStorage, logger, metrics, raftmgr.WithEntryRecorder(raftEntryRecorder))
-		}
+		raftNode, err := raftmgr.NewNode(setup.Config, logger, dbMgr, nil)
+		require.NoError(t, err)
+
+		raftFactory = raftmgr.DefaultFactoryWithNode(setup.Config.Raft, raftNode, raftmgr.WithEntryRecorder(raftEntryRecorder))
 	}
 
 	var (
@@ -1227,6 +1245,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
 			transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
+
 			transactionManager.sink = step.Sink
 
 			installHooks(transactionManager, &inflightTransactions, step.Hooks, raftEntryRecorder)
@@ -1654,6 +1673,10 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		// Those are raft-specific keys. They should not be a concern of TransactionManager tests.
 		for _, key := range raftmgr.RaftDBKeys {
 			tc.expectedState.Database[string(key)] = &anypb.Any{}
+		}
+		peerKey := fmt.Sprintf("p/1/raft/%s/%d", storageName, setup.PartitionID)
+		if _, ok := tc.expectedState.Database[peerKey]; !ok {
+			tc.expectedState.Database[peerKey] = &anypb.Any{}
 		}
 	}
 	RequireDatabase(t, ctx, database, tc.expectedState.Database)

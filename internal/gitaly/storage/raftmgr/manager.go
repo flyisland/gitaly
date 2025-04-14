@@ -173,7 +173,7 @@ type RaftManagerFactory func(
 ) (*Manager, error)
 
 // DefaultFactoryWithNode enhances the factory to connect newly created managers with raft-enabled storage
-func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node) RaftManagerFactory {
+func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionFunc) RaftManagerFactory {
 	return func(
 		storageName string,
 		partitionID storage.PartitionID,
@@ -191,7 +191,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node) RaftManagerFact
 			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
 
-		manager, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics)
+		manager, err := NewManager(storageName, partitionID, raftCfg, raftStorage, raftEnabledStorage, logger, metrics, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("create manager %q: %w", storageName, err)
 		}
@@ -201,22 +201,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node) RaftManagerFact
 				partitionID, storageName, err)
 		}
 
-		manager.raftEnabledStorage = raftEnabledStorage
-
 		return manager, nil
-	}
-}
-
-// DefaultFactory returns a RaftManagerFactory that returns a manager from input raft config
-func DefaultFactory(raftCfg config.Raft) RaftManagerFactory {
-	return func(
-		storageName string,
-		partitionID storage.PartitionID,
-		raftStorage *Storage,
-		logger logging.Logger,
-		metrics *Metrics,
-	) (*Manager, error) {
-		return NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics)
 	}
 }
 
@@ -226,6 +211,7 @@ func NewManager(
 	partitionID storage.PartitionID,
 	raftCfg config.Raft,
 	raftStorage *Storage,
+	raftEnabledStorage *RaftEnabledStorage,
 	logger logging.Logger,
 	metrics *Metrics,
 	opts ...OptionFunc,
@@ -248,20 +234,21 @@ func NewManager(
 	scopedMetrics := metrics.Scope(authorityName)
 
 	return &Manager{
-		authorityName: authorityName,
-		ptnID:         partitionID,
-		raftCfg:       raftCfg,
-		options:       options,
-		storage:       raftStorage,
-		logger:        logger,
-		registry:      NewRegistry(scopedMetrics),
-		syncer:        safe.NewSyncer(),
-		leadership:    NewLeadership(),
-		ready:         &ready{c: make(chan error, 1)},
-		notifyQueue:   make(chan error, 1),
-		EntryRecorder: options.entryRecorder,
-		metrics:       scopedMetrics,
-		hooks:         noopHooks(),
+		authorityName:      authorityName,
+		ptnID:              partitionID,
+		raftCfg:            raftCfg,
+		options:            options,
+		storage:            raftStorage,
+		logger:             logger,
+		registry:           NewRegistry(scopedMetrics),
+		syncer:             safe.NewSyncer(),
+		leadership:         NewLeadership(),
+		ready:              &ready{c: make(chan error, 1)},
+		notifyQueue:        make(chan error, 1),
+		EntryRecorder:      options.entryRecorder,
+		metrics:            scopedMetrics,
+		raftEnabledStorage: raftEnabledStorage,
+		hooks:              noopHooks(),
 	}, nil
 }
 

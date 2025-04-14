@@ -10,9 +10,11 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	logger "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -68,6 +70,7 @@ func (mc *mockConsumer) GetNotifications() []mockNotification {
 func openTestDB(t *testing.T, ctx context.Context, cfg config.Cfg, logger logger.Logger) *databasemgr.DBManager {
 	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
 	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
 	return dbMgr
 }
 
@@ -75,10 +78,35 @@ func getTestDBManager(t *testing.T, ctx context.Context, cfg config.Cfg, logger 
 	t.Helper()
 
 	dbMgr := openTestDB(t, ctx, cfg, logger)
-	t.Cleanup(dbMgr.Close)
-
 	db, err := dbMgr.GetDB(cfg.Storages[0].Name)
 	require.NoError(t, err)
 
 	return db
+}
+
+func createRaftManager(t *testing.T, ctx context.Context, raftCfg config.Raft, partitionID storage.PartitionID, metrics *Metrics, opts ...OptionFunc) (*Manager, error) {
+	logger := testhelper.NewLogger(t)
+	cfg := testcfg.Build(t)
+
+	storageName := cfg.Storages[0].Name
+	stagingDir := testhelper.TempDir(t)
+	stateDir := testhelper.TempDir(t)
+	posTracker := log.NewPositionTracker()
+
+	dbMgr := openTestDB(t, ctx, cfg, logger)
+
+	db, err := dbMgr.GetDB(storageName)
+	require.NoError(t, err)
+
+	raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+	require.NoError(t, err)
+
+	raftNode, err := NewNode(cfg, logger, dbMgr, nil)
+	require.NoError(t, err)
+
+	raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, opts...)
+
+	manager, err := raftFactory(storageName, partitionID, raftStorage, logger, metrics)
+
+	return manager, err
 }
