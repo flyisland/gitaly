@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
@@ -19,6 +21,13 @@ func TestDiffBlobs(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 	cfg, client := setupDiffService(t)
+
+	cmdFactory, clean, err := gitcmd.NewExecCommandFactory(cfg, testhelper.SharedLogger(t))
+	require.NoError(t, err)
+	defer clean()
+
+	gitVersion, err := cmdFactory.GitVersion(ctx)
+	require.NoError(t, err)
 
 	type setupData struct {
 		request           *gitalypb.DiffBlobsRequest
@@ -838,11 +847,283 @@ func TestDiffBlobs(t *testing.T) {
 				}
 			},
 		},
+		{
+			desc: "blob info and raw info provided",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				blobID2 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository: repoProto,
+						BlobPairs: []*gitalypb.DiffBlobsRequest_BlobPair{
+							{
+								LeftBlob:  []byte(blobID1),
+								RightBlob: []byte(blobID2),
+							},
+						},
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Path:      []byte("file"),
+								Status:    gitalypb.ChangedPaths_MODIFIED,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+							},
+						},
+					},
+					expectedErr: structerr.NewInvalidArgument("blob pairs and raw info both used in request"),
+				}
+			},
+		},
+		{
+			desc: "diff-pairs single diff",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				blobID2 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository: repoProto,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Path:      []byte("file"),
+								Status:    gitalypb.ChangedPaths_MODIFIED,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+							},
+						},
+					},
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Patch:       []byte("@@ -1 +1 @@\n-foo\n+bar\n"),
+							PatchSize:   22,
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "diff-pairs rename and copy",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				blobID2 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository: repoProto,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Path:      []byte("bar"),
+								OldPath:   []byte("foo"),
+								Status:    gitalypb.ChangedPaths_RENAMED,
+								Score:     50,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+							},
+							{
+								Path:      []byte("bar"),
+								OldPath:   []byte("foo"),
+								Status:    gitalypb.ChangedPaths_COPIED,
+								Score:     100,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+							},
+						},
+					},
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Patch:       []byte("@@ -1 +1 @@\n-foo\n+bar\n"),
+							PatchSize:   22,
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Patch:       []byte("@@ -1 +1 @@\n-foo\n+bar\n"),
+							PatchSize:   22,
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "diff-pairs multiple diffed",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				blobID2 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository: repoProto,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Path:      []byte("file1"),
+								Status:    gitalypb.ChangedPaths_MODIFIED,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+							},
+							{
+								Path:      []byte("file2"),
+								Status:    gitalypb.ChangedPaths_MODIFIED,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+							},
+						},
+					},
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Patch:       []byte("@@ -1 +1 @@\n-foo\n+bar\n"),
+							PatchSize:   22,
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Patch:       []byte("@@ -1 +1 @@\n-foo\n+bar\n"),
+							PatchSize:   22,
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "diff-pairs whitespace_changes: ignore",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				blobID2 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo \n"))
+				// Prefix space is not ignored.
+				blobID3 := gittest.WriteBlob(t, cfg, repoPath, []byte(" foo \n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository:        repoProto,
+						WhitespaceChanges: gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Path:      []byte("file1"),
+								Status:    gitalypb.ChangedPaths_MODIFIED,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+							},
+							{
+								Path:      []byte("file2"),
+								Status:    gitalypb.ChangedPaths_MODIFIED,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID3.String(),
+							},
+						},
+					},
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID3.String(),
+							Patch:       []byte("@@ -1 +1 @@\n-foo\n+ foo \n"),
+							PatchSize:   24,
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "diff-pairs whitespace_changes: ignore_all",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				blobID2 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo \n"))
+				blobID3 := gittest.WriteBlob(t, cfg, repoPath, []byte(" foo \n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository:        repoProto,
+						WhitespaceChanges: gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE_ALL,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Path:      []byte("file1"),
+								Status:    gitalypb.ChangedPaths_MODIFIED,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+							},
+							{
+								Path:      []byte("file2"),
+								Status:    gitalypb.ChangedPaths_MODIFIED,
+								OldMode:   0o100644,
+								NewMode:   0o100644,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID3.String(),
+							},
+						},
+					},
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID3.String(),
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
 			data := tc.setup()
+
+			if len(data.request.GetRawInfo()) > 0 && len(data.request.GetBlobPairs()) == 0 {
+				if gittest.IsGitVersionLessThan(t, ctx, cfg, git.NewVersion(2, 49, 0, 1)) {
+					data.expectedErr = structerr.NewInvalidArgument("git version: %s, doesn't support git-diff-pairs(1)", gitVersion)
+					data.expectedResponses = nil
+				}
+			}
 
 			stream, err := client.DiffBlobs(ctx, data.request)
 			require.NoError(t, err)

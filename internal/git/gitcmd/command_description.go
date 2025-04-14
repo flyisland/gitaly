@@ -88,6 +88,9 @@ var commandDescriptions = map[string]commandDescription{
 	"diff": {
 		flags: scNoRefUpdates,
 	},
+	"diff-pairs": {
+		flags: scNoRefUpdates,
+	},
 	"diff-tree": {
 		flags: scNoRefUpdates,
 	},
