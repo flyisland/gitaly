@@ -47,8 +47,8 @@ type Manager struct {
 	// background goroutine. It scans and removes entries below the low water mark. The channel is buffered because
 	// the pruning goroutine doesn't need to block callers.
 	pruningSignals chan struct{}
-	// pruningDone is a channel used to wait for background pruning task completion.
-	pruningDone chan struct{}
+	// pruningDone is a WaitGroup used to wait for background pruning task completion.
+	pruningWG sync.WaitGroup
 
 	// mutex protects access to critical states, especially `appendedLSN`, as well as the integrity
 	// of inflight log entries. Since indices are monotonic, two parallel log appending operations result in pushing
@@ -102,7 +102,6 @@ func NewManager(
 		positionTracker: positionTracker,
 		notifyQueue:     make(chan error, 1),
 		pruningSignals:  make(chan struct{}, 1),
-		pruningDone:     make(chan struct{}),
 	}
 }
 
@@ -165,6 +164,7 @@ func (mgr *Manager) Initialize(ctx context.Context, appliedLSN storage.LSN) erro
 		mgr.consumer.NotifyNewEntries(mgr.storageName, mgr.partitionID, mgr.oldestLSN, mgr.appendedLSN)
 	}
 
+	mgr.pruningWG.Add(1)
 	go mgr.pruneLogEntries()
 
 	// Trigger the first pruning task to clean up leftovers from prior restarts if any.
@@ -215,7 +215,7 @@ func (mgr *Manager) Close() error {
 		return fmt.Errorf("log manager has not been initialized")
 	}
 	mgr.cancel()
-	<-mgr.pruningDone
+	mgr.pruningWG.Wait()
 	return nil
 }
 
@@ -319,7 +319,7 @@ func (mgr *Manager) createStateDirectory() error {
 // transaction consistency are deleted.
 // If the GITALY_KEEP_WAL_LOG_ENTRIES environment variable is set, log entries will not be deleted.
 func (mgr *Manager) pruneLogEntries() {
-	defer close(mgr.pruningDone)
+	defer mgr.pruningWG.Done()
 
 	_, keepEntries := os.LookupEnv("GITALY_KEEP_WAL_LOG_ENTRIES")
 	for {
