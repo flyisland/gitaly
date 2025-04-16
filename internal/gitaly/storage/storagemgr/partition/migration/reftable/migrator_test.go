@@ -206,7 +206,7 @@ func TestMigrator(t *testing.T) {
 	cmdFactory := gittest.NewCommandFactory(t, cfg)
 	localRepoFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, catfileCache)
 
-	partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil, cfg.Raft, nil)
+	partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil, cfg.Raft, nil, nil)
 
 	ptnMgr, err := node.NewManager(cfg.Storages, storagemgr.NewFactory(
 		logger, dbMgr, partitionFactory, storagemgr.DefaultMaxInactivePartitions, storagemgr.NewMetrics(cfg.Prometheus),

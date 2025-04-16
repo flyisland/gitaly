@@ -399,6 +399,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 						nil,
 						cfg.Raft,
 						raftFactory,
+						nil,
 					),
 					migration.NewMetrics(),
 					migrations,

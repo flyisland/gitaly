@@ -794,6 +794,9 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 	if transaction.runHousekeeping.runOffloading == nil {
 		return nil
 	}
+	if mgr.offloadingSink == nil {
+		return fmt.Errorf("absent offloading sink")
+	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareOffloading", nil)
 	defer span.Finish()
@@ -866,7 +869,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		// If there is an error, the error is returned to the caller together with the returnedErr.
 		// Any undeleted files will eventually be removed by a garbage collection job.
 		if returnedErr != nil {
-			deletionErrors := mgr.sink.DeleteObjects(ctx, cfg.Prefix, uploadedPackFiles)
+			deletionErrors := mgr.offloadingSink.DeleteObjects(ctx, cfg.Prefix, uploadedPackFiles)
 			for _, err := range deletionErrors {
 				if gcerrors.Code(err) != gcerrors.NotFound {
 					returnedErr = errors.Join(returnedErr, err)
@@ -875,7 +878,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		}
 	}()
 	for file := range packFilesToUpload {
-		if err := mgr.sink.Upload(ctx, filepath.Join(filterToDir, file), cfg.Prefix); err != nil {
+		if err := mgr.offloadingSink.Upload(ctx, filepath.Join(filterToDir, file), cfg.Prefix); err != nil {
 			return errors.Join(errOffloadingObjectUpload, err)
 		}
 		uploadedPackFiles = append(uploadedPackFiles, file)

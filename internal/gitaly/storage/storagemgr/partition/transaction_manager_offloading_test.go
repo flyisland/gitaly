@@ -50,6 +50,11 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 		// Creating a new setup would generate different commits due to different timestamps,
 		// making it difficult to predict and verify the expected repository state.
 		setup, _, _, _, _, _ := setupOffloadingRepo(t, ctx, testPartitionID, relativePath)
+		setup.Config.Offloading = config.Offloading{
+			Enabled:    true,
+			CacheRoot:  cacheRoot,
+			GoCloudURL: sinkURL,
+		}
 		return setup
 	}
 
@@ -79,7 +84,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -160,9 +164,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 			desc:        "cannot offload a repository with loose objects",
 			customSetup: customSetup,
 			steps: steps{
-				StartManager{
-					Sink: sink,
-				},
+				StartManager{},
 				Begin{
 					TransactionID: 1,
 					RelativePaths: []string{relativePath},
@@ -245,7 +247,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: unstableSink,
+					OverridingSink: unstableSink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -330,7 +332,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -434,7 +435,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -529,7 +529,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -622,7 +621,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 							RelativePath:           "fake_pool",
 						})
 					},
-					Sink: sink,
 				},
 
 				Begin{
@@ -717,7 +715,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 
 				Begin{

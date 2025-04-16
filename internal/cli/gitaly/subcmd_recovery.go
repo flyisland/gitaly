@@ -565,6 +565,7 @@ func setupRecoveryContext(ctx context.Context, cmd *cli.Command) (rc recoveryCon
 					nil,
 					cfg.Raft,
 					nil,
+					nil,
 				),
 				migration.NewMetrics(),
 				[]migration.Migration{},

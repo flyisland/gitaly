@@ -116,6 +116,7 @@ func testWithAndWithoutTransaction(t *testing.T, ctx context.Context, desc strin
 						nil,
 						cfg.Raft,
 						raftFactory,
+						nil,
 					),
 					storagemgr.DefaultMaxInactivePartitions,
 					storagemgr.NewMetrics(cfg.Prometheus),

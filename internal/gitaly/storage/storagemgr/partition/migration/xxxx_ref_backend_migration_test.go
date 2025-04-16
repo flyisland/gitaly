@@ -150,7 +150,7 @@ func TestReftableMigration(t *testing.T) {
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, database)
 
-			partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil, cfg.Raft, raftFactory)
+			partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil, cfg.Raft, raftFactory, nil)
 
 			stateDir := filepath.Join(storagePath, "state")
 			require.NoError(t, os.MkdirAll(stateDir, mode.Directory))

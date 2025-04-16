@@ -13,6 +13,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	logger "gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/offloading"
 )
 
 // Factory is factory type that can create new partitions.
@@ -23,6 +24,7 @@ type Factory struct {
 	logConsumer      storage.LogConsumer
 	raftCfg          config.Raft
 	raftFactory      raftmgr.RaftReplicaFactory
+	offloadingSink   *offloading.Sink
 }
 
 // New returns a new Partition instance.
@@ -95,6 +97,7 @@ func (f Factory) New(
 		storagePath,
 		absoluteStateDir,
 		stagingDir,
+		f.offloadingSink,
 		f.cmdFactory,
 		repoFactory,
 		f.partitionMetrics.Scope(storageName),
@@ -115,6 +118,7 @@ func NewFactory(
 	logConsumer storage.LogConsumer,
 	raftCfg config.Raft,
 	raftFactory raftmgr.RaftReplicaFactory,
+	offloadingSink *offloading.Sink,
 ) Factory {
 	return Factory{
 		cmdFactory:       cmdFactory,
@@ -123,5 +127,6 @@ func NewFactory(
 		logConsumer:      logConsumer,
 		raftCfg:          raftCfg,
 		raftFactory:      raftFactory,
+		offloadingSink:   offloadingSink,
 	}
 }

@@ -958,8 +958,8 @@ type TransactionManager struct {
 	// metrics stores reporters which facilitate metric recording of transactional operations.
 	metrics ManagerMetrics
 
-	// sink points to the offloading storage used during offloading tasks.
-	sink *offloading.Sink
+	// offloadingSink points to the offloading storage used during offloading tasks.
+	offloadingSink *offloading.Sink
 }
 
 // testHooks defines hooks for testing various stages of WAL log operations.
@@ -985,6 +985,7 @@ func NewTransactionManager(
 	storagePath,
 	stateDir,
 	stagingDir string,
+	offloadingSink *offloading.Sink,
 	cmdFactory gitcmd.CommandFactory,
 	repositoryFactory localrepo.StorageScopedFactory,
 	metrics ManagerMetrics,
@@ -1019,6 +1020,7 @@ func NewTransactionManager(
 		cleanupWorkerFailed: make(chan struct{}),
 		committedEntries:    list.New(),
 		metrics:             metrics,
+		offloadingSink:      offloadingSink,
 
 		testHooks: testHooks{
 			beforeInitialization:  func() {},

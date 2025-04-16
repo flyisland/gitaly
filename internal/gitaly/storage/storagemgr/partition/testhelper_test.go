@@ -844,7 +844,7 @@ type StartManager struct {
 	ModifyStorage func(tb testing.TB, cfg config.Cfg, storagePath string)
 
 	// Sink is the destination for objects during offloading operations.
-	Sink *offloading.Sink
+	OverridingSink *offloading.Sink
 }
 
 // CloseManager closes a TransactionManager.
@@ -1203,7 +1203,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		// managerRunning tracks whether the manager is running or closed.
 		managerRunning bool
 		// factory is the factory that produces the current TransactionManager
-		factory = NewFactory(setup.CommandFactory, setup.RepositoryFactory, newMetrics(), setup.Consumer, setup.Config.Raft, raftFactory)
+		factory = NewFactory(setup.CommandFactory, setup.RepositoryFactory, newMetrics(), setup.Consumer, setup.Config.Raft, raftFactory, nil)
 		// transactionManager is the current TransactionManager instance.
 		transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 		// managerErr is used for synchronizing manager closing and returning
@@ -1255,8 +1255,14 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
 			transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
-
-			transactionManager.sink = step.Sink
+			if step.OverridingSink != nil {
+				// Typically, transactionManager.offloadingSink is properly set by Factory.New().
+				// We override it here only in case when we need to simulate custom sink behaviors
+				// (e.g., timeouts or interruptions) without complicating the main Factory logic.
+				// This approach keeps the sink creation logic simple in production code
+				// while allowing flexible testing scenarios.
+				transactionManager.offloadingSink = step.OverridingSink
+			}
 
 			installHooks(transactionManager, &inflightTransactions, step.Hooks, raftEntryRecorder)
 
