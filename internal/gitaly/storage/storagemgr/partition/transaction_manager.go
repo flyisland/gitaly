@@ -760,9 +760,10 @@ func (txn *Transaction) WriteCommitGraphs(config housekeepingcfg.WriteCommitGrap
 	}
 }
 
-// OffloadRepository configures a transaction to run an offloading task
-// by setting the runOffloading struct.
-func (txn *Transaction) OffloadRepository(cfg housekeepingcfg.OffloadingConfig) {
+// SetOffloadingConfig configures a transaction to run an offloading task
+// by setting the runOffloading struct. This configuration will be picked up later
+// by the prepareOffloading function to execute an offloading task when the transaction commits.
+func (txn *Transaction) SetOffloadingConfig(cfg housekeepingcfg.OffloadingConfig) {
 	if txn.runHousekeeping == nil {
 		txn.runHousekeeping = &runHousekeeping{}
 	}

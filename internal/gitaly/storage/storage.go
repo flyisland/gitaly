@@ -129,8 +129,10 @@ type Transaction interface {
 	// PartitionRelativePaths returns all known repository relative paths for
 	// the transactions partition.
 	PartitionRelativePaths() []string
-	// OffloadRepository runs offloading when transaction commits.
-	OffloadRepository(housekeepingcfg.OffloadingConfig)
+	// SetOffloadingConfig configures the transaction with repository offloading parameters
+	// and schedules the offloading operation to execute when the transaction commits.
+	// It stores the offloading configuration in the transaction's runOffloading struct.
+	SetOffloadingConfig(housekeepingcfg.OffloadingConfig)
 }
 
 // BeginOptions are used to configure a transaction that is being started.
