@@ -62,7 +62,7 @@ require (
 	// - https://gitlab.com/gitlab-com/request-for-help/-/issues/2127
 	// - https://gitlab.com/gitlab-org/gitaly/-/issues/6385
 	google.golang.org/grpc v1.71.1
-	google.golang.org/protobuf v1.36.5
+	google.golang.org/protobuf v1.36.6
 )
 
 require (
