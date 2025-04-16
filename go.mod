@@ -52,7 +52,7 @@ require (
 	gocloud.dev v0.40.1-0.20241107185025-56954848c3aa
 	golang.org/x/crypto v0.35.0
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
-	golang.org/x/sync v0.12.0
+	golang.org/x/sync v0.13.0
 	golang.org/x/sys v0.31.0
 	golang.org/x/text v0.23.0
 	golang.org/x/time v0.11.0
