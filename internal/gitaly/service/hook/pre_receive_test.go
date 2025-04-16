@@ -2,12 +2,14 @@ package hook
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,6 +19,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
@@ -223,10 +226,31 @@ func allowedHandler(t *testing.T, allowed bool) http.HandlerFunc {
 func TestPreReceive_APIErrors(t *testing.T) {
 	t.Parallel()
 
+	newHooksPayload := func(ctx context.Context, cfg config.Cfg, repo *gitalypb.Repository) string {
+		hooksPayload, err := gitcmd.NewHooksPayload(
+			ctx,
+			cfg,
+			repo,
+			gittest.DefaultObjectHash,
+			nil,
+			&gitcmd.UserDetails{
+				UserID:   "key-123",
+				Username: "username",
+				Protocol: "web",
+			},
+			gitcmd.PreReceiveHook,
+			featureflag.FromContext(ctx),
+			storage.ExtractTransactionID(ctx),
+		).Env()
+		require.NoError(t, err)
+		return hooksPayload
+	}
+
 	testCases := []struct {
 		desc               string
 		allowedHandler     http.HandlerFunc
 		preReceiveHandler  http.HandlerFunc
+		hooksPayloadEnv    func(ctx context.Context, cfg config.Cfg, repo *gitalypb.Repository) string
 		expectedExitStatus int32
 		expectedStderr     string
 	}{
@@ -238,6 +262,7 @@ func TestPreReceive_APIErrors(t *testing.T) {
 					res.WriteHeader(http.StatusUnauthorized)
 				}),
 			preReceiveHandler:  func(http.ResponseWriter, *http.Request) {},
+			hooksPayloadEnv:    newHooksPayload,
 			expectedExitStatus: 1,
 			expectedStderr:     "GitLab: Internal API error (401)",
 		},
@@ -245,6 +270,7 @@ func TestPreReceive_APIErrors(t *testing.T) {
 			desc:               "allowed rejects",
 			allowedHandler:     allowedHandler(t, false),
 			preReceiveHandler:  func(http.ResponseWriter, *http.Request) {},
+			hooksPayloadEnv:    newHooksPayload,
 			expectedExitStatus: 1,
 			expectedStderr:     "GitLab: not allowed",
 		},
@@ -252,7 +278,22 @@ func TestPreReceive_APIErrors(t *testing.T) {
 			desc:               "/pre_receive endpoint fails to increase reference counter",
 			allowedHandler:     allowedHandler(t, true),
 			preReceiveHandler:  preReceiveHandler(t, false),
+			hooksPayloadEnv:    newHooksPayload,
 			expectedExitStatus: 1,
+		},
+		{
+			desc:              "bad hooks payload must return an error",
+			allowedHandler:    allowedHandler(t, true),
+			preReceiveHandler: preReceiveHandler(t, false),
+			hooksPayloadEnv: func(ctx context.Context, cfg config.Cfg, repo *gitalypb.Repository) string {
+				payload := newHooksPayload(ctx, cfg, repo)
+
+				// this will fudge the base64 encoded payload and will cause
+				// the decoding to return an error
+				return payload + "123abc"
+			},
+			expectedExitStatus: 1,
+			expectedStderr:     "extracting hooks payload: illegal base64 data",
 		},
 	}
 
@@ -286,29 +327,12 @@ func TestPreReceive_APIErrors(t *testing.T) {
 			client, conn := newHooksClient(t, cfg.SocketPath)
 			defer conn.Close()
 
-			hooksPayload, err := gitcmd.NewHooksPayload(
-				ctx,
-				cfg,
-				repo,
-				gittest.DefaultObjectHash,
-				nil,
-				&gitcmd.UserDetails{
-					UserID:   "key-123",
-					Username: "username",
-					Protocol: "web",
-				},
-				gitcmd.PreReceiveHook,
-				featureflag.FromContext(ctx),
-				storage.ExtractTransactionID(ctx),
-			).Env()
-			require.NoError(t, err)
-
 			stream, err := client.PreReceiveHook(ctx)
 			require.NoError(t, err)
 			require.NoError(t, stream.Send(&gitalypb.PreReceiveHookRequest{
 				Repository: repo,
 				EnvironmentVariables: []string{
-					hooksPayload,
+					tc.hooksPayloadEnv(ctx, cfg, repo),
 				},
 			}))
 			require.NoError(t, stream.Send(&gitalypb.PreReceiveHookRequest{
@@ -319,9 +343,82 @@ func TestPreReceive_APIErrors(t *testing.T) {
 			_, stderr, status := receivePreReceive(t, stream, &bytes.Buffer{})
 
 			require.Equal(t, tc.expectedExitStatus, status)
-			assert.Equal(t, tc.expectedStderr, text.ChompBytes(stderr), "hook stderr")
+			assert.Contains(t, text.ChompBytes(stderr), tc.expectedStderr, "hook stderr")
 		})
 	}
+}
+
+// TestPreReceiveHook_HookErrorTooLarge validates that when the error message length
+// exceeds the maximum message size, it is chunked.
+// See issue here: https://gitlab.com/gitlab-org/gitaly/-/issues/5048
+func TestPreReceiveHook_HookErrorTooLarge(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	// Create hook manager
+	preReceiveMockFunc := func(t *testing.T, ctx context.Context, repo *gitalypb.Repository, pushOptions, env []string, stdin io.Reader, stdout, stderr io.Writer) error {
+		// Here we want to test that the error message will be chunked by the streamio package.
+		// Hence we use `streamio.WriteBufferSize` as a constant, and multiply by a given factor
+		// to make sure the error will be chunked.
+		errMsg := strings.Repeat("y", streamio.WriteBufferSize*2)
+		return fmt.Errorf("an error occurred: %s", errMsg)
+	}
+	hookManager := hook.NewMockManager(t, preReceiveMockFunc, nil, nil, nil, hook.NewProcReceiveRegistry())
+
+	// Create hook server
+	hookServer := runHooksServer(t, cfg, nil, testserver.WithGitLabClient(nil), testserver.WithHookManager(hookManager))
+	cfg.SocketPath = hookServer
+
+	// Create repo
+	repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+	// Create client
+	client, conn := newHooksClient(t, cfg.SocketPath)
+	defer conn.Close()
+
+	// Send request
+	stream, err := client.PreReceiveHook(ctx)
+	require.NoError(t, err)
+
+	// First message
+	hooksPayload, err := gitcmd.NewHooksPayload(
+		ctx,
+		cfg,
+		repo,
+		gittest.DefaultObjectHash,
+		nil,
+		&gitcmd.UserDetails{
+			UserID:   "key-123",
+			Username: "username",
+			Protocol: "web",
+		},
+		gitcmd.PreReceiveHook,
+		featureflag.FromContext(ctx),
+		storage.ExtractTransactionID(ctx),
+	).Env()
+	require.NoError(t, err)
+	require.NoError(t, stream.Send(&gitalypb.PreReceiveHookRequest{
+		Repository:           repo,
+		EnvironmentVariables: []string{hooksPayload},
+	}))
+
+	// Second message
+	require.NoError(t, stream.Send(&gitalypb.PreReceiveHookRequest{
+		Stdin: []byte("changes\n"),
+	}))
+
+	// End client side of stream
+	require.NoError(t, stream.CloseSend())
+
+	// Receive the first chunk of the response
+	// and assert that the error has been chunked
+
+	firstResponseChunk, err := stream.Recv()
+	require.NoError(t, err)
+	require.Equal(t, firstResponseChunk.GetExitStatus().GetValue(), int32(1))
+	require.Len(t, firstResponseChunk.GetStderr(), streamio.WriteBufferSize)
 }
 
 func TestPreReceiveHook_CustomHookErrors(t *testing.T) {

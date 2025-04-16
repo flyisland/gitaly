@@ -62,10 +62,29 @@ func validatePreReceiveHookRequest(ctx context.Context, locator storage.Locator,
 }
 
 func preReceiveHookResponse(stream gitalypb.HookService_PreReceiveHookServer, code int32, stderr string) error {
-	if err := stream.Send(&gitalypb.PreReceiveHookResponse{
-		ExitStatus: &gitalypb.ExitStatus{Value: code},
-		Stderr:     []byte(stderr),
-	}); err != nil {
+	var err error
+
+	// if the error is not empty, we use `streamio.NewSyncWriter` to
+	// chunk the output
+	if len(stderr) > 0 {
+		var m sync.Mutex
+		errOutput := streamio.NewSyncWriter(&m, func(p []byte) error {
+			return stream.Send(&gitalypb.PreReceiveHookResponse{
+				Stderr:     p,
+				ExitStatus: &gitalypb.ExitStatus{Value: code},
+			})
+		})
+
+		// send the error using the NewSyncWriter so we can chunk the output
+		_, err = errOutput.Write([]byte(stderr))
+	} else {
+		err = stream.Send(&gitalypb.PreReceiveHookResponse{
+			Stderr:     []byte(stderr),
+			ExitStatus: &gitalypb.ExitStatus{Value: code},
+		})
+	}
+
+	if err != nil {
 		return structerr.NewInternal("sending response: %w", err)
 	}
 
