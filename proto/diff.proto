@@ -427,6 +427,8 @@ message ChangedPaths {
   // old_path is the pre-image path of a renamed or copied object. This field is empty for all other
   // change types.
   bytes old_path = 7;
+  // score denotes the similarity between the source and target. Only present for renames and copies.
+  int32 score = 8;
 }
 
 // GetPatchIDRequest is a request for the GetPatchID RPC.
@@ -586,6 +588,8 @@ message DiffBlobsRequest {
   // patch_bytes_limit is the max size in bytes of a single patch generated from a pair of blobs.
   // Patches surpassing this limit are pruned. If set to zero, no limit is enforced.
   int32 patch_bytes_limit = 5;
+  // raw_info is the set of file pairs in raw format used to compute diffs for.
+  repeated ChangedPaths raw_info = 6;
 }
 
 // DiffBlobsResponse is a response for the DiffBlobs RPC.
