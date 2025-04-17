@@ -228,6 +228,20 @@ func TestLogManager_Initialize(t *testing.T) {
 		require.EqualError(t, logManager.ctx.Err(), context.Canceled.Error())
 		require.NoError(t, logManager.Close())
 	})
+
+	t.Run("Close() is called after a failed initialization", func(t *testing.T) {
+		t.Parallel()
+		ctx := testhelper.Context(t)
+
+		stateDir := testhelper.TempDir(t)
+		require.NoError(t, os.Chmod(stateDir, 0))
+		logManager := NewManager("test-storage", 1, testhelper.TempDir(t), stateDir, nil, newTracker(t, nil))
+
+		err := logManager.Initialize(ctx, 0)
+
+		require.ErrorContains(t, err, "create state directory")
+		require.NoError(t, logManager.Close())
+	})
 }
 
 func TestLogManager_PruneLogEntries(t *testing.T) {
