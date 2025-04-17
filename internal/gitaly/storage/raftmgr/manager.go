@@ -154,7 +154,7 @@ type Replica struct {
 	EntryRecorder *ReplicaEntryRecorder
 
 	// hooks is a collection of hooks, used in test environment to intercept critical events in the replica
-	hooks testHooks
+	hooks replicaHooks
 }
 
 // applyOptions creates and validates replica options by applying provided option functions
@@ -414,7 +414,7 @@ func (replica *Replica) run(initStatus InitStatus) {
 				if err := replica.handleReady(&rd); err != nil {
 					return err
 				}
-				replica.hooks.BeforeNodeAdvance()
+				replica.hooks.BeforeAdvance()
 				replica.node.Advance()
 				return nil
 			}); err != nil {

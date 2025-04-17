@@ -2,8 +2,8 @@ package raftmgr
 
 import "go.etcd.io/raft/v3/raftpb"
 
-// testHooks defines insertion points for testing various stages of Raft operations.
-type testHooks struct {
+// replicaHooks defines insertion points for testing various stages of a replica's operations.
+type replicaHooks struct {
 	// BeforeInsertLogEntry is called before inserting a log entry at the specified index.
 	BeforeInsertLogEntry func(index uint64)
 
@@ -16,24 +16,24 @@ type testHooks struct {
 	// BeforeProcessCommittedEntries is called before processing committed entries from a Ready state.
 	BeforeProcessCommittedEntries func([]raftpb.Entry)
 
-	// BeforeNodeAdvance is called before advancing the Raft node's state.
-	BeforeNodeAdvance func()
+	// BeforeAdvance is called before advancing the replica state.
+	BeforeAdvance func()
 
-	// BeforeSendMessages is called before sending messages to other Raft nodes.
+	// BeforeSendMessages is called before sending messages to other replicas.
 	BeforeSendMessages func()
 
-	// BeforeHandleReady is called before processing a new Ready state from the Raft node.
+	// BeforeHandleReady is called before processing a new Ready state of a replica.
 	BeforeHandleReady func()
 }
 
 // noopHooks returns a Hooks instance with all hooks set to no-op functions.
-func noopHooks() testHooks {
-	return testHooks{
+func noopHooks() replicaHooks {
+	return replicaHooks{
 		BeforeInsertLogEntry:          func(uint64) {},
 		BeforeSaveHardState:           func() {},
 		BeforePropose:                 func(string) {},
 		BeforeProcessCommittedEntries: func([]raftpb.Entry) {},
-		BeforeNodeAdvance:             func() {},
+		BeforeAdvance:                 func() {},
 		BeforeSendMessages:            func() {},
 		BeforeHandleReady:             func() {},
 	}

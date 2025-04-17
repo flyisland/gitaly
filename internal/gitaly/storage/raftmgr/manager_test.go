@@ -1134,7 +1134,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// inserted before Initialize(). Otherwise, we'll have a race.
 		var trigger atomic.Bool
 		env := setupTest(t, ctx, storage.PartitionID(3), func(mgr *Replica) {
-			mgr.hooks.BeforeNodeAdvance = func() {
+			mgr.hooks.BeforeAdvance = func() {
 				if trigger.Load() {
 					panic("simulated crash during node advance")
 				}

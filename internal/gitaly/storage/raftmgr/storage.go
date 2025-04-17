@@ -141,7 +141,7 @@ type ReplicaLogStore struct {
 	snapshotter   ReplicaSnapshotter
 
 	// hooks is a collection of hooks, used in test environment to intercept critical events
-	hooks testHooks
+	hooks replicaHooks
 }
 
 // raftManifestPath returns the path to the manifest file within a log entry directory. The manifest file contains
