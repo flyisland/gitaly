@@ -906,6 +906,10 @@ type RunOffloading struct {
 	Config        housekeepingcfg.OffloadingConfig
 }
 
+type ChangeGitConfig struct {
+	TransactionID int
+}
+
 // WriteCommitGraphs calls commit-graphs writing housekeeping task on a transaction.
 type WriteCommitGraphs struct {
 	// TransactionID is the transaction for which the repack task runs.
@@ -962,6 +966,12 @@ type Commit struct {
 	IncludeObjects []git.ObjectID
 	// UpdateAlternate updates the repository's alternate when set.
 	UpdateAlternate *alternateUpdate
+
+	// UpdateGitConfig updates the repository's Git configuration with provided key-value pairs.
+	// The pairs are written to the Git config file when this operation is executed.
+	// Note: Currently, this operation exists solely for testing conflict detection
+	// when multiple transactions attempt to modify Git configuration simultaneously.
+	UpdateGitConfig map[string]string
 }
 
 // RecordInitialReferenceValues calls RecordInitialReferenceValues on a transaction.
@@ -1321,6 +1331,10 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 					}
 				}
 
+				if step.UpdateGitConfig != nil {
+					updateGitConfig(t, ctx, rewrittenRepo, step.UpdateGitConfig, transaction)
+				}
+
 				if step.QuarantinedPacks != nil {
 					for _, dir := range []string{
 						transaction.stagingDirectory,
@@ -1615,7 +1629,8 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.Contains(t, openTransactions, step.TransactionID, "test error: offloading task aborted on committed before beginning it")
 
 			transaction := openTransactions[step.TransactionID]
-			transaction.OffloadRepository(wrapOffloadingConfig(ctx, step.TransactionID, &step.Config, setup))
+			transaction.OffloadRepository(wrapOffloadingConfig(ctx, &step.Config, setup))
+
 		default:
 			t.Fatalf("unhandled step type: %T", step)
 		}
@@ -1836,4 +1851,20 @@ func checkManagerError(t *testing.T, ctx context.Context, managerErrChannel chan
 	}
 
 	return false, managerErr
+}
+
+// updateGitConfig mocks an operation that modifies Git configuration within a transaction
+func updateGitConfig(t *testing.T, ctx context.Context, repo *localrepo.Repo, configKV map[string]string, tx *Transaction) {
+	for k, v := range configKV {
+		require.NoError(t, repo.SetConfig(ctx, k, v, nil))
+	}
+
+	repoPath, err := repo.Path(ctx)
+	require.NoError(t, err)
+	configPath := filepath.Join(repoPath, "config")
+
+	require.NotNil(t, tx)
+	relPath, err := filepath.Rel(tx.FS().Root(), configPath)
+	require.NoError(t, err)
+	require.NoError(t, tx.FS().RecordFile(relPath))
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/google/uuid"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -24,10 +25,10 @@ func (m *RepositoryManager) OffloadRepository(ctx context.Context, repo *localre
 		}
 		if tx != nil {
 			originalRepo = tx.OriginalRepository(originalRepo)
-			txID := storage.ExtractTransactionID(ctx)
-			// Use original repo's relative path + transaction ID as prefix when in
+			offloadingID := uuid.New().String()
+			// Use original repo's relative path + UUID as prefix when in
 			// uploading to an offloading storage.
-			cfg.Prefix = filepath.Join(originalRepo.GetRelativePath(), fmt.Sprintf("%d", txID))
+			cfg.Prefix = filepath.Join(originalRepo.GetRelativePath(), offloadingID)
 
 			if err := validateOffloadingConfig(cfg); err != nil {
 				return err

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
@@ -20,6 +21,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/fshistory"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/offloading"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -36,6 +38,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 	// Run setupOffloadingRepo once to gather object information (blobs, trees, etc.) needed for test expectations.
 	// This information becomes inaccessible after customSetup() is called within transactionTestCase.
 	preRunSetup, blobs, trees, commits, refs, originalAlternatesFileContent := setupOffloadingRepo(t, ctx, testPartitionID, relativePath)
+
 	noneBlobObjects := append(trees, commits...)
 	allObjects := append(blobs, noneBlobObjects...)
 
@@ -55,6 +58,10 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 	relCachePath, err := filepath.Rel(filepath.Join(preRunSetup.RepositoryPath, objectsDir), absCachePath)
 	require.NoError(t, err)
 	afterOffloadingAlternatesFileContent := fmt.Sprintf("%s\n%s\n", originalAlternatesFileContent, relCachePath)
+
+	// pathPrefixUuid is a unique path prefix for when uploading
+	pathPrefixUUID := uuid.New().String()
+	anotherTxnPathPrefixUUID := uuid.New().String()
 
 	return []transactionTestCase{
 		{
@@ -80,6 +87,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 					Config: housekeepingcfg.OffloadingConfig{
 						CachePath: absCachePath,
 						SinkURL:   sinkURL,
+						Prefix:    filepath.Join(relativePath, pathPrefixUUID),
 						Filter:    filter,
 						// Other fields are determined at wrapOffloadingConfig()
 					},
@@ -138,8 +146,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 					},
 				},
 				OffloadingStorage: OffloadingStorageStates{
-					// The prefix is relativePath/txnID
-					filepath.Join(relativePath, strconv.Itoa(1)): OffloadingStorageState{
+					filepath.Join(relativePath, pathPrefixUUID): OffloadingStorageState{
 						Sink:      sink,
 						Kind:      packFile,
 						FileTotal: 3,
@@ -306,11 +313,502 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 					},
 				},
 				OffloadingStorage: OffloadingStorageStates{
-					// The prefix is relativePath/txnID
-					filepath.Join(relativePath, strconv.Itoa(1)): OffloadingStorageState{
+					filepath.Join(relativePath, pathPrefixUUID): OffloadingStorageState{
 						Sink:      unstableSink,
 						Kind:      packFile,
 						FileTotal: 0,
+					},
+				},
+			},
+		},
+		{
+			desc:        "conflict when there is a committed offloading already",
+			customSetup: customSetup,
+			steps: steps{
+				StartManager{
+					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
+						repoPath := filepath.Join(storagePath, relativePath)
+
+						// Do a git gc to clean loose objects. git repack with filter may be
+						// ineffective when there is loose objects.
+						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
+					},
+					Sink: sink,
+				},
+				Begin{
+					TransactionID: 1,
+					RelativePaths: []string{relativePath},
+				},
+				RunOffloading{
+					TransactionID: 1,
+					Config: housekeepingcfg.OffloadingConfig{
+						CachePath: absCachePath,
+						SinkURL:   sinkURL,
+						Prefix:    filepath.Join(relativePath, pathPrefixUUID),
+						Filter:    filter,
+						// Other fields are determined at wrapOffloadingConfig()
+					},
+				},
+				Begin{
+					TransactionID: 2,
+					RelativePaths: []string{relativePath},
+				},
+				RunOffloading{
+					TransactionID: 2,
+					Config: housekeepingcfg.OffloadingConfig{
+						CachePath: absCachePath,
+						SinkURL:   sinkURL,
+						Prefix:    filepath.Join(relativePath, anotherTxnPathPrefixUUID),
+						Filter:    filter,
+						// Other fields are determined at wrapOffloadingConfig()
+					},
+				},
+				Commit{
+					TransactionID: 1,
+				},
+				Commit{
+					TransactionID: 2,
+					ExpectedError: errHousekeepingConflictConcurrent,
+				},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN): storage.LSN(1).ToProto(),
+				},
+				Repositories: RepositoryStates{
+					relativePath: {
+						Alternate:     afterOffloadingAlternatesFileContent,
+						DefaultBranch: "refs/heads/main",
+						References: gittest.FilesOrReftables(&ReferencesState{
+							FilesBackend: &FilesBackendState{
+								PackedReferences: refs,
+								LooseReferences:  map[git.ReferenceName]git.ObjectID{},
+							},
+						}, &ReferencesState{
+							ReftableBackend: &ReftableBackendState{
+								Tables: []ReftableTable{
+									{
+										MinIndex: 1,
+										MaxIndex: 4,
+										References: []git.Reference{
+											{
+												Name:       "HEAD",
+												Target:     "refs/heads/main",
+												IsSymbolic: true,
+											},
+											{
+												Name:       "refs/heads/first",
+												Target:     refs["refs/heads/first"].String(),
+												IsSymbolic: false,
+											},
+											{
+												Name:       "refs/heads/main",
+												Target:     refs["refs/heads/main"].String(),
+												IsSymbolic: false,
+											},
+											{
+												Name:       "refs/heads/second",
+												Target:     refs["refs/heads/second"].String(),
+												IsSymbolic: false,
+											},
+										},
+									},
+								},
+							},
+						}),
+						Objects: noneBlobObjects,
+					},
+				},
+				OffloadingStorage: OffloadingStorageStates{
+					filepath.Join(relativePath, pathPrefixUUID): OffloadingStorageState{
+						Sink:      sink,
+						Kind:      packFile,
+						FileTotal: 3,
+						Objects:   blobs,
+					},
+				},
+			},
+		},
+		{
+			desc:        "conflict when there is a committed housekeeping job already",
+			customSetup: customSetup,
+			steps: steps{
+				StartManager{
+					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
+						repoPath := filepath.Join(storagePath, relativePath)
+
+						// Do a git gc to clean loose objects. git repack with filter may be
+						// ineffective when there is loose objects.
+						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
+					},
+					Sink: sink,
+				},
+				Begin{
+					TransactionID: 1,
+					RelativePaths: []string{relativePath},
+				},
+				RunRepack{
+					TransactionID: 1,
+					Config: housekeepingcfg.RepackObjectsConfig{
+						Strategy:            housekeepingcfg.RepackObjectsStrategyFullWithUnreachable,
+						WriteBitmap:         true,
+						WriteMultiPackIndex: true,
+					},
+				},
+				Begin{
+					TransactionID: 2,
+					RelativePaths: []string{relativePath},
+				},
+				RunOffloading{
+					TransactionID: 2,
+					Config: housekeepingcfg.OffloadingConfig{
+						CachePath: absCachePath,
+						SinkURL:   sinkURL,
+						Filter:    filter,
+						// Other fields are determined at wrapOffloadingConfig()
+					},
+				},
+				Commit{
+					TransactionID: 1,
+				},
+				Commit{
+					TransactionID: 2,
+					ExpectedError: errHousekeepingConflictConcurrent,
+				},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN): storage.LSN(1).ToProto(),
+				},
+				Repositories: RepositoryStates{
+					relativePath: {
+						Alternate:     originalAlternatesFileContent,
+						DefaultBranch: "refs/heads/main",
+						References: gittest.FilesOrReftables(&ReferencesState{
+							FilesBackend: &FilesBackendState{
+								PackedReferences: refs,
+								LooseReferences:  map[git.ReferenceName]git.ObjectID{},
+							},
+						}, &ReferencesState{
+							ReftableBackend: &ReftableBackendState{
+								Tables: []ReftableTable{
+									{
+										MinIndex: 1,
+										MaxIndex: 4,
+										References: []git.Reference{
+											{
+												Name:       "HEAD",
+												Target:     "refs/heads/main",
+												IsSymbolic: true,
+											},
+											{
+												Name:       "refs/heads/first",
+												Target:     refs["refs/heads/first"].String(),
+												IsSymbolic: false,
+											},
+											{
+												Name:       "refs/heads/main",
+												Target:     refs["refs/heads/main"].String(),
+												IsSymbolic: false,
+											},
+											{
+												Name:       "refs/heads/second",
+												Target:     refs["refs/heads/second"].String(),
+												IsSymbolic: false,
+											},
+										},
+									},
+								},
+							},
+						}),
+						Objects: allObjects,
+					},
+				},
+			},
+		},
+		{
+			desc:        "conflict when there is committed repository deletion already",
+			customSetup: customSetup,
+			steps: steps{
+				StartManager{
+					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
+						repoPath := filepath.Join(storagePath, relativePath)
+
+						// Do a git gc to clean loose objects. git repack with filter may be
+						// ineffective when there is loose objects.
+						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
+					},
+					Sink: sink,
+				},
+				Begin{
+					TransactionID: 1,
+					RelativePaths: []string{relativePath},
+				},
+				Begin{
+					TransactionID: 2,
+					RelativePaths: []string{relativePath},
+				},
+				RunOffloading{
+					TransactionID: 2,
+					Config: housekeepingcfg.OffloadingConfig{
+						CachePath: absCachePath,
+						SinkURL:   sinkURL,
+						Filter:    filter,
+						Prefix:    filepath.Join(relativePath, pathPrefixUUID),
+						// Other fields are determined at wrapOffloadingConfig()
+					},
+				},
+				Commit{
+					TransactionID:    1,
+					DeleteRepository: true,
+				},
+				Begin{
+					TransactionID:       3,
+					RelativePaths:       []string{relativePath},
+					ExpectedSnapshotLSN: 1,
+				},
+				CreateRepository{
+					TransactionID: 3,
+				},
+				Commit{
+					TransactionID: 3,
+				},
+				Commit{
+					TransactionID: 2,
+					ExpectedError: errConflictRepositoryDeletion,
+				},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN):                               storage.LSN(2).ToProto(),
+					"kv/" + string(storage.RepositoryKey(relativePath)): "",
+				},
+				Repositories: RepositoryStates{
+					relativePath: {
+						DefaultBranch: "refs/heads/main",
+						References: gittest.FilesOrReftables(&ReferencesState{
+							FilesBackend: &FilesBackendState{
+								LooseReferences: map[git.ReferenceName]git.ObjectID{},
+							},
+						}, &ReferencesState{
+							ReftableBackend: &ReftableBackendState{
+								Tables: []ReftableTable{
+									{
+										MinIndex: 1,
+										MaxIndex: 1,
+										References: []git.Reference{
+											{
+												Name:       "HEAD",
+												Target:     "refs/heads/main",
+												IsSymbolic: true,
+											},
+										},
+									},
+								},
+							},
+						}),
+						Objects: []git.ObjectID{},
+					},
+				},
+			},
+		},
+		{
+			desc:        "conflict when there is a committed change on the alternate file",
+			customSetup: customSetup,
+			steps: steps{
+				StartManager{
+					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
+						repoPath := filepath.Join(storagePath, relativePath)
+
+						// Do a git gc to clean loose objects. git repack with filter may be
+						// ineffective when there is loose objects.
+						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
+
+						// Removes the alternates file, later in the test file
+						// we will recreate one
+						require.NoError(t, os.Remove(filepath.Join(stats.AlternatesFilePath(repoPath))))
+
+						gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+							SkipCreationViaService: true,
+							RelativePath:           "fake_pool",
+						})
+					},
+					Sink: sink,
+				},
+
+				Begin{
+					TransactionID: 1,
+					RelativePaths: []string{relativePath, "fake_pool"},
+				},
+				Begin{
+					TransactionID: 2,
+					RelativePaths: []string{relativePath},
+				},
+				RunOffloading{
+					TransactionID: 2,
+					Config: housekeepingcfg.OffloadingConfig{
+						CachePath: absCachePath,
+						SinkURL:   sinkURL,
+						Filter:    filter,
+						// Other fields are determined at wrapOffloadingConfig()
+					},
+				},
+
+				Commit{
+					TransactionID:   1,
+					UpdateAlternate: &alternateUpdate{RelativePath: "fake_pool"},
+				},
+				Commit{
+					TransactionID: 2,
+					ExpectedError: fshistory.NewReadWriteConflictError(
+						filepath.Join(stats.AlternatesFilePath(relativePath)),
+						0, 1),
+				},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN): storage.LSN(1).ToProto(),
+				},
+				Repositories: RepositoryStates{
+					"fake_pool": {
+						Objects: []git.ObjectID{},
+					},
+					relativePath: {
+						Alternate:     "../../../../../fake_pool/objects",
+						DefaultBranch: "refs/heads/main",
+						References: gittest.FilesOrReftables(&ReferencesState{
+							FilesBackend: &FilesBackendState{
+								PackedReferences: refs,
+								LooseReferences:  map[git.ReferenceName]git.ObjectID{},
+							},
+						}, &ReferencesState{
+							ReftableBackend: &ReftableBackendState{
+								Tables: []ReftableTable{
+									{
+										MinIndex: 1,
+										MaxIndex: 4,
+										References: []git.Reference{
+											{
+												Name:       "HEAD",
+												Target:     "refs/heads/main",
+												IsSymbolic: true,
+											},
+											{
+												Name:       "refs/heads/first",
+												Target:     refs["refs/heads/first"].String(),
+												IsSymbolic: false,
+											},
+											{
+												Name:       "refs/heads/main",
+												Target:     refs["refs/heads/main"].String(),
+												IsSymbolic: false,
+											},
+											{
+												Name:       "refs/heads/second",
+												Target:     refs["refs/heads/second"].String(),
+												IsSymbolic: false,
+											},
+										},
+									},
+								},
+							},
+						}),
+						Objects: allObjects,
+					},
+				},
+			},
+		},
+		{
+			desc:        "conflict when committed changes on the gitconfig file",
+			customSetup: customSetup,
+			steps: steps{
+				StartManager{
+					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
+						repoPath := filepath.Join(storagePath, relativePath)
+
+						// Do a git gc to clean loose objects. git repack with filter may be
+						// ineffective when there is loose objects.
+						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
+					},
+					Sink: sink,
+				},
+
+				Begin{
+					TransactionID: 1,
+					RelativePaths: []string{relativePath},
+				},
+				Begin{
+					TransactionID: 2,
+					RelativePaths: []string{relativePath},
+				},
+				RunOffloading{
+					TransactionID: 2,
+					Config: housekeepingcfg.OffloadingConfig{
+						CachePath: absCachePath,
+						SinkURL:   sinkURL,
+						Filter:    filter,
+						// Other fields are determined at wrapOffloadingConfig()
+					},
+				},
+				Commit{
+					TransactionID: 1,
+					UpdateGitConfig: map[string]string{
+						"user.name": "John Doe the Offloading tester",
+					},
+				},
+				Commit{
+					TransactionID: 2,
+					ExpectedError: fshistory.NewReadWriteConflictError(
+						filepath.Join(filepath.Join(relativePath, "config")),
+						0, 1),
+				},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN): storage.LSN(1).ToProto(),
+				},
+				Repositories: RepositoryStates{
+					relativePath: {
+						Alternate:     originalAlternatesFileContent,
+						DefaultBranch: "refs/heads/main",
+						References: gittest.FilesOrReftables(&ReferencesState{
+							FilesBackend: &FilesBackendState{
+								PackedReferences: refs,
+								LooseReferences:  map[git.ReferenceName]git.ObjectID{},
+							},
+						}, &ReferencesState{
+							ReftableBackend: &ReftableBackendState{
+								Tables: []ReftableTable{
+									{
+										MinIndex: 1,
+										MaxIndex: 4,
+										References: []git.Reference{
+											{
+												Name:       "HEAD",
+												Target:     "refs/heads/main",
+												IsSymbolic: true,
+											},
+											{
+												Name:       "refs/heads/first",
+												Target:     refs["refs/heads/first"].String(),
+												IsSymbolic: false,
+											},
+											{
+												Name:       "refs/heads/main",
+												Target:     refs["refs/heads/main"].String(),
+												IsSymbolic: false,
+											},
+											{
+												Name:       "refs/heads/second",
+												Target:     refs["refs/heads/second"].String(),
+												IsSymbolic: false,
+											},
+										},
+									},
+								},
+							},
+						}),
+						Objects: allObjects,
 					},
 				},
 			},
@@ -336,9 +834,8 @@ func setupEmptyLocalBucket(t *testing.T, localBucketDir string, stable bool) (*o
 }
 
 // wrapOffloadingConfig
-func wrapOffloadingConfig(_ context.Context, txnID int, in *housekeepingcfg.OffloadingConfig, setup testTransactionSetup) housekeepingcfg.OffloadingConfig {
+func wrapOffloadingConfig(_ context.Context, in *housekeepingcfg.OffloadingConfig, setup testTransactionSetup) housekeepingcfg.OffloadingConfig {
 	in.OriginalRepo = setup.RepositoryPath
-	in.Prefix = filepath.Join(setup.RelativePath, strconv.Itoa(txnID))
 	return *in
 }
 

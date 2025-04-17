@@ -41,11 +41,14 @@ message LogEntry {
     // PackRefs models a pack-refs housekeeping task.
     message PackRefs {
     }
-
+    // Offloading models a offloading task.
+    message Offloading {
+    }
     // pack_refs signifies if the housekeeping run includes a pack-refs task.
     PackRefs pack_refs = 1;
+    // offloading, when set, indicates this log entry contains a offloading task.
+    Offloading offloading = 2;
   }
-
   // relative_path is the relative path of the repository the changes in the
   // log entry are targeting.
   string relative_path = 1;
@@ -58,7 +61,6 @@ message LogEntry {
   RepositoryDeletion repository_deletion = 6;
   // housekeeping, when set, indicates this log entry contains a housekeeping task.
   Housekeeping housekeeping = 9;
-
   // Operation models a single operation to be performed.
   message Operation {
     // CreateHardLink creates a hard link. The existing inode metadata, including
@@ -121,6 +123,7 @@ message LogEntry {
   // operations is an ordered list of operations to run in order to apply
   // this log entry.
   repeated Operation operations = 10;
+
 }
 
 // LSN serializes a log sequence number. It's used for storing a partition's
