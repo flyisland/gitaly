@@ -14,9 +14,9 @@ func partitionKeyToString(pk *gitalypb.PartitionKey) string {
 // ManagerRegistry is an interface that defines the methods to register and retrieve managers.
 type ManagerRegistry interface {
 	// GetManager returns the manager for a given partition key.
-	GetManager(key *gitalypb.PartitionKey) (RaftManager, error)
+	GetManager(key *gitalypb.PartitionKey) (RaftReplica, error)
 	// RegisterManager registers a manager for a given partition key.
-	RegisterManager(key *gitalypb.PartitionKey, manager RaftManager)
+	RegisterManager(key *gitalypb.PartitionKey, manager RaftReplica)
 	// DeregisterManager removes the manager with the given key from the registry.
 	DeregisterManager(key *gitalypb.PartitionKey)
 }
@@ -32,15 +32,15 @@ func NewRaftManagerRegistry() *raftManagerRegistry {
 }
 
 // GetManager returns the manager for a given partitionKey.
-func (r *raftManagerRegistry) GetManager(key *gitalypb.PartitionKey) (RaftManager, error) {
+func (r *raftManagerRegistry) GetManager(key *gitalypb.PartitionKey) (RaftReplica, error) {
 	if mgr, ok := r.managers.Load(partitionKeyToString(key)); ok {
-		return mgr.(RaftManager), nil
+		return mgr.(RaftReplica), nil
 	}
 	return nil, fmt.Errorf("no manager found for partition key %+v", key)
 }
 
 // RegisterManager registers a manager for a given partitionKey.
-func (r *raftManagerRegistry) RegisterManager(key *gitalypb.PartitionKey, manager RaftManager) {
+func (r *raftManagerRegistry) RegisterManager(key *gitalypb.PartitionKey, manager RaftReplica) {
 	r.managers.LoadOrStore(partitionKeyToString(key), manager)
 }
 

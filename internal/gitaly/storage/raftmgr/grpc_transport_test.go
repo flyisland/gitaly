@@ -291,22 +291,22 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 			id:              uint64(i + 1),
 		}
 
-		// Create and set up manager
-		manager := newManager(config)
+		// Create and set up replica
+		replica := newReplica(config)
 
 		partitionKey := &gitalypb.PartitionKey{
 			AuthorityName: storageName,
 			PartitionId:   uint64(partitionID),
 		}
 
-		// Register the manager with the registry
-		registries[i].RegisterManager(partitionKey, manager)
+		// Register the replica with the registry
+		registries[i].RegisterManager(partitionKey, replica)
 
 		nodeID := uint64(i + 1)
 		if i == 0 {
 			cluster.leader = node
-			raftMgr, err := node.managerRegistry.GetManager(partitionKey)
-			require.Equal(t, raftMgr, manager)
+			replica, err := node.managerRegistry.GetManager(partitionKey)
+			require.Equal(t, replica, replica)
 			require.NoError(t, err)
 
 			entry := RoutingTableEntry{
@@ -349,10 +349,10 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	return cluster
 }
 
-func newManager(cfg config.Cfg) RaftManager {
+func newReplica(cfg config.Cfg) RaftReplica {
 	walManager := log.NewManager("default", 1, cfg.Storages[0].Path, cfg.Storages[0].Path, nil, nil)
 
-	return &mockRaftManager{
+	return &mockReplica{
 		logManager: walManager,
 		config:     cfg.Raft,
 	}

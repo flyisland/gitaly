@@ -55,13 +55,13 @@ func TestServer_SendSnapshot_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	registry := storage.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
-	raftMgr := &mockRaftManager{}
+	replica := &mockRaftReplica{}
 
 	partitionKey := &gitalypb.PartitionKey{
 		AuthorityName: authorityName,
 		PartitionId:   1,
 	}
-	registry.RegisterManager(partitionKey, raftMgr)
+	registry.RegisterManager(partitionKey, replica)
 
 	client := runRaftServer(t, ctx, cfg, mockNode)
 
@@ -252,13 +252,13 @@ func TestServer_SendSnapshot_Errors(t *testing.T) {
 			require.NoError(t, err)
 
 			registry := storage.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
-			raftMgr := &mockRaftManager{}
+			replica := &mockRaftReplica{}
 
 			partitionKey := &gitalypb.PartitionKey{
 				AuthorityName: authorityName,
 				PartitionId:   1,
 			}
-			registry.RegisterManager(partitionKey, raftMgr)
+			registry.RegisterManager(partitionKey, replica)
 
 			client := runRaftServer(t, ctx, cfg, mockNode)
 

@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// EntryRecorder is a utility for recording and classifying log entries processed by the Raft manager. In addition to
+// EntryRecorder is a utility for recording and classifying log entries processed by the Raft replica. In addition to
 // standard log entries, Raft may generate internal entries such as configuration changes or empty logs for verification
 // purposes. These internal entries are backfilled into the Write-Ahead Log (WAL), occupying Log Sequence Number (LSN)
 // slots. Consequently, the LSN sequence may diverge from expectations when Raft is enabled.

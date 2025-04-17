@@ -41,10 +41,10 @@ freely to other storages after creation.
 Each partition is a Raft group with one or more members. Raft groups are also identified by the Partition ID due to
 the one-to-one relationship.
 
-The `raftmgr.Manager` oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
+The `raftmgr.Replica` oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
 integer **Node ID** to a Raft group member. The Node ID does not change throughout the lifecycle of a group member.
 
-When a partition is bootstrapped for the first time, the Raft manager initializes the `etcd/raft` state machine,
+When a partition is bootstrapped for the first time, the Raft replica initializes the `etcd/raft` state machine,
 elects itself as the initial leader, and persists all Raft metadata to persistent storage. Its internal Node ID
 is always 1 at this stage, making it a fully functional single-node Raft instance.
 
@@ -123,7 +123,7 @@ TBD
 
 ## Interaction with Transactions and WAL
 
-The Raft manager implements the `storage.LogManager` interface. By default, the Transaction Manager uses `log.Manager`.
+The Raft replica implements the `storage.LogManager` interface. By default, the Transaction Manager uses `log.Manager`.
 All log entries are appended to the filesystem WAL. Once an entry is persisted, it is ready to be applied by the
 Transaction Manager. When Raft is enabled, `log.Manager` is replaced by `raftmgr.Manager` which manages the entire
 commit flow, including network communications and quorum acknowledgment.
@@ -131,7 +131,7 @@ commit flow, including network communications and quorum acknowledgment.
 The responsibilities of three critical components are:
 
 - `log.Manager`: Handles local log management.
-- `raftmgr.Manager`: Manages distributed log management.
+- `raftmgr.Replica`: Manages distributed log management.
 - `partition.TransactionManager`: Manages transactions, concurrency, snapshots, conflicts, and related tasks.
 
 The flow is illustrated in the following chart:
@@ -151,7 +151,7 @@ TransactionManager    New Transaction              │ Without Raft
                 ▼                                  ▼
          ┌─►Initialize─────...──────────────────Propose
          │                                         │
-raftmgr.Manager                          etcd/raft state machine
+raftmgr.Replica                          etcd/raft state machine
 
                                            ┌───────┴────────┐
                                            ▼                ▼

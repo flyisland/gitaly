@@ -36,7 +36,7 @@ func (s *RaftEnabledStorage) GetManagerRegistry() ManagerRegistry {
 
 // RegisterManager registers a Manager with this RaftEnabledStorage
 // This should be called after both the Manager and RaftEnabledStorage are created
-func (s *RaftEnabledStorage) RegisterManager(partitionID storage.PartitionID, manager *Manager) error {
+func (s *RaftEnabledStorage) RegisterManager(partitionID storage.PartitionID, manager *Replica) error {
 	partitionKey := &gitalypb.PartitionKey{
 		PartitionId:   uint64(partitionID),
 		AuthorityName: manager.authorityName,
@@ -48,7 +48,7 @@ func (s *RaftEnabledStorage) RegisterManager(partitionID storage.PartitionID, ma
 
 // DeregisterManager removes a Manager from this RaftEnabledStorage.
 // This should be called when the manager is closing.
-func (s *RaftEnabledStorage) DeregisterManager(manager *Manager) {
+func (s *RaftEnabledStorage) DeregisterManager(manager *Replica) {
 	partitionKey := &gitalypb.PartitionKey{
 		PartitionId:   uint64(manager.ptnID),
 		AuthorityName: manager.authorityName,

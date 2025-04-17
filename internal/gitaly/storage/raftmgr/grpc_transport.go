@@ -207,10 +207,10 @@ func (t *GrpcTransport) packLogData(ctx context.Context, lsn storage.LSN, messag
 
 // Receive receives a stream of Raft messages and processes them.
 func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error {
-	// Retrieve the raft manager from the registry, assumption is that all the messages are from the same partition key.
-	raftManager, err := t.registry.GetManager(partitionKey)
+	// Retrieve the raft replica from the registry, assumption is that all the messages are from the same partition key.
+	replica, err := t.registry.GetManager(partitionKey)
 	if err != nil {
-		return status.Errorf(codes.NotFound, "raft manager not found for partition %d: %v",
+		return status.Errorf(codes.NotFound, "replica not found for partition %d: %v",
 			partitionKey.GetPartitionId(), err)
 	}
 
@@ -221,14 +221,14 @@ func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.Part
 		}
 
 		if msg.GetData().GetPacked() != nil {
-			if err := unpackLogData(&msg, raftManager.GetEntryPath(storage.LSN(entry.Index))); err != nil {
+			if err := unpackLogData(&msg, replica.GetEntryPath(storage.LSN(entry.Index))); err != nil {
 				return status.Errorf(codes.Internal, "failed to unpack log data: %v", err)
 			}
 		}
 	}
 
 	// Step messages per partition with their respective entries
-	if err := raftManager.Step(ctx, raftMsg); err != nil {
+	if err := replica.Step(ctx, raftMsg); err != nil {
 		return status.Errorf(codes.Internal, "failed to step message: %v", err)
 	}
 

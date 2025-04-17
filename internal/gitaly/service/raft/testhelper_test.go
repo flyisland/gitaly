@@ -19,12 +19,12 @@ func TestMain(m *testing.M) {
 	testhelper.Run(m)
 }
 
-type mockRaftManager struct {
-	raftmgr.RaftManager
+type mockRaftReplica struct {
+	raftmgr.RaftReplica
 }
 
 // Step is a mock implementation of the raft.Node.Step method.
-func (m *mockRaftManager) Step(ctx context.Context, msg raftpb.Message) error {
+func (m *mockRaftReplica) Step(ctx context.Context, msg raftpb.Message) error {
 	return nil
 }
 

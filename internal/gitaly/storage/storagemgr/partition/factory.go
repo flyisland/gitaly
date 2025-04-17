@@ -72,7 +72,7 @@ func (f Factory) New(
 		if err != nil {
 			panic(fmt.Errorf("creating raft storage: %w", err))
 		}
-		raftManager, err := factory(
+		raftReplica, err := factory(
 			storageName,
 			partitionID,
 			raftStorage,
@@ -80,9 +80,9 @@ func (f Factory) New(
 			f.partitionMetrics.raft,
 		)
 		if err != nil {
-			panic(fmt.Errorf("creating raft manager: %w", err))
+			panic(fmt.Errorf("creating raft replica: %w", err))
 		}
-		logManager = raftManager
+		logManager = raftReplica
 	} else {
 		logManager = log.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, f.logConsumer, positionTracker)
 	}

@@ -79,7 +79,7 @@ func dbSetup(t *testing.T, ctx context.Context, cfg config.Cfg, dbPath string, s
 	return db, dbMgr
 }
 
-func TestManager_Initialize(t *testing.T) {
+func TestReplica_Initialize(t *testing.T) {
 	t.Parallel()
 
 	t.Run("succeeds when raft is enabled", func(t *testing.T) {
@@ -89,14 +89,14 @@ func TestManager_Initialize(t *testing.T) {
 		recorder := NewEntryRecorder()
 		metrics := NewMetrics()
 		raftCfg := raftConfigsForTest(t)
-		mgr, err := createRaftManager(t, ctx, raftCfg, storage.PartitionID(1), metrics, WithEntryRecorder(recorder))
+		mgr, err := createRaftReplica(t, ctx, raftCfg, storage.PartitionID(1), metrics, WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
-		// Initialize the manager
+		// Initialize the replica
 		err = mgr.Initialize(ctx, 0)
 		require.NoError(t, err)
 
-		// Verify that the manager is properly initialized
+		// Verify that the replica is properly initialized
 		require.True(t, mgr.started)
 		require.NotNil(t, mgr.node)
 
@@ -109,7 +109,7 @@ func TestManager_Initialize(t *testing.T) {
 		raftEntries := recorder.FromRaft()
 		require.NotEmpty(t, raftEntries, "expected at least one Raft entry after initialization")
 
-		// Close the manager
+		// Close the replica
 		require.NoError(t, mgr.Close())
 
 		testhelper.RequirePromMetrics(t, metrics, `
@@ -130,19 +130,19 @@ func TestManager_Initialize(t *testing.T) {
 		raftCfg := raftConfigsForTest(t)
 		raftCfg.Enabled = false
 
-		mgr, err := createRaftManager(t, ctx, raftCfg, storage.PartitionID(1), NewMetrics())
+		mgr, err := createRaftReplica(t, ctx, raftCfg, storage.PartitionID(1), NewMetrics())
 		require.Nil(t, mgr)
 		require.ErrorContains(t, err, "raft is not enabled")
 	})
 
-	t.Run("fails when manager is reused", func(t *testing.T) {
+	t.Run("fails when replica is reused", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
 		raftCfg := raftConfigsForTest(t)
 		partitionID := storage.PartitionID(1)
 
-		mgr, err := createRaftManager(t, ctx, raftCfg, partitionID, NewMetrics())
+		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics())
 		require.NoError(t, err)
 
 		// First initialization should succeed
@@ -151,7 +151,7 @@ func TestManager_Initialize(t *testing.T) {
 
 		// Second initialization should fail
 		err = mgr.Initialize(ctx, 0)
-		require.EqualError(t, err, fmt.Sprintf("raft manager for partition %q already started", partitionID))
+		require.EqualError(t, err, fmt.Sprintf("raft replica for partition %q already started", partitionID))
 
 		require.NoError(t, mgr.Close())
 	})
@@ -164,7 +164,7 @@ func TestManager_Initialize(t *testing.T) {
 		partitionID := storage.PartitionID(1)
 		recorder := NewEntryRecorder()
 
-		mgr, err := createRaftManager(t, ctx, raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
+		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		releaseReady := make(chan struct{})
@@ -172,7 +172,7 @@ func TestManager_Initialize(t *testing.T) {
 			<-releaseReady
 		}
 
-		// Initialize the manager
+		// Initialize the replica
 		err = mgr.Initialize(ctx, 0)
 		require.ErrorIs(t, err, ErrReadyTimeout)
 
@@ -237,7 +237,7 @@ func TestManager_Initialize(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
-		// Initialize the Raft manager with the highest LSN
+		// Initialize the raft replica with the highest LSN
 		err = mgr.Initialize(ctx, highestLSN)
 		require.NoError(t, err)
 
@@ -315,7 +315,7 @@ func TestManager_Initialize(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
-		// Initialize the Raft manager with the applied LSN (not the highest)
+		// Initialize the raft replica with the applied LSN (not the highest)
 		err = mgr.Initialize(ctx, appliedLSN)
 		require.NoError(t, err)
 
@@ -359,7 +359,7 @@ func TestManager_Initialize(t *testing.T) {
 		mgr1, err := raftFactory(storageName, partitionID, raftStorage1, logger, metrics)
 		require.NoError(t, err)
 
-		// Initialize the Raft manager
+		// Initialize the raft replica
 		err = mgr1.Initialize(ctx, 0)
 		require.NoError(t, err)
 
@@ -373,7 +373,7 @@ func TestManager_Initialize(t *testing.T) {
 		// Get the highest LSN after Raft phase
 		highestRaftLSN := mgr1.AppendedLSN()
 
-		// Close the Raft manager (simulate disabling Raft)
+		// Close the raft replica (simulate disabling Raft)
 		require.NoError(t, mgr1.Close())
 
 		// PHASE 2: Use direct WAL
@@ -447,15 +447,15 @@ func TestManager_Initialize(t *testing.T) {
 	})
 }
 
-func TestManager_AppendLogEntry(t *testing.T) {
+func TestReplica_AppendLogEntry(t *testing.T) {
 	t.Parallel()
 
-	setup := func(t *testing.T, ctx context.Context, cfg config.Cfg) (*Manager, *Metrics, *EntryRecorder) {
+	setup := func(t *testing.T, ctx context.Context, cfg config.Cfg) (*Replica, *Metrics, *EntryRecorder) {
 		raftCfg := raftConfigsForTest(t)
 		partitionID := storage.PartitionID(1)
 		recorder := NewEntryRecorder()
 		metrics := NewMetrics()
-		mgr, err := createRaftManager(t, ctx, raftCfg, partitionID, metrics, WithEntryRecorder(recorder))
+		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics, WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		err = mgr.Initialize(ctx, 0)
@@ -701,7 +701,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder), WithOpTimeout(1*time.Nanosecond))
 
-		// Create manager with very short operation timeout
+		// Create replica with very short operation timeout
 		mgr, err := raftFactory(
 			storageName,
 			partitionID,
@@ -711,7 +711,7 @@ func TestManager_AppendLogEntry(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		// Initialize the manager
+		// Initialize the replica
 		err = mgr.Initialize(ctx, 0)
 		require.NoError(t, err)
 		defer func() {
@@ -774,12 +774,12 @@ func TestManager_AppendLogEntry(t *testing.T) {
 	})
 }
 
-func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
+func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 	t.Parallel()
 
-	// testEnv encapsulates the test environment for raft manager crash tests
+	// testEnv encapsulates the test environment for raft replica crash tests
 	type testEnv struct {
-		mgr         *Manager
+		mgr         *Replica
 		db          keyvalue.Transactioner
 		dbMgr       *databasemgr.DBManager
 		stagingDir  string
@@ -793,7 +793,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 	}
 
 	// Helper for setting up a test environment
-	setupTest := func(t *testing.T, ctx context.Context, partitionID storage.PartitionID, setupFuncs ...func(*Manager)) testEnv {
+	setupTest := func(t *testing.T, ctx context.Context, partitionID storage.PartitionID, setupFuncs ...func(*Replica)) testEnv {
 		t.Helper()
 
 		cfg := testcfg.Build(t)
@@ -821,7 +821,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		// Configure manager
+		// Configure replica
 		mgr, err := raftFactory(storageName, partitionID, raftStorage, logger, metrics)
 		require.NoError(t, err)
 
@@ -829,7 +829,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 			f(mgr)
 		}
 
-		// Initialize the manager
+		// Initialize the replica
 		err = mgr.Initialize(ctx, 0)
 		require.NoError(t, err)
 
@@ -854,9 +854,9 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		}
 	}
 
-	// Helper to create a recovery manager -- a new instance of the Raft Manager that picks resumes from where the
+	// Helper to create a recovery replica -- a new instance of the raft replica that picks resumes from where the
 	// crashed manager left off.
-	createRecoveryManager := func(t *testing.T, ctx context.Context, env testEnv, lastLSN storage.LSN) *Manager {
+	createRecoveryReplica := func(t *testing.T, ctx context.Context, env testEnv, lastLSN storage.LSN) *Replica {
 		t.Helper()
 
 		logger := testhelper.NewLogger(t)
@@ -886,7 +886,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 	}
 
 	// Helper to verify recovery when change is NOT expected to be persisted or retained
-	verifyNonPersistingRecovery := func(t *testing.T, ctx context.Context, recoveryMgr *Manager, baseLSN storage.LSN, crashContent string) {
+	verifyNonPersistingRecovery := func(t *testing.T, ctx context.Context, recoveryMgr *Replica, baseLSN storage.LSN, crashContent string) {
 		t.Helper()
 
 		// First append a new entry - this is crucial because it may trigger overwriting
@@ -953,7 +953,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 	}
 
 	// Helper to verify recovery when change IS expected to be persisted and retained
-	verifyPersistingRecovery := func(t *testing.T, ctx context.Context, recoveryMgr *Manager, baseLSN storage.LSN, crashContent string) {
+	verifyPersistingRecovery := func(t *testing.T, ctx context.Context, recoveryMgr *Replica, baseLSN storage.LSN, crashContent string) {
 		t.Helper()
 
 		// First append a new entry - this will tell us if the crash entry is truly committed
@@ -1039,15 +1039,15 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 			_, _ = env.mgr.AppendLogEntry(logEntryPath)
 		})
 
-		// Create recovery manager
+		// Create recovery replica
 		require.NoError(t, env.mgr.Close())
-		recoveryMgr := createRecoveryManager(t, ctx, env, env.baseLSN)
+		recoveryMgr := createRecoveryReplica(t, ctx, env, env.baseLSN)
 		defer testhelper.MustClose(t, recoveryMgr)
 
 		// Verify recovery - change should NOT be persisted
 		verifyNonPersistingRecovery(t, ctx, recoveryMgr, env.baseLSN, crashContent)
 
-		// This simulation crashes caller's goroutine, not in Raft manager's life cycle.
+		// This simulation crashes caller's goroutine, not in raft replica's life cycle.
 		testhelper.RequirePromMetrics(t, env.metrics, `
                         # HELP gitaly_raft_log_entries_processed Rate of log entries processed.
                         # TYPE gitaly_raft_log_entries_processed counter
@@ -1084,9 +1084,9 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		crashContent := "crash-during-commit"
 		logEntryPath := createTestLogEntry(t, ctx, crashContent)
 
-		// Try to append - should fail with ErrManagerStopped
+		// Try to append - should fail with ErrReplicaStopped
 		_, err := env.mgr.AppendLogEntry(logEntryPath)
-		require.ErrorIs(t, err, ErrManagerStopped)
+		require.ErrorIs(t, err, ErrReplicaStopped)
 
 		var finalErr error
 		require.Eventually(t, func() bool {
@@ -1095,9 +1095,9 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during commit entries")
 
-		// Create recovery manager
+		// Create recovery replica
 		require.NoError(t, env.mgr.Close())
-		recoveryMgr := createRecoveryManager(t, ctx, env, env.baseLSN)
+		recoveryMgr := createRecoveryReplica(t, ctx, env, env.baseLSN)
 		defer testhelper.MustClose(t, recoveryMgr)
 
 		// Verify recovery - change SHOULD be persisted
@@ -1133,7 +1133,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// The trigger prevents node advance from being triggered during first election. The hook must be
 		// inserted before Initialize(). Otherwise, we'll have a race.
 		var trigger atomic.Bool
-		env := setupTest(t, ctx, storage.PartitionID(3), func(mgr *Manager) {
+		env := setupTest(t, ctx, storage.PartitionID(3), func(mgr *Replica) {
 			mgr.hooks.BeforeNodeAdvance = func() {
 				if trigger.Load() {
 					panic("simulated crash during node advance")
@@ -1163,9 +1163,9 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during node advance")
 
-		// Create recovery manager
+		// Create recovery replica
 		require.NoError(t, env.mgr.Close())
-		recoveryMgr := createRecoveryManager(t, ctx, env, env.baseLSN)
+		recoveryMgr := createRecoveryReplica(t, ctx, env, env.baseLSN)
 		defer testhelper.MustClose(t, recoveryMgr)
 
 		// Verify recovery - change SHOULD be persisted and client already got success
@@ -1208,7 +1208,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		logEntryPath := createTestLogEntry(t, ctx, crashContent)
 
 		_, err := env.mgr.AppendLogEntry(logEntryPath)
-		require.ErrorIs(t, err, ErrManagerStopped)
+		require.ErrorIs(t, err, ErrReplicaStopped)
 
 		var finalErr error
 		require.Eventually(t, func() bool {
@@ -1217,9 +1217,9 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during handle ready")
 
-		// Create recovery manager
+		// Create recovery replica
 		require.NoError(t, env.mgr.Close())
-		recoveryMgr := createRecoveryManager(t, ctx, env, env.baseLSN)
+		recoveryMgr := createRecoveryReplica(t, ctx, env, env.baseLSN)
 		defer testhelper.MustClose(t, recoveryMgr)
 
 		// Verify recovery - change should NOT be persisted
@@ -1266,7 +1266,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		logEntryPath := createTestLogEntry(t, ctx, crashContent)
 
 		_, err := env.mgr.AppendLogEntry(logEntryPath)
-		require.ErrorIs(t, err, ErrManagerStopped)
+		require.ErrorIs(t, err, ErrReplicaStopped)
 
 		var finalErr error
 		require.Eventually(t, func() bool {
@@ -1275,9 +1275,9 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during insert log entry")
 
-		// Create recovery manager
+		// Create recovery replica
 		require.NoError(t, env.mgr.Close())
-		recoveryMgr := createRecoveryManager(t, ctx, env, env.baseLSN)
+		recoveryMgr := createRecoveryReplica(t, ctx, env, env.baseLSN)
 		defer testhelper.MustClose(t, recoveryMgr)
 
 		// Verify recovery - change should NOT be persisted
@@ -1327,7 +1327,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// In a multi-node setup, this could behave differently as the entry might already
 		// be replicated to other nodes before the crash
 		_, err := env.mgr.AppendLogEntry(logEntryPath)
-		require.ErrorIs(t, err, ErrManagerStopped)
+		require.ErrorIs(t, err, ErrReplicaStopped)
 
 		var finalErr error
 		require.Eventually(t, func() bool {
@@ -1336,9 +1336,9 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during save hard state")
 
-		// Create recovery manager
+		// Create recovery replica
 		require.NoError(t, env.mgr.Close())
-		recoveryMgr := createRecoveryManager(t, ctx, env, env.baseLSN)
+		recoveryMgr := createRecoveryReplica(t, ctx, env, env.baseLSN)
 		defer testhelper.MustClose(t, recoveryMgr)
 
 		// When a crash occurs during saveHardState, the log entry is still persisted, unlike crashes
@@ -1387,7 +1387,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		// First recovery cycle - crash during propose
 		require.NoError(t, env.mgr.Close())
-		firstRecoveryMgr := createRecoveryManager(t, ctx, env, lastKnownLSN)
+		firstRecoveryMgr := createRecoveryReplica(t, ctx, env, lastKnownLSN)
 
 		// Add one successful entry to advance the LSN
 		logEntryPath1 := createTestLogEntry(t, ctx, "first-recovery-success")
@@ -1407,11 +1407,11 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 			_, _ = firstRecoveryMgr.AppendLogEntry(logEntryPath2)
 		})
 
-		// Close the manager only, keep the DB manager
+		// Close the replica only, keep the DB manager
 		require.NoError(t, firstRecoveryMgr.Close())
 
 		// Second recovery cycle - crash during commit
-		secondRecoveryMgr := createRecoveryManager(t, ctx, env, lastKnownLSN)
+		secondRecoveryMgr := createRecoveryReplica(t, ctx, env, lastKnownLSN)
 
 		// Add one successful entry to advance the LSN
 		logEntryPath3 := createTestLogEntry(t, ctx, "second-recovery-success")
@@ -1430,7 +1430,7 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		// Attempt that will crash
 		logEntryPath4 := createTestLogEntry(t, ctx, "second-recovery-crash")
 		_, err = secondRecoveryMgr.AppendLogEntry(logEntryPath4)
-		require.ErrorIs(t, err, ErrManagerStopped)
+		require.ErrorIs(t, err, ErrReplicaStopped)
 
 		var finalErr error
 		require.Eventually(t, func() bool {
@@ -1439,11 +1439,11 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during second recovery")
 
-		// Close the manager only, keep the DB manager
+		// Close the replica only, keep the DB manager
 		require.NoError(t, secondRecoveryMgr.Close())
 
 		// Final recovery - verify system state after multiple crashes
-		finalRecoveryMgr := createRecoveryManager(t, ctx, env, lastKnownLSN)
+		finalRecoveryMgr := createRecoveryReplica(t, ctx, env, lastKnownLSN)
 
 		// For commit crash, the crashed entry should be persisted
 		require.Greater(t, finalRecoveryMgr.AppendedLSN(), lastKnownLSN,
@@ -1486,10 +1486,10 @@ func TestManager_AppendLogEntry_CrashRecovery(t *testing.T) {
 	})
 }
 
-func TestManager_Close(t *testing.T) {
+func TestReplica_Close(t *testing.T) {
 	t.Parallel()
 
-	t.Run("close initialized manager", func(t *testing.T) {
+	t.Run("close initialized replica", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
@@ -1502,14 +1502,14 @@ func TestManager_Close(t *testing.T) {
 			SnapshotDir:     testhelper.TempDir(t),
 		}
 
-		mgr, err := createRaftManager(t, ctx, raftCfg, partitionID, NewMetrics())
+		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics())
 		require.NoError(t, err)
 
-		// Initialize the manager
+		// Initialize the replica
 		err = mgr.Initialize(ctx, 0)
 		require.NoError(t, err)
 
-		// Close the manager
+		// Close the replica
 		err = mgr.Close()
 		require.NoError(t, err, "expected Close to succeed")
 
@@ -1518,7 +1518,7 @@ func TestManager_Close(t *testing.T) {
 		require.NoError(t, err, "expected second Close to succeed")
 	})
 
-	t.Run("close uninitialized manager", func(t *testing.T) {
+	t.Run("close uninitialized replica", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
@@ -1531,7 +1531,7 @@ func TestManager_Close(t *testing.T) {
 		}
 		partitionID := storage.PartitionID(1)
 
-		mgr, err := createRaftManager(t, ctx, raftCfg, partitionID, NewMetrics())
+		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics())
 		require.NoError(t, err)
 
 		// Close without initializing
@@ -1548,10 +1548,10 @@ func TestManager_Close(t *testing.T) {
 		partitionID := storage.PartitionID(1)
 		recorder := NewEntryRecorder()
 
-		mgr, err := createRaftManager(t, ctx, raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
+		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
-		// Initialize the manager
+		// Initialize the replica
 		err = mgr.Initialize(ctx, 0)
 		require.NoError(t, err)
 		defer func() {
@@ -1580,11 +1580,11 @@ func TestManager_Close(t *testing.T) {
 	})
 }
 
-func TestManager_NotImplementedLogMethods(t *testing.T) {
+func TestReplica_NotImplementedLogMethods(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
-	// Configure manager with Raft enabled
+	// Configure replica with Raft enabled
 	raftCfg := config.Raft{
 		Enabled:         true,
 		RTTMilliseconds: 100,
@@ -1594,10 +1594,10 @@ func TestManager_NotImplementedLogMethods(t *testing.T) {
 	}
 
 	partitionID := storage.PartitionID(1)
-	mgr, err := createRaftManager(t, ctx, raftCfg, partitionID, NewMetrics())
+	mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics())
 	require.NoError(t, err)
 
-	// Initialize the manager
+	// Initialize the replica
 	err = mgr.Initialize(ctx, 0)
 	require.NoError(t, err)
 	defer func() {
@@ -1606,14 +1606,14 @@ func TestManager_NotImplementedLogMethods(t *testing.T) {
 
 	// Test CompareAndAppendLogEntry - should not be implemented
 	_, err = mgr.CompareAndAppendLogEntry(1, "/path/to/log")
-	require.ErrorContains(t, err, "raft manager does not support CompareAndAppendLogEntry")
+	require.ErrorContains(t, err, "raft replica does not support CompareAndAppendLogEntry")
 
 	// Test DeleteLogEntry - should not be implemented
 	err = mgr.DeleteLogEntry(1)
-	require.ErrorContains(t, err, "raft manager does not support DeleteLogEntry")
+	require.ErrorContains(t, err, "raft replica does not support DeleteLogEntry")
 }
 
-func TestManager_StorageConnection(t *testing.T) {
+func TestReplica_StorageConnection(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
@@ -1653,15 +1653,15 @@ func TestManager_StorageConnection(t *testing.T) {
 	raftNode, err := NewNode(cfg, logger, dbMgr, nil)
 	require.NoError(t, err)
 
-	// Create factory that connects managers to storage
+	// Create factory that connects replicas to storage
 	raftFactory := DefaultFactoryWithNode(cfg.Raft, raftNode)
 
-	raftManager, err := raftFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
+	replica, err := raftFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, raftManager.Close()) })
+	t.Cleanup(func() { require.NoError(t, replica.Close()) })
 
-	raftManagerStorage := raftManager.raftEnabledStorage
-	require.NotNil(t, raftManagerStorage, "manager should have a raft-enabled storage")
+	replicaStorage := replica.raftEnabledStorage
+	require.NotNil(t, replicaStorage, "replica should have a raft-enabled storage")
 
 	gitalyStorage, err := raftNode.GetStorage(storageName)
 	require.NoError(t, err)
@@ -1670,9 +1670,9 @@ func TestManager_StorageConnection(t *testing.T) {
 	raftNodeStorage, ok := gitalyStorage.(*RaftEnabledStorage)
 	require.True(t, ok, "storage should be a RaftEnabledStorage")
 
-	require.Same(t, raftNodeStorage, raftManagerStorage, "manager should point to correct storage")
+	require.Same(t, raftNodeStorage, replicaStorage, "replica should point to correct storage")
 
-	t.Run("manager connection is bidirectional", func(t *testing.T) {
+	t.Run("replica connection is bidirectional", func(t *testing.T) {
 		registry := raftNodeStorage.GetManagerRegistry()
 		require.NotNil(t, registry)
 
@@ -1681,29 +1681,29 @@ func TestManager_StorageConnection(t *testing.T) {
 			AuthorityName: storageName,
 		}
 
-		registeredManager, err := registry.GetManager(partitionKey)
+		registeredReplica, err := registry.GetManager(partitionKey)
 		require.NoError(t, err)
 
 		// Verify bidirectional connection
-		require.Same(t, raftManager, registeredManager,
-			"manager->storage->manager should return same instance")
+		require.Same(t, replica, registeredReplica,
+			"replica->storage->replica should return same instance")
 	})
 
-	t.Run("multiple managers for same partition key", func(t *testing.T) {
-		duplicateManager, err := raftFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
+	t.Run("multiple replicas for same partition key", func(t *testing.T) {
+		duplicateReplica, err := raftFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
 		require.NoError(t, err)
-		require.NotNil(t, duplicateManager)
+		require.NotNil(t, duplicateReplica)
 	})
 
-	t.Run("Register different managers for different partition keys", func(t *testing.T) {
+	t.Run("Register different replicas for different partition keys", func(t *testing.T) {
 		partitionID := storage.PartitionID(2)
-		managerTwo, err := raftFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
+		replicaTwo, err := raftFactory(storageName, partitionID, raftStorage, logger, NewMetrics())
 		require.NoError(t, err)
-		require.NotNil(t, managerTwo)
+		require.NotNil(t, replicaTwo)
 	})
 }
 
-func TestManager_ProcessConfChange(t *testing.T) {
+func TestReplica_ProcessConfChange(t *testing.T) {
 	t.Parallel()
 	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
@@ -1714,15 +1714,15 @@ func TestManager_ProcessConfChange(t *testing.T) {
 
 	metrics := NewMetrics()
 
-	manager, err := createRaftManager(t, ctx, raftCfg, partitionID, metrics)
+	replica, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics)
 	require.NoError(t, err)
 
-	t.Cleanup(func() { require.NoError(t, manager.Close()) })
+	t.Cleanup(func() { require.NoError(t, replica.Close()) })
 
-	err = manager.Initialize(ctx, 0)
+	err = replica.Initialize(ctx, 0)
 	require.NoError(t, err)
 
-	raftEnabledStorage := manager.raftEnabledStorage
+	raftEnabledStorage := replica.raftEnabledStorage
 	require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 	routingTable := raftEnabledStorage.GetRoutingTable()
@@ -1746,7 +1746,7 @@ func TestManager_ProcessConfChange(t *testing.T) {
 		Context: marshaledAddress,
 	}
 
-	err = manager.node.ProposeConfChange(ctx, confChangeAddV1)
+	err = replica.node.ProposeConfChange(ctx, confChangeAddV1)
 	require.NoError(t, err, "proposing add node config change failed")
 
 	require.Eventually(t, func() bool {
@@ -1761,7 +1761,7 @@ func TestManager_ProcessConfChange(t *testing.T) {
 	}, 5*time.Second, 100*time.Millisecond, "routing table did not update after adding node")
 
 	// Verify persisted ConfState
-	_, confState, err := manager.storage.InitialState()
+	_, confState, err := replica.storage.InitialState()
 	require.NoError(t, err)
 	require.Contains(t, confState.Voters, addNodeID, "persisted conf state should contain added node")
 	require.Len(t, confState.Voters, 2, "persisted conf state should have 2 nodes (bootstrap + added)")

@@ -22,19 +22,19 @@ func TestMain(m *testing.M) {
 	testhelper.Run(m)
 }
 
-type mockRaftManager struct {
-	RaftManager
+type mockReplica struct {
+	RaftReplica
 	logManager storage.LogManager
 	config     config.Raft
 }
 
 // EntryPath returns an absolute path to a given log entry's WAL files.
-func (m *mockRaftManager) GetEntryPath(lsn storage.LSN) string {
+func (m *mockReplica) GetEntryPath(lsn storage.LSN) string {
 	return m.logManager.GetEntryPath(lsn)
 }
 
 // Step is a mock implementation of the raft.Node.Step method.
-func (m *mockRaftManager) Step(ctx context.Context, msg raftpb.Message) error {
+func (m *mockReplica) Step(ctx context.Context, msg raftpb.Message) error {
 	return nil
 }
 
@@ -84,7 +84,7 @@ func getTestDBManager(t *testing.T, ctx context.Context, cfg config.Cfg, logger 
 	return db
 }
 
-func createRaftManager(t *testing.T, ctx context.Context, raftCfg config.Raft, partitionID storage.PartitionID, metrics *Metrics, opts ...OptionFunc) (*Manager, error) {
+func createRaftReplica(t *testing.T, ctx context.Context, raftCfg config.Raft, partitionID storage.PartitionID, metrics *Metrics, opts ...OptionFunc) (*Replica, error) {
 	logger := testhelper.NewLogger(t)
 	cfg := testcfg.Build(t)
 
