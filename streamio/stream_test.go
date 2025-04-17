@@ -147,3 +147,35 @@ func (ts *testSender) send(p []byte) error {
 	ts.sends = append(ts.sends, buf)
 	return nil
 }
+
+func TestDataMutated(t *testing.T) {
+	testString := "Hello this is some test data"
+	testData := []byte(testString)
+	ts := &testSender{}
+
+	ch, ch1, doneCh := make(chan struct{}), make(chan struct{}), make(chan struct{})
+
+	w := NewWriter(func(p []byte) error {
+		ch <- struct{}{}
+		<-ch1
+		return ts.send(p)
+	})
+
+	go func() {
+		_, err := io.CopyBuffer(&opaqueWriter{w}, bytes.NewReader(testData), make([]byte, 10))
+		require.NoError(t, err)
+		close(doneCh)
+	}()
+
+	// The following sequence tests the scenario where the
+	// testData is modified after the writer's 'sender' function is
+	// called but before the data is sent to the underlying sender.
+	// This simulates when data is simultaneously modified during a Write.
+	<-ch
+	testData[0] = byte('J')
+	ch1 <- struct{}{}
+
+	<-doneCh
+
+	require.Equal(t, []byte(testString), bytes.Join(ts.sends, nil))
+}

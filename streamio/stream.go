@@ -4,6 +4,7 @@
 package streamio
 
 import (
+	"bytes"
 	"io"
 	"sync"
 )
@@ -42,7 +43,11 @@ func (rr *receiveReader) Read(p []byte) (int, error) {
 // NewWriter turns sender into an io.Writer. The sender callback will
 // receive []byte arguments of length at most WriteBufferSize.
 func NewWriter(sender func(p []byte) error) io.Writer {
-	return &sendWriter{sender: sender}
+	return &sendWriter{
+		sender: func(p []byte) error {
+			return sender(bytes.Clone(p))
+		},
+	}
 }
 
 // NewSyncWriter turns sender into an io.Writer. The sender callback will
@@ -54,7 +59,7 @@ func NewSyncWriter(m *sync.Mutex, sender func(p []byte) error) io.Writer {
 			m.Lock()
 			defer m.Unlock()
 
-			return sender(p)
+			return sender(bytes.Clone(p))
 		},
 	}
 }
