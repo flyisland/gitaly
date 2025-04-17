@@ -30,11 +30,13 @@ var (
 	authErrors = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gitaly_authentication_errors_total",
-			Help: "Counts of of Gitaly request authentication errors",
+			Help: "Counts of Gitaly request authentication errors",
 		},
 		[]string{"version", "error"},
 	)
 )
+
+const tokenVersionV2 = "v2"
 
 func newPermissionDeniedError(reason string) error {
 	return status.Errorf(codes.PermissionDenied, "permission denied: %s", reason)
@@ -64,7 +66,7 @@ type AuthInfo struct {
 // secret.
 func CheckToken(ctx context.Context, secret string, targetTime time.Time) error {
 	if len(secret) == 0 {
-		panic("CheckToken: secret may not be empty")
+		return status.Errorf(codes.Unauthenticated, "secret must not be empty")
 	}
 
 	authInfo, err := ExtractAuthInfo(ctx)
@@ -72,7 +74,7 @@ func CheckToken(ctx context.Context, secret string, targetTime time.Time) error 
 		return errUnauthenticated
 	}
 
-	if authInfo.Version != "v2" {
+	if authInfo.Version != tokenVersionV2 {
 		return newPermissionDeniedError("invalid token version")
 	}
 
@@ -101,7 +103,7 @@ func ExtractAuthInfo(ctx context.Context) (*AuthInfo, error) {
 	return &AuthInfo{Version: version, SignedMessage: decodedSig, Message: msg}, nil
 }
 
-func countV2Error(message string) { authErrors.WithLabelValues("v2", message).Inc() }
+func countV2Error(message string) { authErrors.WithLabelValues(tokenVersionV2, message).Inc() }
 
 func v2HmacInfoValid(message string, signedMessage, secret []byte, targetTime time.Time, tokenValidity time.Duration) error {
 	expectedHMAC := hmacSign(secret, message)
