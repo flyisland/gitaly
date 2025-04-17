@@ -41,9 +41,7 @@ func (s *RaftEnabledStorage) RegisterManager(partitionID storage.PartitionID, ma
 		PartitionId:   uint64(partitionID),
 		AuthorityName: manager.authorityName,
 	}
-	if err := s.managerRegistry.RegisterManager(partitionKey, manager); err != nil {
-		return fmt.Errorf("register manager for partition %q: %w", partitionID, err)
-	}
+	s.managerRegistry.RegisterManager(partitionKey, manager)
 
 	return nil
 }

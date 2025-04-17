@@ -22,6 +22,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	nodeimpl "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/node"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
@@ -99,6 +100,10 @@ func testWithAndWithoutTransaction(t *testing.T, ctx context.Context, desc strin
 			require.NoError(t, err)
 			t.Cleanup(dbMgr.Close)
 
+			raftNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+			require.NoError(t, err)
+
+			raftFactory := raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
 			node, err := nodeimpl.NewManager(
 				cfg.Storages,
 				storagemgr.NewFactory(
@@ -110,7 +115,7 @@ func testWithAndWithoutTransaction(t *testing.T, ctx context.Context, desc strin
 						partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
 						nil,
 						cfg.Raft,
-						nil,
+						raftFactory,
 					),
 					storagemgr.DefaultMaxInactivePartitions,
 					storagemgr.NewMetrics(cfg.Prometheus),

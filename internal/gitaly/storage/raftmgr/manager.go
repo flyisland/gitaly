@@ -173,7 +173,7 @@ type RaftManagerFactory func(
 ) (*Manager, error)
 
 // DefaultFactoryWithNode enhances the factory to connect newly created managers with raft-enabled storage
-func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node) RaftManagerFactory {
+func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionFunc) RaftManagerFactory {
 	return func(
 		storageName string,
 		partitionID storage.PartitionID,
@@ -191,7 +191,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node) RaftManagerFact
 			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
 
-		manager, err := NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics)
+		manager, err := NewManager(storageName, partitionID, raftCfg, raftStorage, raftEnabledStorage, logger, metrics, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("create manager %q: %w", storageName, err)
 		}
@@ -201,22 +201,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node) RaftManagerFact
 				partitionID, storageName, err)
 		}
 
-		manager.raftEnabledStorage = raftEnabledStorage
-
 		return manager, nil
-	}
-}
-
-// DefaultFactory returns a RaftManagerFactory that returns a manager from input raft config
-func DefaultFactory(raftCfg config.Raft) RaftManagerFactory {
-	return func(
-		storageName string,
-		partitionID storage.PartitionID,
-		raftStorage *Storage,
-		logger logging.Logger,
-		metrics *Metrics,
-	) (*Manager, error) {
-		return NewManager(storageName, partitionID, raftCfg, raftStorage, logger, metrics)
 	}
 }
 
@@ -226,6 +211,7 @@ func NewManager(
 	partitionID storage.PartitionID,
 	raftCfg config.Raft,
 	raftStorage *Storage,
+	raftEnabledStorage *RaftEnabledStorage,
 	logger logging.Logger,
 	metrics *Metrics,
 	opts ...OptionFunc,
@@ -248,20 +234,21 @@ func NewManager(
 	scopedMetrics := metrics.Scope(authorityName)
 
 	return &Manager{
-		authorityName: authorityName,
-		ptnID:         partitionID,
-		raftCfg:       raftCfg,
-		options:       options,
-		storage:       raftStorage,
-		logger:        logger,
-		registry:      NewRegistry(scopedMetrics),
-		syncer:        safe.NewSyncer(),
-		leadership:    NewLeadership(),
-		ready:         &ready{c: make(chan error, 1)},
-		notifyQueue:   make(chan error, 1),
-		EntryRecorder: options.entryRecorder,
-		metrics:       scopedMetrics,
-		hooks:         noopHooks(),
+		authorityName:      authorityName,
+		ptnID:              partitionID,
+		raftCfg:            raftCfg,
+		options:            options,
+		storage:            raftStorage,
+		logger:             logger,
+		registry:           NewRegistry(scopedMetrics),
+		syncer:             safe.NewSyncer(),
+		leadership:         NewLeadership(),
+		ready:              &ready{c: make(chan error, 1)},
+		notifyQueue:        make(chan error, 1),
+		EntryRecorder:      options.entryRecorder,
+		metrics:            scopedMetrics,
+		raftEnabledStorage: raftEnabledStorage,
+		hooks:              noopHooks(),
 	}, nil
 }
 
@@ -795,6 +782,21 @@ func (mgr *Manager) processConfChange(entry raftpb.Entry) error {
 		return fmt.Errorf("saving config state: %w", err)
 	}
 
+	partitionKey := &gitalypb.PartitionKey{
+		AuthorityName: mgr.authorityName,
+		PartitionId:   uint64(mgr.ptnID),
+	}
+
+	routingTable := mgr.raftEnabledStorage.GetRoutingTable()
+	if routingTable == nil {
+		return fmt.Errorf("routing table not found")
+	}
+
+	err := routingTable.ApplyConfChange(entry.Term, entry.Index, mgr.leadership.GetLeaderID(), partitionKey, cc)
+	if err != nil {
+		return fmt.Errorf("applying conf change: %w", err)
+	}
+
 	// Signal readiness after first config change. Applies only to new clusters that have not been bootstrapped. Not
 	// needed for subsequent restarts
 	mgr.signalReady()
@@ -807,7 +809,7 @@ func (mgr *Manager) sendMessages(rd *raft.Ready) error {
 	if len(rd.Messages) > 0 {
 		// This code path will be properly implemented when network communication is added
 		// See https://gitlab.com/gitlab-org/gitaly/-/issues/6304
-		return fmt.Errorf("networking for raft cluster is not implemented yet")
+		mgr.logger.Error("networking for raft cluster is not implemented yet")
 	}
 	return nil
 }

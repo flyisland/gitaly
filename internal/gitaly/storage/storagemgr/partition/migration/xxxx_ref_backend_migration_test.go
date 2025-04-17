@@ -14,8 +14,11 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -125,14 +128,29 @@ func TestReftableMigration(t *testing.T) {
 			cmdFactory := gittest.NewCommandFactory(t, cfg)
 			localRepoFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, catfileCache)
 
-			partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil, cfg.Raft, nil)
+			storageName := cfg.Storages[0].Name
+			storagePath := cfg.Storages[0].Path
 
-			database, err := keyvalue.NewBadgerStore(testhelper.SharedLogger(t), t.TempDir())
+			dbMgr, err := databasemgr.NewDBManager(
+				ctx,
+				cfg.Storages,
+				keyvalue.NewBadgerStore,
+				helper.NewNullTickerFactory(),
+				logger,
+			)
+			require.NoError(t, err)
+			defer dbMgr.Close()
+
+			raftNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+			require.NoError(t, err)
+
+			raftFactory := raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
+
+			database, err := dbMgr.GetDB(storageName)
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, database)
 
-			storageName := cfg.Storages[0].Name
-			storagePath := cfg.Storages[0].Path
+			partitionFactory := partition.NewFactory(cmdFactory, localRepoFactory, partition.NewMetrics(nil), nil, cfg.Raft, raftFactory)
 
 			stateDir := filepath.Join(storagePath, "state")
 			require.NoError(t, os.MkdirAll(stateDir, mode.Directory))

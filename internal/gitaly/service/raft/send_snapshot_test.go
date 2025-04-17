@@ -61,8 +61,7 @@ func TestServer_SendSnapshot_Success(t *testing.T) {
 		AuthorityName: authorityName,
 		PartitionId:   1,
 	}
-	err = registry.RegisterManager(partitionKey, raftMgr)
-	require.NoError(t, err)
+	registry.RegisterManager(partitionKey, raftMgr)
 
 	client := runRaftServer(t, ctx, cfg, mockNode)
 
@@ -259,8 +258,7 @@ func TestServer_SendSnapshot_Errors(t *testing.T) {
 				AuthorityName: authorityName,
 				PartitionId:   1,
 			}
-			err = registry.RegisterManager(partitionKey, raftMgr)
-			require.NoError(t, err)
+			registry.RegisterManager(partitionKey, raftMgr)
 
 			client := runRaftServer(t, ctx, cfg, mockNode)
 

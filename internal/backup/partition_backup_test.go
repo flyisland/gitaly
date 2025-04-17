@@ -42,7 +42,13 @@ func TestPartitionBackup_CreateSuccess(t *testing.T) {
 				"2", // the partition id of the first repository
 				"3", // the partition id of the second repository
 			},
-			expectedLog: "Partition backup completed: 2 succeeded, 0 failed",
+			expectedLog: func() string {
+				// When Raft is enabled, the partition 1 will be reserved to store info related to routing table.
+				if testhelper.IsRaftEnabled() {
+					return "Partition backup completed: 3 succeeded, 0 failed"
+				}
+				return "Partition backup completed: 2 succeeded, 0 failed"
+			}(),
 		},
 		{
 			desc:        "storage error",
