@@ -34,7 +34,7 @@ type Transport interface {
 	Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error
 	// Receive receives a Raft message and processes it.
 	Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error
-	SendSnapshot(ctx context.Context, partitionKey *gitalypb.PartitionKey, message raftpb.Message, snapshot *Snapshot) error
+	SendSnapshot(ctx context.Context, partitionKey *gitalypb.PartitionKey, message raftpb.Message, snapshot *ReplicaSnapshot) error
 }
 
 // GrpcTransport is a gRPC transport implementation for sending Raft messages across nodes.
@@ -284,7 +284,7 @@ func unpackLogData(msg *gitalypb.RaftEntry, logEntryPath string) error {
 }
 
 // SendSnapshot sends a snapshot of a partition to a specified node in the cluster.
-func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.PartitionKey, message raftpb.Message, snapshot *Snapshot) (returnedErr error) {
+func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.PartitionKey, message raftpb.Message, snapshot *ReplicaSnapshot) (returnedErr error) {
 	followerNodeID := message.To
 
 	// Find replica's address as recipient of snapshot

@@ -138,7 +138,7 @@ type Storage struct {
 	lastTerm      uint64
 	consumer      storage.LogConsumer
 	stagingDir    string
-	snapshotter   Snapshotter
+	snapshotter   ReplicaSnapshotter
 
 	// hooks is a collection of hooks, used in test environment to intercept critical events
 	hooks testHooks
@@ -189,7 +189,7 @@ func NewStorage(
 		"storage_name": authorityName,
 	})
 
-	snapshotter, err := NewRaftSnapshotter(raftCfg, logger, metrics.Scope(authorityName))
+	snapshotter, err := NewReplicaSnapshotter(raftCfg, logger, metrics.Scope(authorityName))
 	if err != nil {
 		return nil, fmt.Errorf("create raft snapshotter: %w", err)
 	}
@@ -374,7 +374,7 @@ func (s *Storage) Snapshot() (raftpb.Snapshot, error) {
 }
 
 // TriggerSnapshot starts the process of taking a snapshot of the partition's disk
-func (s *Storage) TriggerSnapshot(ctx context.Context, appliedLSN storage.LSN, lastTerm uint64) (*Snapshot, error) {
+func (s *Storage) TriggerSnapshot(ctx context.Context, appliedLSN storage.LSN, lastTerm uint64) (*ReplicaSnapshot, error) {
 	// prevent multiple snapshotters from running at the same time
 	s.snapshotter.Lock()
 	defer s.snapshotter.Unlock()
@@ -386,7 +386,7 @@ func (s *Storage) TriggerSnapshot(ctx context.Context, appliedLSN storage.LSN, l
 	}
 
 	// snapshot metadata are important to track what logs should be applied after snapshot restoration
-	snapshot, err := s.snapshotter.materializeSnapshot(SnapshotMetadata{index: appliedLSN, term: lastTerm}, tx)
+	snapshot, err := s.snapshotter.materializeSnapshot(ReplicaSnapshotMetadata{index: appliedLSN, term: lastTerm}, tx)
 	if err != nil {
 		return nil, fmt.Errorf("materialize snapshot: %w", err)
 	}

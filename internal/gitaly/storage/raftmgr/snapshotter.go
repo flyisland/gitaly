@@ -19,46 +19,46 @@ import (
 
 const snapSuffix = ".snap"
 
-// SnapshotFile represents a file used for snapshots.
-type SnapshotFile interface {
+// ReplicaSnapshotFile represents a file used for snapshots.
+type ReplicaSnapshotFile interface {
 	io.Reader
 	io.Closer
 	io.Writer
 	Name() string
 }
 
-// Snapshot is a structure that holds state about a temporary file that is used
+// ReplicaSnapshot is a structure that holds state about a temporary file that is used
 // to hold a snapshot. By using an intermediate file we avoid holding everything
 // in memory. Index, Term & PartitionID are used to identify when the snapshot was taken.
-type Snapshot struct {
-	file     SnapshotFile
-	metadata SnapshotMetadata
+type ReplicaSnapshot struct {
+	file     ReplicaSnapshotFile
+	metadata ReplicaSnapshotMetadata
 }
 
-// SnapshotMetadata holds the last index and term corresponding to when the snapshot was taken
-type SnapshotMetadata struct {
+// ReplicaSnapshotMetadata holds the last index and term corresponding to when the snapshot was taken
+type ReplicaSnapshotMetadata struct {
 	index       storage.LSN
 	term        uint64
 	partitionID storage.PartitionID
 }
 
-// RaftSnapshotter manages the creation and handling of snapshots in a Raft network.
+// replicaSnapshotter manages the creation and handling of snapshots in a Raft network.
 // It provides thread-safe operations for snapshot management.
-type RaftSnapshotter struct {
+type replicaSnapshotter struct {
 	sync.Mutex
 	logger  logging.Logger
 	dir     string
 	metrics RaftMetrics
 }
 
-// Snapshotter is an interface to implement snapshotting in raft
-type Snapshotter interface {
+// ReplicaSnapshotter is an interface to implement snapshotting in raft
+type ReplicaSnapshotter interface {
 	sync.Locker
-	materializeSnapshot(snapshot SnapshotMetadata, tx storage.Transaction) (_ *Snapshot, returnErr error)
+	materializeSnapshot(snapshot ReplicaSnapshotMetadata, tx storage.Transaction) (_ *ReplicaSnapshot, returnErr error)
 }
 
-// NewRaftSnapshotter creates a new Snapshotter
-func NewRaftSnapshotter(cfg config.Raft, logger logging.Logger, metrics RaftMetrics) (Snapshotter, error) {
+// NewReplicaSnapshotter creates a new Snapshotter
+func NewReplicaSnapshotter(cfg config.Raft, logger logging.Logger, metrics RaftMetrics) (ReplicaSnapshotter, error) {
 	logger = logger.WithField("component", "raft.snapshotter")
 	logger.Info("Initializing Raft Snapshotter")
 
@@ -67,7 +67,7 @@ func NewRaftSnapshotter(cfg config.Raft, logger logging.Logger, metrics RaftMetr
 		return nil, fmt.Errorf("create snapshot directory: %w", err)
 	}
 
-	return &RaftSnapshotter{
+	return &replicaSnapshotter{
 		logger:  logger,
 		dir:     cfg.SnapshotDir,
 		metrics: metrics,
@@ -93,7 +93,7 @@ func writeTarball(partitionRoot string, kvFile *os.File, w io.Writer) error {
 }
 
 // materializeSnapshot materializes the snapshot inside a transaction and writes to a compressed tar
-func (rs *RaftSnapshotter) materializeSnapshot(snapshotMetadata SnapshotMetadata, tx storage.Transaction) (_ *Snapshot, returnErr error) {
+func (rs *replicaSnapshotter) materializeSnapshot(snapshotMetadata ReplicaSnapshotMetadata, tx storage.Transaction) (_ *ReplicaSnapshot, returnErr error) {
 	saveSnapTimer := prometheus.NewTimer(rs.metrics.snapSaveSec)
 
 	// Make a tmp file in snapshot dir
@@ -161,9 +161,9 @@ func (rs *RaftSnapshotter) materializeSnapshot(snapshotMetadata SnapshotMetadata
 	}
 	defer f.Close()
 
-	return &Snapshot{
+	return &ReplicaSnapshot{
 		file: f,
-		metadata: SnapshotMetadata{
+		metadata: ReplicaSnapshotMetadata{
 			index: snapshotMetadata.index,
 			term:  snapshotMetadata.term,
 		},

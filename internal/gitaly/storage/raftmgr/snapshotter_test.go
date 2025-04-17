@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/encoding/protodelim"
 )
 
-func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
+func TestReplicaSnapshotter_materializeSnapshot(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
@@ -71,11 +71,11 @@ func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
 	}
 
 	// Setup snapshotter
-	s, err := NewRaftSnapshotter(cfg.Raft, logger, NewMetrics().Scope("default"))
+	s, err := NewReplicaSnapshotter(cfg.Raft, logger, NewMetrics().Scope("default"))
 	require.NoError(t, err)
 
 	// Package partition's disk into snapshot
-	got, err := s.materializeSnapshot(SnapshotMetadata{
+	got, err := s.materializeSnapshot(ReplicaSnapshotMetadata{
 		index:       10,
 		term:        10,
 		partitionID: storage.PartitionID(1),
@@ -169,7 +169,7 @@ func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 		wg.Add(concurrentCalls)
 
 		type result struct {
-			snapshot *Snapshot
+			snapshot *ReplicaSnapshot
 			seqNum   int
 		}
 
@@ -234,9 +234,9 @@ type MockRaftSnapshotter struct {
 }
 
 // Mock materializeSnapshot
-func (m *MockRaftSnapshotter) materializeSnapshot(snapshotMetadata SnapshotMetadata, tx storage.Transaction) (*Snapshot, error) {
+func (m *MockRaftSnapshotter) materializeSnapshot(snapshotMetadata ReplicaSnapshotMetadata, tx storage.Transaction) (*ReplicaSnapshot, error) {
 	m.callCount++
-	return &Snapshot{
+	return &ReplicaSnapshot{
 		file:     &os.File{},
 		metadata: snapshotMetadata,
 	}, nil

@@ -560,9 +560,9 @@ func TestGrpcTransport_SendSnapshot(t *testing.T) {
 				cancel()
 			}
 
-			snapshot := &Snapshot{
+			snapshot := &ReplicaSnapshot{
 				file: file,
-				metadata: SnapshotMetadata{
+				metadata: ReplicaSnapshotMetadata{
 					term:  msg.Term,
 					index: storage.LSN(msg.Index),
 				},
