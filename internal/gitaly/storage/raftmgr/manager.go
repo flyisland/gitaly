@@ -214,7 +214,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 			return nil, fmt.Errorf("create replica %q: %w", storageName, err)
 		}
 
-		if err := raftEnabledStorage.RegisterManager(partitionID, replica); err != nil {
+		if err := raftEnabledStorage.RegisterReplica(partitionID, replica); err != nil {
 			return nil, fmt.Errorf("register replica for partition %d in storage %q: %w",
 				partitionID, storageName, err)
 		}
@@ -494,7 +494,7 @@ func (replica *Replica) Close() error {
 
 	if replica.raftEnabledStorage != nil {
 		// Mostly for tests; raftEnabledStorage should never be nil in practice.
-		replica.raftEnabledStorage.DeregisterManager(replica)
+		replica.raftEnabledStorage.DeregisterReplica(replica)
 	}
 
 	return replica.storage.close()

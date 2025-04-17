@@ -1673,7 +1673,7 @@ func TestReplica_StorageConnection(t *testing.T) {
 	require.Same(t, raftNodeStorage, replicaStorage, "replica should point to correct storage")
 
 	t.Run("replica connection is bidirectional", func(t *testing.T) {
-		registry := raftNodeStorage.GetManagerRegistry()
+		registry := raftNodeStorage.GetReplicaRegistry()
 		require.NotNil(t, registry)
 
 		partitionKey := &gitalypb.PartitionKey{
@@ -1681,7 +1681,7 @@ func TestReplica_StorageConnection(t *testing.T) {
 			AuthorityName: storageName,
 		}
 
-		registeredReplica, err := registry.GetManager(partitionKey)
+		registeredReplica, err := registry.GetReplica(partitionKey)
 		require.NoError(t, err)
 
 		// Verify bidirectional connection

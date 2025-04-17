@@ -53,22 +53,22 @@ func TestServer_SendMessage(t *testing.T) {
 	storage, err := mockNode.GetStorage(storageNameOne)
 	require.NoError(t, err)
 
-	registry := storage.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
+	registry := storage.(*raftmgr.RaftEnabledStorage).GetReplicaRegistry()
 	replica := &mockRaftReplica{}
 
 	partitionKey := &gitalypb.PartitionKey{
 		AuthorityName: authorityName,
 		PartitionId:   1,
 	}
-	registry.RegisterManager(partitionKey, replica)
+	registry.RegisterReplica(partitionKey, replica)
 
 	// Register storage two
 	storageTwo, err := mockNode.GetStorage(storageNameTwo)
 	require.NoError(t, err)
 
-	registryTwo := storageTwo.(*raftmgr.RaftEnabledStorage).GetManagerRegistry()
+	registryTwo := storageTwo.(*raftmgr.RaftEnabledStorage).GetReplicaRegistry()
 	replicaTwo := &mockRaftReplica{}
-	registryTwo.RegisterManager(partitionKey, replicaTwo)
+	registryTwo.RegisterReplica(partitionKey, replicaTwo)
 
 	client := runRaftServer(t, ctx, cfg, mockNode)
 

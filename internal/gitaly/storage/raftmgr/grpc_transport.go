@@ -42,13 +42,13 @@ type GrpcTransport struct {
 	logger         log.Logger
 	cfg            config.Cfg
 	routingTable   RoutingTable
-	registry       ManagerRegistry
+	registry       ReplicaRegistry
 	connectionPool *client.Pool
 	mutex          sync.Mutex
 }
 
 // NewGrpcTransport creates a new GrpcTransport instance.
-func NewGrpcTransport(logger log.Logger, cfg config.Cfg, routingTable RoutingTable, registry ManagerRegistry, conns *client.Pool) *GrpcTransport {
+func NewGrpcTransport(logger log.Logger, cfg config.Cfg, routingTable RoutingTable, registry ReplicaRegistry, conns *client.Pool) *GrpcTransport {
 	return &GrpcTransport{
 		logger:         logger,
 		cfg:            cfg,
@@ -207,8 +207,8 @@ func (t *GrpcTransport) packLogData(ctx context.Context, lsn storage.LSN, messag
 
 // Receive receives a stream of Raft messages and processes them.
 func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error {
-	// Retrieve the raft replica from the registry, assumption is that all the messages are from the same partition key.
-	replica, err := t.registry.GetManager(partitionKey)
+	// Retrieve the replica from the registry, assumption is that all the messages are from the same partition key.
+	replica, err := t.registry.GetReplica(partitionKey)
 	if err != nil {
 		return status.Errorf(codes.NotFound, "replica not found for partition %d: %v",
 			partitionKey.GetPartitionId(), err)

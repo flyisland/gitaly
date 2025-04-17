@@ -11,40 +11,40 @@ func partitionKeyToString(pk *gitalypb.PartitionKey) string {
 	return fmt.Sprintf("%d:%s", pk.GetPartitionId(), pk.GetAuthorityName())
 }
 
-// ManagerRegistry is an interface that defines the methods to register and retrieve managers.
-type ManagerRegistry interface {
-	// GetManager returns the manager for a given partition key.
-	GetManager(key *gitalypb.PartitionKey) (RaftReplica, error)
-	// RegisterManager registers a manager for a given partition key.
-	RegisterManager(key *gitalypb.PartitionKey, manager RaftReplica)
-	// DeregisterManager removes the manager with the given key from the registry.
-	DeregisterManager(key *gitalypb.PartitionKey)
+// ReplicaRegistry is an interface that defines the methods to register and retrieve replicas.
+type ReplicaRegistry interface {
+	// GetReplica returns the replica for a given partition key.
+	GetReplica(key *gitalypb.PartitionKey) (RaftReplica, error)
+	// RegisterReplica registers a replica for a given partition key.
+	RegisterReplica(key *gitalypb.PartitionKey, replica RaftReplica)
+	// DeregisterReplica removes the replica with the given key from the registry.
+	DeregisterReplica(key *gitalypb.PartitionKey)
 }
 
-// RaftManagerRegistry is a concrete implementation of the ManagerRegistry interface.
-type raftManagerRegistry struct {
-	managers *sync.Map
+// raftRegistry is a concrete implementation of the ReplicaRegistry interface.
+type raftRegistry struct {
+	replicas *sync.Map
 }
 
-// NewRaftManagerRegistry creates a new RaftManagerRegistry.
-func NewRaftManagerRegistry() *raftManagerRegistry {
-	return &raftManagerRegistry{managers: &sync.Map{}}
+// NewReplicaRegistry creates a new replicaRegistry.
+func NewReplicaRegistry() *raftRegistry {
+	return &raftRegistry{replicas: &sync.Map{}}
 }
 
-// GetManager returns the manager for a given partitionKey.
-func (r *raftManagerRegistry) GetManager(key *gitalypb.PartitionKey) (RaftReplica, error) {
-	if mgr, ok := r.managers.Load(partitionKeyToString(key)); ok {
+// GetReplica returns the replica for a given partitionKey.
+func (r *raftRegistry) GetReplica(key *gitalypb.PartitionKey) (RaftReplica, error) {
+	if mgr, ok := r.replicas.Load(partitionKeyToString(key)); ok {
 		return mgr.(RaftReplica), nil
 	}
-	return nil, fmt.Errorf("no manager found for partition key %+v", key)
+	return nil, fmt.Errorf("no replica found for partition key %+v", key)
 }
 
-// RegisterManager registers a manager for a given partitionKey.
-func (r *raftManagerRegistry) RegisterManager(key *gitalypb.PartitionKey, manager RaftReplica) {
-	r.managers.LoadOrStore(partitionKeyToString(key), manager)
+// RegisterReplica registers a replica for a given partitionKey.
+func (r *raftRegistry) RegisterReplica(key *gitalypb.PartitionKey, replica RaftReplica) {
+	r.replicas.LoadOrStore(partitionKeyToString(key), replica)
 }
 
-// DeregisterManager removes the manager with the given key from the registry.
-func (r *raftManagerRegistry) DeregisterManager(key *gitalypb.PartitionKey) {
-	r.managers.Delete(partitionKeyToString(key))
+// DeregisterReplica removes the replica with the given key from the registry.
+func (r *raftRegistry) DeregisterReplica(key *gitalypb.PartitionKey) {
+	r.replicas.Delete(partitionKeyToString(key))
 }

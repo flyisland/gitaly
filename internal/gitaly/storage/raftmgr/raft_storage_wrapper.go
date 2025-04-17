@@ -16,7 +16,7 @@ type RaftEnabledStorage struct {
 	storage.Storage
 	transport       Transport
 	routingTable    RoutingTable
-	managerRegistry ManagerRegistry
+	replicaRegistry ReplicaRegistry
 }
 
 // GetTransport returns the Raft transport for this storage
@@ -29,31 +29,31 @@ func (s *RaftEnabledStorage) GetRoutingTable() RoutingTable {
 	return s.routingTable
 }
 
-// GetManagerRegistry returns the Raft manager registry for this storage
-func (s *RaftEnabledStorage) GetManagerRegistry() ManagerRegistry {
-	return s.managerRegistry
+// GetReplicaRegistry returns the replica registry for this storage
+func (s *RaftEnabledStorage) GetReplicaRegistry() ReplicaRegistry {
+	return s.replicaRegistry
 }
 
-// RegisterManager registers a Manager with this RaftEnabledStorage
-// This should be called after both the Manager and RaftEnabledStorage are created
-func (s *RaftEnabledStorage) RegisterManager(partitionID storage.PartitionID, manager *Replica) error {
+// RegisterReplica registers a replica with this RaftEnabledStorage
+// This should be called after both the replica and RaftEnabledStorage are created
+func (s *RaftEnabledStorage) RegisterReplica(partitionID storage.PartitionID, replica *Replica) error {
 	partitionKey := &gitalypb.PartitionKey{
 		PartitionId:   uint64(partitionID),
-		AuthorityName: manager.authorityName,
+		AuthorityName: replica.authorityName,
 	}
-	s.managerRegistry.RegisterManager(partitionKey, manager)
+	s.replicaRegistry.RegisterReplica(partitionKey, replica)
 
 	return nil
 }
 
-// DeregisterManager removes a Manager from this RaftEnabledStorage.
-// This should be called when the manager is closing.
-func (s *RaftEnabledStorage) DeregisterManager(manager *Replica) {
+// DeregisterReplica removes a replica from this RaftEnabledStorage.
+// This should be called when the replica is closing.
+func (s *RaftEnabledStorage) DeregisterReplica(replica *Replica) {
 	partitionKey := &gitalypb.PartitionKey{
-		PartitionId:   uint64(manager.ptnID),
-		AuthorityName: manager.authorityName,
+		PartitionId:   uint64(replica.ptnID),
+		AuthorityName: replica.authorityName,
 	}
-	s.managerRegistry.DeregisterManager(partitionKey)
+	s.replicaRegistry.DeregisterReplica(partitionKey)
 }
 
 // Node adds Raft functionality to each storage
@@ -80,14 +80,14 @@ func NewNode(cfg config.Cfg, logger log.Logger, dbMgr *databasemgr.DBManager, co
 
 		// Create per-storage Raft components
 		routingTable := NewKVRoutingTable(kvStore)
-		managerRegistry := NewRaftManagerRegistry()
-		transport := NewGrpcTransport(logger, cfg, routingTable, managerRegistry, connsPool)
+		replicaRegistry := NewReplicaRegistry()
+		transport := NewGrpcTransport(logger, cfg, routingTable, replicaRegistry, connsPool)
 
 		n.storages[cfgStorage.Name] = &RaftEnabledStorage{
 			Storage:         baseStorage, // storage.Storage would be nil initially
 			transport:       transport,
 			routingTable:    routingTable,
-			managerRegistry: managerRegistry,
+			replicaRegistry: replicaRegistry,
 		}
 	}
 
