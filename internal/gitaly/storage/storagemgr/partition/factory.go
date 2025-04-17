@@ -57,7 +57,7 @@ func (f Factory) New(
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
 
-		raftStorage, err := raftmgr.NewStorage(
+		replicaLogStore, err := raftmgr.NewReplicaLogStore(
 			storageName,
 			partitionID,
 			f.raftCfg,
@@ -70,12 +70,12 @@ func (f Factory) New(
 			f.partitionMetrics.raft,
 		)
 		if err != nil {
-			panic(fmt.Errorf("creating raft storage: %w", err))
+			panic(fmt.Errorf("creating raft log store: %w", err))
 		}
 		raftReplica, err := factory(
 			storageName,
 			partitionID,
-			raftStorage,
+			replicaLogStore,
 			logger,
 			f.partitionMetrics.raft,
 		)

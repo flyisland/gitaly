@@ -136,7 +136,7 @@ func TestReplicaSnapshotter_materializeSnapshot(t *testing.T) {
 	testhelper.ContainsTarState(t, bufio.NewReader(tar), directoryState)
 }
 
-func TestRaftStorage_TriggerSnapshot(t *testing.T) {
+func TestReplicaLogStore_TriggerSnapshot(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
@@ -146,11 +146,11 @@ func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 			Mutex:     sync.Mutex{},
 			callCount: 0,
 		}
-		raftStorage := &Storage{
+		logStore := &ReplicaLogStore{
 			snapshotter: mockSnapshotter,
 		}
 		// No transaction created in this context
-		snapshot, err := raftStorage.TriggerSnapshot(ctx, storage.LSN(1), 10)
+		snapshot, err := logStore.TriggerSnapshot(ctx, storage.LSN(1), 10)
 		require.ErrorContains(t, err, "transaction not initialized")
 		require.Nil(t, snapshot)
 	})
@@ -160,7 +160,7 @@ func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 			Mutex:     sync.Mutex{},
 			callCount: 0,
 		}
-		raftStorage := &Storage{
+		logStore := &ReplicaLogStore{
 			snapshotter: mockSnapshotter,
 		}
 
@@ -186,7 +186,7 @@ func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 
 				tx := &mockTransaction{}
 				ctx = storage.ContextWithTransaction(ctx, tx)
-				snapshot, err := raftStorage.TriggerSnapshot(ctx, tx.SnapshotLSN(), 10)
+				snapshot, err := logStore.TriggerSnapshot(ctx, tx.SnapshotLSN(), 10)
 
 				select {
 				case <-ctx.Done():

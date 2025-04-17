@@ -98,7 +98,7 @@ func createRaftReplica(t *testing.T, ctx context.Context, raftCfg config.Raft, p
 	db, err := dbMgr.GetDB(storageName)
 	require.NoError(t, err)
 
-	raftStorage, err := NewStorage(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+	logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
 	require.NoError(t, err)
 
 	raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -106,7 +106,7 @@ func createRaftReplica(t *testing.T, ctx context.Context, raftCfg config.Raft, p
 
 	raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, opts...)
 
-	manager, err := raftFactory(storageName, partitionID, raftStorage, logger, metrics)
+	manager, err := raftFactory(storageName, partitionID, logStore, logger, metrics)
 
 	return manager, err
 }

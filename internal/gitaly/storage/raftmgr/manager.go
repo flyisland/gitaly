@@ -134,7 +134,7 @@ type Replica struct {
 	raftCfg       config.Raft         // etcd/raft configurations
 	options       ReplicaOptions      // Additional replica configuration
 	logger        logging.Logger      // Internal logging
-	storage       *Storage            // Persistent storage for Raft logs and state
+	logStore      *ReplicaLogStore    // Persistent storage for Raft logs and state
 	registry      *Registry           // Event tracking
 	leadership    *Leadership         // Current leadership information
 	syncer        safe.Syncer         // Synchronization operations
@@ -184,7 +184,7 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ReplicaOptions, error
 type RaftReplicaFactory func(
 	storageName string,
 	partitionID storage.PartitionID,
-	raftStorage *Storage,
+	logStore *ReplicaLogStore,
 	logger logging.Logger,
 	metrics *Metrics,
 ) (*Replica, error)
@@ -195,7 +195,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 	return func(
 		storageName string,
 		partitionID storage.PartitionID,
-		raftStorage *Storage,
+		logStore *ReplicaLogStore,
 		logger logging.Logger,
 		metrics *Metrics,
 	) (*Replica, error) {
@@ -209,7 +209,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
 
-		replica, err := NewReplica(storageName, partitionID, raftCfg, raftStorage, raftEnabledStorage, logger, metrics, opts...)
+		replica, err := NewReplica(storageName, partitionID, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("create replica %q: %w", storageName, err)
 		}
@@ -231,7 +231,7 @@ func NewReplica(
 	authorityName string,
 	partitionID storage.PartitionID,
 	raftCfg config.Raft,
-	raftStorage *Storage,
+	logStore *ReplicaLogStore,
 	raftEnabledStorage *RaftEnabledStorage,
 	logger logging.Logger,
 	metrics *Metrics,
@@ -259,7 +259,7 @@ func NewReplica(
 		ptnID:              partitionID,
 		raftCfg:            raftCfg,
 		options:            options,
-		storage:            raftStorage,
+		logStore:           logStore,
 		logger:             logger,
 		registry:           NewRegistry(scopedMetrics),
 		syncer:             safe.NewSyncer(),
@@ -298,7 +298,7 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 
 	replica.ctx, replica.cancel = context.WithCancel(ctx)
 
-	initStatus, err := replica.storage.initialize(ctx, appliedLSN)
+	initStatus, err := replica.logStore.initialize(ctx, appliedLSN)
 	if err != nil {
 		return fmt.Errorf("failed to load raft initial state: %w", err)
 	}
@@ -325,7 +325,7 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 		ID:              nodeID,
 		ElectionTick:    int(replica.raftCfg.ElectionTicks),
 		HeartbeatTick:   int(replica.raftCfg.HeartbeatTicks),
-		Storage:         replica.storage,
+		Storage:         replica.logStore,
 		MaxSizePerMsg:   defaultMaxSizePerMsg,
 		MaxInflightMsgs: defaultMaxInflightMsgs,
 		Logger:          &raftLogger{logger: replica.logger.WithFields(logging.Fields{"raft.component": "replica"})},
@@ -352,24 +352,24 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 	case InitStatusBootstrapped:
 		// For restarts, set Applied to latest committed LSN
 		// WAL considers entries committed once they are in the Raft log
-		config.Applied = uint64(replica.storage.readCommittedLSN())
+		config.Applied = uint64(replica.logStore.readCommittedLSN())
 		replica.node = raft.RestartNode(config)
 	case InitStatusNeedsBackfill:
 		// For migrations from non-Raft to Raft storage, we need to establish initial Raft state through these
 		// steps: Create a configuration with the node itself as the only voter and set the commit point to
 		// include all existing backfilled entries, ensuring they're considered committed by the Raft protocol.
-		if err := replica.storage.saveConfState(raftpb.ConfState{
+		if err := replica.logStore.saveConfState(raftpb.ConfState{
 			Voters: []uint64{nodeID},
 		}); err != nil {
 			return fmt.Errorf("saving conf state: %w", err)
 		}
-		if err := replica.storage.saveHardState(raftpb.HardState{
+		if err := replica.logStore.saveHardState(raftpb.HardState{
 			Vote:   nodeID,
-			Commit: uint64(replica.storage.readCommittedLSN()),
+			Commit: uint64(replica.logStore.readCommittedLSN()),
 		}); err != nil {
 			return fmt.Errorf("saving hard state: %w", err)
 		}
-		config.Applied = uint64(replica.storage.readCommittedLSN())
+		config.Applied = uint64(replica.logStore.readCommittedLSN())
 		replica.node = raft.RestartNode(config)
 	default:
 		return fmt.Errorf("raft bootstrapping returns unknown status without any error")
@@ -421,7 +421,7 @@ func (replica *Replica) run(initStatus InitStatus) {
 				replica.handleFatalError(err)
 				return
 			}
-		case err := <-replica.storage.localLog.GetNotificationQueue():
+		case err := <-replica.logStore.localLog.GetNotificationQueue():
 			// Forward storage notifications
 			if err == nil {
 				select {
@@ -497,7 +497,7 @@ func (replica *Replica) Close() error {
 		replica.raftEnabledStorage.DeregisterReplica(replica)
 	}
 
-	return replica.storage.close()
+	return replica.logStore.close()
 }
 
 // GetNotificationQueue returns the channel used to notify external components of changes.
@@ -507,25 +507,25 @@ func (replica *Replica) GetNotificationQueue() <-chan error {
 
 // GetEntryPath returns the filesystem path for a given log entry.
 func (replica *Replica) GetEntryPath(lsn storage.LSN) string {
-	return replica.storage.localLog.GetEntryPath(lsn)
+	return replica.logStore.localLog.GetEntryPath(lsn)
 }
 
 // AcknowledgePosition marks log entries up to and including the given LSN
 // as successfully processed for the specified position type. Raft replica
 // doesn't handle this directly. It propagates to the local log manager.
 func (replica *Replica) AcknowledgePosition(t storage.PositionType, lsn storage.LSN) error {
-	return replica.storage.localLog.AcknowledgePosition(t, lsn)
+	return replica.logStore.localLog.AcknowledgePosition(t, lsn)
 }
 
 // AppendedLSN returns the LSN of the most recently appended log entry.
 func (replica *Replica) AppendedLSN() storage.LSN {
-	return replica.storage.readCommittedLSN()
+	return replica.logStore.readCommittedLSN()
 }
 
 // LowWaterMark returns the earliest LSN that should be retained.
 // Log entries before this LSN can be safely removed.
 func (replica *Replica) LowWaterMark() storage.LSN {
-	lsn, _ := replica.storage.FirstIndex()
+	lsn, _ := replica.logStore.FirstIndex()
 	return storage.LSN(lsn)
 }
 
@@ -699,7 +699,7 @@ func (replica *Replica) saveEntries(rd *raft.Ready) error {
 		case raftpb.EntryNormal:
 			if len(rd.Entries[i].Data) == 0 {
 				// Handle empty entries (typically internal Raft entries)
-				if err := replica.storage.draftLogEntry(rd.Entries[i], func(w *wal.Entry) error {
+				if err := replica.logStore.draftLogEntry(rd.Entries[i], func(w *wal.Entry) error {
 					return nil
 				}); err != nil {
 					return fmt.Errorf("inserting config change log entry: %w", err)
@@ -719,7 +719,7 @@ func (replica *Replica) saveEntries(rd *raft.Ready) error {
 				}
 
 				logEntryPath := string(message.GetData().GetLocalPath())
-				if err := replica.storage.insertLogEntry(rd.Entries[i], logEntryPath); err != nil {
+				if err := replica.logStore.insertLogEntry(rd.Entries[i], logEntryPath); err != nil {
 					return fmt.Errorf("appending log entry: %w", err)
 				}
 				if err := replica.recordEntryIfNeeded(false, lsn); err != nil {
@@ -734,7 +734,7 @@ func (replica *Replica) saveEntries(rd *raft.Ready) error {
 			}
 		case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
 			// Handle configuration change entries
-			if err := replica.storage.draftLogEntry(rd.Entries[i], func(w *wal.Entry) error {
+			if err := replica.logStore.draftLogEntry(rd.Entries[i], func(w *wal.Entry) error {
 				marshaledValue, err := proto.Marshal(lsn.ToProto())
 				if err != nil {
 					return fmt.Errorf("marshal value: %w", err)
@@ -831,7 +831,7 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 	}
 
 	confState := replica.node.ApplyConfChange(cc)
-	if err := replica.storage.saveConfState(*confState); err != nil {
+	if err := replica.logStore.saveConfState(*confState); err != nil {
 		return fmt.Errorf("saving config state: %w", err)
 	}
 
@@ -902,7 +902,7 @@ func (replica *Replica) handleHardState(rd *raft.Ready) error {
 	if raft.IsEmptyHardState(rd.HardState) {
 		return nil
 	}
-	if err := replica.storage.saveHardState(rd.HardState); err != nil {
+	if err := replica.logStore.saveHardState(rd.HardState); err != nil {
 		return fmt.Errorf("saving hard state: %w", err)
 	}
 	return nil
@@ -912,7 +912,7 @@ func (replica *Replica) handleHardState(rd *raft.Ready) error {
 // typically used for testing and debugging.
 func (replica *Replica) recordEntryIfNeeded(fromRaft bool, lsn storage.LSN) error {
 	if replica.EntryRecorder != nil {
-		logEntry, err := replica.storage.readLogEntry(lsn)
+		logEntry, err := replica.logStore.readLogEntry(lsn)
 		if err != nil {
 			return fmt.Errorf("reading log entry: %w", err)
 		}
