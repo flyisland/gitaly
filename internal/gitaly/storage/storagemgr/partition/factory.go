@@ -22,7 +22,7 @@ type Factory struct {
 	partitionMetrics Metrics
 	logConsumer      storage.LogConsumer
 	raftCfg          config.Raft
-	raftFactory      raftmgr.RaftManagerFactory
+	raftFactory      raftmgr.RaftReplicaFactory
 }
 
 // New returns a new Partition instance.
@@ -107,14 +107,14 @@ func (f Factory) New(
 // - repoFactory: Used to create local repository instances
 // - metrics: Used to track partition operations
 // - logConsumer: Consumes WAL entries (optional, can be nil)
-// - raftFactory: Creates Raft managers for replicated partitions (optional, can be nil)
+// - raftFactory: Creates Raft replicas for replicated partitions (optional, can be nil)
 func NewFactory(
 	cmdFactory gitcmd.CommandFactory,
 	repoFactory localrepo.Factory,
 	partitionMetrics Metrics,
 	logConsumer storage.LogConsumer,
 	raftCfg config.Raft,
-	raftFactory raftmgr.RaftManagerFactory,
+	raftFactory raftmgr.RaftReplicaFactory,
 ) Factory {
 	return Factory{
 		cmdFactory:       cmdFactory,

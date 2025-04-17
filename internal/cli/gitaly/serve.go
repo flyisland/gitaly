@@ -409,7 +409,7 @@ func run(appCtx *cli.Context, cfg config.Cfg, logger log.Logger) error {
 			logConsumer = walArchiver
 		}
 
-		var raftFactory raftmgr.RaftManagerFactory
+		var raftFactory raftmgr.RaftReplicaFactory
 		var raftNode *raftmgr.Node
 
 		if cfg.Raft.Enabled {

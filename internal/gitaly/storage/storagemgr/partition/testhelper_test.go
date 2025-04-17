@@ -1182,7 +1182,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		return NewMetrics(housekeeping.NewMetrics(setup.Config.Prometheus))
 	}
 
-	var raftFactory raftmgr.RaftManagerFactory
+	var raftFactory raftmgr.RaftReplicaFactory
 	var raftEntryRecorder *raftmgr.EntryRecorder
 	clusterID := uuid.New().String()
 	if testhelper.IsRaftEnabled() {

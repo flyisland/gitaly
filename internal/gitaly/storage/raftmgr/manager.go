@@ -179,9 +179,9 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ReplicaOptions, error
 	return options, nil
 }
 
-// RaftManagerFactory defines a function type that creates a new Raft Replica instance.
+// RaftReplicaFactory defines a function type that creates a new Raft Replica instance.
 // This factory is used to create and initialize Replica objects for partitions.
-type RaftManagerFactory func(
+type RaftReplicaFactory func(
 	storageName string,
 	partitionID storage.PartitionID,
 	raftStorage *Storage,
@@ -191,7 +191,7 @@ type RaftManagerFactory func(
 
 // DefaultFactoryWithNode enhances the factory to connect newly created replicas with raft-enabled storage.
 // This function creates a Replica and registers it with the appropriate RaftEnabledStorage.
-func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionFunc) RaftManagerFactory {
+func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionFunc) RaftReplicaFactory {
 	return func(
 		storageName string,
 		partitionID storage.PartitionID,
