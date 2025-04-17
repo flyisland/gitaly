@@ -9,26 +9,26 @@ import (
 // EventID uniquely identifies an event in the registry.
 type EventID uint64
 
-// Waiter holds the information required to wait for an event to be committed.
-type Waiter struct {
+// EventWaiter holds the information required to wait for an event to be committed.
+type EventWaiter struct {
 	ID  EventID
 	LSN storage.LSN
 	C   chan error
 }
 
-// Registry manages events and their associated waiters, enabling the registration
+// ReplicaEventRegistry manages events and their associated waiters, enabling the registration
 // and removal of waiters upon event commitment.
-type Registry struct {
+type ReplicaEventRegistry struct {
 	mu          sync.Mutex
 	nextEventID EventID
-	waiters     map[EventID]*Waiter
+	waiters     map[EventID]*EventWaiter
 	metrics     RaftMetrics
 }
 
-// NewRegistry initializes and returns a new instance of Registry.
-func NewRegistry(metrics RaftMetrics) *Registry {
-	return &Registry{
-		waiters: make(map[EventID]*Waiter),
+// NewReplicaEventRegistry initializes and returns a new instance of Registry.
+func NewReplicaEventRegistry(metrics RaftMetrics) *ReplicaEventRegistry {
+	return &ReplicaEventRegistry{
+		waiters: make(map[EventID]*EventWaiter),
 		metrics: metrics,
 	}
 }
@@ -36,12 +36,12 @@ func NewRegistry(metrics RaftMetrics) *Registry {
 // Register creates a new Waiter for an upcoming event and returns it.
 // It must be called whenever an event is proposed, with the event ID embedded
 // in the corresponding Raft message.
-func (r *Registry) Register() *Waiter {
+func (r *ReplicaEventRegistry) Register() *EventWaiter {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.nextEventID++
-	waiter := &Waiter{
+	waiter := &EventWaiter{
 		ID: r.nextEventID,
 		C:  make(chan error, 1),
 	}
@@ -53,7 +53,7 @@ func (r *Registry) Register() *Waiter {
 
 // AssignLSN assigns LSN to an event. LSN of an event is used to unlock obsolete proposals if Raft detects duplicated
 // LSNs but with higher term.
-func (r *Registry) AssignLSN(id EventID, lsn storage.LSN) {
+func (r *ReplicaEventRegistry) AssignLSN(id EventID, lsn storage.LSN) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -66,7 +66,7 @@ func (r *Registry) AssignLSN(id EventID, lsn storage.LSN) {
 
 // UntrackSince untracks all events having LSNs greater than or equal to the input LSN. The input error is assigned to
 // impacted events.
-func (r *Registry) UntrackSince(lsn storage.LSN, err error) {
+func (r *ReplicaEventRegistry) UntrackSince(lsn storage.LSN, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -87,7 +87,7 @@ func (r *Registry) UntrackSince(lsn storage.LSN, err error) {
 }
 
 // UntrackAll untracks all events. The input error is assigned to impacted events.
-func (r *Registry) UntrackAll(err error) {
+func (r *ReplicaEventRegistry) UntrackAll(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -102,7 +102,7 @@ func (r *Registry) UntrackAll(err error) {
 
 // Untrack closes the channel associated with a given EventID and removes the waiter from the registry once the event is
 // committed. This function returns if the registry is still tracking the event.
-func (r *Registry) Untrack(id EventID) bool {
+func (r *ReplicaEventRegistry) Untrack(id EventID) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -119,7 +119,7 @@ func (r *Registry) Untrack(id EventID) bool {
 	return true
 }
 
-func (r *Registry) updateQueueDepth() {
+func (r *ReplicaEventRegistry) updateQueueDepth() {
 	if r.metrics.proposalQueueDepth != nil {
 		r.metrics.proposalQueueDepth.Set(float64(len(r.waiters)))
 	}

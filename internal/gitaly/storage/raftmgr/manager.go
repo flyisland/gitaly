@@ -79,7 +79,7 @@ type ReplicaOptions struct {
 	// This is primarily used in testing to detect deadlocks and performance issues
 	opTimeout time.Duration
 	// entryRecorder stores Raft log entries for testing purposes
-	entryRecorder *EntryRecorder
+	entryRecorder *ReplicaEntryRecorder
 }
 
 // OptionFunc defines a function type for configuring ReplicaOptions.
@@ -104,7 +104,7 @@ func WithOpTimeout(t time.Duration) OptionFunc {
 }
 
 // WithEntryRecorder enables recording of Raft log entries for testing.
-func WithEntryRecorder(recorder *EntryRecorder) OptionFunc {
+func WithEntryRecorder(recorder *ReplicaEntryRecorder) OptionFunc {
 	return func(opt ReplicaOptions) ReplicaOptions {
 		opt.entryRecorder = recorder
 		return opt
@@ -128,20 +128,20 @@ type Replica struct {
 	ctx    context.Context // Context for controlling replica's lifecycle
 	cancel context.CancelFunc
 
-	authorityName string              // Name of the storage this partition belongs to
-	ptnID         storage.PartitionID // Unique identifier for the managed partition
-	node          raft.Node           // etcd/raft node representation
-	raftCfg       config.Raft         // etcd/raft configurations
-	options       ReplicaOptions      // Additional replica configuration
-	logger        logging.Logger      // Internal logging
-	logStore      *ReplicaLogStore    // Persistent storage for Raft logs and state
-	registry      *Registry           // Event tracking
-	leadership    *Leadership         // Current leadership information
-	syncer        safe.Syncer         // Synchronization operations
-	wg            sync.WaitGroup      // Goroutine lifecycle management
-	ready         *ready              // Initialization state tracking
-	started       bool                // Indicates if replica has been started
-	metrics       RaftMetrics         // Scoped metrics for this replica
+	authorityName string                // Name of the storage this partition belongs to
+	ptnID         storage.PartitionID   // Unique identifier for the managed partition
+	node          raft.Node             // etcd/raft node representation
+	raftCfg       config.Raft           // etcd/raft configurations
+	options       ReplicaOptions        // Additional replica configuration
+	logger        logging.Logger        // Internal logging
+	logStore      *ReplicaLogStore      // Persistent storage for Raft logs and state
+	registry      *ReplicaEventRegistry // Event tracking
+	leadership    *Leadership           // Current leadership information
+	syncer        safe.Syncer           // Synchronization operations
+	wg            sync.WaitGroup        // Goroutine lifecycle management
+	ready         *ready                // Initialization state tracking
+	started       bool                  // Indicates if replica has been started
+	metrics       RaftMetrics           // Scoped metrics for this replica
 
 	// Reference to the RaftEnabledStorage that contains this replica
 	raftEnabledStorage *RaftEnabledStorage
@@ -151,7 +151,7 @@ type Replica struct {
 	notifyQueue chan error
 
 	// EntryRecorder stores Raft log entries for testing
-	EntryRecorder *EntryRecorder
+	EntryRecorder *ReplicaEntryRecorder
 
 	// hooks is a collection of hooks, used in test environment to intercept critical events in the replica
 	hooks testHooks
@@ -261,7 +261,7 @@ func NewReplica(
 		options:            options,
 		logStore:           logStore,
 		logger:             logger,
-		registry:           NewRegistry(scopedMetrics),
+		registry:           NewReplicaEventRegistry(scopedMetrics),
 		syncer:             safe.NewSyncer(),
 		leadership:         NewLeadership(),
 		ready:              &ready{c: make(chan error, 1)},

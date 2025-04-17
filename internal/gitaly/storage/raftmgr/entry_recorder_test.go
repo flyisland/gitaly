@@ -7,7 +7,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 )
 
-func TestLogEntryRecorder_WithoutRaftEntries(t *testing.T) {
+func TestReplicaEntryRecorder_WithoutRaftEntries(t *testing.T) {
 	testCases := []struct {
 		desc    string
 		records []bool
@@ -54,7 +54,7 @@ func TestLogEntryRecorder_WithoutRaftEntries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			recorder := EntryRecorder{}
+			recorder := ReplicaEntryRecorder{}
 
 			// Record entries as specified in the test case
 			for i, v := range tc.records {
@@ -73,7 +73,7 @@ func TestLogEntryRecorder_WithoutRaftEntries(t *testing.T) {
 	}
 }
 
-func TestLogEntryRecorder_WithRaftEntries(t *testing.T) {
+func TestReplicaEntryRecorder_WithRaftEntries(t *testing.T) {
 	testCases := []struct {
 		desc    string
 		records []bool
@@ -120,7 +120,7 @@ func TestLogEntryRecorder_WithRaftEntries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			recorder := EntryRecorder{}
+			recorder := ReplicaEntryRecorder{}
 
 			// Record entries as specified in the test case
 			for i, v := range tc.records {

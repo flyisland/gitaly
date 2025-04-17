@@ -25,7 +25,7 @@ type hookContext struct {
 	lsn storage.LSN
 	// raftEntryRecorder normal and Raft-specific entries that are inserted into the WAL. It is used to filter out entries
 	// injected by Raft in hook executions.
-	raftEntryRecorder *raftmgr.EntryRecorder
+	raftEntryRecorder *raftmgr.ReplicaEntryRecorder
 }
 
 // installHooks takes the hooks in the test setup and configures them in the TransactionManager.
@@ -33,7 +33,7 @@ func installHooks(
 	mgr *TransactionManager,
 	inflightTransactions *sync.WaitGroup,
 	hooks testTransactionHooks,
-	raftEntryRecorder *raftmgr.EntryRecorder,
+	raftEntryRecorder *raftmgr.ReplicaEntryRecorder,
 ) {
 	for destination, source := range map[*func()]hookFunc{
 		&mgr.testHooks.beforeInitialization: hooks.BeforeReadAppliedLSN,

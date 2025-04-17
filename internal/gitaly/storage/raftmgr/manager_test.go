@@ -86,7 +86,7 @@ func TestReplica_Initialize(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 		metrics := NewMetrics()
 		raftCfg := raftConfigsForTest(t)
 		mgr, err := createRaftReplica(t, ctx, raftCfg, storage.PartitionID(1), metrics, WithEntryRecorder(recorder))
@@ -162,7 +162,7 @@ func TestReplica_Initialize(t *testing.T) {
 		ctx := testhelper.Context(t)
 		raftCfg := raftConfigsForTest(t)
 		partitionID := storage.PartitionID(1)
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 
 		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestReplica_Initialize(t *testing.T) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 		posTracker := log.NewPositionTracker()
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 		metrics := NewMetrics()
 
 		db, dbMgr := dbSetup(t, ctx, cfg, testhelper.TempDir(t), storageName, logger)
@@ -265,7 +265,7 @@ func TestReplica_Initialize(t *testing.T) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 		posTracker := log.NewPositionTracker()
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 		metrics := NewMetrics()
 
 		db, dbMgr := dbSetup(t, ctx, cfg, testhelper.TempDir(t), storageName, logger)
@@ -344,7 +344,7 @@ func TestReplica_Initialize(t *testing.T) {
 		stateDir := testhelper.TempDir(t)
 		db, dbMgr := dbSetup(t, ctx, cfg, testhelper.TempDir(t), storageName, logger)
 
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 		metrics := NewMetrics()
 
 		// PHASE 1: Create a new partition with Raft enabled
@@ -450,10 +450,10 @@ func TestReplica_Initialize(t *testing.T) {
 func TestReplica_AppendLogEntry(t *testing.T) {
 	t.Parallel()
 
-	setup := func(t *testing.T, ctx context.Context, cfg config.Cfg) (*Replica, *Metrics, *EntryRecorder) {
+	setup := func(t *testing.T, ctx context.Context, cfg config.Cfg) (*Replica, *Metrics, *ReplicaEntryRecorder) {
 		raftCfg := raftConfigsForTest(t)
 		partitionID := storage.PartitionID(1)
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 		metrics := NewMetrics()
 		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics, WithEntryRecorder(recorder))
 		require.NoError(t, err)
@@ -688,7 +688,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
 		posTracker := log.NewPositionTracker()
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 		metrics := NewMetrics()
 
 		db, dbMgr := dbSetup(t, ctx, cfg, testhelper.TempDir(t), storageName, logger)
@@ -785,7 +785,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		stagingDir  string
 		stateDir    string
 		cfg         config.Cfg
-		recorder    *EntryRecorder
+		recorder    *ReplicaEntryRecorder
 		baseLSN     storage.LSN
 		storageName string
 		partitionID storage.PartitionID
@@ -803,7 +803,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		storageName := cfg.Storages[0].Name
 		stagingDir := testhelper.TempDir(t)
 		stateDir := testhelper.TempDir(t)
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 
 		metrics := NewMetrics()
 
@@ -1546,7 +1546,7 @@ func TestReplica_Close(t *testing.T) {
 		raftCfg := raftConfigsForTest(t)
 
 		partitionID := storage.PartitionID(1)
-		recorder := NewEntryRecorder()
+		recorder := NewReplicaEntryRecorder()
 
 		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
