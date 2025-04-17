@@ -160,10 +160,7 @@ func (s *server) processBlobs(
 					headerSent = true
 				}
 
-				pCopy := make([]byte, len(p))
-				copy(pCopy, p)
-
-				if err := callback(oid, size, pCopy, blob.ObjectName); err != nil {
+				if err := callback(oid, size, p, blob.ObjectName); err != nil {
 					return structerr.NewInternal("sending blob chunk: %w", err)
 				}
 
