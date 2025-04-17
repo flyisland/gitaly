@@ -10,11 +10,7 @@ replace github.com/go-enry/go-license-detector/v4 => github.com/gl-gitaly/go-lic
 require (
 	cloud.google.com/go/storage v1.44.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.0
-	// +gitaly pinVersion github.com/ProtonMail/go-crypto v1.0.0
-	// The upstream introduced a significant rework on signature verification. This might affect commit signing feature
-	// in Gitaly.
-	// For more information: https://gitlab.com/gitlab-org/gitaly/-/issues/6520
-	github.com/ProtonMail/go-crypto v1.0.0
+	github.com/ProtonMail/go-crypto v1.1.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.63.1
 	github.com/cloudflare/tableflip v1.2.3
 	github.com/containerd/cgroups/v3 v3.0.5
@@ -120,7 +116,7 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
-	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
+	github.com/cyphar/filepath-securejoin v0.2.5 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgraph-io/ristretto/v2 v2.1.0 // indirect
 	github.com/dgryski/go-minhash v0.0.0-20190315135803-ad340ca03076 // indirect
@@ -138,8 +134,8 @@ require (
 	github.com/git-lfs/wildmatch/v2 v2.0.1 // indirect
 	github.com/go-enry/go-oniguruma v1.2.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.5.0 // indirect
-	github.com/go-git/go-git/v5 v5.11.0 // indirect
+	github.com/go-git/go-billy/v5 v5.6.0 // indirect
+	github.com/go-git/go-git/v5 v5.13.0 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -196,10 +192,10 @@ require (
 	github.com/rubyist/tracerx v0.0.0-20170927163412-787959303086 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sebest/xff v0.0.0-20210106013422-671bd2870b3a // indirect
-	github.com/sergi/go-diff v1.2.0 // indirect
+	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/shirou/gopsutil/v3 v3.21.12 // indirect
 	github.com/shogo82148/go-shuffle v1.0.1 // indirect
-	github.com/skeema/knownhosts v1.2.1 // indirect
+	github.com/skeema/knownhosts v1.3.0 // indirect
 	github.com/ssgelm/cookiejarparser v1.0.1 // indirect
 	github.com/tinylib/msgp v1.1.2 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
@@ -240,3 +236,13 @@ exclude (
 	github.com/gin-gonic/gin v1.4.0
 	github.com/gin-gonic/gin v1.6.3
 )
+
+// +gitaly pinVersion github.com/ProtonMail/go-crypto v1.0.0
+// The upstream introduced a significant rework on signature verification. This might affect commit signing feature
+// in Gitaly.
+// For more information: https://gitlab.com/gitlab-org/gitaly/-/issues/6520
+// Also, the reason why must use a replace directive here to reverse the version v1.1.3 above is
+// because we must use 'github.com/go-git/go-git/v5 v5.13.0' or newer, and this version has a
+// dependency on 'github.com/ProtonMail/go-crypto v1.1.3.'
+// See issue here: https://gitlab.com/gitlab-org/build/cng-security/-/issues/3828
+replace github.com/ProtonMail/go-crypto => github.com/ProtonMail/go-crypto v1.0.0
