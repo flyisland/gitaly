@@ -70,9 +70,9 @@ func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, p
 
 	for addr, reqs := range messagesByNode {
 		g.Go(func() error {
-			nodeID := reqs[0].GetReplicaId().GetNodeId()
+			memberID := reqs[0].GetReplicaId().GetMemberId()
 			if err := t.sendToNode(ctx, addr, reqs); err != nil {
-				errCh <- fmt.Errorf("node %d: %w", nodeID, err)
+				errCh <- fmt.Errorf("node %d: %w", memberID, err)
 				return err
 			}
 			return nil
@@ -133,7 +133,7 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 			}
 			replica, err := t.routingTable.Translate(partitionKey, msg.To)
 			if err != nil {
-				return fmt.Errorf("translate nodeID %d: %w", msg.To, err)
+				return fmt.Errorf("translate memberID %d: %w", msg.To, err)
 			}
 
 			addr := replica.GetMetadata().GetAddress()
@@ -145,7 +145,7 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 				ClusterId: t.cfg.Raft.ClusterID,
 				ReplicaId: &gitalypb.ReplicaID{
 					PartitionKey: partitionKey,
-					NodeId:       msg.To,
+					MemberId:     msg.To,
 					StorageName:  replica.GetStorageName(),
 				},
 				Message: &msg,
@@ -285,12 +285,12 @@ func unpackLogData(msg *gitalypb.RaftEntry, logEntryPath string) error {
 
 // SendSnapshot sends a snapshot of a partition to a specified node in the cluster.
 func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.PartitionKey, message raftpb.Message, snapshot *ReplicaSnapshot) (returnedErr error) {
-	followerNodeID := message.To
+	followerMemberID := message.To
 
 	// Find replica's address as recipient of snapshot
-	replica, err := t.routingTable.Translate(pk, followerNodeID)
+	replica, err := t.routingTable.Translate(pk, followerMemberID)
 	if err != nil {
-		return fmt.Errorf("translate nodeID %d: %w", followerNodeID, err)
+		return fmt.Errorf("translate memberID %d: %w", followerMemberID, err)
 	}
 
 	addr := replica.GetMetadata().GetAddress()
@@ -310,7 +310,7 @@ func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.Partition
 	// Ensure stream is closed properly
 	defer func() {
 		if _, err := stream.CloseAndRecv(); err != nil {
-			returnedErr = errors.Join(returnedErr, formatError(err, followerNodeID, "close stream"))
+			returnedErr = errors.Join(returnedErr, formatError(err, followerMemberID, "close stream"))
 		}
 	}()
 
@@ -366,15 +366,15 @@ func (t *GrpcTransport) getRaftClient(ctx context.Context, addr string) (gitalyp
 
 // formatError formats gRPC errors with specific messages based on error codes.
 // It handles common connection-related errors and uses the provided default message for other errors.
-func formatError(err error, nodeID uint64, defaultMsg string) error {
+func formatError(err error, memberID uint64, defaultMsg string) error {
 	switch status.Code(err) {
 	case codes.Unavailable:
-		return fmt.Errorf("connection to node %d lost: %w", nodeID, err)
+		return fmt.Errorf("connection to node %d lost: %w", memberID, err)
 	case codes.Canceled:
-		return fmt.Errorf("node %d rejected request: connection canceled: %w", nodeID, err)
+		return fmt.Errorf("node %d rejected request: connection canceled: %w", memberID, err)
 	case codes.Aborted:
-		return fmt.Errorf("node %d aborted request: %w", nodeID, err)
+		return fmt.Errorf("node %d aborted request: %w", memberID, err)
 	default:
-		return fmt.Errorf("%s to node %d: %w", defaultMsg, nodeID, err)
+		return fmt.Errorf("%s to node %d: %w", defaultMsg, memberID, err)
 	}
 }

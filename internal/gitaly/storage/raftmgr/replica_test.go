@@ -1732,7 +1732,7 @@ func TestReplica_ProcessConfChange(t *testing.T) {
 		PartitionId:   uint64(partitionID),
 	}
 
-	addNodeID := uint64(2) // Avoid conflict with bootstrap node
+	addMemberID := uint64(2) // Avoid conflict with bootstrap node
 	addNodeAddress := "gitaly-node-2:8075"
 
 	marshaledAddress, err := proto.Marshal(&gitalypb.ReplicaID_Metadata{
@@ -1742,7 +1742,7 @@ func TestReplica_ProcessConfChange(t *testing.T) {
 
 	confChangeAddV1 := raftpb.ConfChange{
 		Type:    raftpb.ConfChangeAddNode,
-		NodeID:  addNodeID,
+		NodeID:  addMemberID,
 		Context: marshaledAddress,
 	}
 
@@ -1756,20 +1756,20 @@ func TestReplica_ProcessConfChange(t *testing.T) {
 		}
 		replica := entry.Replicas[1]
 
-		return replica.GetNodeId() == addNodeID &&
+		return replica.GetMemberId() == addMemberID &&
 			replica.GetMetadata().GetAddress() == addNodeAddress
 	}, 5*time.Second, 100*time.Millisecond, "routing table did not update after adding node")
 
 	// Verify persisted ConfState
 	_, confState, err := replica.logStore.InitialState()
 	require.NoError(t, err)
-	require.Contains(t, confState.Voters, addNodeID, "persisted conf state should contain added node")
+	require.Contains(t, confState.Voters, addMemberID, "persisted conf state should contain added node")
 	require.Len(t, confState.Voters, 2, "persisted conf state should have 2 nodes (bootstrap + added)")
 
 	routingTableEntry, err := routingTable.GetEntry(partitionKey)
 	require.NoError(t, err)
 
 	require.Equal(t, routingTableEntry.LeaderID, uint64(1), "leader ID should be 1")
-	require.Equal(t, routingTableEntry.Replicas[0].GetNodeId(), uint64(1), "bootstrap node should be recorded")
+	require.Equal(t, routingTableEntry.Replicas[0].GetMemberId(), uint64(1), "bootstrap node should be recorded")
 	require.Len(t, routingTableEntry.Replicas, 2, "routing table entry should have 2 replicas (bootstrap + added)")
 }

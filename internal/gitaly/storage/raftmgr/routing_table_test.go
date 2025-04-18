@@ -24,7 +24,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 	rt := NewKVRoutingTable(kvStore)
 
 	t.Run("add and translate member", func(t *testing.T) {
-		nodeID := 1
+		memberID := 1
 		address := "localhost:1234"
 		partitionKey := &gitalypb.PartitionKey{
 			AuthorityName: "test-authority",
@@ -35,7 +35,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       uint64(nodeID),
+					MemberId:     uint64(memberID),
 					StorageName:  "test-storage",
 					Metadata: &gitalypb.ReplicaID_Metadata{
 						Address: address,
@@ -49,7 +49,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 		err := rt.UpsertEntry(entry)
 		require.NoError(t, err)
 
-		replica, err := rt.Translate(partitionKey, uint64(nodeID))
+		replica, err := rt.Translate(partitionKey, uint64(memberID))
 		require.NoError(t, err)
 		require.Equal(t, address, replica.GetMetadata().GetAddress())
 		require.Equal(t, "test-storage", replica.GetStorageName())
@@ -65,7 +65,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: key,
-					NodeId:       1,
+					MemberId:     1,
 					Metadata: &gitalypb.ReplicaID_Metadata{
 						Address: "addr1",
 					},
@@ -90,9 +90,9 @@ func TestPersistentRoutingTable(t *testing.T) {
 			PartitionId:   3,
 		}
 
-		nodeID := 999 // Non-existent node
+		memberID := 999 // Non-existent node
 
-		_, err := rt.Translate(partitionKey, uint64(nodeID))
+		_, err := rt.Translate(partitionKey, uint64(memberID))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "Key not found")
 	})
@@ -141,7 +141,7 @@ func TestApplyConfEntry(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Len(t, updatedEntry.Replicas, 1)
-		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetNodeId())
+		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetMemberId())
 		require.Equal(t, uint64(1), updatedEntry.LeaderID)
 		require.Equal(t, "localhost:1234", updatedEntry.Replicas[0].GetMetadata().GetAddress())
 	})
@@ -165,13 +165,13 @@ func TestApplyConfEntry(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       1,
+					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
 				},
 				{
 					PartitionKey: partitionKey,
-					NodeId:       2,
+					MemberId:     2,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:5678"),
 				},
@@ -201,7 +201,7 @@ func TestApplyConfEntry(t *testing.T) {
 
 		require.Len(t, updatedEntry.Replicas, 1)
 		require.Equal(t, uint64(1), updatedEntry.LeaderID)
-		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetNodeId())
+		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetMemberId())
 		require.Equal(t, "localhost:1234", updatedEntry.Replicas[0].GetMetadata().GetAddress())
 	})
 
@@ -250,7 +250,7 @@ func TestApplyConfEntry(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       1,
+					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
 				},
@@ -291,7 +291,7 @@ func TestApplyConfEntry(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       1,
+					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
 				},
@@ -344,7 +344,7 @@ func TestApplyConfEntry(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       1,
+					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
 				},
@@ -385,7 +385,7 @@ func TestApplyConfEntry(t *testing.T) {
 
 		var node2Found bool
 		for _, replica := range updatedEntry.Replicas {
-			if replica.GetNodeId() == 2 {
+			if replica.GetMemberId() == 2 {
 				node2Found = true
 				require.Equal(t, "localhost:8888", replica.GetMetadata().GetAddress())
 			}

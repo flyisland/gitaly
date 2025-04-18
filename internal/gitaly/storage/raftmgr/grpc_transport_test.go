@@ -302,7 +302,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		// Register the manager with the registry
 		registries[i].RegisterReplica(partitionKey, replica)
 
-		nodeID := uint64(i + 1)
+		memberID := uint64(i + 1)
 		if i == 0 {
 			cluster.leader = node
 
@@ -314,7 +314,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 				Replicas: []*gitalypb.ReplicaID{
 					{
 						PartitionKey: partitionKey,
-						NodeId:       nodeID,
+						MemberId:     memberID,
 						Metadata: &gitalypb.ReplicaID_Metadata{
 							Address: addresses[i],
 						},
@@ -336,7 +336,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 			existingEntry.Index = uint64(i + 1)
 			existingEntry.Replicas = append(existingEntry.Replicas, &gitalypb.ReplicaID{
 				PartitionKey: partitionKey,
-				NodeId:       nodeID,
+				MemberId:     memberID,
 				Metadata: &gitalypb.ReplicaID_Metadata{
 					Address: addresses[i],
 				},

@@ -42,21 +42,21 @@ Each partition is a Raft group with one or more members. Raft groups are also id
 the one-to-one relationship.
 
 The `raftmgr.Replica` oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
-integer **Node ID** to a Raft group member. The Node ID does not change throughout the lifecycle of a group member.
+integer **Member ID** to a Raft group member. The Member ID does not change throughout the lifecycle of a group member.
 
 When a partition is bootstrapped for the first time, the Raft replica initializes the `etcd/raft` state machine,
-elects itself as the initial leader, and persists all Raft metadata to persistent storage. Its internal Node ID
+elects itself as the initial leader, and persists all Raft metadata to persistent storage. Its internal Member ID
 is always 1 at this stage, making it a fully functional single-node Raft instance.
 
 When a new member joins a Raft group, the leader issues a Config Change entry. This entry contains the metadata
-of the storage, such as storage name, address, and authentication/authorization info. The new member's Node ID
+of the storage, such as storage name, address, and authentication/authorization info. The new member's Member ID
 is assigned the LSN of this log entry, ensuring unambiguous identification of members. As the LSN is monotonic,
-Node IDs are never reused even if the storage re-joins later. This Node ID system is not exposed outside the
+Member IDs are never reused even if the storage re-joins later. This Member ID system is not exposed outside the
 scope of `etcd/raft` integration.
 
-Since Gitaly follows a multi-Raft architecture, the Node ID alone is insufficient to precisely locate a
+Since Gitaly follows a multi-Raft architecture, the Member ID alone is insufficient to precisely locate a
 partition or Raft group replica. Therefore, each replica (including the leader) is identified using a
-**Replica ID**, which consists of `(Partition ID, Node ID, Replica Storage Name)`.
+**Replica ID**, which consists of `(Partition ID, Member ID, Replica Storage Name)`.
 
 To ensure fault tolerance in a quorum-based system, a Raft cluster requires a minimum replication factor of 3.
 It can tolerate up to `(n-1)/2` failures. For example, a 3-replica cluster can tolerate 1 failure.

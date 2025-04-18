@@ -121,7 +121,7 @@ func WithEntryRecorder(recorder *ReplicaEntryRecorder) OptionFunc {
 // and implements the storage.LogManager interface to interact with Gitaly's transaction system.
 //
 // A Replica is identified by a Replica ID, which consists of
-// (Partition ID, Node ID, Replica Storage Name).
+// (Partition ID, Member ID, Replica Storage Name).
 type Replica struct {
 	mutex sync.Mutex
 
@@ -284,9 +284,9 @@ func NewReplica(
 //
 // When a partition is bootstrapped for the first time, the Replica initializes the etcd/raft
 // state machine, elects itself as the initial leader, and persists all Raft metadata to
-// persistent storage. Its internal Node ID is always 1 at this stage, making it a fully
+// persistent storage. Its internal Member ID is always 1 at this stage, making it a fully
 // functional single-node Raft instance. Later, when new members join, they'll receive
-// unique Node IDs based on the LSN of the config change entry.
+// unique Member IDs based on the LSN of the config change entry.
 func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) error {
 	replica.mutex.Lock()
 	defer replica.mutex.Unlock()
@@ -303,26 +303,26 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 		return fmt.Errorf("failed to load raft initial state: %w", err)
 	}
 
-	// etcd/raft uses an integer ID (Node ID) to identify a member of a Raft group. This Node ID is part of
-	// the Replica ID which consists of (Partition ID, Node ID, Replica Storage Name).
+	// etcd/raft uses an integer ID (Member ID) to identify a member of a Raft group. This Member ID is part of
+	// the Replica ID which consists of (Partition ID, Member ID, Replica Storage Name).
 	//
-	// The Node ID system yields several benefits:
-	// - No need to set the node ID statically, avoiding the need for a composite key of the storage
-	//   name and node ID.
+	// The Member ID system yields several benefits:
+	// - No need to set the member ID statically, avoiding the need for a composite key of the storage
+	//   name and member ID.
 	// - No need for a global node registration system, as IDs are generated within the group.
 	// - Works better in scenarios where a member leaves and then re-joins the cluster. Each join event
-	//   results in a new unique node ID, preventing ambiguity.
+	//   results in a new unique member ID, preventing ambiguity.
 	//
-	// When a partition is first bootstrapped, we use a fixed node ID of 1 for the initial member.
+	// When a partition is first bootstrapped, we use a fixed member ID of 1 for the initial member.
 	// When new members join a Raft group, the leader issues a Config Change entry containing the metadata
-	// of the storage. The new member's Node ID is assigned the LSN of this log entry, ensuring unambiguous
+	// of the storage. The new member's Member ID is assigned the LSN of this log entry, ensuring unambiguous
 	// identification across the group's lifetime.
 	//
 	// https://gitlab.com/gitlab-org/gitaly/-/issues/6304 tracks the work to bootstrap new cluster members.
-	var nodeID uint64 = 1
+	var memberID uint64 = 1
 
 	config := &raft.Config{
-		ID:              nodeID,
+		ID:              memberID,
 		ElectionTick:    int(replica.raftCfg.ElectionTicks),
 		HeartbeatTick:   int(replica.raftCfg.HeartbeatTicks),
 		Storage:         replica.logStore,
@@ -347,7 +347,7 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 	switch initStatus {
 	case InitStatusUnbootstrapped:
 		// For first-time bootstrap, initialize with self as the only peer
-		peers := []raft.Peer{{ID: nodeID}}
+		peers := []raft.Peer{{ID: memberID}}
 		replica.node = raft.StartNode(config, peers)
 	case InitStatusBootstrapped:
 		// For restarts, set Applied to latest committed LSN
@@ -359,12 +359,12 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 		// steps: Create a configuration with the node itself as the only voter and set the commit point to
 		// include all existing backfilled entries, ensuring they're considered committed by the Raft protocol.
 		if err := replica.logStore.saveConfState(raftpb.ConfState{
-			Voters: []uint64{nodeID},
+			Voters: []uint64{memberID},
 		}); err != nil {
 			return fmt.Errorf("saving conf state: %w", err)
 		}
 		if err := replica.logStore.saveHardState(raftpb.HardState{
-			Vote:   nodeID,
+			Vote:   memberID,
 			Commit: uint64(replica.logStore.readCommittedLSN()),
 		}); err != nil {
 			return fmt.Errorf("saving hard state: %w", err)

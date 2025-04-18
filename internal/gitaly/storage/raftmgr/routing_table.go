@@ -35,9 +35,9 @@ type ReplicaMetadata struct {
 	Address string
 }
 
-// RoutingTable handles translation between node IDs and addresses
+// RoutingTable handles translation between member IDs and addresses
 type RoutingTable interface {
-	Translate(partitionKey *gitalypb.PartitionKey, nodeID uint64) (*gitalypb.ReplicaID, error)
+	Translate(partitionKey *gitalypb.PartitionKey, memberID uint64) (*gitalypb.ReplicaID, error)
 	GetEntry(partitionKey *gitalypb.PartitionKey) (*RoutingTableEntry, error)
 	UpsertEntry(entry RoutingTableEntry) error
 	ApplyConfChange(term uint64, index uint64, leaderID uint64, partitionKey *gitalypb.PartitionKey, cc raftpb.ConfChangeI) error
@@ -130,8 +130,8 @@ func (r *kvRoutingTable) GetEntry(partitionKey *gitalypb.PartitionKey) (*Routing
 	return &entry, nil
 }
 
-// Translate returns the storage name and address for a given partition key and node ID
-func (r *kvRoutingTable) Translate(partitionKey *gitalypb.PartitionKey, nodeID uint64) (*gitalypb.ReplicaID, error) {
+// Translate returns the storage name and address for a given partition key and member ID
+func (r *kvRoutingTable) Translate(partitionKey *gitalypb.PartitionKey, memberID uint64) (*gitalypb.ReplicaID, error) {
 	entry, err := r.GetEntry(partitionKey)
 	if err != nil {
 		return nil, fmt.Errorf("get entry: %w", err)
@@ -139,12 +139,12 @@ func (r *kvRoutingTable) Translate(partitionKey *gitalypb.PartitionKey, nodeID u
 
 	// Look for the node in replicas
 	for _, replica := range entry.Replicas {
-		if replica.GetNodeId() == nodeID {
+		if replica.GetMemberId() == memberID {
 			return replica, nil
 		}
 	}
 
-	return nil, fmt.Errorf("no address found for nodeID %d", nodeID)
+	return nil, fmt.Errorf("no address found for memberID %d", memberID)
 }
 
 func (r *kvRoutingTable) ApplyConfChange(term uint64, index uint64, leaderID uint64, partitionKey *gitalypb.PartitionKey, cc raftpb.ConfChangeI) error {
@@ -179,7 +179,7 @@ func (r *kvRoutingTable) ApplyConfChange(term uint64, index uint64, leaderID uin
 
 			replica := &gitalypb.ReplicaID{
 				PartitionKey: partitionKey,
-				NodeId:       cc.NodeID,
+				MemberId:     cc.NodeID,
 				StorageName:  authorityName,
 				Metadata:     &metadata,
 			}
@@ -191,7 +191,7 @@ func (r *kvRoutingTable) ApplyConfChange(term uint64, index uint64, leaderID uin
 			}
 
 			routingTableEntry.Replicas = slices.DeleteFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
-				return r.GetNodeId() == cc.NodeID
+				return r.GetMemberId() == cc.NodeID
 			})
 
 		case raftpb.ConfChangeUpdateNode:
@@ -200,7 +200,7 @@ func (r *kvRoutingTable) ApplyConfChange(term uint64, index uint64, leaderID uin
 				return fmt.Errorf("unmarshal node address: %w", err)
 			}
 			for i, r := range routingTableEntry.Replicas {
-				if r.GetNodeId() == cc.NodeID {
+				if r.GetMemberId() == cc.NodeID {
 					routingTableEntry.Replicas[i].Metadata = &metadata
 					break
 				}
@@ -224,7 +224,7 @@ func (r *kvRoutingTable) ApplyConfChange(term uint64, index uint64, leaderID uin
 				}
 				replica := &gitalypb.ReplicaID{
 					PartitionKey: partitionKey,
-					NodeId:       change.NodeID,
+					MemberId:     change.NodeID,
 					StorageName:  authorityName,
 					Metadata:     &metadata,
 				}
@@ -234,12 +234,12 @@ func (r *kvRoutingTable) ApplyConfChange(term uint64, index uint64, leaderID uin
 					return fmt.Errorf("no replicas to remove")
 				}
 				routingTableEntry.Replicas = slices.DeleteFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
-					return r.GetNodeId() == change.NodeID
+					return r.GetMemberId() == change.NodeID
 				})
 
 			case raftpb.ConfChangeUpdateNode:
 				for i, r := range routingTableEntry.Replicas {
-					if r.GetNodeId() == change.NodeID {
+					if r.GetMemberId() == change.NodeID {
 						routingTableEntry.Replicas[i].Metadata = &metadata
 						break
 					}
