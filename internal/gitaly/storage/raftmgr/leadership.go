@@ -5,10 +5,10 @@ import (
 	"time"
 )
 
-// Leadership manages the state of leadership in a distributed system using the Raft consensus algorithm. It tracks the
-// current leader's ID, whether this node is the leader, and the time since the last leadership change. It also provides
-// a notification mechanism for leadership changes through a channel.
-type Leadership struct {
+// ReplicaLeadership manages the state of leadership of a Raft replica. It tracks the current
+// leader's ID, whether this node is the leader, and the time since the last leadership change.
+// It also provides a notification mechanism for leadership changes through a channel.
+type ReplicaLeadership struct {
 	mutex      sync.Mutex
 	leaderID   uint64
 	isLeader   bool
@@ -17,8 +17,8 @@ type Leadership struct {
 }
 
 // NewLeadership initializes a new Leadership instance with the current time and a buffered channel.
-func NewLeadership() *Leadership {
-	return &Leadership{
+func NewLeadership() *ReplicaLeadership {
+	return &ReplicaLeadership{
 		lastChange: time.Now(),
 		newLeaderC: make(chan struct{}, 1),
 	}
@@ -26,7 +26,7 @@ func NewLeadership() *Leadership {
 
 // SetLeader updates the leadership information if there is a change in the leaderID.
 // It returns a boolean indicating whether a change occurred and the duration of the last leadership.
-func (l *Leadership) SetLeader(leaderID uint64, isLeader bool) (changed bool, lastDuration time.Duration) {
+func (l *ReplicaLeadership) SetLeader(leaderID uint64, isLeader bool) (changed bool, lastDuration time.Duration) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -49,21 +49,21 @@ func (l *Leadership) SetLeader(leaderID uint64, isLeader bool) (changed bool, la
 }
 
 // IsLeader returns true if the current instance is the leader.
-func (l *Leadership) IsLeader() bool {
+func (l *ReplicaLeadership) IsLeader() bool {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	return l.isLeader
 }
 
 // GetLeaderID retrieves the current leader's ID.
-func (l *Leadership) GetLeaderID() uint64 {
+func (l *ReplicaLeadership) GetLeaderID() uint64 {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	return l.leaderID
 }
 
 // Close cleans up leadership and unlocks polling consumers.
-func (l *Leadership) Close() {
+func (l *ReplicaLeadership) Close() {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	close(l.newLeaderC)

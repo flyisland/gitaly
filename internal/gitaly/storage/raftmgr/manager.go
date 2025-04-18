@@ -136,7 +136,7 @@ type Replica struct {
 	logger        logging.Logger        // Internal logging
 	logStore      *ReplicaLogStore      // Persistent storage for Raft logs and state
 	registry      *ReplicaEventRegistry // Event tracking
-	leadership    *Leadership           // Current leadership information
+	leadership    *ReplicaLeadership    // Current leadership information
 	syncer        safe.Syncer           // Synchronization operations
 	wg            sync.WaitGroup        // Goroutine lifecycle management
 	ready         *ready                // Initialization state tracking
