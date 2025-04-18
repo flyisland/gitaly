@@ -11,8 +11,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"go.etcd.io/raft/v3/raftpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func routingKey(partitionKey *gitalypb.PartitionKey) []byte {
@@ -40,7 +38,7 @@ type RoutingTable interface {
 	Translate(partitionKey *gitalypb.PartitionKey, memberID uint64) (*gitalypb.ReplicaID, error)
 	GetEntry(partitionKey *gitalypb.PartitionKey) (*RoutingTableEntry, error)
 	UpsertEntry(entry RoutingTableEntry) error
-	ApplyConfChange(term uint64, index uint64, leaderID uint64, partitionKey *gitalypb.PartitionKey, cc raftpb.ConfChangeI) error
+	ApplyReplicaConfChange(partitionKey *gitalypb.PartitionKey, changes *ReplicaConfChanges) error
 }
 
 // PersistentRoutingTable implements the RoutingTable interface with KV storage
@@ -147,7 +145,7 @@ func (r *kvRoutingTable) Translate(partitionKey *gitalypb.PartitionKey, memberID
 	return nil, fmt.Errorf("no address found for memberID %d", memberID)
 }
 
-func (r *kvRoutingTable) ApplyConfChange(term uint64, index uint64, leaderID uint64, partitionKey *gitalypb.PartitionKey, cc raftpb.ConfChangeI) error {
+func (r *kvRoutingTable) ApplyReplicaConfChange(partitionKey *gitalypb.PartitionKey, changes *ReplicaConfChanges) error {
 	routingTableEntry, err := r.GetEntry(partitionKey)
 	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 		return fmt.Errorf("getting routing table entry: %w", err)
@@ -158,95 +156,55 @@ func (r *kvRoutingTable) ApplyConfChange(term uint64, index uint64, leaderID uin
 			Replicas: []*gitalypb.ReplicaID{},
 		}
 	}
-	routingTableEntry.LeaderID = leaderID
-	routingTableEntry.Term = term
-	routingTableEntry.Index = index
+
+	routingTableEntry.LeaderID = changes.LeaderID()
+	routingTableEntry.Term = changes.Term()
+	routingTableEntry.Index = changes.Index()
 
 	authorityName := partitionKey.GetAuthorityName()
+	metadata := changes.Metadata()
 
-	switch cc := cc.(type) {
-	case raftpb.ConfChange:
-		switch cc.Type {
-		case raftpb.ConfChangeAddNode:
-			var metadata gitalypb.ReplicaID_Metadata
-			if err := proto.Unmarshal(cc.Context, &metadata); err != nil {
-				return fmt.Errorf("unmarshal node address: %w", err)
+	for _, confChange := range changes.Changes() {
+		switch confChange.changeType {
+		case ConfChangeAddNode:
+			if confChange.memberID == 0 {
+				return fmt.Errorf("member ID should be non-zero")
 			}
 
-			if cc.NodeID == 0 {
-				return fmt.Errorf("nodeID should be non-zero")
+			if index := slices.IndexFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
+				return r.GetMemberId() == confChange.memberID
+			}); index != -1 {
+				return fmt.Errorf("member ID %d already exists", confChange.memberID)
 			}
 
 			replica := &gitalypb.ReplicaID{
 				PartitionKey: partitionKey,
-				MemberId:     cc.NodeID,
+				MemberId:     confChange.memberID,
 				StorageName:  authorityName,
-				Metadata:     &metadata,
+				Metadata:     metadata,
 			}
 			routingTableEntry.Replicas = append(routingTableEntry.Replicas, replica)
 
-		case raftpb.ConfChangeRemoveNode:
+		case ConfChangeRemoveNode:
 			if len(routingTableEntry.Replicas) == 0 {
 				return fmt.Errorf("no replicas to remove")
 			}
 
 			routingTableEntry.Replicas = slices.DeleteFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
-				return r.GetMemberId() == cc.NodeID
+				return r.GetMemberId() == confChange.memberID
 			})
 
-		case raftpb.ConfChangeUpdateNode:
-			var metadata gitalypb.ReplicaID_Metadata
-			if err := proto.Unmarshal(cc.Context, &metadata); err != nil {
-				return fmt.Errorf("unmarshal node address: %w", err)
+		case ConfChangeUpdateNode:
+			index := slices.IndexFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
+				return r.GetMemberId() == confChange.memberID
+			})
+			if index == -1 {
+				return fmt.Errorf("member ID %d not found for update", confChange.memberID)
 			}
-			for i, r := range routingTableEntry.Replicas {
-				if r.GetMemberId() == cc.NodeID {
-					routingTableEntry.Replicas[i].Metadata = &metadata
-					break
-				}
-			}
+			routingTableEntry.Replicas[index].Metadata = metadata
 
 		default:
-			return fmt.Errorf("unknown conf change type: %d", cc.Type)
-		}
-	case raftpb.ConfChangeV2:
-		// Unmarshal the address from the context - it will be the same for all changes
-		var metadata gitalypb.ReplicaID_Metadata
-		if err := proto.Unmarshal(cc.Context, &metadata); err != nil {
-			return fmt.Errorf("unmarshal node address: %w", err)
-		}
-
-		for _, change := range cc.Changes {
-			switch change.Type {
-			case raftpb.ConfChangeAddNode:
-				if change.NodeID == 0 {
-					return fmt.Errorf("nodeID should be non-zero")
-				}
-				replica := &gitalypb.ReplicaID{
-					PartitionKey: partitionKey,
-					MemberId:     change.NodeID,
-					StorageName:  authorityName,
-					Metadata:     &metadata,
-				}
-				routingTableEntry.Replicas = append(routingTableEntry.Replicas, replica)
-			case raftpb.ConfChangeRemoveNode:
-				if len(routingTableEntry.Replicas) == 0 {
-					return fmt.Errorf("no replicas to remove")
-				}
-				routingTableEntry.Replicas = slices.DeleteFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
-					return r.GetMemberId() == change.NodeID
-				})
-
-			case raftpb.ConfChangeUpdateNode:
-				for i, r := range routingTableEntry.Replicas {
-					if r.GetMemberId() == change.NodeID {
-						routingTableEntry.Replicas[i].Metadata = &metadata
-						break
-					}
-				}
-			default:
-				return fmt.Errorf("unknown conf change type: %d", change.Type)
-			}
+			return fmt.Errorf("unknown conf change type: %d", confChange.changeType)
 		}
 	}
 

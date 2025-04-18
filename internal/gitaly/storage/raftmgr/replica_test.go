@@ -1705,71 +1705,116 @@ func TestReplica_StorageConnection(t *testing.T) {
 
 func TestReplica_ProcessConfChange(t *testing.T) {
 	t.Parallel()
-	ctx := testhelper.Context(t)
-	cfg := testcfg.Build(t)
-	raftCfg := raftConfigsForTest(t)
 
-	partitionID := storage.PartitionID(1)
-	storageName := cfg.Storages[0].Name
+	for _, tc := range []struct {
+		desc       string
+		confChange func(t *testing.T, memberID uint64, address string) raftpb.ConfChangeI
+	}{
+		{
+			desc: "ConfigChangeV1",
+			confChange: func(t *testing.T, memberID uint64, address string) raftpb.ConfChangeI {
+				marshaledAddress, err := proto.Marshal(&gitalypb.ReplicaID_Metadata{
+					Address: address,
+				})
+				require.NoError(t, err, "failed to marshal node address")
 
-	metrics := NewMetrics()
+				return raftpb.ConfChange{
+					Type:    raftpb.ConfChangeAddNode,
+					NodeID:  memberID,
+					Context: marshaledAddress,
+				}
+			},
+		},
+		{
+			desc: "ConfigChangeV2",
+			confChange: func(t *testing.T, memberID uint64, address string) raftpb.ConfChangeI {
+				marshaledAddress, err := proto.Marshal(&gitalypb.ReplicaID_Metadata{
+					Address: address,
+				})
+				require.NoError(t, err, "failed to marshal node address")
 
-	replica, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics)
-	require.NoError(t, err)
+				return raftpb.ConfChangeV2{
+					Changes: []raftpb.ConfChangeSingle{
+						{
+							Type:   raftpb.ConfChangeAddNode,
+							NodeID: memberID,
+						},
+					},
+					Context: marshaledAddress,
+				}
+			},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
 
-	t.Cleanup(func() { require.NoError(t, replica.Close()) })
+			ctx := testhelper.Context(t)
+			cfg := testcfg.Build(t)
+			raftCfg := raftConfigsForTest(t)
 
-	err = replica.Initialize(ctx, 0)
-	require.NoError(t, err)
+			partitionID := storage.PartitionID(1)
+			storageName := cfg.Storages[0].Name
 
-	raftEnabledStorage := replica.raftEnabledStorage
-	require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
+			metrics := NewMetrics()
 
-	routingTable := raftEnabledStorage.GetRoutingTable()
+			replica, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics)
+			require.NoError(t, err)
 
-	partitionKey := &gitalypb.PartitionKey{
-		AuthorityName: storageName,
-		PartitionId:   uint64(partitionID),
+			t.Cleanup(func() { require.NoError(t, replica.Close()) })
+
+			err = replica.Initialize(ctx, 0)
+			require.NoError(t, err)
+
+			raftEnabledStorage := replica.raftEnabledStorage
+			require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
+
+			routingTable := raftEnabledStorage.GetRoutingTable()
+
+			partitionKey := &gitalypb.PartitionKey{
+				AuthorityName: storageName,
+				PartitionId:   uint64(partitionID),
+			}
+
+			// Helper to poll for routing table updated
+			waitRoutingTableUpdate := func(t *testing.T, memberID uint64, nodeAddress string) {
+				t.Helper()
+
+				require.Eventually(t, func() bool {
+					entry, err := routingTable.GetEntry(partitionKey)
+					if err != nil {
+						return false
+					}
+					if len(entry.Replicas) < 2 {
+						return false
+					}
+					replica := entry.Replicas[1]
+
+					return replica.GetMemberId() == memberID &&
+						replica.GetMetadata().GetAddress() == nodeAddress
+				}, 5*time.Second, 100*time.Millisecond, "routing table did not update after adding node")
+			}
+
+			// Step 1: Add a new node using ConfChangeV1
+			addMemberID := uint64(2) // Avoid conflict with bootstrap node
+			addNodeAddress := "gitaly-node-2:8075"
+
+			err = replica.node.ProposeConfChange(ctx, tc.confChange(t, addMemberID, addNodeAddress))
+			require.NoError(t, err, "proposing add node config change failed")
+
+			waitRoutingTableUpdate(t, addMemberID, addNodeAddress)
+
+			// Verify persisted ConfState after first change
+			_, confState, err := replica.logStore.InitialState()
+			require.NoError(t, err)
+			require.Contains(t, confState.Voters, addMemberID, "persisted conf state should contain added node")
+			require.Len(t, confState.Voters, 2, "persisted conf state should have 2 nodes (bootstrap + added)")
+
+			routingTableEntry, err := routingTable.GetEntry(partitionKey)
+			require.NoError(t, err)
+
+			require.Equal(t, routingTableEntry.LeaderID, uint64(1), "leader ID should be 1")
+			require.Equal(t, routingTableEntry.Replicas[0].GetMemberId(), uint64(1), "bootstrap node should be recorded")
+			require.Len(t, routingTableEntry.Replicas, 2, "routing table entry should have 2 replicas (bootstrap + added)")
+		})
 	}
-
-	addMemberID := uint64(2) // Avoid conflict with bootstrap node
-	addNodeAddress := "gitaly-node-2:8075"
-
-	marshaledAddress, err := proto.Marshal(&gitalypb.ReplicaID_Metadata{
-		Address: addNodeAddress,
-	})
-	require.NoError(t, err, "failed to marshal node address")
-
-	confChangeAddV1 := raftpb.ConfChange{
-		Type:    raftpb.ConfChangeAddNode,
-		NodeID:  addMemberID,
-		Context: marshaledAddress,
-	}
-
-	err = replica.node.ProposeConfChange(ctx, confChangeAddV1)
-	require.NoError(t, err, "proposing add node config change failed")
-
-	require.Eventually(t, func() bool {
-		entry, err := routingTable.GetEntry(partitionKey)
-		if err != nil {
-			return false
-		}
-		replica := entry.Replicas[1]
-
-		return replica.GetMemberId() == addMemberID &&
-			replica.GetMetadata().GetAddress() == addNodeAddress
-	}, 5*time.Second, 100*time.Millisecond, "routing table did not update after adding node")
-
-	// Verify persisted ConfState
-	_, confState, err := replica.logStore.InitialState()
-	require.NoError(t, err)
-	require.Contains(t, confState.Voters, addMemberID, "persisted conf state should contain added node")
-	require.Len(t, confState.Voters, 2, "persisted conf state should have 2 nodes (bootstrap + added)")
-
-	routingTableEntry, err := routingTable.GetEntry(partitionKey)
-	require.NoError(t, err)
-
-	require.Equal(t, routingTableEntry.LeaderID, uint64(1), "leader ID should be 1")
-	require.Equal(t, routingTableEntry.Replicas[0].GetMemberId(), uint64(1), "bootstrap node should be recorded")
-	require.Len(t, routingTableEntry.Replicas, 2, "routing table entry should have 2 replicas (bootstrap + added)")
 }

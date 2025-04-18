@@ -815,21 +815,17 @@ func (replica *Replica) processCommitEntries(rd *raft.Ready) error {
 // processConfChange processes committed configuration change entries.
 // This function handles membership changes in the Raft group and updates the routing table.
 func (replica *Replica) processConfChange(entry raftpb.Entry) error {
-	var cc raftpb.ConfChangeI
-	if entry.Type == raftpb.EntryConfChange {
-		var cc1 raftpb.ConfChange
-		if err := cc1.Unmarshal(entry.Data); err != nil {
-			return fmt.Errorf("unmarshalling EntryConfChange: %w", err)
-		}
-		cc = cc1
-	} else {
-		var cc2 raftpb.ConfChangeV2
-		if err := cc2.Unmarshal(entry.Data); err != nil {
-			return fmt.Errorf("unmarshalling EntryConfChangeV2: %w", err)
-		}
-		cc = cc2
+	replicaChanges, err := ParseConfChange(entry, replica.leadership.GetLeaderID())
+	if err != nil {
+		return fmt.Errorf("parsing conf changes: %w", err)
 	}
 
+	cc, err := replicaChanges.ToConfChangeV2()
+	if err != nil {
+		return fmt.Errorf("converting replica changes to etcd/raft config changes: %w", err)
+	}
+
+	// Apply the configuration change to the Raft node
 	confState := replica.node.ApplyConfChange(cc)
 	if err := replica.logStore.saveConfState(*confState); err != nil {
 		return fmt.Errorf("saving config state: %w", err)
@@ -845,9 +841,9 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 		return fmt.Errorf("routing table not found")
 	}
 
-	err := routingTable.ApplyConfChange(entry.Term, entry.Index, replica.leadership.GetLeaderID(), partitionKey, cc)
-	if err != nil {
-		return fmt.Errorf("applying conf change: %w", err)
+	// Apply the changes to the routing table
+	if err := routingTable.ApplyReplicaConfChange(partitionKey, replicaChanges); err != nil {
+		return fmt.Errorf("applying conf changes: %w", err)
 	}
 
 	// Signal readiness after first config change. Applies only to new clusters that have not been bootstrapped. Not
