@@ -1648,8 +1648,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.Contains(t, openTransactions, step.TransactionID, "test error: offloading task aborted on committed before beginning it")
 
 			transaction := openTransactions[step.TransactionID]
-			transaction.OffloadRepository(wrapOffloadingConfig(ctx, &step.Config, setup))
-
+			transaction.OffloadRepository(step.Config)
 		default:
 			t.Fatalf("unhandled step type: %T", step)
 		}

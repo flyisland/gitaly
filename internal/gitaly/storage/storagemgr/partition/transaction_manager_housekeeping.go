@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
@@ -803,6 +805,22 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 	// workingRepoPath is the current repository path which we are performing operations on.
 	// In the context of transaction, workingRepoPath is a snapshot repository.
 	workingRepoPath := mgr.getAbsolutePath(workingRepository.GetRelativePath())
+	// Find the original repository's absolute path. In the context of transaction, originalRepo is the repo
+	// which we are taking a snapshot of.
+	originalRepo := &gitalypb.Repository{
+		StorageName:  workingRepository.GetStorageName(),
+		RelativePath: workingRepository.GetRelativePath(),
+	}
+	originalRepo = transaction.OriginalRepository(originalRepo)
+	originalRepoAbsPath := mgr.getAbsolutePath(originalRepo.GetRelativePath())
+
+	// cfg.Prefix should be empty in production, which triggers automatic UUID generation.
+	// Non-empty prefix values are only used in test environments.
+	if cfg.Prefix == "" {
+		offloadingID := uuid.New().String()
+		// When uploading to offloading storage, use [original repo's relative path + UUID] as prefix
+		cfg.Prefix = filepath.Join(originalRepo.GetRelativePath(), offloadingID)
+	}
 
 	// Capture the list of pack-files before repacking.
 	oldPackFiles, err := mgr.collectPackFiles(ctx, workingRepoPath)
@@ -820,8 +838,10 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		return fmt.Errorf("create directory %s: %w", filterToDir, err)
 	}
 
-	// Repack the repository
-	if err := housekeeping.PerformRepackingForOffloading(ctx, workingRepository, cfg.Filter, filterToDir); err != nil {
+	// Repack the repository. Current offloading implementation only offloads blobs, so we hard code filter here.
+	// This can be relaxed to a parameter if more offloading type is supported
+	repackingFilter := "blob:none"
+	if err := housekeeping.PerformRepackingForOffloading(ctx, workingRepository, repackingFilter, filterToDir); err != nil {
 		return errors.Join(errOffloadingOnRepacking, err)
 	}
 	packFilesToUpload, err := mgr.collectPackFiles(ctx, filterToBase)
@@ -844,7 +864,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		// If returnedErr is non-nil, attempt to remove the uploaded file.
 		// This is a best-effort cleanup; we can't guarantee successful deletion.
 		// If there is an error, the error is returned to the caller together with the returnedErr.
-		// Any undeleted files will eventually be removed by the garbage collection job.
+		// Any undeleted files will eventually be removed by a garbage collection job.
 		if returnedErr != nil {
 			deletionErrors := mgr.sink.DeleteObjects(ctx, cfg.Prefix, uploadedPackFiles)
 			for _, err := range deletionErrors {
@@ -861,9 +881,12 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		uploadedPackFiles = append(uploadedPackFiles, file)
 	}
 
-	// Update git config file
-	promisorRemoteURL := filepath.Join(cfg.SinkURL, cfg.Prefix)
-	if err := housekeeping.SetOffloadingGitConfig(ctx, workingRepository, promisorRemoteURL, cfg.Filter, nil); err != nil {
+	// Update git config file.
+	promisorRemoteURL, err := url.JoinPath(cfg.SinkBaseURL, cfg.Prefix)
+	if err != nil {
+		return fmt.Errorf("constructing promisor remote URL: %w", err)
+	}
+	if err := housekeeping.SetOffloadingGitConfig(ctx, workingRepository, promisorRemoteURL, repackingFilter, nil); err != nil {
 		return fmt.Errorf("setting offloading git config: %w", err)
 	}
 
@@ -878,7 +901,9 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 	// snapshot repo path here. This is because the alternate file will eventually be copied back to the
 	// original repo after offloading is completed. If we calculate relative to the snapshot repo path,
 	// it will not work.
-	relativeCacheEntry, err := filepath.Rel(filepath.Join(cfg.OriginalRepo, objectsDir), cfg.CachePath)
+
+	cacheAbsPath := filepath.Join(cfg.CacheRoot, originalRepo.GetRelativePath(), objectsDir) // Must have objectsDir
+	relativeCacheEntry, err := filepath.Rel(filepath.Join(originalRepoAbsPath, objectsDir), cacheAbsPath)
 	if err != nil {
 		return fmt.Errorf("find relative cache entry: %w", err)
 	}
