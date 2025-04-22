@@ -693,11 +693,34 @@ func (bc BundleURIConfig) Validate() error {
 }
 
 // StreamCacheConfig contains settings for a streamcache instance.
+// This is used by the pack-objects cache for handling Git fetch requests.
 type StreamCacheConfig struct {
-	Enabled        bool              `json:"enabled"         toml:"enabled"` // Default: false
-	Dir            string            `json:"dir"             toml:"dir"`     // Default: <FIRST STORAGE PATH>/+gitaly/PackObjectsCache
-	MaxAge         duration.Duration `json:"max_age"         toml:"max_age"` // Default: 5m
-	MinOccurrences int               `json:"min_occurrences" toml:"min_occurrences"`
+	// Enabled determines whether the cache is active.
+	// When enabled, Gitaly will cache the output of git-pack-objects to improve performance
+	// for repeated fetches of the same objects.
+	// Default: false
+	Enabled bool `json:"enabled" toml:"enabled"`
+
+	// Backpressure controls whether the cache applies a backpressure mechanism.
+	// When enabled, the cache generation rate matches the clients' consumption rate.
+	// This prevents excessive I/O when clients are slow or not reading the cache.
+	// Default: true
+	Backpressure bool `json:"backpressure" toml:"backpressure"`
+
+	// Dir specifies the directory where cache files are stored.
+	// Default: <FIRST STORAGE PATH>/+gitaly/PackObjectsCache
+	Dir string `json:"dir" toml:"dir"`
+
+	// MaxAge defines how long cache entries should be retained.
+	// Cache entries older than MaxAge will be automatically removed.
+	// Default: 5m (5 minutes)
+	MaxAge duration.Duration `json:"max_age" toml:"max_age"`
+
+	// MinOccurrences specifies the minimum number of identical requests required
+	// before caching an object. Setting this to values higher than 1 can help
+	// prevent filling the cache with objects that are requested only once.
+	// Default: 1
+	MinOccurrences int `json:"min_occurrences" toml:"min_occurrences"`
 }
 
 // Validate runs validation on all fields and compose all found errors.
@@ -721,6 +744,10 @@ func defaultPackObjectsCacheConfig() StreamCacheConfig {
 		// cache disk space. Also see
 		// https://gitlab.com/gitlab-com/gl-infra/scalability/-/issues/2222.
 		MinOccurrences: 1,
+		// Backpressure is enabled by default to maintain the cache generation rate
+		// that matches the clients consuming rate. This prevents excessive I/O when
+		// clients are slow or not interested in the cache.
+		Backpressure: true,
 	}
 }
 

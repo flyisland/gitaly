@@ -126,15 +126,16 @@ func (NullCache) Fetch(ctx context.Context, key string, dst io.Writer, create fu
 func (NullCache) Stop() {}
 
 type cache struct {
-	m          sync.Mutex
-	maxAge     time.Duration
-	index      map[string]*entry
-	createFile func() (namedWriteCloser, error)
-	stop       chan struct{}
-	stopOnce   sync.Once
-	logger     log.Logger
-	dir        string
-	sleepLoop  *dontpanic.Forever
+	m            sync.Mutex
+	maxAge       time.Duration
+	index        map[string]*entry
+	createFile   func() (namedWriteCloser, error)
+	stop         chan struct{}
+	stopOnce     sync.Once
+	logger       log.Logger
+	dir          string
+	sleepLoop    *dontpanic.Forever
+	backpressure bool // Controls whether cache generation applies backpressure
 
 	// removalCond is a condition that gets signalled after files have been removed from disk.
 	// This field is optional and should only be used for tests.
@@ -153,7 +154,7 @@ func New(cfg config.StreamCacheConfig, logger log.Logger) Cache {
 		return &minOccurrences{
 			N:      cfg.MinOccurrences,
 			MinAge: maxAge,
-			Cache:  newCacheWithSleep(cfg.Dir, maxAge, time.After, time.After, logger),
+			Cache:  newCacheWithSleep(cfg.Dir, maxAge, time.After, time.After, logger, cfg.Backpressure),
 		}
 	}
 
@@ -166,17 +167,19 @@ func newCacheWithSleep(
 	filestoreSleep func(time.Duration) <-chan time.Time,
 	cleanSleep func(time.Duration) <-chan time.Time,
 	logger log.Logger,
+	backpressure bool,
 ) *cache {
 	fs := newFilestore(dir, maxAge, filestoreSleep, logger)
 
 	c := &cache{
-		maxAge:     maxAge,
-		index:      make(map[string]*entry),
-		createFile: fs.Create,
-		stop:       make(chan struct{}),
-		logger:     logger,
-		dir:        dir,
-		sleepLoop:  dontpanic.NewForever(logger, time.Minute),
+		maxAge:       maxAge,
+		index:        make(map[string]*entry),
+		createFile:   fs.Create,
+		stop:         make(chan struct{}),
+		logger:       logger,
+		dir:          dir,
+		sleepLoop:    dontpanic.NewForever(logger, time.Minute),
+		backpressure: backpressure,
 	}
 
 	c.sleepLoop.Go(func() {
@@ -318,7 +321,7 @@ func (c *cache) newEntry(key string, create func(io.Writer) error) (_ io.ReadClo
 	}()
 
 	var pr io.ReadCloser
-	pr, e.pipe, err = newPipe(f)
+	pr, e.pipe, err = newPipe(f, c.backpressure)
 	if err != nil {
 		return nil, nil, err
 	}

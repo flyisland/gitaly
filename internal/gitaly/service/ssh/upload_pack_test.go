@@ -695,9 +695,25 @@ func newRepositoryClient(tb testing.TB, cfg config.Cfg) gitalypb.RepositoryServi
 func TestUploadPack_packObjectsHook(t *testing.T) {
 	t.Parallel()
 
-	ctx := testhelper.Context(t)
+	t.Run("with backpressure", func(t *testing.T) {
+		cfg := testcfg.Build(t, testcfg.WithPackObjectsCacheEnabled())
 
-	cfg := testcfg.Build(t, testcfg.WithPackObjectsCacheEnabled())
+		require.True(t, cfg.PackObjectsCache.Enabled)
+		require.True(t, cfg.PackObjectsCache.Backpressure)
+
+		testUploadPackPackObjectsHook(t, cfg)
+	})
+
+	t.Run("without backpressure", func(t *testing.T) {
+		cfg := testcfg.Build(t, testcfg.WithPackObjectsCacheEnabled())
+		cfg.PackObjectsCache.Backpressure = false
+
+		testUploadPackPackObjectsHook(t, cfg)
+	})
+}
+
+func testUploadPackPackObjectsHook(t *testing.T, cfg config.Cfg) {
+	ctx := testhelper.Context(t)
 
 	testcfg.BuildGitalySSH(t, cfg)
 	testcfg.BuildGitalyHooks(t, cfg)

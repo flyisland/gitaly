@@ -5,6 +5,7 @@ package streamcache
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -22,6 +23,8 @@ func (wf *wrappedFile) Close() error                { return wf.f.Close() }
 func (wf *wrappedFile) Name() string                { return wf.f.Name() }
 
 func TestPipe_WriteTo(t *testing.T) {
+	t.Parallel()
+
 	data := make([]byte, 10*1024*1024)
 	_, err := rand.Read(data)
 	require.NoError(t, err)
@@ -52,87 +55,99 @@ func TestPipe_WriteTo(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			pr, p := createPipe(t)
-			defer pr.Close()
+	for _, backpressure := range []bool{true, false} {
+		for _, tc := range testCases {
+			t.Run(fmt.Sprintf("%s-backpressure-%v", tc.desc, backpressure), func(t *testing.T) {
+				t.Parallel()
 
-			errC := make(chan error, 1)
-			go func() {
-				errC <- func() error {
-					defer p.Close()
+				pr, p := createPipe(t, backpressure)
+				defer pr.Close()
 
-					// To exercise pipe blocking logic, we want to prevent writing all of
-					// data at once.
-					r := iotest.HalfReader(bytes.NewReader(data))
-					if _, err := io.Copy(p, r); err != nil {
-						return err
-					}
-					return p.Close()
+				errC := make(chan error, 1)
+				go func() {
+					errC <- func() error {
+						defer p.Close()
+
+						// To exercise pipe blocking logic, we want to prevent writing all of
+						// data at once.
+						r := iotest.HalfReader(bytes.NewReader(data))
+						if _, err := io.Copy(p, r); err != nil {
+							return err
+						}
+						return p.Close()
+					}()
 				}()
-			}()
 
-			outW := tc.create(t)
-			require.NoError(t, err)
-			defer outW.Close()
+				outW := tc.create(t)
+				require.NoError(t, err)
+				defer outW.Close()
 
-			n, err := pr.WriteTo(outW)
-			require.NoError(t, err)
-			require.Equal(t, int64(len(data)), n)
+				n, err := pr.WriteTo(outW)
+				require.NoError(t, err)
+				require.Equal(t, int64(len(data)), n)
 
-			require.NoError(t, outW.Close())
-			require.NoError(t, <-errC)
+				require.NoError(t, outW.Close())
+				require.NoError(t, <-errC)
 
-			outBytes, err := os.ReadFile(outW.Name())
-			require.NoError(t, err)
-			// Don't use require.Equal because we don't want a 10MB error message.
-			require.True(t, bytes.Equal(data, outBytes))
+				outBytes, err := os.ReadFile(outW.Name())
+				require.NoError(t, err)
+				// Don't use require.Equal because we don't want a 10MB error message.
+				require.True(t, bytes.Equal(data, outBytes))
 
-			require.Equal(t, tc.sendfile, pr.sendfileCalledSuccessfully)
-		})
+				require.Equal(t, tc.sendfile, pr.sendfileCalledSuccessfully)
+			})
+		}
 	}
 }
 
 func TestPipe_WriteTo_EAGAIN(t *testing.T) {
-	data := make([]byte, 10*1024*1024)
-	_, err := rand.Read(data)
-	require.NoError(t, err)
+	t.Parallel()
 
-	pr, p := createPipe(t)
-	defer pr.Close()
-	defer p.Close()
+	for _, backpressure := range []bool{true, false} {
+		t.Run(fmt.Sprintf("backpressure-%v", backpressure), func(t *testing.T) {
+			t.Parallel()
 
-	_, err = p.Write(data)
-	require.NoError(t, err)
-	require.NoError(t, p.Close())
+			data := make([]byte, 10*1024*1024)
+			_, err := rand.Read(data)
+			require.NoError(t, err)
 
-	fr, fw, err := os.Pipe()
-	require.NoError(t, err)
-	defer fr.Close()
-	defer fw.Close()
+			pr, p := createPipe(t, backpressure)
+			defer pr.Close()
+			defer p.Close()
 
-	errC := make(chan error, 1)
-	go func() {
-		errC <- func() error {
+			_, err = p.Write(data)
+			require.NoError(t, err)
+			require.NoError(t, p.Close())
+
+			fr, fw, err := os.Pipe()
+			require.NoError(t, err)
+			defer fr.Close()
 			defer fw.Close()
 
-			// This will try to write 10MB into fw at once, which will fail because
-			// the pipe buffer is too small. Then sendfile will return EAGAIN. Doing
-			// this tests our ability to handle EAGAIN correctly.
-			_, err := pr.WriteTo(fw)
-			if err != nil {
-				return err
-			}
+			errC := make(chan error, 1)
+			go func() {
+				errC <- func() error {
+					defer fw.Close()
 
-			return fw.Close()
-		}()
-	}()
+					// This will try to write 10MB into fw at once, which will fail because
+					// the pipe buffer is too small. Then sendfile will return EAGAIN. Doing
+					// this tests our ability to handle EAGAIN correctly.
+					_, err := pr.WriteTo(fw)
+					if err != nil {
+						return err
+					}
 
-	out, err := io.ReadAll(fr)
-	require.NoError(t, err)
-	// Don't use require.Equal because we don't want a 10MB error message.
-	require.True(t, bytes.Equal(data, out))
+					return fw.Close()
+				}()
+			}()
 
-	require.NoError(t, <-errC)
-	require.True(t, pr.sendfileCalledSuccessfully)
+			out, err := io.ReadAll(fr)
+			require.NoError(t, err)
+			// Don't use require.Equal because we don't want a 10MB error message.
+			require.True(t, bytes.Equal(data, out))
+
+			require.NoError(t, <-errC)
+			require.True(t, pr.sendfileCalledSuccessfully)
+		})
+	}
 }

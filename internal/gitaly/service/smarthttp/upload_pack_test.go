@@ -290,11 +290,24 @@ func TestServer_PostUploadPackWithSidechannel_usesPackObjectsHook(t *testing.T) 
 func testServerPostUploadPackWithSidechannelUsesPackObjectsHook(t *testing.T, ctx context.Context) {
 	t.Parallel()
 
-	testServerPostUploadPackUsesPackObjectsHook(t, ctx, makePostUploadPackWithSidechannelRequest)
+	t.Run("with backpressure", func(t *testing.T) {
+		cfg := testcfg.Build(t, testcfg.WithPackObjectsCacheEnabled())
+
+		require.True(t, cfg.PackObjectsCache.Enabled)
+		require.True(t, cfg.PackObjectsCache.Backpressure)
+
+		testServerPostUploadPackUsesPackObjectsHook(t, ctx, cfg, makePostUploadPackWithSidechannelRequest)
+	})
+
+	t.Run("without backpressure", func(t *testing.T) {
+		cfg := testcfg.Build(t, testcfg.WithPackObjectsCacheEnabled())
+		cfg.PackObjectsCache.Backpressure = false
+
+		testServerPostUploadPackUsesPackObjectsHook(t, ctx, cfg, makePostUploadPackWithSidechannelRequest)
+	})
 }
 
-func testServerPostUploadPackUsesPackObjectsHook(t *testing.T, ctx context.Context, makeRequest requestMaker, opts ...testcfg.Option) {
-	cfg := testcfg.Build(t, append(opts, testcfg.WithPackObjectsCacheEnabled())...)
+func testServerPostUploadPackUsesPackObjectsHook(t *testing.T, ctx context.Context, cfg config.Cfg, makeRequest requestMaker) {
 	testcfg.BuildGitalyHooks(t, cfg)
 
 	cache := streamcache.New(cfg.PackObjectsCache, testhelper.SharedLogger(t))

@@ -1652,13 +1652,13 @@ path="/foobar"
 		out  StreamCacheConfig
 		err  error
 	}{
-		{desc: "empty", out: StreamCacheConfig{MinOccurrences: 1}},
+		{desc: "empty", out: StreamCacheConfig{MinOccurrences: 1, Backpressure: true}},
 		{
 			desc: "enabled",
 			in: storageConfig + `[pack_objects_cache]
 enabled = true
 `,
-			out: StreamCacheConfig{Enabled: true, MaxAge: duration.Duration(5 * time.Minute), Dir: "/foobar/+gitaly/PackObjectsCache", MinOccurrences: 1},
+			out: StreamCacheConfig{Enabled: true, MaxAge: duration.Duration(5 * time.Minute), Dir: "/foobar/+gitaly/PackObjectsCache", MinOccurrences: 1, Backpressure: true},
 		},
 		{
 			desc: "enabled with custom values",
@@ -1667,8 +1667,9 @@ enabled = true
 dir = "/bazqux"
 max_age = "10m"
 min_occurrences = 0
+backpressure = false
 `,
-			out: StreamCacheConfig{Enabled: true, MaxAge: duration.Duration(10 * time.Minute), Dir: "/bazqux", MinOccurrences: 0},
+			out: StreamCacheConfig{Enabled: true, MaxAge: duration.Duration(10 * time.Minute), Dir: "/bazqux", MinOccurrences: 0, Backpressure: false},
 		},
 		{
 			desc: "enabled with 0 storages",
