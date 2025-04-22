@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
@@ -52,32 +52,32 @@ Examples:
 				Usage: "only include repositories created before this duration",
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func listUntrackedRepositoriesAction(appCtx *cli.Context) error {
+func listUntrackedRepositoriesAction(ctx context.Context, cmd *cli.Command) error {
 	logger := log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	onlyIncludeOlderThan := appCtx.Duration("older-than")
-	delimiter := appCtx.String("delimiter")
+	onlyIncludeOlderThan := cmd.Duration("older-than")
+	delimiter := cmd.String("delimiter")
 
-	ctx := correlation.ContextWithCorrelation(appCtx.Context, correlation.SafeRandomID())
-	ctx = metadata.AppendToOutgoingContext(ctx, "client_name", appCtx.Command.Name)
+	ctx = correlation.ContextWithCorrelation(ctx, correlation.SafeRandomID())
+	ctx = metadata.AppendToOutgoingContext(ctx, "client_name", cmd.Name)
 
 	logger = logger.WithField("correlation_id", correlation.ExtractFromContext(ctx))
-	logger.Debug(fmt.Sprintf("starting %s command", appCtx.App.Name))
+	logger.Debug(fmt.Sprintf("starting %s command", cmd.Name))
 
 	logger.Debug("dialing to gitaly nodes...")
 	nodeSet, err := dialGitalyStorages(ctx, conf, defaultDialTimeout)
@@ -102,7 +102,7 @@ func listUntrackedRepositoriesAction(appCtx *cli.Context) error {
 		ctx:         ctx,
 		checker:     datastore.NewStorageCleanup(db),
 		delimiter:   delimiter,
-		out:         appCtx.App.Writer,
+		out:         cmd.Writer,
 		printHeader: true,
 	}
 	for _, vs := range conf.VirtualStorages {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,30 +9,30 @@ import (
 	"os"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/signature"
 )
 
-func gpgApp() *cli.App {
-	return &cli.App{
+func gpgApp() *cli.Command {
+	return &cli.Command{
 		Flags: []cli.Flag{
 			&cli.IntFlag{Name: "status-fd"},
 			&cli.BoolFlag{Name: "verify"},
 			&cli.BoolFlag{Name: "bsau"},
 		},
-		Action: func(cCtx *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			// Git passes the --status-fd=2 flag into the gpg call.
-			if cCtx.Int("status-fd") != 2 {
+			if cmd.Int("status-fd") != 2 {
 				return errors.New("expected --status-fd=2")
 			}
 
-			signingKeys, err := signature.ParseSigningKeys(cCtx.Args().First())
+			signingKeys, err := signature.ParseSigningKeys(cmd.Args().First())
 			if err != nil {
-				return fmt.Errorf("reading signed key file %s : %w", cCtx.Args().First(), err)
+				return fmt.Errorf("reading signed key file %s : %w", cmd.Args().First(), err)
 			}
 
-			contents, err := io.ReadAll(cCtx.App.Reader)
+			contents, err := io.ReadAll(cmd.Reader)
 			if err != nil {
 				return fmt.Errorf("reading contents from stdin: %w", err)
 			}
@@ -53,15 +54,15 @@ func gpgApp() *cli.App {
 			}
 
 			// Git looks for this output string as part of GPG output.
-			if _, err := cCtx.App.ErrWriter.Write([]byte("[GNUPG:] SIG_CREATED ")); err != nil {
+			if _, err := cmd.ErrWriter.Write([]byte("[GNUPG:] SIG_CREATED ")); err != nil {
 				return fmt.Errorf("printing to stdout: %w", err)
 			}
 
-			if _, err := cCtx.App.Writer.Write(sig); err != nil {
+			if _, err := cmd.Writer.Write(sig); err != nil {
 				return fmt.Errorf("printing to stdout: %w", err)
 			}
 
-			if _, err := cCtx.App.Writer.Write([]byte("\n")); err != nil {
+			if _, err := cmd.Writer.Write([]byte("\n")); err != nil {
 				return fmt.Errorf("printing to stdout: %w", err)
 			}
 
@@ -80,7 +81,7 @@ func gpgApp() *cli.App {
 // commit message that we can add a signature to, at which point we can sign
 // commits manually and get rid of this binary.
 func main() {
-	if err := gpgApp().Run(os.Args); err != nil {
+	if err := gpgApp().Run(context.Background(), os.Args); err != nil {
 		log.Fatal(err)
 	}
 }

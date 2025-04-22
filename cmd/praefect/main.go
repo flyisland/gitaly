@@ -1,14 +1,16 @@
 package main
 
 import (
-	"log"
+	"context"
+	"fmt"
 	"os"
 
 	cli "gitlab.com/gitlab-org/gitaly/v16/internal/cli/praefect"
 )
 
 func main() {
-	if err := cli.NewApp().Run(os.Args); err != nil {
-		log.Fatal(err)
+	if err := cli.NewApp().Run(context.Background(), os.Args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }

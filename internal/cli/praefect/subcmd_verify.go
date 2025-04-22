@@ -1,10 +1,11 @@
 package praefect
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -35,7 +36,7 @@ Examples:
 		HideHelpCommand: true,
 		Action:          verifyAction,
 		Flags: []cli.Flag{
-			&cli.Int64Flag{
+			&cli.IntFlag{
 				Name:  "repository-id",
 				Usage: "repository ID of the repository to mark as unverified",
 			},
@@ -48,27 +49,27 @@ Examples:
 				Usage: "name of the the physical storage associated with the virtual storage with replicas to mark as unverified",
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func verifyAction(appCtx *cli.Context) error {
+func verifyAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	repositoryID := appCtx.Int64("repository-id")
-	virtualStorage := appCtx.String(paramVirtualStorage)
-	storage := appCtx.String("storage")
+	repositoryID := cmd.Int("repository-id")
+	virtualStorage := cmd.String(paramVirtualStorage)
+	storage := cmd.String("storage")
 
 	var request gitalypb.MarkUnverifiedRequest
 	switch {
@@ -100,7 +101,6 @@ func verifyAction(appCtx *cli.Context) error {
 		return fmt.Errorf("get node address: %w", err)
 	}
 
-	ctx := appCtx.Context
 	conn, err := subCmdDial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
@@ -112,7 +112,7 @@ func verifyAction(appCtx *cli.Context) error {
 		return fmt.Errorf("verify replicas: %w", err)
 	}
 
-	fmt.Fprintf(appCtx.App.Writer, "%d replicas marked unverified\n", response.GetReplicasMarked())
+	fmt.Fprintf(cmd.Writer, "%d replicas marked unverified\n", response.GetReplicasMarked())
 
 	return nil
 }

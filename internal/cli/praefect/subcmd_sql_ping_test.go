@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testdb"
 )
 
@@ -54,14 +54,18 @@ func TestSQLPingSubcommand(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			stdout, stderr, err := runApp(append([]string{"-config", tc.confPath(t), sqlPingCmdName}, tc.args...))
-			assert.Empty(t, stderr)
+			ctx := testhelper.Context(t)
+
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", tc.confPath(t), sqlPingCmdName}, tc.args...))
 			if tc.expectedErr != nil {
-				require.EqualError(t, err, tc.expectedErr.Error())
+				require.Equal(t, tc.expectedErr.Error()+"\n", stderr)
+				require.Equal(t, 1, exitCode)
+				return
 			}
-			if tc.expectedOutput != "" {
-				assert.Equal(t, tc.expectedOutput, stdout)
-			}
+
+			require.Equal(t, tc.expectedOutput, stdout)
+			require.Empty(t, stderr)
+			require.Zero(t, 0, exitCode)
 		})
 	}
 }

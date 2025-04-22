@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
@@ -88,22 +88,22 @@ func TestListUntrackedRepositoriesCommand(t *testing.T) {
 		time.Now().Add(-(timeDelta+1*time.Second))))
 
 	t.Run("positional arguments", func(t *testing.T) {
-		stdout, stderr, err := runApp([]string{"-config", confPath, "list-untracked-repositories", "positional-arg"})
-		require.Equal(t, cli.Exit(unexpectedPositionalArgsError{Command: "list-untracked-repositories"}, 1), err)
+		stdout, stderr, exitCode := runApp(t, ctx, []string{"-config", confPath, "list-untracked-repositories", "positional-arg"})
 		assert.NotEmpty(t, stdout, "the help text should be printed")
-		assert.Empty(t, stderr)
+		assert.Equal(t, cli.Exit(unexpectedPositionalArgsError{Command: "list-untracked-repositories"}, 1).Error()+"\n", stderr)
+		require.Equal(t, 1, exitCode)
 	})
 
 	t.Run("default flag values used", func(t *testing.T) {
-		stdout, stderr, err := runApp([]string{"-config", confPath, "list-untracked-repositories"})
-		require.NoError(t, err)
+		stdout, stderr, exitCode := runApp(t, ctx, []string{"-config", confPath, "list-untracked-repositories"})
+		require.Zero(t, exitCode)
 		assert.Empty(t, stdout)
 		assert.Empty(t, stderr)
 	})
 
 	t.Run("passed flag values used", func(t *testing.T) {
-		stdout, stderr, err := runApp([]string{"-config", confPath, "list-untracked-repositories", "-older-than", timeDelta.String(), "-delimiter", "~"})
-		require.NoError(t, err)
+		stdout, stderr, exitCode := runApp(t, ctx, []string{"-config", confPath, "list-untracked-repositories", "-older-than", timeDelta.String(), "-delimiter", "~"})
+		require.Zero(t, exitCode)
 		assert.Empty(t, stderr)
 		exp := []string{
 			"The following repositories were found on disk, but missing from the tracking database:",

@@ -25,13 +25,14 @@ updates that might introduce compatibility issues or security vulnerabilities.
 */
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 )
@@ -58,15 +59,11 @@ func main() {
 	var cfg config
 
 	// Set up CLI application using urfave/cli
-	app := &cli.App{
+	app := &cli.Command{
 		Name:    "go-mod-validator",
 		Usage:   "Validate go.mod files for version pinning compliance",
 		Version: "1.0.0",
-		Authors: []*cli.Author{
-			{
-				Name: "Gitaly Team",
-			},
-		},
+		Authors: []any{"Gitaly Team"},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "file",
@@ -76,8 +73,8 @@ func main() {
 				Required:    true,
 			},
 		},
-		Action: func(c *cli.Context) error {
-			exitCode := runValidator(cfg, c.App.Writer, c.App.ErrWriter)
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			exitCode := runValidator(cfg, cmd.Writer, cmd.ErrWriter)
 			if exitCode != 0 {
 				// Exit with the code without showing an error message
 				os.Exit(exitCode)
@@ -87,7 +84,7 @@ func main() {
 	}
 
 	// Run the application
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		fmt.Fprint(os.Stderr, err.Error())
 	}
 }

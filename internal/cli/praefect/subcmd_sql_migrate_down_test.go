@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore/migrations"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testdb"
 )
 
@@ -56,12 +57,20 @@ func TestSQLMigrateDownSubcommand(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			stdout, stderr, err := runApp(append([]string{"-config", confPath, sqlMigrateDownCmdName}, tc.args...))
-			assert.Empty(t, stderr)
-			require.Equal(t, tc.expectedErr, err)
+			ctx := testhelper.Context(t)
+
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, sqlMigrateDownCmdName}, tc.args...))
+			if tc.expectedErr != nil {
+				require.Equal(t, tc.expectedErr.Error()+"\n", stderr)
+				require.Equal(t, 1, exitCode)
+				return
+			}
+
 			for _, expectedOutput := range tc.expectedOutput {
 				assert.Contains(t, stdout, expectedOutput)
 			}
+			require.Empty(t, stderr)
+			require.Zero(t, exitCode)
 		})
 	}
 }

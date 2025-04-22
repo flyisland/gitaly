@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
@@ -19,8 +19,8 @@ type partitionCreateSubcommand struct {
 	parallel int
 }
 
-func (cmd *partitionCreateSubcommand) flags(ctx *cli.Context) {
-	cmd.parallel = ctx.Int("parallel")
+func (cmd *partitionCreateSubcommand) flags(ctx *cli.Command) {
+	cmd.parallel = int(ctx.Int("parallel"))
 }
 
 func partitionCreateFlags() []cli.Flag {
@@ -37,7 +37,7 @@ func newPartitionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "partition",
 		Usage: "Commands to create and restore partition backups",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newPartitionCreateCommand(),
 		},
 	}
@@ -52,14 +52,14 @@ func newPartitionCreateCommand() *cli.Command {
 	}
 }
 
-func partitionCreateAction(cctx *cli.Context) error {
-	logger, err := log.Configure(cctx.App.Writer, "json", "info")
+func partitionCreateAction(ctx context.Context, cmd *cli.Command) error {
+	logger, err := log.Configure(cmd.Writer, "json", "info")
 	if err != nil {
 		fmt.Printf("configuring logger failed: %v", err)
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(cctx.Context)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Set up signal handling
@@ -87,7 +87,7 @@ func partitionCreateAction(cctx *cli.Context) error {
 	}
 
 	subcmd := partitionCreateSubcommand{}
-	subcmd.flags(cctx)
+	subcmd.flags(cmd)
 
 	if err := subcmd.run(ctx, logger); err != nil {
 		logger.Error(err.Error())

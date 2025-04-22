@@ -3,21 +3,21 @@ package gitaly
 import (
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/version"
 )
 
 func init() {
 	// Override the version printer so the output format matches what Gitaly
 	// used before the introduction of the CLI toolkit.
-	cli.VersionPrinter = func(ctx *cli.Context) {
-		fmt.Fprintln(ctx.App.Writer, version.GetVersionString("Gitaly"))
+	cli.VersionPrinter = func(ctx *cli.Command) {
+		fmt.Fprintln(ctx.Writer, version.GetVersionString("Gitaly"))
 	}
 }
 
 // NewApp returns a new gitaly app.
-func NewApp() *cli.App {
-	return &cli.App{
+func NewApp() *cli.Command {
+	return &cli.Command{
 		Name:        "gitaly",
 		Usage:       "a Git RPC service",
 		Description: "Gitaly is a Git RPC service for handling Git calls.",

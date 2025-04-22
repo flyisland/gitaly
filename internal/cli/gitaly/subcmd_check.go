@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
@@ -31,18 +31,18 @@ Example: gitaly check gitaly.config.toml`,
 	}
 }
 
-func checkAction(ctx *cli.Context) (returnedErr error) {
+func checkAction(ctx context.Context, cmd *cli.Command) (returnedErr error) {
 	logger := log.ConfigureCommand()
 
-	if ctx.NArg() != 1 || ctx.Args().First() == "" {
-		if err := cli.ShowSubcommandHelp(ctx); err != nil {
+	if cmd.NArg() != 1 || cmd.Args().First() == "" {
+		if err := cli.ShowSubcommandHelp(cmd); err != nil {
 			return err
 		}
 
 		return cli.Exit("error: invalid argument(s)", 2)
 	}
 
-	configPath := ctx.Args().First()
+	configPath := cmd.Args().First()
 	cfg, err := loadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("loading configuration %q: %w", configPath, err)
@@ -73,19 +73,19 @@ func checkAction(ctx *cli.Context) (returnedErr error) {
 		return fmt.Errorf("unpack auxiliary binaries: %w", err)
 	}
 
-	fmt.Fprint(ctx.App.Writer, "Checking GitLab API access: ")
+	fmt.Fprint(cmd.Writer, "Checking GitLab API access: ")
 	info, err := checkAPI(cfg, logger)
 	if err != nil {
-		fmt.Fprintln(ctx.App.Writer, "FAILED")
+		fmt.Fprintln(cmd.Writer, "FAILED")
 		return err
 	}
 
-	fmt.Fprintln(ctx.App.Writer, "OK")
-	fmt.Fprintf(ctx.App.Writer, "GitLab version: %s\n", info.Version)
-	fmt.Fprintf(ctx.App.Writer, "GitLab revision: %s\n", info.Revision)
-	fmt.Fprintf(ctx.App.Writer, "GitLab Api version: %s\n", info.APIVersion)
-	fmt.Fprintf(ctx.App.Writer, "Redis reachable for GitLab: %t\n", info.RedisReachable)
-	fmt.Fprintln(ctx.App.Writer, "OK")
+	fmt.Fprintln(cmd.Writer, "OK")
+	fmt.Fprintf(cmd.Writer, "GitLab version: %s\n", info.Version)
+	fmt.Fprintf(cmd.Writer, "GitLab revision: %s\n", info.Revision)
+	fmt.Fprintf(cmd.Writer, "GitLab Api version: %s\n", info.APIVersion)
+	fmt.Fprintf(cmd.Writer, "Redis reachable for GitLab: %t\n", info.RedisReachable)
+	fmt.Fprintln(cmd.Writer, "OK")
 
 	return returnedErr
 }

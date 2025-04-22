@@ -184,9 +184,9 @@ func TestTrackRepositoriesSubcommand(t *testing.T) {
 				}
 				require.NoError(t, input.Close())
 
-				stdout, stderr, err := runApp(append([]string{"-config", confPath, trackRepositoriesCmdName}, tc.args(inputPath)...))
+				stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, trackRepositoriesCmdName}, tc.args(inputPath)...))
 				assert.Empty(t, stderr)
-				require.NoError(t, err)
+				require.Zero(t, exitCode)
 				assert.Contains(t, stdout, tc.expectedOutput)
 
 				replicateImmediately := slices.Contains(tc.args(inputPath), "-replicate-immediately")
@@ -372,15 +372,13 @@ func TestTrackRepositoriesSubcommand(t *testing.T) {
 				if tc.args != nil {
 					args = tc.args(inputPath)
 				}
-				stdout, stderr, err := runApp(append([]string{"-config", confPath, trackRepositoriesCmdName}, args...))
-				assert.Empty(t, stderr)
-				require.Error(t, err)
-
+				stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, trackRepositoriesCmdName}, args...))
 				if len(tc.expectedOutput) > 0 {
 					require.Subset(t, strings.Split(stdout, "\n"), outputLines(inputPath, tc.requestCt, tc.expectedOutput))
 				}
 
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.Contains(t, stderr, tc.expectedError)
+				require.Equal(t, 1, exitCode)
 			})
 		}
 	})

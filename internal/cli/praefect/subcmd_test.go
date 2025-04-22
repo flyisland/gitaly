@@ -2,13 +2,16 @@ package praefect
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -68,12 +71,18 @@ func listenAndServe(tb testing.TB, svcs []svcRegistrar) (net.Listener, testhelpe
 	}
 }
 
-func runApp(args []string) (string, string, error) {
+func runApp(tb testing.TB, ctx context.Context, args []string) (string, string, int) {
 	var stdout, stderr bytes.Buffer
-	app := NewApp()
-	app.Writer = &stdout
-	app.ErrWriter = &stderr
-	app.Reader = bytes.NewReader(nil)
-	err := app.Run(append([]string{progname}, args...))
-	return stdout.String(), stderr.String(), err
+	cmd := exec.CommandContext(ctx, testcfg.BuildPraefect(tb, testcfg.Build(tb)), args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	exitCode := 0
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		require.ErrorAs(tb, err, &exitErr)
+		exitCode = exitErr.ExitCode()
+	}
+
+	return stdout.String(), stderr.String(), exitCode
 }

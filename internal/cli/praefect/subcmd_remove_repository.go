@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
@@ -61,25 +61,24 @@ By default, runs in dry-run mode to check if the repository exists in the Praefe
 				Usage: "remove the repository records from the database only",
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func removeRepositoryAction(appCtx *cli.Context) error {
+func removeRepositoryAction(ctx context.Context, cmd *cli.Command) error {
 	logger := log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	ctx := appCtx.Context
 	openDBCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	db, err := glsql.OpenDB(openDBCtx, conf.DB)
@@ -92,12 +91,12 @@ func removeRepositoryAction(appCtx *cli.Context) error {
 
 	rmRepo := &removeRepository{
 		logger:         logger.WithField("correlation_id", correlation.ExtractFromContext(ctx)),
-		virtualStorage: appCtx.String(paramVirtualStorage),
-		relativePath:   appCtx.String(paramRelativePath),
-		apply:          appCtx.Bool(paramApply),
-		dbOnly:         appCtx.Bool(paramDBOnly),
+		virtualStorage: cmd.String(paramVirtualStorage),
+		relativePath:   cmd.String(paramRelativePath),
+		apply:          cmd.Bool(paramApply),
+		dbOnly:         cmd.Bool(paramDBOnly),
 		dialTimeout:    defaultDialTimeout,
-		w:              &writer{w: appCtx.App.Writer},
+		w:              &writer{w: cmd.Writer},
 	}
 
 	return rmRepo.exec(ctx, logger, db, conf)

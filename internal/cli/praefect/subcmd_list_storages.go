@@ -1,10 +1,11 @@
 package praefect
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
 
@@ -34,25 +35,25 @@ Example: praefect --config praefect.config.toml list-storages --virtual-storage 
 				Usage: "name of the virtual storage to list physical storages for",
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func listStoragesAction(ctx *cli.Context) error {
+func listStoragesAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	conf, err := readConfig(ctx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	table := tablewriter.NewWriter(ctx.App.Writer)
+	table := tablewriter.NewWriter(cmd.Writer)
 	table.SetHeader([]string{"VIRTUAL_STORAGE", "NODE", "ADDRESS"})
 	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 	table.SetAutoFormatHeaders(false)
@@ -65,7 +66,7 @@ func listStoragesAction(ctx *cli.Context) error {
 	table.SetTablePadding("\t") // pad with tabs
 	table.SetNoWhiteSpace(true)
 
-	if pickedVirtualStorage := ctx.String(paramVirtualStorage); pickedVirtualStorage != "" {
+	if pickedVirtualStorage := cmd.String(paramVirtualStorage); pickedVirtualStorage != "" {
 		for _, virtualStorage := range conf.VirtualStorages {
 			if virtualStorage.Name != pickedVirtualStorage {
 				continue
@@ -80,7 +81,7 @@ func listStoragesAction(ctx *cli.Context) error {
 			return nil
 		}
 
-		fmt.Fprintf(ctx.App.Writer, "No virtual storages named %s.\n", pickedVirtualStorage)
+		fmt.Fprintf(cmd.Writer, "No virtual storages named %s.\n", pickedVirtualStorage)
 
 		return nil
 	}

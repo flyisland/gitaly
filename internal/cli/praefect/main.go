@@ -12,13 +12,14 @@
 package praefect
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"slices"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/service"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/version"
 )
@@ -26,8 +27,8 @@ import (
 func init() {
 	// Override the version printer so the output format matches what Praefect
 	// used before the introduction of the CLI toolkit.
-	cli.VersionPrinter = func(ctx *cli.Context) {
-		fmt.Fprintln(ctx.App.Writer, version.GetVersionString("Praefect"))
+	cli.VersionPrinter = func(cmd *cli.Command) {
+		fmt.Fprintln(cmd.Writer, version.GetVersionString("Praefect"))
 	}
 }
 
@@ -38,10 +39,10 @@ const (
 )
 
 // NewApp returns a new praefect app.
-func NewApp() *cli.App {
+func NewApp() *cli.Command {
 	interrupt := make(chan os.Signal, 1)
 
-	return &cli.App{
+	return &cli.Command{
 		Name:    progname,
 		Usage:   "a gitaly proxy",
 		Version: version.GetVersionString("Praefect"),
@@ -82,14 +83,14 @@ func NewApp() *cli.App {
 				Usage: "load configuration from `FILE`",
 			},
 		},
-		Before: func(appCtx *cli.Context) error {
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
 			// Praefect service manages os.Interrupt on its own, by making a "table-flip".
 			// That is why the signal listening is omitted if there are no arguments passed
 			// (old-fashioned method of starting Praefect service) or 'serve' sub-command
 			// is invoked. Other sub-commands require signal to be properly handled.
-			args := appCtx.Args().Slice()
+			args := cmd.Args().Slice()
 			if len(args) == 0 || slices.Contains(args, "serve") {
-				return nil
+				return ctx, nil
 			}
 
 			signal.Notify(interrupt, os.Interrupt)
@@ -99,9 +100,9 @@ func NewApp() *cli.App {
 				}
 			}()
 
-			return nil
+			return ctx, nil
 		},
-		After: func(*cli.Context) error {
+		After: func(context.Context, *cli.Command) error {
 			close(interrupt)
 			return nil
 		},
@@ -110,14 +111,14 @@ func NewApp() *cli.App {
 
 // mustProvideConfigFlag extracts value of the 'config' flag and returns it.
 // If flag is not set the help for the command will be printed and terminated with exit code 2.
-func mustProvideConfigFlag(ctx *cli.Context, command string) string {
-	pathToConfigFile := ctx.String(configFlagName)
+func mustProvideConfigFlag(ctx context.Context, cmd *cli.Command, command string) string {
+	pathToConfigFile := cmd.String(configFlagName)
 	if pathToConfigFile == "" {
 		// We can't make 'config' flag required for all commands, but we still want the
 		// same output to be printed if it is not provided.
 		// It should be removed after migration to the `praefect CMD -config FILE`
 		// where we can mark it as required for each sub-command.
-		_ = cli.ShowCommandHelp(ctx, command)
+		_ = cli.ShowCommandHelp(ctx, cmd, command)
 		log.Printf("Required flag %q not set\n", configFlagName)
 		os.Exit(2)
 	}

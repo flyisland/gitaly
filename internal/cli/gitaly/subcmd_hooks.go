@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
@@ -32,7 +32,7 @@ func newHooksCommand() *cli.Command {
 
 Provides the "set" subcommand.`,
 		HideHelpCommand: true,
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:  "set",
 				Usage: "set custom hooks for a Git repository",
@@ -59,15 +59,15 @@ To remove custom Git hooks for a specified repository, run the set subcommand wi
 	}
 }
 
-func setHooksAction(ctx *cli.Context) error {
+func setHooksAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	cfg, err := loadConfig(ctx.String(flagConfig))
+	cfg, err := loadConfig(cmd.String(flagConfig))
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	storage := ctx.String(flagStorage)
+	storage := cmd.String(flagStorage)
 	if storage == "" {
 		if len(cfg.Storages) != 1 {
 			return fmt.Errorf("multiple storages configured: use --storage to target storage explicitly")
@@ -81,16 +81,16 @@ func setHooksAction(ctx *cli.Context) error {
 		return fmt.Errorf("get Gitaly address: %w", err)
 	}
 
-	conn, err := dial(ctx.Context, address, cfg.Auth.Token, 10*time.Second)
+	conn, err := dial(ctx, address, cfg.Auth.Token, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("create connection: %w", err)
 	}
 	defer conn.Close()
 
-	if err := setRepoHooks(ctx.Context, conn,
-		ctx.App.Reader,
+	if err := setRepoHooks(ctx, conn,
+		cmd.Reader,
 		storage,
-		ctx.String(flagRepository),
+		cmd.String(flagRepository),
 	); err != nil {
 		return err
 	}

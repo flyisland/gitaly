@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	gitalycfg "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
@@ -95,19 +95,21 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 	confPath := writeConfigToFile(t, conf)
 
 	for _, tc := range []struct {
-		desc         string
-		confPath     func(*testing.T) string
-		args         func(*testing.T, *gitalypb.Repository, string) []string
-		assertError  func(*testing.T, error, *gitalypb.Repository, string)
-		assertOutput func(*testing.T, string, *gitalypb.Repository)
+		desc             string
+		confPath         func(*testing.T) string
+		args             func(*testing.T, *gitalypb.Repository, string) []string
+		expectedExitCode int
+		assertError      func(*testing.T, string, *gitalypb.Repository, string)
+		assertOutput     func(*testing.T, string, *gitalypb.Repository)
 	}{
 		{
 			desc: "positional arguments",
 			args: func(*testing.T, *gitalypb.Repository, string) []string {
 				return []string{"-virtual-storage=vs", "-relative-path=r", "positional-arg"}
 			},
-			assertError: func(t *testing.T, err error, _ *gitalypb.Repository, _ string) {
-				assert.Equal(t, cli.Exit(unexpectedPositionalArgsError{Command: "remove-repository"}, 1), err)
+			expectedExitCode: 1,
+			assertError: func(t *testing.T, stderr string, _ *gitalypb.Repository, _ string) {
+				assert.Equal(t, cli.Exit(unexpectedPositionalArgsError{Command: "remove-repository"}, 1).Error()+"\n", stderr)
 			},
 		},
 		{
@@ -115,8 +117,9 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			args: func(*testing.T, *gitalypb.Repository, string) []string {
 				return []string{"-relative-path=r"}
 			},
-			assertError: func(t *testing.T, err error, _ *gitalypb.Repository, _ string) {
-				assert.EqualError(t, err, `Required flag "virtual-storage" not set`)
+			expectedExitCode: 1,
+			assertError: func(t *testing.T, stderr string, _ *gitalypb.Repository, _ string) {
+				assert.Equal(t, "Required flag \"virtual-storage\" not set\n", stderr)
 			},
 		},
 		{
@@ -124,8 +127,9 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			args: func(*testing.T, *gitalypb.Repository, string) []string {
 				return []string{"-virtual-storage=vs"}
 			},
-			assertError: func(t *testing.T, err error, _ *gitalypb.Repository, _ string) {
-				assert.EqualError(t, err, `Required flag "relative-path" not set`)
+			expectedExitCode: 1,
+			assertError: func(t *testing.T, stderr string, _ *gitalypb.Repository, _ string) {
+				assert.Equal(t, "Required flag \"relative-path\" not set\n", stderr)
 			},
 		},
 		{
@@ -159,8 +163,9 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			args: func(*testing.T, *gitalypb.Repository, string) []string {
 				return []string{"-virtual-storage=vs", "-relative-path=r"}
 			},
-			assertError: func(t *testing.T, err error, _ *gitalypb.Repository, _ string) {
-				require.Contains(t, err.Error(), "connect to database: send ping: failed to connect to ")
+			expectedExitCode: 1,
+			assertError: func(t *testing.T, stderr string, _ *gitalypb.Repository, _ string) {
+				require.Contains(t, stderr, "connect to database: send ping: failed to connect to ")
 			},
 		},
 		{
@@ -168,8 +173,8 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			args: func(_ *testing.T, repo *gitalypb.Repository, _ string) []string {
 				return []string{"-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath()}
 			},
-			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
-				require.NoError(t, err)
+			assertError: func(t *testing.T, stderr string, repo *gitalypb.Repository, replicaPath string) {
+				require.Empty(t, stderr)
 
 				require.True(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
 				require.True(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
@@ -187,8 +192,8 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 
 				return []string{"-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply"}
 			},
-			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
-				require.NoError(t, err)
+			assertError: func(t *testing.T, stderr string, repo *gitalypb.Repository, replicaPath string) {
+				require.Empty(t, stderr)
 
 				require.False(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
 				require.False(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
@@ -206,8 +211,8 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			args: func(t *testing.T, repo *gitalypb.Repository, _ string) []string {
 				return []string{"-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply", "-db-only"}
 			},
-			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
-				require.NoError(t, err)
+			assertError: func(t *testing.T, stderr string, repo *gitalypb.Repository, replicaPath string) {
+				require.Empty(t, stderr)
 				require.False(t, praefectRepositoryExists(t, repo))
 				// Repo is still present on-disk on the Gitaly nodes.
 				require.True(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
@@ -231,8 +236,8 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 				require.NoError(t, err)
 				return []string{"-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply"}
 			},
-			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
-				require.NoError(t, err)
+			assertError: func(t *testing.T, stderr string, repo *gitalypb.Repository, replicaPath string) {
+				require.Empty(t, stderr)
 
 				require.False(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
 				require.False(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
@@ -253,8 +258,9 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 				require.NoError(t, err)
 				return []string{"-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply"}
 			},
-			assertError: func(t *testing.T, err error, repo *gitalypb.Repository, replicaPath string) {
-				require.EqualError(t, err, "repository is not being tracked in Praefect")
+			expectedExitCode: 1,
+			assertError: func(t *testing.T, stderr string, repo *gitalypb.Repository, replicaPath string) {
+				require.Equal(t, "repository is not being tracked in Praefect\n", stderr)
 
 				require.True(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))
 				require.True(t, gitalyRepositoryExists(t, gitalyTwoConfig, gitalyTwoCfg.Storages[0].Name, replicaPath))
@@ -270,12 +276,12 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 			}
 			repo := createRepo(t, ctx, repoClient, praefectStorage, t.Name())
 			replicaPath := gittest.GetReplicaPath(t, ctx, gitalycfg.Cfg{SocketPath: praefectServer.Address()}, repo)
-			stdout, stderr, err := runApp(append([]string{"-config", confPath, "remove-repository"}, tc.args(t, repo, replicaPath)...))
-			assert.Empty(t, stderr)
-			tc.assertError(t, err, repo, replicaPath)
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, "remove-repository"}, tc.args(t, repo, replicaPath)...))
+			tc.assertError(t, stderr, repo, replicaPath)
 			if tc.assertOutput != nil {
 				tc.assertOutput(t, stdout, repo)
 			}
+			require.Equal(t, tc.expectedExitCode, exitCode)
 		})
 	}
 
@@ -283,9 +289,9 @@ func TestRemoveRepositorySubcommand(t *testing.T) {
 		repo := createRepo(t, ctx, repoClient, praefectStorage, t.Name())
 		gitalyTwoSrv.Shutdown()
 		replicaPath := gittest.GetReplicaPath(t, ctx, gitalycfg.Cfg{SocketPath: praefectServer.Address()}, repo)
-		stdout, stderr, err := runApp([]string{"-config", confPath, "remove-repository", "-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply"})
+		stdout, stderr, exitCode := runApp(t, ctx, []string{"-config", confPath, "remove-repository", "-virtual-storage", repo.GetStorageName(), "-relative-path", repo.GetRelativePath(), "-apply"})
 		assert.Empty(t, stderr)
-		require.NoError(t, err)
+		require.Zero(t, exitCode)
 		assert.Contains(t, stdout, "Repository removal completed.")
 
 		require.False(t, gitalyRepositoryExists(t, gitalyOneConfig, gitalyOneCfg.Storages[0].Name, replicaPath))

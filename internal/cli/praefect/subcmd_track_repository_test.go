@@ -176,9 +176,15 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				_, stderr, err := runApp(append([]string{"-config", confPath, trackRepositoryCmdName}, tc.args...))
+				_, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, trackRepositoryCmdName}, tc.args...))
+				if tc.errorMsg != "" {
+					require.Equal(t, tc.errorMsg+"\n", stderr)
+					require.Equal(t, 1, exitCode)
+					return
+				}
+
 				assert.Empty(t, stderr)
-				require.EqualError(t, err, tc.errorMsg)
+				require.Zero(t, exitCode)
 			})
 		}
 	})
@@ -271,9 +277,9 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 				if tc.replicateImmediately {
 					args = append(args, "-replicate-immediately")
 				}
-				stdout, stderr, err := runApp(append([]string{"-config", confPath, trackRepositoryCmdName}, args...))
+				stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, trackRepositoryCmdName}, args...))
 				assert.Empty(t, stderr)
-				require.NoError(t, err)
+				require.Zero(t, exitCode)
 
 				as := datastore.NewAssignmentStore(db, conf.StorageNames())
 
@@ -321,7 +327,7 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 
 		require.NoDirExists(t, filepath.Join(gitalyTwoCfg.Storages[0].Path, relativePath))
 
-		_, stderr, err := runApp([]string{
+		_, stderr, exitCode := runApp(t, ctx, []string{
 			"-config", confPath,
 			trackRepositoryCmdName,
 			"-virtual-storage", virtualStorageName,
@@ -329,12 +335,12 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 			"-replica-path", relativePath,
 			"-authoritative-storage", authoritativeStorage,
 		})
-		require.NoError(t, err)
+		require.Zero(t, exitCode)
 		require.Empty(t, stderr)
 
 		// running the command twice means we try creating the replication event
 		// again, which should log the duplicate but not break the flow.
-		stdout, stderr, err := runApp([]string{
+		stdout, stderr, exitCode := runApp(t, ctx, []string{
 			"-config", confPath,
 			trackRepositoryCmdName,
 			"-virtual-storage", virtualStorageName,
@@ -342,7 +348,7 @@ func TestTrackRepositorySubcommand(t *testing.T) {
 			"-replica-path", relativePath,
 			"-authoritative-storage", authoritativeStorage,
 		})
-		require.NoError(t, err)
+		require.Zero(t, exitCode)
 		assert.Empty(t, stderr)
 		assert.Contains(t, stdout, "replication event queue already has similar entry: replication event \"\" -> \"praefect\" -> \"gitaly-2\" -> \"path/to/test/repo_3\" already exists.")
 	})

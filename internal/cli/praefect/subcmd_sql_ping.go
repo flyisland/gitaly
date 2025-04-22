@@ -1,9 +1,10 @@
 package praefect
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
 )
@@ -17,27 +18,27 @@ func newSQLPingCommand() *cli.Command {
 		Description:     "The subcommand checks if the database configured in the configuration file is reachable",
 		HideHelpCommand: true,
 		Action:          sqlPingAction,
-		Before: func(appCtx *cli.Context) error {
-			if appCtx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(appCtx)
-				return unexpectedPositionalArgsError{Command: appCtx.Command.Name}
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, unexpectedPositionalArgsError{Command: cmd.Name}
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func sqlPingAction(appCtx *cli.Context) error {
+func sqlPingAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	subCmd := progname + " " + appCtx.Command.Name
+	subCmd := progname + " " + cmd.Name
 
-	db, clean, err := openDB(conf.DB, appCtx.App.ErrWriter)
+	db, clean, err := openDB(conf.DB, cmd.ErrWriter)
 	if err != nil {
 		return err
 	}
@@ -47,6 +48,6 @@ func sqlPingAction(appCtx *cli.Context) error {
 		return fmt.Errorf("%s: fail: %w", subCmd, err)
 	}
 
-	fmt.Fprintf(appCtx.App.Writer, "%s: OK\n", subCmd)
+	fmt.Fprintf(cmd.Writer, "%s: OK\n", subCmd)
 	return nil
 }

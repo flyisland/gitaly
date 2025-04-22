@@ -1,6 +1,7 @@
 package gitaly
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -8,7 +9,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -82,7 +83,7 @@ func newBadgerDBCmd() *cli.Command {
 		Usage:       "Interact with the BadgerDB",
 		UsageText:   "gitaly db <subcommand>",
 		Description: "This command allows you to interact with the BadgerDB. It provides subcommands to list and get values from the database.",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newBadgerDBListCmd(),
 			newBadgerDBGetCmd(),
 			newBadgerDBUpdateCmd(),
@@ -110,12 +111,12 @@ func newBadgerDBListCmd() *cli.Command {
 				Destination: &formatKeys,
 			},
 		},
-		Action: func(ctx *cli.Context) (returnErr error) {
-			if ctx.NArg() > 0 {
+		Action: func(ctx context.Context, cmd *cli.Command) (returnErr error) {
+			if cmd.NArg() > 0 {
 				return fmt.Errorf("no arguments required, use -h for help")
 			}
 
-			db, err := openDatabase(ctx, ctx.String("db-path"))
+			db, err := openDatabase(cmd, cmd.String("db-path"))
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
@@ -125,7 +126,7 @@ func newBadgerDBListCmd() *cli.Command {
 					returnErr = errors.Join(returnErr, fmt.Errorf("closing database: %w", err))
 				}
 			}()
-			return listKeys(ctx, db, ctx.String("prefix"), formatKeys)
+			return listKeys(cmd, db, cmd.String("prefix"), formatKeys)
 		},
 	}
 	return cmd
@@ -139,12 +140,12 @@ func newBadgerDBGetCmd() *cli.Command {
 			databasePathFlag(),
 		},
 		ArgsUsage: "<key>",
-		Action: func(ctx *cli.Context) (returnErr error) {
-			if ctx.NArg() != 1 {
+		Action: func(ctx context.Context, cmd *cli.Command) (returnErr error) {
+			if cmd.NArg() != 1 {
 				return fmt.Errorf("exactly one argument required")
 			}
 
-			db, err := openDatabase(ctx, ctx.String("db-path"))
+			db, err := openDatabase(cmd, cmd.String("db-path"))
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
@@ -155,8 +156,8 @@ func newBadgerDBGetCmd() *cli.Command {
 				}
 			}()
 
-			key := ctx.Args().First()
-			return getValue(ctx, db, key)
+			key := cmd.Args().First()
+			return getValue(cmd, db, key)
 		},
 	}
 	return cmd
@@ -170,12 +171,12 @@ func newBadgerDBUpdateCmd() *cli.Command {
 			databasePathFlag(),
 		},
 		ArgsUsage: "<key> <value>",
-		Action: func(ctx *cli.Context) (returnErr error) {
-			if ctx.NArg() != 2 {
+		Action: func(ctx context.Context, cmd *cli.Command) (returnErr error) {
+			if cmd.NArg() != 2 {
 				return fmt.Errorf("exactly two arguments required")
 			}
 
-			db, err := openDatabase(ctx, ctx.String("db-path"))
+			db, err := openDatabase(cmd, cmd.String("db-path"))
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
@@ -186,15 +187,15 @@ func newBadgerDBUpdateCmd() *cli.Command {
 				}
 			}()
 
-			key := ctx.Args().First()
-			value := ctx.Args().Get(1)
-			return updateKey(ctx, db, key, []byte(value))
+			key := cmd.Args().First()
+			value := cmd.Args().Get(1)
+			return updateKey(cmd, db, key, []byte(value))
 		},
 	}
 	return cmd
 }
 
-func listKeys(ctx *cli.Context, db keyvalue.Store, prefix string, formatKeys bool) error {
+func listKeys(cmd *cli.Command, db keyvalue.Store, prefix string, formatKeys bool) error {
 	if prefix != "" {
 		var err error
 		// Unquote the prefix to handle escape sequences
@@ -213,7 +214,7 @@ func listKeys(ctx *cli.Context, db keyvalue.Store, prefix string, formatKeys boo
 			if formatKeys {
 				key = formatKey([]byte(key))
 			}
-			fmt.Fprintf(ctx.App.Writer, "%q\n", key)
+			fmt.Fprintf(cmd.Writer, "%q\n", key)
 		}
 		return nil
 	}); err != nil {
@@ -223,7 +224,7 @@ func listKeys(ctx *cli.Context, db keyvalue.Store, prefix string, formatKeys boo
 	return nil
 }
 
-func updateKey(ctx *cli.Context, db keyvalue.Store, key string, value []byte) error {
+func updateKey(cmd *cli.Command, db keyvalue.Store, key string, value []byte) error {
 	return db.Update(func(txn keyvalue.ReadWriter) error {
 		// unquote the key to handle escape sequences
 		unquotedKey, err := strconv.Unquote(`"` + key + `"`)
@@ -247,13 +248,13 @@ func updateKey(ctx *cli.Context, db keyvalue.Store, key string, value []byte) er
 			return fmt.Errorf("set entry: %w", err)
 		}
 
-		fmt.Fprintf(ctx.App.Writer, "Updated key: %q\n", unquotedKey)
+		fmt.Fprintf(cmd.Writer, "Updated key: %q\n", unquotedKey)
 
 		return nil
 	})
 }
 
-func getValue(ctx *cli.Context, db keyvalue.Store, key string) error {
+func getValue(cmd *cli.Command, db keyvalue.Store, key string) error {
 	var value []byte
 	var unquotedKey string
 	if err := db.View(func(txn keyvalue.ReadWriter) error {
@@ -274,17 +275,17 @@ func getValue(ctx *cli.Context, db keyvalue.Store, key string) error {
 		return fmt.Errorf("retrieve value: %w", err)
 	}
 
-	decodedValue, err := decodeValue(ctx, unquotedKey, value)
+	decodedValue, err := decodeValue(cmd, unquotedKey, value)
 	if err != nil {
 		return fmt.Errorf("decode value: %w", err)
 	}
 
-	fmt.Fprintf(ctx.App.Writer, "%s\n", decodedValue)
+	fmt.Fprintf(cmd.Writer, "%s\n", decodedValue)
 
 	return nil
 }
 
-func decodeValue(ctx *cli.Context, key string, data []byte) (string, error) {
+func decodeValue(cmd *cli.Command, key string, data []byte) (string, error) {
 	for prefix, decode := range decoders {
 		pattern := regexp.MustCompile(prefix)
 		if pattern.MatchString(key) {
@@ -292,7 +293,7 @@ func decodeValue(ctx *cli.Context, key string, data []byte) (string, error) {
 		}
 	}
 
-	fmt.Fprintf(ctx.App.ErrWriter, "no decoder found for key: %s\n", key)
+	fmt.Fprintf(cmd.ErrWriter, "no decoder found for key: %s\n", key)
 	return hex.Dump(data), nil
 }
 
@@ -336,8 +337,8 @@ func encodeLSN(data []byte) ([]byte, error) {
 	return proto.Marshal(lsn)
 }
 
-func openDatabase(ctx *cli.Context, storagePath string) (keyvalue.Store, error) {
-	logger, err := log.Configure(ctx.App.ErrWriter, "json", "error")
+func openDatabase(cmd *cli.Command, storagePath string) (keyvalue.Store, error) {
+	logger, err := log.Configure(cmd.ErrWriter, "json", "error")
 	if err != nil {
 		return nil, fmt.Errorf("configure logger: %w", err)
 	}

@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/service/info"
@@ -122,13 +121,15 @@ func TestMetadataSubcommand(t *testing.T) {
 			}
 			confPath := writeConfigToFile(t, conf)
 
-			stdout, stderr, err := runApp(append([]string{"-config", confPath, "metadata"}, tc.args...))
-			assert.Empty(t, stderr)
-			require.Equal(t, tc.error, err)
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, "metadata"}, tc.args...))
 			if tc.error != nil {
+				require.Equal(t, tc.error.Error()+"\n", stderr)
+				require.Equal(t, 1, exitCode)
 				return
 			}
 
+			require.Zero(t, exitCode)
+			require.Empty(t, stderr)
 			require.Equal(t, `Repository ID: 1
 Virtual Storage: "virtual-storage"
 Relative Path: "relative-path"

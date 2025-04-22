@@ -3,13 +3,13 @@ package gitalybackup
 import (
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/version"
 )
 
 func init() {
-	cli.VersionPrinter = func(ctx *cli.Context) {
-		fmt.Fprintln(ctx.App.Writer, version.GetVersionString(binaryName))
+	cli.VersionPrinter = func(cmd *cli.Command) {
+		fmt.Fprintln(cmd.Writer, version.GetVersionString(binaryName))
 	}
 }
 
@@ -21,8 +21,8 @@ const (
 )
 
 // NewApp returns a new gitaly[backup app.
-func NewApp() *cli.App {
-	return &cli.App{
+func NewApp() *cli.Command {
+	return &cli.Command{
 		Name:    progname,
 		Usage:   "create gitaly backups",
 		Version: version.GetVersionString(binaryName),

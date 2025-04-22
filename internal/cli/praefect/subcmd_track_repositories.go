@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
 	"gitlab.com/gitlab-org/labkit/correlation"
@@ -48,36 +48,36 @@ func newTrackRepositoriesCommand() *cli.Command {
 				Required: true,
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			if ctx.Args().Present() {
-				_ = cli.ShowSubcommandHelp(ctx)
-				return cli.Exit(unexpectedPositionalArgsError{Command: ctx.Command.Name}, 1)
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Args().Present() {
+				_ = cli.ShowSubcommandHelp(cmd)
+				return nil, cli.Exit(unexpectedPositionalArgsError{Command: cmd.Name}, 1)
 			}
-			return nil
+			return ctx, nil
 		},
 	}
 }
 
-func trackRepositoriesAction(appCtx *cli.Context) error {
+func trackRepositoriesAction(ctx context.Context, cmd *cli.Command) error {
 	logger := log.ConfigureCommand()
 
-	conf, err := readConfig(appCtx.String(configFlagName))
+	conf, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
 	}
 
-	db, clean, err := openDB(conf.DB, appCtx.App.ErrWriter)
+	db, clean, err := openDB(conf.DB, cmd.ErrWriter)
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 	defer clean()
 
-	ctx := correlation.ContextWithCorrelation(context.Background(), correlation.SafeRandomID())
+	ctx = correlation.ContextWithCorrelation(ctx, correlation.SafeRandomID())
 	logger = logger.WithField("correlation_id", correlation.ExtractFromContext(ctx))
 
 	store := datastore.NewPostgresRepositoryStore(db, conf.StorageNames())
 
-	inputPath := appCtx.String(paramInputPath)
+	inputPath := cmd.String(paramInputPath)
 	f, err := os.Open(inputPath)
 	if err != nil {
 		return fmt.Errorf("open input: %w", err)
@@ -86,7 +86,7 @@ func trackRepositoriesAction(appCtx *cli.Context) error {
 
 	scanner := bufio.NewScanner(f)
 
-	fmt.Fprintf(appCtx.App.Writer, "Validating repository information in %q\n", inputPath)
+	fmt.Fprintf(cmd.Writer, "Validating repository information in %q\n", inputPath)
 
 	var requests []trackRepositoryRequest
 	var line int
@@ -160,7 +160,7 @@ func trackRepositoriesAction(appCtx *cli.Context) error {
 			continue
 		}
 
-		authoritativeRepoExists, err := request.authoritativeRepositoryExists(ctx, conf, logger, appCtx.App.Writer, request.AuthoritativeStorage)
+		authoritativeRepoExists, err := request.authoritativeRepositoryExists(ctx, conf, logger, cmd.Writer, request.AuthoritativeStorage)
 		if err != nil {
 			badReq.errs = append(badReq.errs, fmt.Errorf("checking repository on disk: %w", err))
 		} else if !authoritativeRepoExists {
@@ -175,18 +175,18 @@ func trackRepositoriesAction(appCtx *cli.Context) error {
 	}
 
 	if len(repoErrs) > 0 {
-		printInvalidRequests(appCtx.App.Writer, repoErrs, pathLines, inputPath)
+		printInvalidRequests(cmd.Writer, repoErrs, pathLines, inputPath)
 		return fmt.Errorf("invalid entries found, aborting")
 	}
 	if len(requests) == 0 {
 		return fmt.Errorf("no repository information found in %q", inputPath)
 	}
 
-	fmt.Fprintf(appCtx.App.Writer, "All repository details are correctly formatted\n")
-	fmt.Fprintf(appCtx.App.Writer, "Tracking %v repositories in Praefect DB...\n", line)
-	replicateImmediately := appCtx.Bool("replicate-immediately")
+	fmt.Fprintf(cmd.Writer, "All repository details are correctly formatted\n")
+	fmt.Fprintf(cmd.Writer, "Tracking %v repositories in Praefect DB...\n", line)
+	replicateImmediately := cmd.Bool("replicate-immediately")
 	for _, request := range requests {
-		if err := request.execRequest(ctx, db, conf, appCtx.App.Writer, logger, replicateImmediately); err != nil {
+		if err := request.execRequest(ctx, db, conf, cmd.Writer, logger, replicateImmediately); err != nil {
 			return fmt.Errorf("tracking repository %q: %w", request.RelativePath, err)
 		}
 	}

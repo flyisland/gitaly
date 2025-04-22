@@ -7,12 +7,15 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
 
 func TestListStoragesSubcommand(t *testing.T) {
 	t.Parallel()
+
+	ctx := testhelper.Context(t)
 
 	testCases := []struct {
 		desc            string
@@ -140,9 +143,9 @@ func TestListStoragesSubcommand(t *testing.T) {
 				VirtualStorages: tc.virtualStorages,
 			}
 			confPath := writeConfigToFile(t, conf)
-			stdout, stderr, err := runApp(append([]string{"-config", confPath, "list-storages"}, tc.args...))
+			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, "list-storages"}, tc.args...))
 			assert.Empty(t, stderr)
-			require.NoError(t, err)
+			require.Zero(t, exitCode)
 			require.Equal(t, expectedOutput.String(), stdout)
 		})
 	}
@@ -169,16 +172,16 @@ func TestListStoragesSubcommand(t *testing.T) {
 		confPath := writeConfigToFile(t, conf)
 
 		t.Run("virtual storage arg matches no virtual storages", func(t *testing.T) {
-			stdout, stderr, err := runApp([]string{"-config", confPath, "list-storages", "-virtual-storage", "vs-2"})
+			stdout, stderr, exitCode := runApp(t, ctx, []string{"-config", confPath, "list-storages", "-virtual-storage", "vs-2"})
 			assert.Empty(t, stderr)
-			require.NoError(t, err)
+			require.Zero(t, exitCode)
 			require.Equal(t, "No virtual storages named vs-2.\n", stdout)
 		})
 
 		t.Run("positional arguments", func(t *testing.T) {
-			_, stderr, err := runApp([]string{"-config", confPath, "list-storages", "-virtual-storage", "vs-1", "positional-arg"})
-			assert.Empty(t, stderr)
-			require.Equal(t, cli.Exit(unexpectedPositionalArgsError{Command: "list-storages"}, 1), err)
+			_, stderr, exitCode := runApp(t, ctx, []string{"-config", confPath, "list-storages", "-virtual-storage", "vs-1", "positional-arg"})
+			require.Equal(t, cli.Exit(unexpectedPositionalArgsError{Command: "list-storages"}, 1).Error()+"\n", stderr)
+			require.Equal(t, 1, exitCode)
 		})
 	})
 }

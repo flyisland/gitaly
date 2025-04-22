@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func TestGoModValidator(t *testing.T) {
@@ -187,27 +188,27 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.2
 			var exitCode int
 			// Set up test app
 			var cfg config
-			app := &cli.App{
+			cmd := &cli.Command{
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "file",
 						Destination: &cfg.modFilePath,
 					},
 				},
-				Action: func(c *cli.Context) error {
-					exitCode = runValidator(cfg, c.App.Writer, c.App.ErrWriter)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					exitCode = runValidator(cfg, cmd.Writer, cmd.ErrWriter)
 					return nil
 				},
 			}
 
 			// Capture stdout and stderr
 			var stdout, stderr bytes.Buffer
-			app.Writer = &stdout
-			app.ErrWriter = &stderr
+			cmd.Writer = &stdout
+			cmd.ErrWriter = &stderr
 
 			// Run the app
 			cfg.modFilePath = goModPath
-			require.NoError(t, app.Run([]string{"app", "--file", goModPath}))
+			require.NoError(t, cmd.Run(context.Background(), []string{"app", "--file", goModPath}))
 
 			assert.Equal(t, tc.expectedCode, exitCode, "Expected exit code %d", tc.expectedCode)
 			assert.Contains(t, strings.TrimSpace(stdout.String()), strings.TrimSpace(tc.expectedOutput), "Expected stdout for test case: %s", tc.name)

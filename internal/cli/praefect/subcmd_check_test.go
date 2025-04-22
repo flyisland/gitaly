@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/service"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
 
 func TestCheckSubcommand(t *testing.T) {
@@ -181,6 +182,8 @@ Checking check 3...Failed (warning) error: i failed but not too badly
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			ctx := testhelper.Context(t)
+
 			t.Run("quiet", func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
 				app := NewApp()
@@ -189,10 +192,12 @@ Checking check 3...Failed (warning) error: i failed but not too badly
 				for i, cmd := range app.Commands {
 					if cmd.Name == "check" {
 						app.Commands[i] = newCheckCommand(tc.checks)
+						app.Commands[i].Writer = &stdout
+						app.Commands[i].ErrWriter = &stderr
 						break
 					}
 				}
-				err := app.Run(append([]string{progname, "-config", confPath, "check", "-q"}, tc.args...))
+				err := app.Run(ctx, append([]string{progname, "-config", confPath, "check", "-q"}, tc.args...))
 				assert.Equal(t, tc.expectedError, err)
 				if len(tc.args) == 0 {
 					assert.Equal(t, tc.expectedQuietOutput, stdout.String())
@@ -208,10 +213,12 @@ Checking check 3...Failed (warning) error: i failed but not too badly
 				for i, cmd := range app.Commands {
 					if cmd.Name == "check" {
 						app.Commands[i] = newCheckCommand(tc.checks)
+						app.Commands[i].Writer = &stdout
+						app.Commands[i].ErrWriter = &stderr
 						break
 					}
 				}
-				err := app.Run(append([]string{progname, "-config", confPath, "check"}, tc.args...))
+				err := app.Run(ctx, append([]string{progname, "-config", confPath, "check"}, tc.args...))
 				assert.Equal(t, tc.expectedError, err)
 				if len(tc.args) == 0 {
 					assert.Equal(t, tc.expectedOutput, stdout.String())

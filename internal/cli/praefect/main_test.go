@@ -2,7 +2,6 @@ package praefect
 
 import (
 	"errors"
-	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +18,13 @@ type stubFlag struct{}
 
 func (stubFlag) String() string { return "it is a stub" }
 
-func (stubFlag) Apply(*flag.FlagSet) error { return nil }
+func (stubFlag) Get() any { return nil }
+
+func (stubFlag) PreParse() error { return nil }
+
+func (stubFlag) PostParse() error { return nil }
+
+func (stubFlag) Set(string, string) error { return nil }
 
 func (stubFlag) Names() []string { return nil }
 
