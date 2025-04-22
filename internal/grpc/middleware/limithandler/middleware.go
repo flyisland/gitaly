@@ -3,13 +3,10 @@ package limithandler
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/requestinfohandler"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter"
 	"google.golang.org/grpc"
 )
@@ -241,42 +238,4 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 
 		middleware.methodLimiters = result
 	}
-}
-
-// WithRateLimiters sets up a middleware with limiters that limit requests
-// based on its rate per second per RPC
-func WithRateLimiters(ctx context.Context) SetupFunc {
-	return func(cfg config.Cfg, middleware *LimiterMiddleware) {
-		result := make(map[string]limiter.Limiter)
-
-		for _, limitCfg := range cfg.RateLimiting {
-			if limitCfg.Burst > 0 && limitCfg.Interval > 0 {
-				serviceName, methodName := splitMethodName(limitCfg.RPC)
-				rateLimiter := limiter.NewRateLimiter(
-					limitCfg.Interval.Duration(),
-					limitCfg.Burst,
-					helper.NewTimerTicker(5*time.Minute),
-					middleware.requestsDroppedMetric.With(prometheus.Labels{
-						"system":       "gitaly",
-						"grpc_service": serviceName,
-						"grpc_method":  methodName,
-						"reason":       "rate",
-					}),
-				)
-				result[limitCfg.RPC] = rateLimiter
-				go rateLimiter.PruneUnusedLimiters(ctx)
-			}
-		}
-
-		middleware.methodLimiters = result
-	}
-}
-
-func splitMethodName(fullMethodName string) (string, string) {
-	fullMethodName = strings.TrimPrefix(fullMethodName, "/") // remove leading slash
-	service, method, ok := strings.Cut(fullMethodName, "/")
-	if !ok {
-		return "unknown", "unknown"
-	}
-	return service, method
 }

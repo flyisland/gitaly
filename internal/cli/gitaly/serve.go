@@ -315,13 +315,6 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	)
 	prometheus.MustRegister(perRPCLimitHandler)
 
-	rateLimitHandler := limithandler.New(
-		cfg,
-		limithandler.LimitConcurrencyByRepo,
-		limithandler.WithRateLimiters(ctx),
-	)
-	prometheus.MustRegister(rateLimitHandler)
-
 	var packObjectLimit *limiter.AdaptiveLimit
 	if cfg.PackObjectsLimiting.Adaptive {
 		packObjectLimit = limiter.NewAdaptiveLimit("packObjects", limiter.AdaptiveSetting{
@@ -532,7 +525,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		logger,
 		registry,
 		diskCache,
-		[]*limithandler.LimiterMiddleware{perRPCLimitHandler, rateLimitHandler},
+		[]*limithandler.LimiterMiddleware{perRPCLimitHandler},
 		txMiddleware,
 	)
 	defer gitalyServerFactory.Stop()

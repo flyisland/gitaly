@@ -10,8 +10,7 @@ If there is a surge of traffic beyond what Gitaly can handle, Gitaly should
 be able to push back on the client calling. Gitaly shouldn't subserviently agree
 to process more than it can handle.
 
-We can turn several different knobs in Gitaly that put a limit on different kinds
-of traffic patterns.
+We employ concurrency limiting as our primary backpressure mechanism in Gitaly.
 
 ## Concurrency queue
 
@@ -52,35 +51,13 @@ max_queue_wait = "1m"
 max_queue_size = 5
 ```
 
-## Rate limiting
+## Note on Rate Limiting
 
-To allow Gitaly to put back pressure on its clients, administrators can set a rate limit per
-repository for each RPC:
-
-```toml
-[[rate_limiting]]
-rpc =  "/gitaly.RepositoryService/OptimizeRepository"
-interval = "1m"
-burst = 1
-```
-
-The rate limiter is implemented using the concept of a `token bucket`. A `token
-bucket` has capacity `burst` and is refilled at an interval of `interval`. When a
-request comes into Gitaly, a token is retrieved from the `token bucket` per
-request. When the `token bucket` is empty, there are no more requests for that
-RPC for a repository until the `token bucket` is refilled again. There is a `token bucket`
-each RPC for each repository.
-
-In the above configuration, the `token bucket` has a capacity of 1 and gets
-refilled every minute. This means that Gitaly only accepts 1 `OptimizeRepository`
-request per repository each minute.
-
-Requests that come in after the `token bucket` is full (and before it is
-replenished) are rejected with an error.
+Rate limiting has been removed from Gitaly. For more information about why and the alternatives, please see [issue #5011](https://gitlab.com/gitlab-org/gitaly/-/issues/5011).
 
 ## Errors
 
-With concurrency limiting and rate limiting, Gitaly responds with a structured
+With concurrency limiting, Gitaly responds with a structured
 gRPC `gitalypb.LimitError` error with:
 
 - A `Message` field that describes the error.

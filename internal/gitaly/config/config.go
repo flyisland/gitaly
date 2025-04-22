@@ -133,7 +133,6 @@ type Cfg struct {
 	GitlabShell            GitlabShell         `json:"gitlab-shell"                toml:"gitlab-shell,omitempty"`
 	Hooks                  Hooks               `json:"hooks"                       toml:"hooks,omitempty"`
 	Concurrency            []Concurrency       `json:"concurrency"                 toml:"concurrency,omitempty"`
-	RateLimiting           []RateLimiting      `json:"rate_limiting"               toml:"rate_limiting,omitempty"`
 	GracefulRestartTimeout duration.Duration   `json:"graceful_restart_timeout"    toml:"graceful_restart_timeout,omitempty"`
 	DailyMaintenance       DailyJob            `json:"daily_maintenance"           toml:"daily_maintenance,omitempty"`
 	Cgroups                cgroups.Config      `json:"cgroups"                     toml:"cgroups,omitempty"`
@@ -580,22 +579,6 @@ func (c AdaptiveLimiting) Validate() error {
 		Append(cfgerror.Comparable(c.CPUThrottledThreshold).GreaterOrEqual(0), "cpu_throttled_threshold").
 		Append(cfgerror.Comparable(c.MemoryThreshold).GreaterOrEqual(0), "memory_threshold").
 		AsError()
-}
-
-// RateLimiting allows endpoints to be limited to a maximum request rate per
-// second. The rate limiter uses a concept of a "token bucket". In order to serve a
-// request, a token is retrieved from the token bucket. The size of the token
-// bucket is configured through the Burst value, while the rate at which the
-// token bucket is refilled per second is configured through the RequestsPerSecond
-// value.
-type RateLimiting struct {
-	// RPC is the full name of the RPC including the service name
-	RPC string `json:"rpc" toml:"rpc"`
-	// Interval sets the interval with which the token bucket will
-	// be refilled to what is configured in Burst.
-	Interval duration.Duration `json:"interval" toml:"interval"`
-	// Burst sets the capacity of the token bucket (see above).
-	Burst int `json:"burst" toml:"burst"`
 }
 
 // PackObjectsLimiting allows the concurrency of pack objects processes to be limited
