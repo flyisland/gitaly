@@ -161,11 +161,11 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 	// transaction as the external request that led to the internal socket call would have been transactionalized
 	// already.
 	if external {
-		if s.txMiddleware.UnaryInterceptor != nil {
-			unaryServerInterceptors = append(unaryServerInterceptors, s.txMiddleware.UnaryInterceptor)
+		if len(s.txMiddleware.UnaryInterceptors) > 0 {
+			unaryServerInterceptors = append(unaryServerInterceptors, s.txMiddleware.UnaryInterceptors...)
 		}
-		if s.txMiddleware.StreamInterceptor != nil {
-			streamServerInterceptors = append(streamServerInterceptors, s.txMiddleware.StreamInterceptor)
+		if len(s.txMiddleware.StreamInterceptors) > 0 {
+			streamServerInterceptors = append(streamServerInterceptors, s.txMiddleware.StreamInterceptors...)
 		}
 	}
 
