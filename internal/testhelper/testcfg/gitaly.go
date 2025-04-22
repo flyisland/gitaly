@@ -134,6 +134,9 @@ func (gc *GitalyCfgBuilder) Build(tb testing.TB) config.Cfg {
 	}
 
 	cfg.PackObjectsCache.Enabled = gc.packObjectsCacheEnabled
+	if cfg.PackObjectsCache.Enabled {
+		cfg.PackObjectsCache.Backpressure = true
+	}
 
 	// The tests don't require GitLab API to be accessible, but as it is required to pass
 	// validation, so the artificial values are set to pass.

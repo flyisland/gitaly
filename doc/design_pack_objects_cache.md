@@ -78,6 +78,33 @@ programming problem, instead of a distributed systems problem.
 The data structure responsible for streaming and backpressure is
 `internal/streamcache.pipe`.
 
+### Configuring backpressure
+
+The backpressure mechanism is enabled by default but can be configured:
+
+```toml
+[pack_objects_cache]
+enabled = true        # Enable the pack-objects cache
+backpressure = true   # Control the backpressure mechanism (default: true)
+min_occurrences = 1   # Minimum number of cache hits before caching an object
+max_age = "5m"        # How long to keep items in the cache
+```
+
+While the backpressure mechanism provides the benefits described above, it can have a side effect:
+`git-pack-objects` processes may remain in a waiting state until the fastest client requesting the
+same cache key completes its operation. During this waiting period, these processes can occupy
+substantial server resources.
+
+Consider disabling backpressure if you observe:
+
+- Hung `git-pack-objects` processes occupying excessive server resources
+- Memory pressure during heavy load scenarios
+- Slower overall performance with backpressure enabled
+
+When backpressure is disabled, Gitaly will write to the cache at its maximum rate regardless of
+client consumption, which may increase I/O but could improve throughput in certain environments,
+especially when there are many concurrent fetches of the same data.
+
 ## Storage considerations
 
 Early on in the project we thought we would use object storage to
