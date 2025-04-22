@@ -1147,3 +1147,76 @@ func TestDiffBlobs(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkDiffBlobs(b *testing.B) {
+	ctx := testhelper.Context(b)
+	cfg, client := setupDiffService(b)
+	repoProto, repoPath := gittest.CreateRepository(b, ctx, cfg)
+
+	gittest.SkipIfGitVersionLessThan(b, ctx, cfg, git.NewVersion(2, 49, 0, 1),
+		"git-diff-pairs(1) required")
+
+	data1 := strings.Repeat("1\n", 1024) + "\n\n\n\na\n"
+	data2 := strings.Repeat("2\n", 1024) + "\n\n\n\nb\n"
+
+	blobID1 := gittest.WriteBlob(b, cfg, repoPath, []byte(data1))
+	blobID2 := gittest.WriteBlob(b, cfg, repoPath, []byte(data2))
+
+	var blobPairs []*gitalypb.DiffBlobsRequest_BlobPair
+	var changedPaths []*gitalypb.ChangedPaths
+	for i := 0; i < 1000; i++ {
+		blobPairs = append(blobPairs, &gitalypb.DiffBlobsRequest_BlobPair{
+			LeftBlob:  []byte(blobID1),
+			RightBlob: []byte(blobID2),
+		})
+
+		changedPaths = append(changedPaths, &gitalypb.ChangedPaths{
+			Path:      []byte("file"),
+			Status:    gitalypb.ChangedPaths_MODIFIED,
+			OldMode:   0o100644,
+			NewMode:   0o100644,
+			OldBlobId: blobID1.String(),
+			NewBlobId: blobID2.String(),
+		})
+	}
+
+	diffRequest := &gitalypb.DiffBlobsRequest{
+		Repository: repoProto,
+		BlobPairs:  blobPairs,
+	}
+
+	pairsRequest := &gitalypb.DiffBlobsRequest{
+		Repository: repoProto,
+		RawInfo:    changedPaths,
+	}
+
+	b.Run("DiffBlobs using git-diff(1)", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			stream, err := client.DiffBlobs(ctx, diffRequest)
+			require.NoError(b, err)
+
+			for {
+				_, err := stream.Recv()
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				require.NoError(b, err)
+			}
+		}
+	})
+
+	b.Run("DiffBlobs using git-diff-pairs(1)", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			stream, err := client.DiffBlobs(ctx, pairsRequest)
+			require.NoError(b, err)
+
+			for {
+				_, err := stream.Recv()
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				require.NoError(b, err)
+			}
+		}
+	})
+}
