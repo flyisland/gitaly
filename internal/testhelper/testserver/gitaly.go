@@ -359,7 +359,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		require.NoError(tb, err)
 		tb.Cleanup(dbMgr.Close)
 
-		var raftFactory raftmgr.RaftManagerFactory
+		var raftFactory raftmgr.RaftReplicaFactory
 		var raftNode *raftmgr.Node
 		if testhelper.IsRaftEnabled() && !testhelper.IsPraefectEnabled() {
 			cfg.Raft = config.DefaultRaftConfig(uuid.New().String())

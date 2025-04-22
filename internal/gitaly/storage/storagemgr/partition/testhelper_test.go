@@ -1182,11 +1182,11 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		return NewMetrics(housekeeping.NewMetrics(setup.Config.Prometheus))
 	}
 
-	var raftFactory raftmgr.RaftManagerFactory
-	var raftEntryRecorder *raftmgr.EntryRecorder
+	var raftFactory raftmgr.RaftReplicaFactory
+	var raftEntryRecorder *raftmgr.ReplicaEntryRecorder
 	clusterID := uuid.New().String()
 	if testhelper.IsRaftEnabled() {
-		raftEntryRecorder = raftmgr.NewEntryRecorder()
+		raftEntryRecorder = raftmgr.NewReplicaEntryRecorder()
 		setup.Config.Raft = config.DefaultRaftConfig(clusterID)
 		// Speed up initial election overhead in the test setup
 		setup.Config.Raft.ElectionTicks = 5
@@ -1771,7 +1771,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 // internal entries.
 // - Insert RAFT metadata files.
 // - Insert Raft's internal log entries if they are not pruned away.
-func modifyDirectoryStateForRaft(t *testing.T, expectedDirectory testhelper.DirectoryState, tm *TransactionManager, recorder *raftmgr.EntryRecorder) testhelper.DirectoryState {
+func modifyDirectoryStateForRaft(t *testing.T, expectedDirectory testhelper.DirectoryState, tm *TransactionManager, recorder *raftmgr.ReplicaEntryRecorder) testhelper.DirectoryState {
 	if !testhelper.IsRaftEnabled() {
 		return expectedDirectory
 	}

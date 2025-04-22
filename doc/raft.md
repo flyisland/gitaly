@@ -41,22 +41,22 @@ freely to other storages after creation.
 Each partition is a Raft group with one or more members. Raft groups are also identified by the Partition ID due to
 the one-to-one relationship.
 
-The `raftmgr.Manager` oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
-integer **Node ID** to a Raft group member. The Node ID does not change throughout the lifecycle of a group member.
+The `raftmgr.Replica` oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
+integer **Member ID** to a Raft group member. The Member ID does not change throughout the lifecycle of a group member.
 
-When a partition is bootstrapped for the first time, the Raft manager initializes the `etcd/raft` state machine,
-elects itself as the initial leader, and persists all Raft metadata to persistent storage. Its internal Node ID
+When a partition is bootstrapped for the first time, the Raft replica initializes the `etcd/raft` state machine,
+elects itself as the initial leader, and persists all Raft metadata to persistent storage. Its internal Member ID
 is always 1 at this stage, making it a fully functional single-node Raft instance.
 
 When a new member joins a Raft group, the leader issues a Config Change entry. This entry contains the metadata
-of the storage, such as storage name, address, and authentication/authorization info. The new member's Node ID
+of the storage, such as storage name, address, and authentication/authorization info. The new member's Member ID
 is assigned the LSN of this log entry, ensuring unambiguous identification of members. As the LSN is monotonic,
-Node IDs are never reused even if the storage re-joins later. This Node ID system is not exposed outside the
+Member IDs are never reused even if the storage re-joins later. This Member ID system is not exposed outside the
 scope of `etcd/raft` integration.
 
-Since Gitaly follows a multi-Raft architecture, the Node ID alone is insufficient to precisely locate a
+Since Gitaly follows a multi-Raft architecture, the Member ID alone is insufficient to precisely locate a
 partition or Raft group replica. Therefore, each replica (including the leader) is identified using a
-**Replica ID**, which consists of `(Partition ID, Node ID, Replica Storage Name)`.
+**Replica ID**, which consists of `(Partition ID, Member ID, Replica Storage Name)`.
 
 To ensure fault tolerance in a quorum-based system, a Raft cluster requires a minimum replication factor of 3.
 It can tolerate up to `(n-1)/2` failures. For example, a 3-replica cluster can tolerate 1 failure.
@@ -123,7 +123,7 @@ TBD
 
 ## Interaction with Transactions and WAL
 
-The Raft manager implements the `storage.LogManager` interface. By default, the Transaction Manager uses `log.Manager`.
+The Raft replica implements the `storage.LogManager` interface. By default, the Transaction Manager uses `log.Manager`.
 All log entries are appended to the filesystem WAL. Once an entry is persisted, it is ready to be applied by the
 Transaction Manager. When Raft is enabled, `log.Manager` is replaced by `raftmgr.Manager` which manages the entire
 commit flow, including network communications and quorum acknowledgment.
@@ -131,7 +131,7 @@ commit flow, including network communications and quorum acknowledgment.
 The responsibilities of three critical components are:
 
 - `log.Manager`: Handles local log management.
-- `raftmgr.Manager`: Manages distributed log management.
+- `raftmgr.Replica`: Manages distributed log management.
 - `partition.TransactionManager`: Manages transactions, concurrency, snapshots, conflicts, and related tasks.
 
 The flow is illustrated in the following chart:
@@ -151,7 +151,7 @@ TransactionManager    New Transaction              │ Without Raft
                 ▼                                  ▼
          ┌─►Initialize─────...──────────────────Propose
          │                                         │
-raftmgr.Manager                          etcd/raft state machine
+raftmgr.Replica                          etcd/raft state machine
 
                                            ┌───────┴────────┐
                                            ▼                ▼

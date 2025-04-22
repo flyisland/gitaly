@@ -49,7 +49,7 @@ type mockStorageNode struct {
 	name            string
 	transport       *GrpcTransport
 	server          *grpc.Server
-	managerRegistry ManagerRegistry
+	managerRegistry ReplicaRegistry
 }
 
 func (m mockStorageNode) GetTransport() Transport {
@@ -177,7 +177,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 				AuthorityName: storageName,
 			}
 
-			mgr, err := leader.managerRegistry.GetManager(partitionKey)
+			mgr, err := leader.managerRegistry.GetReplica(partitionKey)
 			require.NoError(t, err)
 
 			// Create test messages
@@ -194,7 +194,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 
 			// Verify WAL replication
 			for i, follower := range testCluster.followers {
-				mgr, err := follower.managerRegistry.GetManager(partitionKey)
+				mgr, err := follower.managerRegistry.GetReplica(partitionKey)
 				require.NoError(t, err)
 
 				for _, entry := range tc.walEntries {
@@ -229,7 +229,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 
 	routingTable := NewKVRoutingTable(kvStore)
 
-	createTransport := func(cfg config.Cfg, srv *grpc.Server, listener net.Listener, addr string, registry ManagerRegistry) *GrpcTransport {
+	createTransport := func(cfg config.Cfg, srv *grpc.Server, listener net.Listener, addr string, registry ReplicaRegistry) *GrpcTransport {
 		pool := client.NewPool(client.WithDialOptions(
 			client.UnaryInterceptor(),
 			client.StreamInterceptor(),
@@ -261,7 +261,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		return transport
 	}
 
-	registries := []ManagerRegistry{}
+	registries := []ReplicaRegistry{}
 
 	cluster := &cluster{}
 	cluster.leader = &mockStorageNode{}
@@ -269,7 +269,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 
 	// First set up all servers and fill routing table
 	for range numNodes {
-		registries = append(registries, NewRaftManagerRegistry())
+		registries = append(registries, NewReplicaRegistry())
 		srv, listener, addr := runServer(t)
 		servers = append(servers, srv)
 		listeners = append(listeners, listener)
@@ -291,8 +291,8 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 			id:              uint64(i + 1),
 		}
 
-		// Create and set up manager
-		manager := newManager(config)
+		// Create and set up replica
+		replica := newReplica(config)
 
 		partitionKey := &gitalypb.PartitionKey{
 			AuthorityName: storageName,
@@ -300,20 +300,21 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		}
 
 		// Register the manager with the registry
-		registries[i].RegisterManager(partitionKey, manager)
+		registries[i].RegisterReplica(partitionKey, replica)
 
-		nodeID := uint64(i + 1)
+		memberID := uint64(i + 1)
 		if i == 0 {
 			cluster.leader = node
-			raftMgr, err := node.managerRegistry.GetManager(partitionKey)
-			require.Equal(t, raftMgr, manager)
+
+			fetchedReplica, err := node.managerRegistry.GetReplica(partitionKey)
+			require.Equal(t, fetchedReplica, replica)
 			require.NoError(t, err)
 
 			entry := RoutingTableEntry{
 				Replicas: []*gitalypb.ReplicaID{
 					{
 						PartitionKey: partitionKey,
-						NodeId:       nodeID,
+						MemberId:     memberID,
 						Metadata: &gitalypb.ReplicaID_Metadata{
 							Address: addresses[i],
 						},
@@ -335,7 +336,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 			existingEntry.Index = uint64(i + 1)
 			existingEntry.Replicas = append(existingEntry.Replicas, &gitalypb.ReplicaID{
 				PartitionKey: partitionKey,
-				NodeId:       nodeID,
+				MemberId:     memberID,
 				Metadata: &gitalypb.ReplicaID_Metadata{
 					Address: addresses[i],
 				},
@@ -349,10 +350,10 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 	return cluster
 }
 
-func newManager(cfg config.Cfg) RaftManager {
+func newReplica(cfg config.Cfg) RaftReplica {
 	walManager := log.NewManager("default", 1, cfg.Storages[0].Path, cfg.Storages[0].Path, nil, nil)
 
-	return &mockRaftManager{
+	return &mockReplica{
 		logManager: walManager,
 		config:     cfg.Raft,
 	}
@@ -559,9 +560,9 @@ func TestGrpcTransport_SendSnapshot(t *testing.T) {
 				cancel()
 			}
 
-			snapshot := &Snapshot{
+			snapshot := &ReplicaSnapshot{
 				file: file,
-				metadata: SnapshotMetadata{
+				metadata: ReplicaSnapshotMetadata{
 					term:  msg.Term,
 					index: storage.LSN(msg.Index),
 				},

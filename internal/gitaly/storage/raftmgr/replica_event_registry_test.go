@@ -12,17 +12,17 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
 
-func TestRegistry_Untrack(t *testing.T) {
+func TestReplicaEventRegistry_Untrack(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name           string
-		action         func(*testing.T, *Registry, *Metrics) []*Waiter
+		action         func(*testing.T, *ReplicaEventRegistry, *Metrics) []*EventWaiter
 		expectedEvents []EventID
 	}{
 		{
 			name: "Register and Remove single event",
-			action: func(t *testing.T, r *Registry, metrics *Metrics) []*Waiter {
+			action: func(t *testing.T, r *ReplicaEventRegistry, metrics *Metrics) []*EventWaiter {
 				waiter := r.Register()
 
 				testhelper.RequirePromMetrics(t, metrics, `
@@ -32,13 +32,13 @@ func TestRegistry_Untrack(t *testing.T) {
 				`)
 
 				require.True(t, r.Untrack(waiter.ID), "event should not be untracked beforehand")
-				return []*Waiter{waiter}
+				return []*EventWaiter{waiter}
 			},
 			expectedEvents: []EventID{1},
 		},
 		{
 			name: "Register multiple events and remove in order",
-			action: func(t *testing.T, r *Registry, metrics *Metrics) []*Waiter {
+			action: func(t *testing.T, r *ReplicaEventRegistry, metrics *Metrics) []*EventWaiter {
 				w1 := r.Register()
 				w2 := r.Register()
 
@@ -50,13 +50,13 @@ func TestRegistry_Untrack(t *testing.T) {
 
 				require.True(t, r.Untrack(w1.ID), "event should not be untracked beforehand")
 				require.True(t, r.Untrack(w2.ID), "event should not be untracked beforehand")
-				return []*Waiter{w1, w2}
+				return []*EventWaiter{w1, w2}
 			},
 			expectedEvents: []EventID{1, 2},
 		},
 		{
 			name: "Register multiple events and remove out of order",
-			action: func(t *testing.T, r *Registry, metrics *Metrics) []*Waiter {
+			action: func(t *testing.T, r *ReplicaEventRegistry, metrics *Metrics) []*EventWaiter {
 				w1 := r.Register()
 				w2 := r.Register()
 
@@ -68,18 +68,18 @@ func TestRegistry_Untrack(t *testing.T) {
 
 				require.True(t, r.Untrack(w2.ID), "event should not be untracked beforehand") // Removing the second one first
 				require.True(t, r.Untrack(w1.ID), "event should not be untracked beforehand") // Then the first one
-				return []*Waiter{w1, w2}
+				return []*EventWaiter{w1, w2}
 			},
 			expectedEvents: []EventID{1, 2},
 		},
 		{
 			name: "Remove non-existent event",
-			action: func(t *testing.T, r *Registry, _ *Metrics) []*Waiter {
+			action: func(t *testing.T, r *ReplicaEventRegistry, _ *Metrics) []*EventWaiter {
 				require.False(t, r.Untrack(1234), "event should not be tracked")
 
 				c := make(chan error, 1)
 				close(c)
-				return []*Waiter{{ID: 99999, C: c}} // Non-existent event
+				return []*EventWaiter{{ID: 99999, C: c}} // Non-existent event
 			},
 			expectedEvents: []EventID{99999},
 		},
@@ -91,7 +91,7 @@ func TestRegistry_Untrack(t *testing.T) {
 
 			metrics := NewMetrics()
 			raftMetrics := metrics.Scope("test-storage")
-			registry := NewRegistry(raftMetrics)
+			registry := NewReplicaEventRegistry(raftMetrics)
 
 			// Assert initial queue depth is zero
 			testhelper.RequirePromMetrics(t, metrics, `
@@ -122,12 +122,12 @@ func TestRegistry_Untrack(t *testing.T) {
 	}
 }
 
-func TestRegistry_AssignLSN(t *testing.T) {
+func TestReplicaEventRegistry_AssignLSN(t *testing.T) {
 	t.Parallel()
 
 	metrics := NewMetrics()
 	raftMetrics := metrics.Scope("test-storage")
-	registry := NewRegistry(raftMetrics)
+	registry := NewReplicaEventRegistry(raftMetrics)
 
 	// Assert initial queue depth is zero
 	testhelper.RequirePromMetrics(t, metrics, `
@@ -174,12 +174,12 @@ func TestRegistry_AssignLSN(t *testing.T) {
 	`)
 }
 
-func TestRegistry_UntrackSince(t *testing.T) {
+func TestReplicaEventRegistry_UntrackSince(t *testing.T) {
 	t.Parallel()
 
 	metrics := NewMetrics()
 	raftMetrics := metrics.Scope("test-storage")
-	registry := NewRegistry(raftMetrics)
+	registry := NewReplicaEventRegistry(raftMetrics)
 
 	// Assert initial queue depth is zero
 	testhelper.RequirePromMetrics(t, metrics, `
@@ -251,12 +251,12 @@ func TestRegistry_UntrackSince(t *testing.T) {
 	`)
 }
 
-func TestRegistry_UntrackAll(t *testing.T) {
+func TestReplicaEventRegistry_UntrackAll(t *testing.T) {
 	t.Parallel()
 
 	metrics := NewMetrics()
 	raftMetrics := metrics.Scope("test-storage")
-	registry := NewRegistry(raftMetrics)
+	registry := NewReplicaEventRegistry(raftMetrics)
 
 	// Assert initial queue depth is zero
 	testhelper.RequirePromMetrics(t, metrics, `
@@ -291,7 +291,7 @@ func TestRegistry_UntrackAll(t *testing.T) {
         	gitaly_raft_proposal_queue_depth{storage="test-storage"} 0
 	`)
 
-	for _, w := range []*Waiter{waiter1, waiter2, waiter3} {
+	for _, w := range []*EventWaiter{waiter1, waiter2, waiter3} {
 		select {
 		case err := <-w.C:
 			// Expected behavior, channel closed
@@ -307,13 +307,13 @@ func TestRegistry_UntrackAll(t *testing.T) {
 	require.False(t, registry.Untrack(waiter3.ID))
 }
 
-func TestRegistry_ConcurrentAccess(t *testing.T) {
+func TestReplicaEventRegistry_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	const numEvents = 100
 
 	metrics := NewMetrics()
 	raftMetrics := metrics.Scope("test-storage")
-	registry := NewRegistry(raftMetrics)
+	registry := NewReplicaEventRegistry(raftMetrics)
 
 	// Assert initial queue depth is zero
 	testhelper.RequirePromMetrics(t, metrics, `

@@ -7,8 +7,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"go.etcd.io/raft/v3/raftpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestPersistentRoutingTable(t *testing.T) {
@@ -24,7 +22,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 	rt := NewKVRoutingTable(kvStore)
 
 	t.Run("add and translate member", func(t *testing.T) {
-		nodeID := 1
+		memberID := 1
 		address := "localhost:1234"
 		partitionKey := &gitalypb.PartitionKey{
 			AuthorityName: "test-authority",
@@ -35,7 +33,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       uint64(nodeID),
+					MemberId:     uint64(memberID),
 					StorageName:  "test-storage",
 					Metadata: &gitalypb.ReplicaID_Metadata{
 						Address: address,
@@ -49,7 +47,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 		err := rt.UpsertEntry(entry)
 		require.NoError(t, err)
 
-		replica, err := rt.Translate(partitionKey, uint64(nodeID))
+		replica, err := rt.Translate(partitionKey, uint64(memberID))
 		require.NoError(t, err)
 		require.Equal(t, address, replica.GetMetadata().GetAddress())
 		require.Equal(t, "test-storage", replica.GetStorageName())
@@ -65,7 +63,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: key,
-					NodeId:       1,
+					MemberId:     1,
 					Metadata: &gitalypb.ReplicaID_Metadata{
 						Address: "addr1",
 					},
@@ -90,15 +88,15 @@ func TestPersistentRoutingTable(t *testing.T) {
 			PartitionId:   3,
 		}
 
-		nodeID := 999 // Non-existent node
+		memberID := 999 // Non-existent node
 
-		_, err := rt.Translate(partitionKey, uint64(nodeID))
+		_, err := rt.Translate(partitionKey, uint64(memberID))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "Key not found")
 	})
 }
 
-func TestApplyConfEntry(t *testing.T) {
+func TestApplyReplicaConfChange(t *testing.T) {
 	t.Parallel()
 
 	createMetadata := func(address string) *gitalypb.ReplicaID_Metadata {
@@ -107,13 +105,7 @@ func TestApplyConfEntry(t *testing.T) {
 		}
 	}
 
-	serializeMetadata := func(metadata *gitalypb.ReplicaID_Metadata) []byte {
-		data, err := proto.Marshal(metadata)
-		require.NoError(t, err)
-		return data
-	}
-
-	t.Run("add node with confChange v1", func(t *testing.T) {
+	t.Run("add node", func(t *testing.T) {
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -128,25 +120,22 @@ func TestApplyConfEntry(t *testing.T) {
 			PartitionId:   1,
 		}
 
-		confChange := raftpb.ConfChange{
-			Type:    raftpb.ConfChangeAddNode,
-			NodeID:  1,
-			Context: serializeMetadata(createMetadata("localhost:1234")),
-		}
+		changes := NewReplicaConfChanges(1, 1, 1, createMetadata("localhost:1234"))
+		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyConfChange(1, 1, 1, partitionKey, confChange)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
 		require.NoError(t, err)
 
 		require.Len(t, updatedEntry.Replicas, 1)
-		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetNodeId())
+		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetMemberId())
 		require.Equal(t, uint64(1), updatedEntry.LeaderID)
 		require.Equal(t, "localhost:1234", updatedEntry.Replicas[0].GetMetadata().GetAddress())
 	})
 
-	t.Run("remove node with confChange v1", func(t *testing.T) {
+	t.Run("remove node", func(t *testing.T) {
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -165,13 +154,13 @@ func TestApplyConfEntry(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       1,
+					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
 				},
 				{
 					PartitionKey: partitionKey,
-					NodeId:       2,
+					MemberId:     2,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:5678"),
 				},
@@ -184,16 +173,10 @@ func TestApplyConfEntry(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		confChange := raftpb.ConfChange{
-			Type:   raftpb.ConfChangeRemoveNode,
-			NodeID: 2,
-		}
+		changes := NewReplicaConfChanges(2, 2, 1, nil)
+		changes.AddChange(2, ConfChangeRemoveNode)
 
-		entry := initialEntry
-		entry.Term = 2
-		entry.Index = 2
-
-		err = rt.ApplyConfChange(entry.Term, entry.Index, 1, partitionKey, confChange)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -201,11 +184,11 @@ func TestApplyConfEntry(t *testing.T) {
 
 		require.Len(t, updatedEntry.Replicas, 1)
 		require.Equal(t, uint64(1), updatedEntry.LeaderID)
-		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetNodeId())
+		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetMemberId())
 		require.Equal(t, "localhost:1234", updatedEntry.Replicas[0].GetMetadata().GetAddress())
 	})
 
-	t.Run("if nodeID is zero, it should not be added to the routing table", func(t *testing.T) {
+	t.Run("if member ID is zero, it should not be added to the routing table", func(t *testing.T) {
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -220,15 +203,74 @@ func TestApplyConfEntry(t *testing.T) {
 			PartitionId:   1,
 		}
 
-		confChange := raftpb.ConfChange{
-			Type:    raftpb.ConfChangeAddNode,
-			NodeID:  0,
-			Context: serializeMetadata(createMetadata("localhost:1234")),
+		changes := NewReplicaConfChanges(1, 1, 0, createMetadata("localhost:1234"))
+		changes.AddChange(0, ConfChangeAddNode)
+
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "member ID should be non-zero")
+	})
+
+	t.Run("should not add duplicate member ID", func(t *testing.T) {
+		dir := t.TempDir()
+		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, kvStore.Close())
+		}()
+
+		rt := NewKVRoutingTable(kvStore)
+
+		partitionKey := &gitalypb.PartitionKey{
+			AuthorityName: "test-authority",
+			PartitionId:   1,
 		}
 
-		err = rt.ApplyConfChange(1, 1, 0, partitionKey, confChange)
+		// First add a node
+		changes := NewReplicaConfChanges(1, 1, 1, createMetadata("localhost:1234"))
+		changes.AddChange(1, ConfChangeAddNode)
+
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		require.NoError(t, err)
+
+		// Try to add the same node ID again
+		changes = NewReplicaConfChanges(2, 2, 1, createMetadata("localhost:5678"))
+		changes.AddChange(1, ConfChangeAddNode)
+
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "nodeID should be non-zero")
+		require.Contains(t, err.Error(), "member ID 1 already exists")
+	})
+
+	t.Run("should error when updating non-existent member ID", func(t *testing.T) {
+		dir := t.TempDir()
+		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, kvStore.Close())
+		}()
+
+		rt := NewKVRoutingTable(kvStore)
+
+		partitionKey := &gitalypb.PartitionKey{
+			AuthorityName: "test-authority",
+			PartitionId:   1,
+		}
+
+		// Add a node with ID 1
+		changes := NewReplicaConfChanges(1, 1, 1, createMetadata("localhost:1234"))
+		changes.AddChange(1, ConfChangeAddNode)
+
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		require.NoError(t, err)
+
+		// Try to update a non-existent node with ID 2
+		changes = NewReplicaConfChanges(2, 2, 1, createMetadata("localhost:5678"))
+		changes.AddChange(2, ConfChangeUpdateNode)
+
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "member ID 2 not found for update")
 	})
 
 	t.Run("fails if the last remaining node is removed", func(t *testing.T) {
@@ -250,7 +292,7 @@ func TestApplyConfEntry(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       1,
+					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
 				},
@@ -262,17 +304,15 @@ func TestApplyConfEntry(t *testing.T) {
 		err = rt.UpsertEntry(*entry)
 		require.NoError(t, err)
 
-		confChange := raftpb.ConfChange{
-			Type:   raftpb.ConfChangeRemoveNode,
-			NodeID: 1,
-		}
+		changes := NewReplicaConfChanges(entry.Term, entry.Index, 1, nil)
+		changes.AddChange(1, ConfChangeRemoveNode)
 
-		err = rt.ApplyConfChange(entry.Term, entry.Index, 1, partitionKey, confChange)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no replicas to upsert")
 	})
 
-	t.Run("update node with confChange v1", func(t *testing.T) {
+	t.Run("update node", func(t *testing.T) {
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -291,7 +331,7 @@ func TestApplyConfEntry(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       1,
+					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
 				},
@@ -304,17 +344,10 @@ func TestApplyConfEntry(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		confChange := raftpb.ConfChange{
-			Type:    raftpb.ConfChangeUpdateNode,
-			NodeID:  1,
-			Context: serializeMetadata(createMetadata("localhost:5678")),
-		}
+		changes := NewReplicaConfChanges(2, 2, 1, createMetadata("localhost:5678"))
+		changes.AddChange(1, ConfChangeUpdateNode)
 
-		entry := initialEntry
-		entry.Term = 2
-		entry.Index = 2
-
-		err = rt.ApplyConfChange(entry.Term, entry.Index, 1, partitionKey, confChange)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -325,7 +358,7 @@ func TestApplyConfEntry(t *testing.T) {
 		require.Equal(t, "localhost:5678", updatedEntry.Replicas[0].GetMetadata().GetAddress())
 	})
 
-	t.Run("apply multiple changes with ConfChangeV2", func(t *testing.T) {
+	t.Run("apply multiple changes", func(t *testing.T) {
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -344,7 +377,7 @@ func TestApplyConfEntry(t *testing.T) {
 			Replicas: []*gitalypb.ReplicaID{
 				{
 					PartitionKey: partitionKey,
-					NodeId:       1,
+					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
 				},
@@ -357,25 +390,11 @@ func TestApplyConfEntry(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		confChangeV2 := raftpb.ConfChangeV2{
-			Changes: []raftpb.ConfChangeSingle{
-				{
-					Type:   raftpb.ConfChangeRemoveNode,
-					NodeID: 1,
-				},
-				{
-					Type:   raftpb.ConfChangeAddNode,
-					NodeID: 2,
-				},
-			},
-			Context: serializeMetadata(createMetadata("localhost:8888")),
-		}
+		changes := NewReplicaConfChanges(2, 2, 1, createMetadata("localhost:8888"))
+		changes.AddChange(1, ConfChangeRemoveNode)
+		changes.AddChange(2, ConfChangeAddNode)
 
-		entry := initialEntry
-		entry.Term = 2
-		entry.Index = 2
-
-		err = rt.ApplyConfChange(2, 2, 1, partitionKey, confChangeV2)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -385,7 +404,7 @@ func TestApplyConfEntry(t *testing.T) {
 
 		var node2Found bool
 		for _, replica := range updatedEntry.Replicas {
-			if replica.GetNodeId() == 2 {
+			if replica.GetMemberId() == 2 {
 				node2Found = true
 				require.Equal(t, "localhost:8888", replica.GetMetadata().GetAddress())
 			}

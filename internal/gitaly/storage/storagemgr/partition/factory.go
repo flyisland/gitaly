@@ -22,7 +22,7 @@ type Factory struct {
 	partitionMetrics Metrics
 	logConsumer      storage.LogConsumer
 	raftCfg          config.Raft
-	raftFactory      raftmgr.RaftManagerFactory
+	raftFactory      raftmgr.RaftReplicaFactory
 }
 
 // New returns a new Partition instance.
@@ -57,7 +57,7 @@ func (f Factory) New(
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
 
-		raftStorage, err := raftmgr.NewStorage(
+		replicaLogStore, err := raftmgr.NewReplicaLogStore(
 			storageName,
 			partitionID,
 			f.raftCfg,
@@ -70,19 +70,19 @@ func (f Factory) New(
 			f.partitionMetrics.raft,
 		)
 		if err != nil {
-			panic(fmt.Errorf("creating raft storage: %w", err))
+			panic(fmt.Errorf("creating raft log store: %w", err))
 		}
-		raftManager, err := factory(
+		raftReplica, err := factory(
 			storageName,
 			partitionID,
-			raftStorage,
+			replicaLogStore,
 			logger,
 			f.partitionMetrics.raft,
 		)
 		if err != nil {
-			panic(fmt.Errorf("creating raft manager: %w", err))
+			panic(fmt.Errorf("creating raft replica: %w", err))
 		}
-		logManager = raftManager
+		logManager = raftReplica
 	} else {
 		logManager = log.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, f.logConsumer, positionTracker)
 	}
@@ -107,14 +107,14 @@ func (f Factory) New(
 // - repoFactory: Used to create local repository instances
 // - metrics: Used to track partition operations
 // - logConsumer: Consumes WAL entries (optional, can be nil)
-// - raftFactory: Creates Raft managers for replicated partitions (optional, can be nil)
+// - raftFactory: Creates Raft replicas for replicated partitions (optional, can be nil)
 func NewFactory(
 	cmdFactory gitcmd.CommandFactory,
 	repoFactory localrepo.Factory,
 	partitionMetrics Metrics,
 	logConsumer storage.LogConsumer,
 	raftCfg config.Raft,
-	raftFactory raftmgr.RaftManagerFactory,
+	raftFactory raftmgr.RaftReplicaFactory,
 ) Factory {
 	return Factory{
 		cmdFactory:       cmdFactory,

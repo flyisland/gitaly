@@ -24,14 +24,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// InitStatus represents the initialization status of the Raft storage.
+// InitStatus represents the initialization status of the Raft log store.
 type InitStatus int
 
 const (
 	// InitStatusUnknown indicates an unknown initialization status, typically due to an error.
 	InitStatusUnknown InitStatus = iota
 
-	// InitStatusUnbootstrapped indicates that the Raft storage has not been bootstrapped yet
+	// InitStatusUnbootstrapped indicates that the Raft log store has not been bootstrapped yet
 	// and contains no log entries. This is the state of a completely new installation where
 	// no data exists and the Raft group needs to be initialized for the first time.
 	InitStatusUnbootstrapped
@@ -39,10 +39,10 @@ const (
 	// InitStatusNeedsBackfill indicates that Raft is being enabled for an existing partition that
 	// already contains log entries. In this state, the system needs to backfill Raft metadata
 	// for these pre-existing entries before bootstrapping the Raft group. This happens when
-	// migrating a non-Raft storage system to use Raft consensus.
+	// migrating a non-Raft log store system to use Raft consensus.
 	InitStatusNeedsBackfill
 
-	// InitStatusBootstrapped indicates that the Raft storage has been previously bootstrapped.
+	// InitStatusBootstrapped indicates that the Raft log store has been previously bootstrapped.
 	// This means a hard state exists and the Raft group has been initialized before.
 	InitStatusBootstrapped
 )
@@ -74,7 +74,7 @@ var (
 	RaftDBKeys = [][]byte{KeyHardState, KeyConfState, KeyLastConfigChange}
 )
 
-// Storage implements the raft.Storage interface and manages the persistence of Raft state
+// ReplicaLogStore implements the raft.Storage interface and manages the persistence of Raft state
 // in coordination with etcd/raft and log.Manager.
 //
 // During the lifecycle of etcd/raft, the library requests the application to persist two types of data:
@@ -82,7 +82,7 @@ var (
 //     (e.g., hard state, config state).
 //  2. The latest state of the Raft group, such as hard state, config state, snapshot state, etc.
 //
-// To persist the first type of data, Storage writes an additional RAFT file encapsulating
+// To persist the first type of data, ReplicaLogStore writes an additional RAFT file encapsulating
 // this metadata to the staging directory of the target entry. It then coordinates with log.Manager
 // to finalize the log appending operation. Later, the etcd/raft library retrieves the log entry and
 // its associated Raft metadata. The second type of data is persisted in the key-value database.
@@ -111,7 +111,7 @@ var (
 //     point, the entry is ready to be applied by the leader. Followers will apply it after
 //     receiving the next update from the leader.
 //
-// With the introduction of committedLSN, Storage proxies certain functionalities of
+// With the introduction of committedLSN, ReplicaLogStore proxies certain functionalities of
 // log.Manager, particularly log consumption. In log.Manager, the consumer is notified
 // immediately after a log entry is appended to the local WAL. However, with Raft, the
 // consumer is notified only when the log entry is committed.
@@ -127,7 +127,7 @@ var (
    Can remove                            Need confirmed from quorum
                                          Not ready to be used
 */
-type Storage struct {
+type ReplicaLogStore struct {
 	ctx           context.Context
 	mutex         sync.Mutex
 	authorityName string
@@ -138,10 +138,10 @@ type Storage struct {
 	lastTerm      uint64
 	consumer      storage.LogConsumer
 	stagingDir    string
-	snapshotter   Snapshotter
+	snapshotter   ReplicaSnapshotter
 
 	// hooks is a collection of hooks, used in test environment to intercept critical events
-	hooks testHooks
+	hooks replicaHooks
 }
 
 // raftManifestPath returns the path to the manifest file within a log entry directory. The manifest file contains
@@ -153,8 +153,8 @@ func raftManifestPath(logEntryPath string) string {
 	return filepath.Join(logEntryPath, "RAFT")
 }
 
-// NewStorage creates and initializes a new Storage instance.
-func NewStorage(
+// NewReplicaLogStore creates and initializes a new Storage instance.
+func NewReplicaLogStore(
 	authorityName string,
 	partitionID storage.PartitionID,
 	raftCfg config.Raft,
@@ -165,7 +165,7 @@ func NewStorage(
 	positionTracker *log.PositionTracker,
 	logger lg.Logger,
 	metrics *Metrics,
-) (*Storage, error) {
+) (*ReplicaLogStore, error) {
 	if err := positionTracker.Register(RaftCommittedPosition); err != nil {
 		return nil, fmt.Errorf("registering committed position: %w", err)
 	}
@@ -189,12 +189,12 @@ func NewStorage(
 		"storage_name": authorityName,
 	})
 
-	snapshotter, err := NewRaftSnapshotter(raftCfg, logger, metrics.Scope(authorityName))
+	snapshotter, err := NewReplicaSnapshotter(raftCfg, logger, metrics.Scope(authorityName))
 	if err != nil {
 		return nil, fmt.Errorf("create raft snapshotter: %w", err)
 	}
 
-	return &Storage{
+	return &ReplicaLogStore{
 		database:      db,
 		authorityName: authorityName,
 		partitionID:   partitionID,
@@ -208,7 +208,7 @@ func NewStorage(
 
 // initialize loads all states from DB and disk. It also checks whether the leader has completed its initial bootstrap
 // process by verifying the existence of a saved hard state.
-func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (InitStatus, error) {
+func (s *ReplicaLogStore) initialize(ctx context.Context, appliedLSN storage.LSN) (InitStatus, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -232,7 +232,7 @@ func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (InitS
 	} else if errors.Is(err, badger.ErrKeyNotFound) {
 		// No previous state exists - this is a fresh installation. As Raft feature is optional, there's
 		// a chance that Raft is enabled for an existing partition. When so, all appended log entries
-		// are considered to be committed. Raft storage needs to backfill Raft manifest to such entries.
+		// are considered to be committed. Raft log store needs to backfill Raft manifest to such entries.
 		s.committedLSN = s.localLog.AppendedLSN()
 		if s.committedLSN == 0 {
 			status = InitStatusUnbootstrapped
@@ -303,12 +303,12 @@ func (s *Storage) initialize(ctx context.Context, appliedLSN storage.LSN) (InitS
 	return status, nil
 }
 
-func (s *Storage) close() error {
+func (s *ReplicaLogStore) close() error {
 	return s.localLog.Close()
 }
 
 // Entries implements raft.Storage's Entries(). It returns the list of entries which are still managed of range [lo, hi)
-func (s *Storage) Entries(lo uint64, hi uint64, maxSize uint64) ([]raftpb.Entry, error) {
+func (s *ReplicaLogStore) Entries(lo uint64, hi uint64, maxSize uint64) ([]raftpb.Entry, error) {
 	firstLSN := uint64(s.localLog.LowWaterMark())
 	lastLSN := uint64(s.localLog.AppendedLSN())
 	if lo < firstLSN {
@@ -340,7 +340,7 @@ func (s *Storage) Entries(lo uint64, hi uint64, maxSize uint64) ([]raftpb.Entry,
 
 // InitialState retrieves the initial Raft HardState and ConfState from persistent storage. It is used to initialize the
 // Raft state machine with the previously saved state.
-func (s *Storage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+func (s *ReplicaLogStore) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	hardState, err := s.readHardState()
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, fmt.Errorf("reading hard state: %w", err)
@@ -356,25 +356,25 @@ func (s *Storage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 
 // LastIndex returns the last index of all entries currently available in the log.
 // This corresponds to the last LSN in the write-ahead log.
-func (s *Storage) LastIndex() (uint64, error) {
+func (s *ReplicaLogStore) LastIndex() (uint64, error) {
 	return uint64(s.localLog.AppendedLSN()), nil
 }
 
 // FirstIndex returns the first index of all entries currently available in the log.
 // This corresponds to the first LSN in the write-ahead log.
-func (s *Storage) FirstIndex() (uint64, error) {
+func (s *ReplicaLogStore) FirstIndex() (uint64, error) {
 	return uint64(s.localLog.LowWaterMark()), nil
 }
 
 // Snapshot returns the latest snapshot of the state machine. As we haven't supported autocompaction feature, this
 // method always returns Unavailable error.
 // For more information: https://gitlab.com/gitlab-org/gitaly/-/issues/6463
-func (s *Storage) Snapshot() (raftpb.Snapshot, error) {
+func (s *ReplicaLogStore) Snapshot() (raftpb.Snapshot, error) {
 	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 }
 
 // TriggerSnapshot starts the process of taking a snapshot of the partition's disk
-func (s *Storage) TriggerSnapshot(ctx context.Context, appliedLSN storage.LSN, lastTerm uint64) (*Snapshot, error) {
+func (s *ReplicaLogStore) TriggerSnapshot(ctx context.Context, appliedLSN storage.LSN, lastTerm uint64) (*ReplicaSnapshot, error) {
 	// prevent multiple snapshotters from running at the same time
 	s.snapshotter.Lock()
 	defer s.snapshotter.Unlock()
@@ -386,7 +386,7 @@ func (s *Storage) TriggerSnapshot(ctx context.Context, appliedLSN storage.LSN, l
 	}
 
 	// snapshot metadata are important to track what logs should be applied after snapshot restoration
-	snapshot, err := s.snapshotter.materializeSnapshot(SnapshotMetadata{index: appliedLSN, term: lastTerm}, tx)
+	snapshot, err := s.snapshotter.materializeSnapshot(ReplicaSnapshotMetadata{index: appliedLSN, term: lastTerm}, tx)
 	if err != nil {
 		return nil, fmt.Errorf("materialize snapshot: %w", err)
 	}
@@ -395,7 +395,7 @@ func (s *Storage) TriggerSnapshot(ctx context.Context, appliedLSN storage.LSN, l
 }
 
 // Term returns the term of the entry at a given index.
-func (s *Storage) Term(i uint64) (uint64, error) {
+func (s *ReplicaLogStore) Term(i uint64) (uint64, error) {
 	firstLSN := uint64(s.localLog.LowWaterMark())
 	lastLSN := uint64(s.localLog.AppendedLSN())
 	if i > lastLSN {
@@ -412,7 +412,7 @@ func (s *Storage) Term(i uint64) (uint64, error) {
 		// inactive partitions to retain log entries indefinitely until new entries are received.
 		//
 		// To address this, the term of the last log entry is maintained in memory. Its value is derived from
-		// the persisted hard state when the Raft manager restarts. After a new entry is persisted, the value is
+		// the persisted hard state when the Raft replica restarts. After a new entry is persisted, the value is
 		// updated.
 		if i == lastLSN {
 			return s.lastTerm, nil
@@ -427,7 +427,7 @@ func (s *Storage) Term(i uint64) (uint64, error) {
 	return raftEntry.Term, nil
 }
 
-func (s *Storage) readCommittedLSN() storage.LSN {
+func (s *ReplicaLogStore) readCommittedLSN() storage.LSN {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -435,7 +435,7 @@ func (s *Storage) readCommittedLSN() storage.LSN {
 }
 
 // setKey marshals and stores a given protocol buffer message into the database under the given key.
-func (s *Storage) setKey(key []byte, value []byte) error {
+func (s *ReplicaLogStore) setKey(key []byte, value []byte) error {
 	return s.database.Update(func(tx keyvalue.ReadWriter) error {
 		return tx.Set(key, value)
 	})
@@ -443,7 +443,7 @@ func (s *Storage) setKey(key []byte, value []byte) error {
 
 // readKey reads a key from the database and unmarshals its value in to the destination protocol
 // buffer message.
-func (s *Storage) readKey(key []byte, unmarshal func([]byte) error) error {
+func (s *ReplicaLogStore) readKey(key []byte, unmarshal func([]byte) error) error {
 	return s.database.View(func(txn keyvalue.ReadWriter) error {
 		item, err := txn.Get(key)
 		if err != nil {
@@ -455,7 +455,7 @@ func (s *Storage) readKey(key []byte, unmarshal func([]byte) error) error {
 }
 
 // saveConfState persists the current Raft configuration state to disk, ensuring that configuration changes are durable.
-func (s *Storage) saveHardState(hardState raftpb.HardState) error {
+func (s *ReplicaLogStore) saveHardState(hardState raftpb.HardState) error {
 	marshaled, err := hardState.Marshal()
 	if err != nil {
 		return fmt.Errorf("marshaling hard state: %w", err)
@@ -499,7 +499,7 @@ func (s *Storage) saveHardState(hardState raftpb.HardState) error {
 	return nil
 }
 
-func (s *Storage) readHardState() (raftpb.HardState, error) {
+func (s *ReplicaLogStore) readHardState() (raftpb.HardState, error) {
 	var hardState raftpb.HardState
 	if err := s.readKey(KeyHardState, func(value []byte) error {
 		return hardState.Unmarshal(value)
@@ -513,7 +513,7 @@ func (s *Storage) readHardState() (raftpb.HardState, error) {
 }
 
 // saveConfState persists latest conf state to. It is used when generating snapshot.
-func (s *Storage) saveConfState(confState raftpb.ConfState) error {
+func (s *ReplicaLogStore) saveConfState(confState raftpb.ConfState) error {
 	marshaled, err := confState.Marshal()
 	if err != nil {
 		return fmt.Errorf("marshaling conf state: %w", err)
@@ -521,7 +521,7 @@ func (s *Storage) saveConfState(confState raftpb.ConfState) error {
 	return s.setKey(KeyConfState, marshaled)
 }
 
-func (s *Storage) readConfState() (raftpb.ConfState, error) {
+func (s *ReplicaLogStore) readConfState() (raftpb.ConfState, error) {
 	var confState raftpb.ConfState
 	if err := s.readKey(KeyConfState, func(value []byte) error {
 		return confState.Unmarshal(value)
@@ -536,7 +536,7 @@ func (s *Storage) readConfState() (raftpb.ConfState, error) {
 
 // draftLogEntry drafts a log entry and inserts it to WAL at a certain position. The caller passes a callback function
 // for setting the content of the log entry.
-func (s *Storage) draftLogEntry(raftEntry raftpb.Entry, callback func(*wal.Entry) error) (returnedErr error) {
+func (s *ReplicaLogStore) draftLogEntry(raftEntry raftpb.Entry, callback func(*wal.Entry) error) (returnedErr error) {
 	// Create a temp directory for drafting log entry. This directory will be moved to the state directory of the
 	// local log manager. It's only cleaned up if there's an error along the way.
 	logEntryPath, err := os.MkdirTemp(s.stagingDir, "")
@@ -573,7 +573,7 @@ func (s *Storage) draftLogEntry(raftEntry raftpb.Entry, callback func(*wal.Entry
 }
 
 // insertLogEntry inserts a log entry to WAL at a certain position with respective Raft metadata.
-func (s *Storage) insertLogEntry(raftEntry raftpb.Entry, logEntryPath string) error {
+func (s *ReplicaLogStore) insertLogEntry(raftEntry raftpb.Entry, logEntryPath string) error {
 	s.hooks.BeforeInsertLogEntry(raftEntry.Index)
 
 	s.mutex.Lock()
@@ -611,7 +611,7 @@ func (s *Storage) insertLogEntry(raftEntry raftpb.Entry, logEntryPath string) er
 }
 
 // writeRaftEntry writes the Raft metadata to the given position in the log.
-func (s *Storage) writeRaftEntry(raftEntry raftpb.Entry, logEntryPath string) error {
+func (s *ReplicaLogStore) writeRaftEntry(raftEntry raftpb.Entry, logEntryPath string) error {
 	marshaledEntry, err := raftEntry.Marshal()
 	if err != nil {
 		return fmt.Errorf("marshaling raft entry: %w", err)
@@ -633,7 +633,7 @@ func (s *Storage) writeRaftEntry(raftEntry raftpb.Entry, logEntryPath string) er
 }
 
 // readRaftEntry returns the Raft metadata from the given position in the log.
-func (s *Storage) readRaftEntry(lsn storage.LSN) (raftpb.Entry, error) {
+func (s *ReplicaLogStore) readRaftEntry(lsn storage.LSN) (raftpb.Entry, error) {
 	var raftEntry raftpb.Entry
 
 	marshaledBytes, err := os.ReadFile(raftManifestPath(s.localLog.GetEntryPath(lsn)))
@@ -648,7 +648,7 @@ func (s *Storage) readRaftEntry(lsn storage.LSN) (raftpb.Entry, error) {
 	return raftEntry, nil
 }
 
-func (s *Storage) hasRaftEntry(lsn storage.LSN) (bool, error) {
+func (s *ReplicaLogStore) hasRaftEntry(lsn storage.LSN) (bool, error) {
 	_, err := os.Stat(raftManifestPath(s.localLog.GetEntryPath(lsn)))
 	if err == nil {
 		return true, nil
@@ -658,9 +658,9 @@ func (s *Storage) hasRaftEntry(lsn storage.LSN) (bool, error) {
 	return false, err
 }
 
-func (s *Storage) readLogEntry(lsn storage.LSN) (*gitalypb.LogEntry, error) {
+func (s *ReplicaLogStore) readLogEntry(lsn storage.LSN) (*gitalypb.LogEntry, error) {
 	return wal.ReadManifest(s.localLog.GetEntryPath(lsn))
 }
 
 // Compile-time type check.
-var _ = (raft.Storage)(&Storage{})
+var _ = (raft.Storage)(&ReplicaLogStore{})

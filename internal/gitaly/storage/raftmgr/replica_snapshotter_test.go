@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/encoding/protodelim"
 )
 
-func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
+func TestReplicaSnapshotter_materializeSnapshot(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
@@ -71,11 +71,11 @@ func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
 	}
 
 	// Setup snapshotter
-	s, err := NewRaftSnapshotter(cfg.Raft, logger, NewMetrics().Scope("default"))
+	s, err := NewReplicaSnapshotter(cfg.Raft, logger, NewMetrics().Scope("default"))
 	require.NoError(t, err)
 
 	// Package partition's disk into snapshot
-	got, err := s.materializeSnapshot(SnapshotMetadata{
+	got, err := s.materializeSnapshot(ReplicaSnapshotMetadata{
 		index:       10,
 		term:        10,
 		partitionID: storage.PartitionID(1),
@@ -136,7 +136,7 @@ func TestRaftSnapshotter_materializeSnapshot(t *testing.T) {
 	testhelper.ContainsTarState(t, bufio.NewReader(tar), directoryState)
 }
 
-func TestRaftStorage_TriggerSnapshot(t *testing.T) {
+func TestReplicaLogStore_TriggerSnapshot(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
@@ -146,11 +146,11 @@ func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 			Mutex:     sync.Mutex{},
 			callCount: 0,
 		}
-		raftStorage := &Storage{
+		logStore := &ReplicaLogStore{
 			snapshotter: mockSnapshotter,
 		}
 		// No transaction created in this context
-		snapshot, err := raftStorage.TriggerSnapshot(ctx, storage.LSN(1), 10)
+		snapshot, err := logStore.TriggerSnapshot(ctx, storage.LSN(1), 10)
 		require.ErrorContains(t, err, "transaction not initialized")
 		require.Nil(t, snapshot)
 	})
@@ -160,7 +160,7 @@ func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 			Mutex:     sync.Mutex{},
 			callCount: 0,
 		}
-		raftStorage := &Storage{
+		logStore := &ReplicaLogStore{
 			snapshotter: mockSnapshotter,
 		}
 
@@ -169,7 +169,7 @@ func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 		wg.Add(concurrentCalls)
 
 		type result struct {
-			snapshot *Snapshot
+			snapshot *ReplicaSnapshot
 			seqNum   int
 		}
 
@@ -186,7 +186,7 @@ func TestRaftStorage_TriggerSnapshot(t *testing.T) {
 
 				tx := &mockTransaction{}
 				ctx = storage.ContextWithTransaction(ctx, tx)
-				snapshot, err := raftStorage.TriggerSnapshot(ctx, tx.SnapshotLSN(), 10)
+				snapshot, err := logStore.TriggerSnapshot(ctx, tx.SnapshotLSN(), 10)
 
 				select {
 				case <-ctx.Done():
@@ -234,9 +234,9 @@ type MockRaftSnapshotter struct {
 }
 
 // Mock materializeSnapshot
-func (m *MockRaftSnapshotter) materializeSnapshot(snapshotMetadata SnapshotMetadata, tx storage.Transaction) (*Snapshot, error) {
+func (m *MockRaftSnapshotter) materializeSnapshot(snapshotMetadata ReplicaSnapshotMetadata, tx storage.Transaction) (*ReplicaSnapshot, error) {
 	m.callCount++
-	return &Snapshot{
+	return &ReplicaSnapshot{
 		file:     &os.File{},
 		metadata: snapshotMetadata,
 	}, nil

@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// EntryRecorder is a utility for recording and classifying log entries processed by the Raft manager. In addition to
+// ReplicaEntryRecorder is a utility for recording and classifying log entries processed by the Raft replica. In addition to
 // standard log entries, Raft may generate internal entries such as configuration changes or empty logs for verification
 // purposes. These internal entries are backfilled into the Write-Ahead Log (WAL), occupying Log Sequence Number (LSN)
 // slots. Consequently, the LSN sequence may diverge from expectations when Raft is enabled.
@@ -17,38 +17,38 @@ import (
 // This recorder is equipped with the capability to offset the LSN, which is particularly useful in testing environments
 // to mitigate differences in LSN sequences. It is strongly advised that this feature be restricted to testing purposes
 // and not utilized in production or other non-testing scenarios.
-type EntryRecorder struct {
-	mu    sync.Mutex // Mutex for safe concurrent access
-	Items []Item     // Slice to store recorded log entries
+type ReplicaEntryRecorder struct {
+	mu    sync.Mutex     // Mutex for safe concurrent access
+	Items []recordedItem // Slice to store recorded log entries
 }
 
-// Item represents an entry recorded by the LogEntryRecorder, with a flag indicating if it's from Raft.
-type Item struct {
+// recordedItem represents an entry recorded by the LogEntryRecorder, with a flag indicating if it's from Raft.
+type recordedItem struct {
 	FromRaft bool
 	LSN      storage.LSN
 	Entry    *gitalypb.LogEntry
 }
 
-// NewEntryRecorder returns a new instance of NewEntryRecorder.
-func NewEntryRecorder() *EntryRecorder {
-	return &EntryRecorder{}
+// NewReplicaEntryRecorder returns a new instance of NewReplicaEntryRecorder.
+func NewReplicaEntryRecorder() *ReplicaEntryRecorder {
+	return &ReplicaEntryRecorder{}
 }
 
 // Record logs an entry, marking it as originating from Raft if specified.
 // If the LSN is from the past, it removes all entries after that LSN.
-func (r *EntryRecorder) Record(fromRaft bool, lsn storage.LSN, entry *gitalypb.LogEntry) {
+func (r *ReplicaEntryRecorder) Record(fromRaft bool, lsn storage.LSN, entry *gitalypb.LogEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// Trim items that have an LSN greater than the current LSN
-	if idx := slices.IndexFunc(r.Items, func(itm Item) bool {
+	if idx := slices.IndexFunc(r.Items, func(itm recordedItem) bool {
 		return itm.LSN >= lsn
 	}); idx != -1 {
 		r.Items = r.Items[:idx]
 	}
 
 	// Append the new entry
-	r.Items = append(r.Items, Item{
+	r.Items = append(r.Items, recordedItem{
 		FromRaft: fromRaft,
 		LSN:      lsn,
 		Entry:    proto.Clone(entry).(*gitalypb.LogEntry),
@@ -57,7 +57,7 @@ func (r *EntryRecorder) Record(fromRaft bool, lsn storage.LSN, entry *gitalypb.L
 
 // WithoutRaftEntries adjusts the log sequence number (LSN) by
 // excluding internal Raft entries occupying LSN slots.
-func (r *EntryRecorder) WithoutRaftEntries(lsn storage.LSN) storage.LSN {
+func (r *ReplicaEntryRecorder) WithoutRaftEntries(lsn storage.LSN) storage.LSN {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -99,7 +99,7 @@ func (r *EntryRecorder) WithoutRaftEntries(lsn storage.LSN) storage.LSN {
 }
 
 // WithRaftEntries adjusts the log sequence number (LSN) by including internal Raft entries occupying LSN slots.
-func (r *EntryRecorder) WithRaftEntries(lsn storage.LSN) storage.LSN {
+func (r *ReplicaEntryRecorder) WithRaftEntries(lsn storage.LSN) storage.LSN {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -133,7 +133,7 @@ func (r *EntryRecorder) WithRaftEntries(lsn storage.LSN) storage.LSN {
 }
 
 // Latest returns the latest recorded LSN.
-func (r *EntryRecorder) Latest() storage.LSN {
+func (r *ReplicaEntryRecorder) Latest() storage.LSN {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -144,7 +144,7 @@ func (r *EntryRecorder) Latest() storage.LSN {
 }
 
 // Len returns the length of recorded entries.
-func (r *EntryRecorder) Len() int {
+func (r *ReplicaEntryRecorder) Len() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -152,7 +152,7 @@ func (r *EntryRecorder) Len() int {
 }
 
 // IsFromRaft returns true if the asserting LSN is an entry emitted by Raft.
-func (r *EntryRecorder) IsFromRaft(lsn storage.LSN) bool {
+func (r *ReplicaEntryRecorder) IsFromRaft(lsn storage.LSN) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -165,7 +165,7 @@ func (r *EntryRecorder) IsFromRaft(lsn storage.LSN) bool {
 }
 
 // FromRaft retrieves all log entries that originated from the Raft system.
-func (r *EntryRecorder) FromRaft() map[storage.LSN]*gitalypb.LogEntry {
+func (r *ReplicaEntryRecorder) FromRaft() map[storage.LSN]*gitalypb.LogEntry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
