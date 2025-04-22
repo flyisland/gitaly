@@ -11,6 +11,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/tracing"
+	"gitlab.com/gitlab-org/gitaly/v16/middleware"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -140,45 +141,6 @@ func NewUnaryInterceptor(logger log.Logger, registry *protoregistry.Registry, tx
 	}
 }
 
-// peekedStream allows for peeking the first message of ServerStream. Reading the first message would leave
-// handler unable to read the first message as it was already consumed. peekedStream allows for restoring the
-// stream so the RPC handler can read the first message as usual. It additionally supports overriding the
-// context of the stream.
-type peekedStream struct {
-	context      context.Context
-	firstMessage proto.Message
-	firstError   error
-	grpc.ServerStream
-}
-
-func (ps *peekedStream) Context() context.Context {
-	return ps.context
-}
-
-func (ps *peekedStream) RecvMsg(dst interface{}) error {
-	if ps.firstError != nil {
-		firstError := ps.firstError
-		ps.firstError = nil
-		return firstError
-	}
-
-	if ps.firstMessage != nil {
-		marshaled, err := proto.Marshal(ps.firstMessage)
-		if err != nil {
-			return fmt.Errorf("marshal: %w", err)
-		}
-
-		if err := proto.Unmarshal(marshaled, dst.(proto.Message)); err != nil {
-			return fmt.Errorf("unmarshal: %w", err)
-		}
-
-		ps.firstMessage = nil
-		return nil
-	}
-
-	return ps.ServerStream.RecvMsg(dst)
-}
-
 // NewStreamInterceptor returns a stream interceptor that manages a streaming RPC's transaction. It starts a transaction
 // on the target repository of the first request and rewrites the request to point to the transaction's snapshot repository.
 // The transaction is committed if the handler doesn't return an error and rolled back otherwise.
@@ -200,11 +162,7 @@ func NewStreamInterceptor(logger log.Logger, registry *protoregistry.Registry, t
 			// To maintain compatibility with tests, we instead invoke the handler to let them return
 			// the asserted error messages. Once the transaction management is on by default, we should
 			// error out here directly and amend the failing test cases.
-			return handler(srv, &peekedStream{
-				context:      ss.Context(),
-				firstError:   err,
-				ServerStream: ss,
-			})
+			return handler(srv, middleware.NewPeekedStream(ss.Context(), nil, err, ss))
 		}
 
 		txReq, err := transactionalizeRequest(ss.Context(), logger, txRegistry, node, locator, methodInfo, req)
@@ -213,11 +171,7 @@ func NewStreamInterceptor(logger log.Logger, registry *protoregistry.Registry, t
 		}
 		defer func() { returnedErr = txReq.finishTransaction(returnedErr) }()
 
-		return handler(srv, &peekedStream{
-			context:      txReq.ctx,
-			firstMessage: txReq.firstMessage,
-			ServerStream: ss,
-		})
+		return handler(srv, middleware.NewPeekedStream(txReq.ctx, txReq.firstMessage, nil, ss))
 	}
 }
 

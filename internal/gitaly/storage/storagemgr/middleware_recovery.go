@@ -11,6 +11,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
+	"gitlab.com/gitlab-org/gitaly/v16/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )
@@ -102,22 +103,14 @@ func (mw *TransactionRecoveryMiddleware) StreamServerInterceptor() grpc.StreamSe
 		if err := ss.RecvMsg(req); err != nil {
 			// All of the repository scoped streaming RPCs send the repository in the first message.
 			// If we fail to read the first message, we'll just let the handler handle it.
-			return handler(srv, &peekedStream{
-				context:      ss.Context(),
-				firstError:   err,
-				ServerStream: ss,
-			})
+			return handler(srv, middleware.NewPeekedStream(ss.Context(), nil, err, ss))
 		}
 
 		if err := mw.applyPendingWAL(ctx, methodInfo, req); err != nil {
 			return fmt.Errorf("apply pending WAL: %w", err)
 		}
 
-		return handler(srv, &peekedStream{
-			context:      ctx,
-			firstMessage: req,
-			ServerStream: ss,
-		})
+		return handler(srv, middleware.NewPeekedStream(ctx, req, nil, ss))
 	}
 }
 

@@ -41,6 +41,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
@@ -373,7 +374,8 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	raftMetrics := raftmgr.NewMetrics()
 	partitionMetrics := partition.NewMetrics(housekeepingMetrics)
 	migrationMetrics := migration.NewMetrics()
-	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics, migrationMetrics, raftMetrics)
+	reftableMigratorMetrics := reftable.NewMetrics()
+	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics, migrationMetrics, raftMetrics, reftableMigratorMetrics)
 
 	migrations := []migration.Migration{}
 
@@ -467,9 +469,19 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			node = nodeMgr
 		}
 
+		reftableMigrator := reftable.NewMigrator(logger, reftableMigratorMetrics, node, localrepoFactory)
+		reftableMigrator.Run()
+		defer reftableMigrator.Close()
+
 		txMiddleware = server.TransactionMiddleware{
-			UnaryInterceptor:  storagemgr.NewUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
-			StreamInterceptor: storagemgr.NewStreamInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
+			UnaryInterceptors: []grpc.UnaryServerInterceptor{
+				storagemgr.NewUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
+				reftable.NewUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, reftableMigrator),
+			},
+			StreamInterceptors: []grpc.StreamServerInterceptor{
+				storagemgr.NewStreamInterceptor(logger, protoregistry.GitalyProtoPreregistered, txRegistry, node, locator),
+				reftable.NewStreamInterceptor(logger, protoregistry.GitalyProtoPreregistered, reftableMigrator),
+			},
 		}
 	} else {
 		storagePaths := make([]string, len(cfg.Storages))
@@ -518,8 +530,12 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 
 			recoveryMiddleware := storagemgr.NewTransactionRecoveryMiddleware(protoregistry.GitalyProtoPreregistered, nodeMgr)
 			txMiddleware = server.TransactionMiddleware{
-				UnaryInterceptor:  recoveryMiddleware.UnaryServerInterceptor(),
-				StreamInterceptor: recoveryMiddleware.StreamServerInterceptor(),
+				UnaryInterceptors: []grpc.UnaryServerInterceptor{
+					recoveryMiddleware.UnaryServerInterceptor(),
+				},
+				StreamInterceptors: []grpc.StreamServerInterceptor{
+					recoveryMiddleware.StreamServerInterceptor(),
+				},
 			}
 		}
 	}
