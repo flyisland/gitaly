@@ -77,16 +77,22 @@ type pipe struct {
 	// wnotifier is the channel the writer uses to wait for reader progress
 	// notifications.
 	wnotifier *notifier
+
+	// backpressure determines whether the backpressure mechanism is enabled.
+	backpressure bool
 }
 
-func newPipe(w namedWriteCloser) (*pipeReader, *pipe, error) {
+func newPipe(w namedWriteCloser, backpressure bool) (*pipeReader, *pipe, error) {
 	p := &pipe{
-		name:    w.Name(),
-		w:       w,
-		wcursor: newCursor(),
-		rcursor: newCursor(),
+		name:         w.Name(),
+		w:            w,
+		wcursor:      newCursor(),
+		rcursor:      newCursor(),
+		backpressure: backpressure,
 	}
-	p.wnotifier = p.rcursor.Subscribe()
+	if p.backpressure {
+		p.wnotifier = p.rcursor.Subscribe()
+	}
 
 	pr, err := p.OpenReader()
 	if err != nil {
@@ -98,12 +104,22 @@ func newPipe(w namedWriteCloser) (*pipeReader, *pipe, error) {
 
 func (p *pipe) Write(b []byte) (int, error) {
 	// Loop (block) until at least one reader catches up with our last write.
-	for p.wcursor.Position() > p.rcursor.Position() {
+	if p.backpressure {
+		for p.wcursor.Position() > p.rcursor.Position() {
+			select {
+			case <-p.wcursor.Done():
+				// Prevent writing bytes no-one will read
+				return 0, errWrongCloseOrder
+			case <-p.wnotifier.C:
+			}
+		}
+	} else {
+		// Even though disabling backpressure allows the writer to write data without waiting for readers, it
+		// does not make sense to continue writing if nobody is interested in the result anymore.
 		select {
 		case <-p.wcursor.Done():
-			// Prevent writing bytes no-one will read
 			return 0, errWrongCloseOrder
-		case <-p.wnotifier.C:
+		default:
 		}
 	}
 

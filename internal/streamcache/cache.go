@@ -318,7 +318,7 @@ func (c *cache) newEntry(key string, create func(io.Writer) error) (_ io.ReadClo
 	}()
 
 	var pr io.ReadCloser
-	pr, e.pipe, err = newPipe(f)
+	pr, e.pipe, err = newPipe(f, true)
 	if err != nil {
 		return nil, nil, err
 	}
