@@ -17,18 +17,6 @@ var (
 	// **confidential** issue using the "Ignored Vulnerability" template on gitlab-org/gitaly before adding a new
 	// entry here.
 	defaultIgnoreList = ignoreList{
-		"GO-2025-3368": {
-			GitLabIssueURL: "https://gitlab.com/gitlab-org/gitaly/-/issues/6575",
-		},
-		"GO-2025-3367": {
-			GitLabIssueURL: "https://gitlab.com/gitlab-org/gitaly/-/issues/6575",
-		},
-		"GO-2025-3408": {
-			GitLabIssueURL: "https://gitlab.com/gitlab-org/gitaly/-/issues/6613",
-		},
-		"GO-2025-3447": {
-			GitLabIssueURL: "https://gitlab.com/gitlab-org/gitaly/-/issues/6625",
-		},
 		"GO-2025-3487": {
 			GitLabIssueURL: "https://gitlab.com/gitlab-org/gitaly/-/issues/6667",
 		},
