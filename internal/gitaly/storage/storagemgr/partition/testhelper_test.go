@@ -814,6 +814,7 @@ type testTransactionSetup struct {
 	Commits           testTransactionCommits
 	AnnotatedTags     []testTransactionTag
 	Consumer          storage.LogConsumer
+	OffloadSink       *offloading.Sink
 }
 
 type testTransactionHooks struct {
@@ -1203,7 +1204,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		// managerRunning tracks whether the manager is running or closed.
 		managerRunning bool
 		// factory is the factory that produces the current TransactionManager
-		factory = NewFactory(setup.CommandFactory, setup.RepositoryFactory, newMetrics(), setup.Consumer, setup.Config.Raft, raftFactory, nil)
+		factory = NewFactory(setup.CommandFactory, setup.RepositoryFactory, newMetrics(), setup.Consumer, setup.Config.Raft, raftFactory, setup.OffloadSink)
 		// transactionManager is the current TransactionManager instance.
 		transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 		// managerErr is used for synchronizing manager closing and returning

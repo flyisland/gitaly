@@ -55,6 +55,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 			CacheRoot:  cacheRoot,
 			GoCloudURL: sinkURL,
 		}
+		setup.OffloadSink = sink
 		return setup
 	}
 
