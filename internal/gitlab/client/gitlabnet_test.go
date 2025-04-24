@@ -17,10 +17,14 @@ import (
 const secret = "it's a secret"
 
 func TestJWTAuthenticationHeader(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	expectedCorrelationID := "testing-correlation-id"
+	server := httptest.NewServer(correlation.InjectCorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := fmt.Fprint(w, r.Header.Get(apiSecretHeaderName))
 		require.NoError(t, err)
-	}))
+
+		correlationID := correlation.ExtractFromContext(r.Context())
+		require.Equal(t, expectedCorrelationID, correlationID)
+	}), correlation.WithPropagation()))
 	defer server.Close()
 
 	tests := []struct {
@@ -59,7 +63,7 @@ func TestJWTAuthenticationHeader(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			ctx := testhelper.Context(t)
+			ctx := correlation.ContextWithCorrelation(testhelper.Context(t), expectedCorrelationID)
 			response, err := gitlabnet.DoRequest(ctx, tc.method, "/jwt_auth", nil)
 			require.NoError(t, err)
 			require.NotNil(t, response)
@@ -81,8 +85,6 @@ func TestJWTAuthenticationHeader(t *testing.T) {
 			logEntry := hook.LastEntry()
 			require.Equal(t, "Finished HTTP request", logEntry.Message)
 
-			// correlation_id does not exist in ctx but generated via ExtractFromContextOrGenerate
-			require.Empty(t, correlation.ExtractFromContext(ctx))
 			require.NotEmpty(t, logEntry.Data["correlation_id"])
 		})
 	}
