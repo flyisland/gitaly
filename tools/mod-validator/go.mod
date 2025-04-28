@@ -1,13 +1,13 @@
 module gitlab.com/gitlab-org/gitaly/tools/gitaly-deps
 
-go 1.23
+go 1.23.0
 
-toolchain go1.23.6
+toolchain go1.23.8
 
 require (
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v3 v3.1.0
-	golang.org/x/mod v0.23.0
+	golang.org/x/mod v0.24.0
 )
 
 require (
