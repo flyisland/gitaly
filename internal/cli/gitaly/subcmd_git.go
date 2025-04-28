@@ -37,8 +37,7 @@ without understanding the implications of doing so.
 Modifying Gitaly's state may lead to violating Gitaly's
 invariants, and lead to unavailability or data loss.
 ===============`,
-		Action:          gitAction,
-		HideHelpCommand: true,
+		Action: gitAction,
 		Flags: []cli.Flag{
 			gitalyConfigFlag(),
 		},

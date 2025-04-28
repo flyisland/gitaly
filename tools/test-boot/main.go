@@ -179,10 +179,9 @@ func testBoot(ctx context.Context, cmd *cli.Command) error {
 
 func main() {
 	app := cli.Command{
-		Name:            "test-boot",
-		Usage:           "smoke-test the bootup process of Gitaly",
-		Action:          testBoot,
-		HideHelpCommand: true,
+		Name:   "test-boot",
+		Usage:  "smoke-test the bootup process of Gitaly",
+		Action: testBoot,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "bundled-git",

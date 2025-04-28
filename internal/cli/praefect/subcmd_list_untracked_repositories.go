@@ -38,8 +38,7 @@ Examples:
 
 - praefect --config praefect.config.toml list-untracked-repositories
 - praefect --config praefect.config.toml list-untracked-repositories --older-than 1s`,
-		HideHelpCommand: true,
-		Action:          listUntrackedRepositoriesAction,
+		Action: listUntrackedRepositoriesAction,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "delimiter",

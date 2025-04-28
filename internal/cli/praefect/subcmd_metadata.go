@@ -32,8 +32,7 @@ Examples:
 
 - praefect --config praefect.config.toml metadata --repository-id 1
 - praefect --config praefect.config.toml metadata --virtual-storage default --relative-path <relative_path_on_the_physical_storage>`,
-		HideHelpCommand: true,
-		Action:          metadataAction,
+		Action: metadataAction,
 		Flags: []cli.Flag{
 			&cli.IntFlag{
 				Name:  "repository-id",

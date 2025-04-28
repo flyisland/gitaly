@@ -26,10 +26,9 @@ func checker(ctx context.Context, cmd *cli.Command) error {
 
 func main() {
 	app := cli.Command{
-		Name:            "binary-size-checker",
-		Usage:           "check the size of Gitaly binary is less than a threshold",
-		Action:          checker,
-		HideHelpCommand: true,
+		Name:   "binary-size-checker",
+		Usage:  "check the size of Gitaly binary is less than a threshold",
+		Action: checker,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "gitaly-directory",

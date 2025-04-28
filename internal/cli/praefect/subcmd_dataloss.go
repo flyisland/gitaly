@@ -32,8 +32,7 @@ For each unavailable repository with potential data loss, the output lists:
 - Any out-of-date Gitaly nodes (outdated storages).
 
 Example: praefect --config praefect.config.toml dataloss`,
-		HideHelpCommand: true,
-		Action:          datalossAction,
+		Action: datalossAction,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name: paramVirtualStorage,

@@ -20,7 +20,6 @@ storages that contain replicas of the repository are scheduled to make them cons
 authoritative physical storage.
 
 Example: praefect --config praefect.config.toml accept-dataloss --virtual-storage default --repository <relative_path_on_the_virtual_storage> --authoritative-storage <physical_storage_1>`,
-		HideHelpCommand: true,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     paramVirtualStorage,

@@ -27,21 +27,6 @@ To help users discover `gitaly` and `praefect` features through the CLI:
   Example: gitaly subcommand plausible-value.toml --mandatory-flag  plausible-value`,
   ```
 
-- Because of a [known issue](https://gitlab.com/gitlab-org/gitaly/-/issues/5350), always set the `HideHelpCommand`
-  field key to `true`. Setting this hides the `COMMANDS:` section of the help text,
-  which hides a generated list of available subcommands, if available.
-
-  Instead, list subcommands in the value of the `Description` field key. For example:
-
-  ```go
-  Description: `This is a long description of all the things example command can do.
-
-  Provides the following subcommands:
-
-  - subcommand1
-  - subcommand2`,
-  ```
-
 ## Rules for command strings
 
 When adding or updating `gitaly` and `praefect` CLI tools, use the following guidance for values for the different field
