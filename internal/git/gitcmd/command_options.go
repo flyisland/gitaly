@@ -304,3 +304,12 @@ func WithReferenceBackend(refBackend git.ReferenceBackend) CmdOpt {
 		return nil
 	}
 }
+
+// WithCompletionErrorLogFilter configures a function that should return true if an errored
+// command should not produce logs.
+func WithCompletionErrorLogFilter(fn func(cmd *command.Command, stderr string) bool) CmdOpt {
+	return func(_ context.Context, _ config.Cfg, _ CommandFactory, c *cmdCfg) error {
+		c.commandOpts = append(c.commandOpts, command.WithCompletionErrorLogFilter(fn))
+		return nil
+	}
+}

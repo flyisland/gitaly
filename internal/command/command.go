@@ -159,6 +159,8 @@ type Command struct {
 	cgroupPath    string
 	cmdGitVersion string
 	refBackend    string
+
+	completionErrorLogFilter func(cmd *Command, stderr string) bool
 }
 
 // New creates a Command from the given executable name and arguments On success, the Command
@@ -235,18 +237,19 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 	cmd := exec.Command(nameAndArgs[0], nameAndArgs[1:]...)
 
 	command := &Command{
-		logger:               logger,
-		cmd:                  cmd,
-		startTime:            time.Now(),
-		context:              ctx,
-		span:                 span,
-		finalizers:           cfg.finalizers,
-		metricsCmd:           cfg.commandName,
-		metricsSubCmd:        cfg.subcommandName,
-		cmdGitVersion:        cfg.gitVersion,
-		refBackend:           cfg.refBackend,
-		subprocessLoggerDone: make(chan struct{}),
-		processExitedCh:      make(chan struct{}),
+		logger:                   logger,
+		cmd:                      cmd,
+		startTime:                time.Now(),
+		context:                  ctx,
+		span:                     span,
+		finalizers:               cfg.finalizers,
+		metricsCmd:               cfg.commandName,
+		metricsSubCmd:            cfg.subcommandName,
+		cmdGitVersion:            cfg.gitVersion,
+		refBackend:               cfg.refBackend,
+		subprocessLoggerDone:     make(chan struct{}),
+		processExitedCh:          make(chan struct{}),
+		completionErrorLogFilter: cfg.completionErrorLogFilter,
 	}
 
 	cmd.Dir = cfg.dir
@@ -602,7 +605,10 @@ func (c *Command) logProcessComplete() {
 		if exitCode != 0 {
 			logLevel = entry.ErrorContext
 		}
-		logLevel(ctx, c.stderrBuffer.String())
+
+		if c.completionErrorLogFilter == nil || !c.completionErrorLogFilter(c, c.stderrBuffer.String()) {
+			logLevel(ctx, c.stderrBuffer.String())
+		}
 	}
 
 	if customFields := log.CustomFieldsFromContext(ctx); customFields != nil {

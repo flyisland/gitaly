@@ -303,6 +303,7 @@ func TestCommand_stderr(t *testing.T) {
 		name      string
 		script    string
 		lastEntry *logrus.Entry
+		opts      []Option
 	}{
 		{
 			name: "basic stderr logging",
@@ -415,6 +416,30 @@ func TestCommand_stderr(t *testing.T) {
 					strings.Repeat("a", 3331)),
 			},
 		},
+		{
+			name: "doesn't log when a process exits with an error and a filter is specified",
+			script: `#!/usr/bin/env bash
+				echo "fatal: not a git repository" >&2
+				exit 128
+			`,
+			opts: []Option{WithCompletionErrorLogFilter(func(cmd *Command, stderr string) bool {
+				return strings.HasPrefix(stderr, "fatal: not a git repository") && cmd.cmd.ProcessState.ExitCode() == 128
+			})},
+		},
+		{
+			name: "logs when a process exits with an error and an ineffective filter is specified",
+			script: `#!/usr/bin/env bash
+				echo "fatal: not a git repository" >&2
+				exit 128
+			`,
+			opts: []Option{WithCompletionErrorLogFilter(func(cmd *Command, stderr string) bool {
+				return strings.HasPrefix(stderr, "fatal: not a git repository") && cmd.cmd.ProcessState.ExitCode() == 1
+			})},
+			lastEntry: &logrus.Entry{
+				Level:   logrus.ErrorLevel,
+				Message: "fatal: not a git repository\n",
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -428,7 +453,7 @@ func TestCommand_stderr(t *testing.T) {
 			ctx := testhelper.Context(t)
 
 			var stdout bytes.Buffer
-			cmd, err := New(ctx, logger, []string{binaryPath}, WithStdout(&stdout))
+			cmd, err := New(ctx, logger, []string{binaryPath}, append(tc.opts, WithStdout(&stdout))...)
 			require.NoError(t, err)
 
 			err = cmd.Wait()
