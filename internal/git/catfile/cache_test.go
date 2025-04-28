@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/quarantine"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
@@ -409,6 +410,56 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 		cancel()
 
 		require.Empty(t, keys(t, &cache.objectReadersWithoutMailmap))
+	})
+}
+
+func TestCache_ObjectReader_quarantine(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	locator := config.NewLocator(cfg)
+	logger := testhelper.NewLogger(t)
+
+	cache := newCache(time.Hour, 10, helper.NewManualTicker())
+	defer cache.Stop()
+
+	t.Run("with active quarantine", func(t *testing.T) {
+		defer cache.Evict()
+
+		repo, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+		})
+		gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
+
+		quarantineDir, err := quarantine.New(testhelper.Context(t), repo, logger, locator)
+		require.NoError(t, err)
+
+		quarantineRepo := quarantineDir.QuarantinedRepo()
+
+		reader, cancel, err := cache.ObjectReaderWithoutMailmap(ctx, newRepoExecutor(t, cfg, quarantineRepo))
+		require.NoError(t, err)
+
+		// Cancel the context such that the process will be considered for return to the
+		// cache and wait for the cache to collect it.
+		cancel()
+
+		allKeys := keys(t, &cache.objectReadersWithoutMailmap)
+
+		expectedSessionID := fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now()))
+
+		require.Equal(t, []key{{
+			sessionID:   expectedSessionID,
+			repoStorage: repo.GetStorageName(),
+			repoRelPath: repo.GetRelativePath(),
+			repoObjDir:  quarantineRepo.GetGitObjectDirectory(),
+			repoAltDir:  "objects",
+		}}, allKeys)
+
+		// Assert that we can still read from the cached process.
+		_, err = reader.Object(ctx, "refs/heads/main")
+		require.NoError(t, err)
 	})
 }
 
