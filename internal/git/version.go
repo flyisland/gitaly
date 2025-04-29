@@ -87,6 +87,12 @@ func (v Version) IsSupported() bool {
 	return !v.LessThan(minimumVersion)
 }
 
+// IsCatfileObjectTypeFilterSupported checks whether the current Git version supports the `git cat-file --filter=`
+// option.
+func (v Version) IsCatfileObjectTypeFilterSupported() bool {
+	return v.GreaterOrEqual(NewVersion(2, 49, 0, 2))
+}
+
 // LessThan determines whether the version is older than another version.
 func (v Version) LessThan(other Version) bool {
 	switch {
