@@ -1727,7 +1727,7 @@ func TestReplica_AddNode(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		replica, _, storageName, partitionID, _ := setupTest(t)
+		replica, metrics, storageName, partitionID, _ := setupTest(t)
 		t.Cleanup(func() { require.NoError(t, replica.Close()) })
 
 		// Wait for the replica to elect itself as leader
@@ -1763,13 +1763,27 @@ func TestReplica_AddNode(t *testing.T) {
 		_, confState, err := replica.logStore.InitialState()
 		require.NoError(t, err)
 		require.Len(t, confState.Voters, 2, "should have 2 nodes (bootstrap + added)")
-	})
 
+		testhelper.RequirePromMetrics(t, metrics, `
+			# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+			# TYPE gitaly_raft_log_entries_processed counter
+			gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 2
+			gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 2
+			gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 1
+			gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 1
+			# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+			# TYPE gitaly_raft_proposal_queue_depth gauge
+			gitaly_raft_proposal_queue_depth{storage="default"} 0
+			# HELP gitaly_raft_membership_changes_total Counter of Raft membership changes by type
+			# TYPE gitaly_raft_membership_changes_total counter
+			gitaly_raft_membership_changes_total{change_type="add_voter"} 1
+		`)
+	})
 	t.Run("concurrent add node proposals", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		replica, _, storageName, partitionID, recorder := setupTest(t)
+		replica, metrics, storageName, partitionID, recorder := setupTest(t)
 
 		t.Cleanup(func() {
 			require.NoError(t, replica.Close())
@@ -1827,6 +1841,26 @@ func TestReplica_AddNode(t *testing.T) {
 		require.Len(t, entry.Replicas, 2, "expected two replicas in the routing table")
 		require.Equal(t, entry.Replicas[0].GetMemberId(), uint64(1))
 		require.Equal(t, entry.Replicas[1].GetMemberId(), uint64(3))
+
+		// We ignore the metric with "verify" tag because it's not deterministic. With each run the number of times empty entries
+		// processed are different.
+		testhelper.RequirePromMetrics(t, metrics, `
+			# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
+			# TYPE gitaly_raft_log_entries_processed counter
+			gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 3
+			gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 3
+			# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
+			# TYPE gitaly_raft_proposal_queue_depth gauge
+			gitaly_raft_proposal_queue_depth{storage="default"} 0
+			# HELP gitaly_raft_membership_changes_total Counter of Raft membership changes by type
+			# TYPE gitaly_raft_membership_changes_total counter
+			gitaly_raft_membership_changes_total{change_type="add_voter"} 2
+		`,
+			"gitaly_raft_log_entries_processed{entry_type=\"config_change\"}",
+			"gitaly_raft_log_entries_processed{entry_type=\"config_change\"}",
+			"gitaly_raft_proposal_queue_depth",
+			"gitaly_raft_membership_changes_total",
+		)
 	})
 
 	t.Run("remove node that does not exist", func(t *testing.T) {
@@ -1842,14 +1876,14 @@ func TestReplica_AddNode(t *testing.T) {
 		}, 5*time.Second, 5*time.Millisecond, "replica should become leader")
 
 		err := replica.RemoveNode(ctx, 999)
-		require.EqualError(t, err, "member ID not found in routing table")
+		require.EqualError(t, err, "checking member ID: translating member ID: no address found for memberID 999")
 	})
 
 	t.Run("fails when node is not leader", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		replica, _, _, _, _ := setupTest(t)
+		replica, metrics, _, _, _ := setupTest(t)
 		t.Cleanup(func() { require.NoError(t, replica.Close()) })
 
 		// Set a random leader ID to simulate a non-leader
@@ -1857,5 +1891,11 @@ func TestReplica_AddNode(t *testing.T) {
 
 		err := replica.AddNode(ctx, "gitaly-node-2:8075")
 		require.EqualError(t, err, "replica is not the leader", "adding node should fail when not leader")
+
+		testhelper.RequirePromMetrics(t, metrics, `
+			# HELP gitaly_raft_membership_errors_total Counter of Raft membership operation errors
+			# TYPE gitaly_raft_membership_errors_total counter
+			gitaly_raft_membership_errors_total{change_type="add_voter",reason="not_leader"} 1
+		`)
 	})
 }

@@ -991,6 +991,7 @@ func (replica *Replica) proposeMembershipChange(
 	metadata *gitalypb.ReplicaID_Metadata,
 ) error {
 	if !replica.leadership.IsLeader() {
+		replica.metrics.IncMembershipError(changeType, "not_leader")
 		return fmt.Errorf("replica is not the leader")
 	}
 
@@ -999,12 +1000,8 @@ func (replica *Replica) proposeMembershipChange(
 		if routingTable == nil {
 			return fmt.Errorf("routing table not found")
 		}
-		found, err := checkMemberID(replica, memberID, routingTable)
-		if err != nil {
+		if err := checkMemberID(replica, memberID, routingTable); err != nil {
 			return fmt.Errorf("checking member ID: %w", err)
-		}
-		if !found {
-			return fmt.Errorf("member ID not found in routing table")
 		}
 	}
 
@@ -1022,27 +1019,25 @@ func (replica *Replica) proposeMembershipChange(
 	}
 
 	if err := replica.node.ProposeConfChange(ctx, cc); err != nil {
+		replica.metrics.IncMembershipError(changeType, "propose_failed")
 		return fmt.Errorf("propose conf change: %w", err)
 	}
+
+	replica.metrics.IncMembershipChange(changeType)
 	return nil
 }
 
-func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) (bool, error) {
+func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {
 	partitionKey := &gitalypb.PartitionKey{
 		AuthorityName: replica.authorityName,
 		PartitionId:   uint64(replica.ptnID),
 	}
 
-	replicaID, err := routingTable.Translate(partitionKey, memberID)
+	_, err := routingTable.Translate(partitionKey, memberID)
 	if err != nil {
-		return false, fmt.Errorf("translating member ID: %w", err)
+		return fmt.Errorf("translating member ID: %w", err)
 	}
-
-	if replicaID == nil {
-		return false, nil
-	}
-
-	return true, nil
+	return nil
 }
 
 var _ = (storage.LogManager)(&Replica{}) // Ensure Replica implements LogManager interface

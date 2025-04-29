@@ -1,6 +1,8 @@
 package raftmgr
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // Metrics contains the unscoped collected by Raft activities.
 type Metrics struct {
@@ -10,6 +12,8 @@ type Metrics struct {
 	logEntriesProcessed *prometheus.CounterVec
 	proposalQueueDepth  *prometheus.GaugeVec
 	eventLoopCrashes    *prometheus.CounterVec
+	membershipChanges   *prometheus.CounterVec
+	membershipErrors    *prometheus.CounterVec
 }
 
 // NewMetrics returns a new Metrics instance.
@@ -17,6 +21,7 @@ func NewMetrics() *Metrics {
 	storageLabels := []string{"storage"}
 	proposalLabels := []string{"storage", "result"}
 	operationLabels := []string{"storage", "operation", "entry_type"}
+
 	return &Metrics{
 		snapSaveSec: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name: "gitaly_raft_snapshot_duration_seconds",
@@ -47,6 +52,20 @@ func NewMetrics() *Metrics {
 			Name: "gitaly_raft_event_loop_crashes_total",
 			Help: "Counter of Raft event loop crashes",
 		}, storageLabels),
+		membershipChanges: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gitaly_raft_membership_changes_total",
+				Help: "Counter of Raft membership changes by type",
+			},
+			[]string{"change_type"},
+		),
+		membershipErrors: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "gitaly_raft_membership_errors_total",
+				Help: "Counter of Raft membership operation errors",
+			},
+			[]string{"change_type", "reason"},
+		),
 	}
 }
 
@@ -63,6 +82,8 @@ func (m *Metrics) Collect(metrics chan<- prometheus.Metric) {
 	m.logEntriesProcessed.Collect(metrics)
 	m.proposalQueueDepth.Collect(metrics)
 	m.eventLoopCrashes.Collect(metrics)
+	m.membershipChanges.Collect(metrics)
+	m.membershipErrors.Collect(metrics)
 }
 
 // RaftMetrics are metrics scoped for a specific storage
@@ -73,6 +94,8 @@ type RaftMetrics struct {
 	logEntriesProcessed *prometheus.CounterVec
 	proposalQueueDepth  prometheus.Gauge
 	eventLoopCrashes    prometheus.Counter
+	membershipChanges   *prometheus.CounterVec
+	membershipErrors    *prometheus.CounterVec
 }
 
 // Scope returns Raft metrics scoped for a specific storage.
@@ -85,5 +108,17 @@ func (m *Metrics) Scope(storage string) RaftMetrics {
 		logEntriesProcessed: m.logEntriesProcessed.MustCurryWith(labels),
 		proposalQueueDepth:  m.proposalQueueDepth.With(labels),
 		eventLoopCrashes:    m.eventLoopCrashes.With(labels),
+		membershipChanges:   m.membershipChanges,
+		membershipErrors:    m.membershipErrors,
 	}
+}
+
+// IncMembershipChange increments the membership change counter for the given type
+func (m RaftMetrics) IncMembershipChange(changeType string) {
+	m.membershipChanges.WithLabelValues(changeType).Inc()
+}
+
+// IncMembershipError increments the membership error counter for the given operation
+func (m RaftMetrics) IncMembershipError(changeType string, reason string) {
+	m.membershipErrors.WithLabelValues(changeType, reason).Inc()
 }
