@@ -52,4 +52,5 @@ func (m Metrics) Describe(descs chan<- *prometheus.Desc) {
 // Collect implements prometheus.Collector.
 func (m Metrics) Collect(metrics chan<- prometheus.Metric) {
 	m.latencyMetric.Collect(metrics)
+	m.failsMetric.Collect(metrics)
 }
