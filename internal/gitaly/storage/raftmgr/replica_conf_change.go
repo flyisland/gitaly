@@ -16,6 +16,7 @@ const (
 	ConfChangeAddNode ConfChangeType = iota
 	ConfChangeRemoveNode
 	ConfChangeUpdateNode
+	ConfChangeAddLearnerNode // Adds a node as a learner (non-voting member)
 )
 
 // ReplicaConfChange represents a single configuration change.
@@ -100,6 +101,8 @@ func (r *ReplicaConfChanges) ToConfChangeV2() (raftpb.ConfChangeV2, error) {
 			confType = raftpb.ConfChangeRemoveNode
 		case ConfChangeUpdateNode:
 			confType = raftpb.ConfChangeUpdateNode
+		case ConfChangeAddLearnerNode:
+			confType = raftpb.ConfChangeAddLearnerNode
 		default:
 			return raftpb.ConfChangeV2{}, fmt.Errorf("unknown conf change type: %d", change.changeType)
 		}
@@ -134,6 +137,8 @@ func parseChangeType(ccType raftpb.ConfChangeType) (ConfChangeType, error) {
 		return ConfChangeRemoveNode, nil
 	case raftpb.ConfChangeUpdateNode:
 		return ConfChangeUpdateNode, nil
+	case raftpb.ConfChangeAddLearnerNode:
+		return ConfChangeAddLearnerNode, nil
 	default:
 		return ConfChangeType(0), fmt.Errorf("unknown conf change type: %d", ccType)
 	}

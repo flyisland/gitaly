@@ -135,7 +135,6 @@ func (r *kvRoutingTable) Translate(partitionKey *gitalypb.PartitionKey, memberID
 		return nil, fmt.Errorf("get entry: %w", err)
 	}
 
-	// Look for the node in replicas
 	for _, replica := range entry.Replicas {
 		if replica.GetMemberId() == memberID {
 			return replica, nil
@@ -171,9 +170,9 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(partitionKey *gitalypb.Partition
 				return fmt.Errorf("member ID should be non-zero")
 			}
 
-			if index := slices.IndexFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
+			if slices.ContainsFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
 				return r.GetMemberId() == confChange.memberID
-			}); index != -1 {
+			}) {
 				return fmt.Errorf("member ID %d already exists", confChange.memberID)
 			}
 
@@ -182,8 +181,29 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(partitionKey *gitalypb.Partition
 				MemberId:     confChange.memberID,
 				StorageName:  authorityName,
 				Metadata:     metadata,
+				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 			}
 			routingTableEntry.Replicas = append(routingTableEntry.Replicas, replica)
+
+		case ConfChangeAddLearnerNode:
+			if confChange.memberID == 0 {
+				return fmt.Errorf("member ID should be non-zero")
+			}
+
+			if slices.ContainsFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
+				return r.GetMemberId() == confChange.memberID
+			}) {
+				return fmt.Errorf("member ID %d already exists as a replica", confChange.memberID)
+			}
+
+			learner := &gitalypb.ReplicaID{
+				PartitionKey: partitionKey,
+				MemberId:     confChange.memberID,
+				StorageName:  authorityName,
+				Metadata:     metadata,
+				Type:         gitalypb.ReplicaID_REPLICA_TYPE_LEARNER,
+			}
+			routingTableEntry.Replicas = append(routingTableEntry.Replicas, learner)
 
 		case ConfChangeRemoveNode:
 			if len(routingTableEntry.Replicas) == 0 {
