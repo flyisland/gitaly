@@ -17,6 +17,15 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
+var statusLookup = map[gitalypb.ChangedPaths_Status]byte{
+	gitalypb.ChangedPaths_MODIFIED:    'M',
+	gitalypb.ChangedPaths_DELETED:     'D',
+	gitalypb.ChangedPaths_TYPE_CHANGE: 'T',
+	gitalypb.ChangedPaths_COPIED:      'C',
+	gitalypb.ChangedPaths_ADDED:       'A',
+	gitalypb.ChangedPaths_RENAMED:     'R',
+}
+
 func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.DiffService_DiffBlobsServer) error {
 	ctx := stream.Context()
 
@@ -24,6 +33,115 @@ func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.D
 		return err
 	}
 
+	if len(request.GetBlobPairs()) == 0 && len(request.GetRawInfo()) == 0 {
+		return structerr.NewInvalidArgument("request contains no file pairs to diff")
+	}
+
+	if len(request.GetBlobPairs()) > 0 && len(request.GetRawInfo()) > 0 {
+		return structerr.NewInvalidArgument("blob pairs and raw info both used in request")
+	}
+
+	var cmdOpts []gitcmd.Option
+
+	switch request.GetWhitespaceChanges() {
+	case gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE_ALL:
+		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--ignore-all-space"})
+	case gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE:
+		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--ignore-space-change"})
+	}
+
+	if request.GetDiffMode() == gitalypb.DiffBlobsRequest_DIFF_MODE_WORD {
+		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--word-diff=porcelain"})
+	}
+
+	if len(request.GetBlobPairs()) > 0 {
+		return s.diffBlobs(ctx, request, stream, cmdOpts)
+	}
+
+	return s.diffPairs(ctx, request, stream, cmdOpts)
+}
+
+func (s *server) diffPairs(ctx context.Context,
+	request *gitalypb.DiffBlobsRequest,
+	stream gitalypb.DiffService_DiffBlobsServer,
+	opts []gitcmd.Option,
+) error {
+	repo := s.localRepoFactory.Build(request.GetRepository())
+
+	gitVersion, err := repo.GitVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("git version: %w", err)
+	}
+
+	// The git-diff-pairs(1) command was backported to Git 2.49 and thus the GitLab Git version is
+	// required until Git 2.50 is released and rolled out.
+	if gitVersion.LessThan(git.NewVersion(2, 49, 0, 1)) {
+		return structerr.NewInvalidArgument("git version: %s, doesn't support git-diff-pairs(1)", gitVersion)
+	}
+
+	objectHash, err := repo.ObjectHash(ctx)
+	if err != nil {
+		return structerr.NewInternal("detecting object format: %w", err)
+	}
+
+	var rawInfo []diff.Raw
+	var rawInput bytes.Buffer
+	for _, entry := range request.GetRawInfo() {
+		raw := diff.Raw{
+			SrcMode: entry.GetOldMode(),
+			DstMode: entry.GetNewMode(),
+			SrcOID:  entry.GetOldBlobId(),
+			DstOID:  entry.GetNewBlobId(),
+			Status:  statusLookup[entry.GetStatus()],
+			// Score:   entry.GetScore(),
+			SrcPath: entry.GetPath(),
+		}
+
+		if len(entry.GetOldPath()) > 0 {
+			raw.SrcPath = entry.GetOldPath()
+			raw.DstPath = entry.GetPath()
+		}
+
+		rawInput.Write(raw.ToBytes())
+		rawInfo = append(rawInfo, raw)
+	}
+
+	gitCmd := gitcmd.Command{
+		Name: "diff-pairs",
+		Flags: []gitcmd.Option{
+			gitcmd.Flag{Name: "-z"},
+			gitcmd.Flag{Name: fmt.Sprintf("--abbrev=%d", objectHash.EncodedLen())},
+		},
+	}
+	gitCmd.Flags = append(gitCmd.Flags, opts...)
+
+	cmd, err := repo.Exec(ctx, gitCmd, gitcmd.WithSetupStdout(), gitcmd.WithStdin(&rawInput))
+	if err != nil {
+		return fmt.Errorf("spawning git-diff-pairs: %w", err)
+	}
+
+	parser := diff.NewPatchParser(cmd, rawInfo, request.GetPatchBytesLimit(), objectHash)
+	for parser.Parse() {
+		if err := s.sendDiff(stream, parser.Diff()); err != nil {
+			return structerr.NewInternal("sending diff: %w", err)
+		}
+	}
+	if parser.Err() != nil {
+		return fmt.Errorf("parsing diff: %w", err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("waiting for git-diff-pairs: %w", err)
+	}
+
+	return nil
+}
+
+func (s *server) diffBlobs(ctx context.Context,
+	request *gitalypb.DiffBlobsRequest,
+	stream gitalypb.DiffService_DiffBlobsServer,
+	cmdOpts []gitcmd.Option,
+) error {
 	// Unfortunately, git-diff(1) does not support generating a blob diff using a null OID as an
 	// input argument. When a blob is added/deleted, there is no pre-image/post-image respectively.
 	// To generate diffs for additions and deletions, the empty blob ID is used as either the left
@@ -49,19 +167,6 @@ func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.D
 	blobInfoPairs, err := s.blobInfoPairs(ctx, repo, objectHash, request.GetBlobPairs())
 	if err != nil {
 		return err
-	}
-
-	var cmdOpts []gitcmd.Option
-
-	switch request.GetWhitespaceChanges() {
-	case gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE_ALL:
-		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--ignore-all-space"})
-	case gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_IGNORE:
-		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--ignore-space-change"})
-	}
-
-	if request.GetDiffMode() == gitalypb.DiffBlobsRequest_DIFF_MODE_WORD {
-		cmdOpts = append(cmdOpts, gitcmd.Flag{Name: "--word-diff=porcelain"})
 	}
 
 	var limits diff.Limits
