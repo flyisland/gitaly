@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitpipe"
@@ -87,6 +88,11 @@ func (s *server) ListAllLFSPointers(in *gitalypb.ListAllLFSPointersRequest, stre
 
 	repo := s.localRepoFactory.Build(repository)
 
+	gitVersion, err := repo.GitVersion(ctx)
+	if err != nil {
+		return structerr.NewInternal("detecting availability of object type filter: %w", err)
+	}
+
 	chunker := chunk.New(&lfsPointerSender{
 		send: func(pointers []*gitalypb.LFSPointer) error {
 			return stream.Send(&gitalypb.ListAllLFSPointersResponse{
@@ -101,11 +107,16 @@ func (s *server) ListAllLFSPointers(in *gitalypb.ListAllLFSPointersRequest, stre
 	}
 	defer cancel()
 
-	catfileInfoIter := gitpipe.CatfileInfoAllObjects(ctx, repo,
+	catfileInfoOptions := []gitpipe.CatfileInfoOption{
 		gitpipe.WithSkipCatfileInfoResult(func(objectInfo *catfile.ObjectInfo) bool {
 			return objectInfo.Type != "blob" || objectInfo.Size > lfsPointerMaxSize
 		}),
-	)
+	}
+	if featureflag.CatfileObjectTypeFilter.IsEnabled(ctx) && gitVersion.IsCatfileObjectTypeFilterSupported() {
+		catfileInfoOptions = append(catfileInfoOptions, gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeBlob))
+	}
+
+	catfileInfoIter := gitpipe.CatfileInfoAllObjects(ctx, repo, catfileInfoOptions...)
 
 	catfileObjectIter, err := gitpipe.CatfileObject(ctx, objectReader, catfileInfoIter)
 	if err != nil {

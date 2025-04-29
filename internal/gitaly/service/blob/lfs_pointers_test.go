@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
@@ -139,8 +140,12 @@ func TestListLFSPointers(t *testing.T) {
 
 func TestListAllLFSPointers(t *testing.T) {
 	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.CatfileObjectTypeFilter).Run(t, testListAllLFSPointers)
+}
 
-	ctx := testhelper.Context(t)
+func testListAllLFSPointers(t *testing.T, ctx context.Context) {
+	t.Parallel()
+
 	cfg, client := setup(t, ctx)
 
 	lfsPointerContents := `version https://git-lfs.github.com/spec/v1
