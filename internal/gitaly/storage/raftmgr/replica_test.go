@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -24,7 +25,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3/raftpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func raftConfigsForTest(t *testing.T) config.Raft {
@@ -1703,118 +1703,159 @@ func TestReplica_StorageConnection(t *testing.T) {
 	})
 }
 
-func TestReplica_ProcessConfChange(t *testing.T) {
+func TestReplica_AddNode(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		desc       string
-		confChange func(t *testing.T, memberID uint64, address string) raftpb.ConfChangeI
-	}{
-		{
-			desc: "ConfigChangeV1",
-			confChange: func(t *testing.T, memberID uint64, address string) raftpb.ConfChangeI {
-				marshaledAddress, err := proto.Marshal(&gitalypb.ReplicaID_Metadata{
-					Address: address,
-				})
-				require.NoError(t, err, "failed to marshal node address")
+	setupTest := func(t *testing.T) (*Replica, *Metrics, string, storage.PartitionID, *ReplicaEntryRecorder) {
+		ctx := testhelper.Context(t)
+		cfg := testcfg.Build(t)
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+		recorder := NewReplicaEntryRecorder()
 
-				return raftpb.ConfChange{
-					Type:    raftpb.ConfChangeAddNode,
-					NodeID:  memberID,
-					Context: marshaledAddress,
-				}
-			},
-		},
-		{
-			desc: "ConfigChangeV2",
-			confChange: func(t *testing.T, memberID uint64, address string) raftpb.ConfChangeI {
-				marshaledAddress, err := proto.Marshal(&gitalypb.ReplicaID_Metadata{
-					Address: address,
-				})
-				require.NoError(t, err, "failed to marshal node address")
+		replica, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics, WithEntryRecorder(recorder))
+		require.NoError(t, err)
 
-				return raftpb.ConfChangeV2{
-					Changes: []raftpb.ConfChangeSingle{
-						{
-							Type:   raftpb.ConfChangeAddNode,
-							NodeID: memberID,
-						},
-					},
-					Context: marshaledAddress,
-				}
-			},
-		},
-	} {
-		t.Run(tc.desc, func(t *testing.T) {
-			t.Parallel()
+		err = replica.Initialize(ctx, 0)
+		require.NoError(t, err)
 
-			ctx := testhelper.Context(t)
-			cfg := testcfg.Build(t)
-			raftCfg := raftConfigsForTest(t)
-
-			partitionID := storage.PartitionID(1)
-			storageName := cfg.Storages[0].Name
-
-			metrics := NewMetrics()
-
-			replica, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics)
-			require.NoError(t, err)
-
-			t.Cleanup(func() { require.NoError(t, replica.Close()) })
-
-			err = replica.Initialize(ctx, 0)
-			require.NoError(t, err)
-
-			raftEnabledStorage := replica.raftEnabledStorage
-			require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
-
-			routingTable := raftEnabledStorage.GetRoutingTable()
-
-			partitionKey := &gitalypb.PartitionKey{
-				AuthorityName: storageName,
-				PartitionId:   uint64(partitionID),
-			}
-
-			// Helper to poll for routing table updated
-			waitRoutingTableUpdate := func(t *testing.T, memberID uint64, nodeAddress string) {
-				t.Helper()
-
-				require.Eventually(t, func() bool {
-					entry, err := routingTable.GetEntry(partitionKey)
-					if err != nil {
-						return false
-					}
-					if len(entry.Replicas) < 2 {
-						return false
-					}
-					replica := entry.Replicas[1]
-
-					return replica.GetMemberId() == memberID &&
-						replica.GetMetadata().GetAddress() == nodeAddress
-				}, 5*time.Second, 100*time.Millisecond, "routing table did not update after adding node")
-			}
-
-			// Step 1: Add a new node using ConfChangeV1
-			addMemberID := uint64(2) // Avoid conflict with bootstrap node
-			addNodeAddress := "gitaly-node-2:8075"
-
-			err = replica.node.ProposeConfChange(ctx, tc.confChange(t, addMemberID, addNodeAddress))
-			require.NoError(t, err, "proposing add node config change failed")
-
-			waitRoutingTableUpdate(t, addMemberID, addNodeAddress)
-
-			// Verify persisted ConfState after first change
-			_, confState, err := replica.logStore.InitialState()
-			require.NoError(t, err)
-			require.Contains(t, confState.Voters, addMemberID, "persisted conf state should contain added node")
-			require.Len(t, confState.Voters, 2, "persisted conf state should have 2 nodes (bootstrap + added)")
-
-			routingTableEntry, err := routingTable.GetEntry(partitionKey)
-			require.NoError(t, err)
-
-			require.Equal(t, routingTableEntry.LeaderID, uint64(1), "leader ID should be 1")
-			require.Equal(t, routingTableEntry.Replicas[0].GetMemberId(), uint64(1), "bootstrap node should be recorded")
-			require.Len(t, routingTableEntry.Replicas, 2, "routing table entry should have 2 replicas (bootstrap + added)")
-		})
+		return replica, metrics, cfg.Storages[0].Name, partitionID, recorder
 	}
+
+	t.Run("successful when node is leader", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		replica, _, storageName, partitionID, _ := setupTest(t)
+		t.Cleanup(func() { require.NoError(t, replica.Close()) })
+
+		// Wait for the replica to elect itself as leader
+		require.Eventually(t, func() bool {
+			return replica.AppendedLSN() > 1 && replica.leadership.IsLeader()
+		}, 5*time.Second, 5*time.Millisecond, "replica should become leader")
+
+		raftEnabledStorage := replica.raftEnabledStorage
+		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
+
+		routingTable := raftEnabledStorage.GetRoutingTable()
+		partitionKey := &gitalypb.PartitionKey{
+			AuthorityName: storageName,
+			PartitionId:   uint64(partitionID),
+		}
+
+		addNodeAddress := "gitaly-node-2:8075"
+		err := replica.AddNode(ctx, addNodeAddress)
+		require.NoError(t, err, "adding node should succeed when leader")
+
+		// Verify routing table is updated
+		require.Eventually(t, func() bool {
+			entry, err := routingTable.GetEntry(partitionKey)
+			if err != nil {
+				return false
+			}
+			return slices.ContainsFunc(entry.Replicas, func(r *gitalypb.ReplicaID) bool {
+				return r.GetMetadata().GetAddress() == addNodeAddress && r.GetType() == gitalypb.ReplicaID_REPLICA_TYPE_VOTER
+			})
+		}, 5*time.Second, 5*time.Millisecond, "routing table should be updated")
+
+		// Verify configuration state
+		_, confState, err := replica.logStore.InitialState()
+		require.NoError(t, err)
+		require.Len(t, confState.Voters, 2, "should have 2 nodes (bootstrap + added)")
+	})
+
+	t.Run("concurrent add node proposals", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		replica, _, storageName, partitionID, recorder := setupTest(t)
+
+		t.Cleanup(func() {
+			require.NoError(t, replica.Close())
+		})
+
+		raftEnabledStorage := replica.raftEnabledStorage
+		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
+
+		routingTable := raftEnabledStorage.GetRoutingTable()
+		partitionKey := &gitalypb.PartitionKey{
+			AuthorityName: storageName,
+			PartitionId:   uint64(partitionID),
+		}
+
+		// Wait for the replica to elect itself as leader
+		require.Eventually(t, func() bool {
+			return replica.AppendedLSN() > 1 && replica.leadership.IsLeader()
+		}, 5*time.Second, 5*time.Millisecond, "replica should become leader")
+
+		for i := 0; i < 2; i++ {
+			err := replica.proposeMembershipChange(ctx, string(addVoter), uint64(3), ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
+				Address: fmt.Sprintf("node-%d:8075", i),
+			})
+			require.NoError(t, err)
+		}
+
+		require.Eventually(t, func() bool {
+			entry, err := routingTable.GetEntry(partitionKey)
+			if err != nil {
+				return false
+			}
+			return slices.ContainsFunc(entry.Replicas, func(r *gitalypb.ReplicaID) bool {
+				return (r.GetMetadata().GetAddress() == "node-0:8075" || r.GetMetadata().GetAddress() == "node-1:8075") && r.GetType() == gitalypb.ReplicaID_REPLICA_TYPE_VOTER
+			})
+		}, 5*time.Second, 5*time.Millisecond, "routing table should be updated")
+
+		raftEntries := recorder.FromRaft()
+		foundConfigChange := 0
+		for _, entry := range raftEntries {
+			if entry.GetOperations() != nil {
+				for _, op := range entry.GetOperations() {
+					if op.GetSetKey() != nil && string(op.GetSetKey().GetKey()) == string(KeyLastConfigChange) {
+						foundConfigChange++
+					}
+				}
+			}
+		}
+		require.Equal(t, foundConfigChange, 2, "expected 2 config change entries, (bootstrap + added)")
+
+		status := replica.node.Status()
+		require.Len(t, status.Config.Voters, 2, "expected two voters in the final configuration")
+
+		entry, err := routingTable.GetEntry(partitionKey)
+		require.NoError(t, err)
+		require.Len(t, entry.Replicas, 2, "expected two replicas in the routing table")
+		require.Equal(t, entry.Replicas[0].GetMemberId(), uint64(1))
+		require.Equal(t, entry.Replicas[1].GetMemberId(), uint64(3))
+	})
+
+	t.Run("remove node that does not exist", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		replica, _, _, _, _ := setupTest(t)
+		t.Cleanup(func() { require.NoError(t, replica.Close()) })
+
+		// Wait for the replica to elect itself as leader
+		require.Eventually(t, func() bool {
+			return replica.AppendedLSN() > 1 && replica.leadership.IsLeader()
+		}, 5*time.Second, 5*time.Millisecond, "replica should become leader")
+
+		err := replica.RemoveNode(ctx, 999)
+		require.EqualError(t, err, "member ID not found in routing table")
+	})
+
+	t.Run("fails when node is not leader", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		replica, _, _, _, _ := setupTest(t)
+		t.Cleanup(func() { require.NoError(t, replica.Close()) })
+
+		// Set a random leader ID to simulate a non-leader
+		replica.leadership.SetLeader(999, false)
+
+		err := replica.AddNode(ctx, "gitaly-node-2:8075")
+		require.EqualError(t, err, "replica is not the leader", "adding node should fail when not leader")
+	})
 }
