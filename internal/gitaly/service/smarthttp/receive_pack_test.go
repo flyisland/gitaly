@@ -905,7 +905,14 @@ func TestPostReceivePack_notAllowed(t *testing.T) {
 		},
 		gitalyhook.NopPostReceive,
 		gitalyhook.NopUpdate,
-		gitalyhook.NopReferenceTransaction,
+		func(t *testing.T, ctx context.Context, state gitalyhook.ReferenceTransactionState, env []string, stdin io.Reader) error {
+			// Discard the stream before returning so the RPC stream does not close before
+			// gitaly-hooks finishes sending the stdin. Doing so leads to flakiness as its expected
+			// that the whole stream is consumed before responding successfully.
+			_, err := io.Copy(io.Discard, stdin)
+			assert.NoError(t, err)
+			return nil
+		},
 		gitalyhook.NewProcReceiveRegistry(),
 	)
 
