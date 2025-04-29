@@ -2,12 +2,14 @@ package blob
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/quarantine"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
@@ -325,8 +327,12 @@ func TestListBlobs(t *testing.T) {
 
 func TestListAllBlobs(t *testing.T) {
 	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.CatfileObjectTypeFilter).Run(t, testListAllBlobs)
+}
 
-	ctx := testhelper.Context(t)
+func testListAllBlobs(t *testing.T, ctx context.Context) {
+	t.Parallel()
+
 	cfg, client := setup(t, ctx)
 
 	repo, _, _ := setupRepoWithLFS(t, ctx, cfg)
