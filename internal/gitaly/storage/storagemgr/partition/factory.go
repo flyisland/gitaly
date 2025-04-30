@@ -89,20 +89,22 @@ func (f Factory) New(
 		logManager = log.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, f.logConsumer, positionTracker)
 	}
 
-	return NewTransactionManager(
-		partitionID,
-		logger,
-		db,
-		storageName,
-		storagePath,
-		absoluteStateDir,
-		stagingDir,
-		f.offloadingSink,
-		f.cmdFactory,
-		repoFactory,
-		f.partitionMetrics.Scope(storageName),
-		logManager,
-	)
+	parameters := &transactionManagerParameters{
+		PtnID:             partitionID,
+		Logger:            logger,
+		DB:                db,
+		StorageName:       storageName,
+		StoragePath:       storagePath,
+		StateDir:          absoluteStateDir,
+		StagingDir:        stagingDir,
+		OffloadingSink:    f.offloadingSink,
+		CmdFactory:        f.cmdFactory,
+		RepositoryFactory: repoFactory,
+		Metrics:           f.partitionMetrics.Scope(storageName),
+		LogManager:        logManager,
+	}
+
+	return NewTransactionManager(parameters)
 }
 
 // NewFactory creates a partition factory with the given components:
