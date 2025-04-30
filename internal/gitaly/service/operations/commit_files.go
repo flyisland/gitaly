@@ -146,20 +146,20 @@ func (s *Server) UserCommitFiles(stream gitalypb.OperationService_UserCommitFile
 	}
 
 	if err := s.userCommitFiles(ctx, header, stream, objectHash); err != nil {
-		log.AddFields(ctx, log.Fields{
-			"repository_storage":       header.GetRepository().GetStorageName(),
-			"repository_relative_path": header.GetRepository().GetRelativePath(),
-			"branch_name":              header.GetBranchName(),
-			"start_branch_name":        header.GetStartBranchName(),
-			"start_sha":                header.GetStartSha(),
-			"force":                    header.GetForce(),
-		})
+		if fields := log.CustomFieldsFromContext(ctx); fields != nil {
+			fields.RecordMetadata("repository_storage", header.GetRepository().GetStorageName())
+			fields.RecordMetadata("repository_relative_path", header.GetRepository().GetRelativePath())
+			fields.RecordMetadata("branch_name", header.GetBranchName())
+			fields.RecordMetadata("start_branch_name", header.GetStartBranchName())
+			fields.RecordMetadata("start_sha", header.GetStartSha())
+			fields.RecordMetadata("force", header.GetForce())
+		}
 
 		if startRepo := header.GetStartRepository(); startRepo != nil {
-			log.AddFields(ctx, log.Fields{
-				"start_repository_storage":       startRepo.GetStorageName(),
-				"start_repository_relative_path": startRepo.GetRelativePath(),
-			})
+			if fields := log.CustomFieldsFromContext(ctx); fields != nil {
+				fields.RecordMetadata("start_repository_storage", startRepo.GetStorageName())
+				fields.RecordMetadata("start_repository_relative_path", startRepo.GetRelativePath())
+			}
 		}
 
 		var (

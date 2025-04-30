@@ -240,10 +240,10 @@ func (c *Coordinator) Collect(metrics chan<- prometheus.Metric) {
 }
 
 func (c *Coordinator) directRepositoryScopedMessage(ctx context.Context, call grpcCall) (*proxy.StreamParameters, error) {
-	log.AddFields(ctx, log.Fields{
-		"virtual_storage": call.targetRepo.GetStorageName(),
-		"relative_path":   call.targetRepo.GetRelativePath(),
-	})
+	if fields := log.CustomFieldsFromContext(ctx); fields != nil {
+		fields.RecordMetadata("virtual_storage", call.targetRepo.GetStorageName())
+		fields.RecordMetadata("relative_path", call.targetRepo.GetRelativePath())
+	}
 
 	var err error
 	var ps *proxy.StreamParameters

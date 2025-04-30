@@ -26,7 +26,9 @@ func (e additionalRepositoryNotFoundError) Error() string {
 }
 
 func addRouteLogField(ctx context.Context, fields log.Fields) {
-	log.AddFields(ctx, log.Fields{"route": fields})
+	if f := log.CustomFieldsFromContext(ctx); f != nil {
+		f.RecordMetadata("route", fields)
+	}
 }
 
 func routerNodeStorages(secondaries []RouterNode) []string {

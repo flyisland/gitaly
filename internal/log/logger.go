@@ -149,12 +149,6 @@ func FromContext(ctx context.Context) LogrusLogger {
 	}
 }
 
-// AddFields adds the given log fields to the context so that it will be used by any logging function like
-// `InfoContext()` that receives a context as input.
-func AddFields(ctx context.Context, fields Fields) {
-	ctxlogrus.AddFields(ctx, fields)
-}
-
 // ConvertLoggingFields converts Fields in go-grpc-middleware/v2/interceptors/logging package
 // into a general map[string]interface{}. So that other logging packages (such as Logrus) can use them.
 func ConvertLoggingFields(fields grpcmwloggingv2.Fields) map[string]any {
