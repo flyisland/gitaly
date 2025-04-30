@@ -1204,7 +1204,16 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		// managerRunning tracks whether the manager is running or closed.
 		managerRunning bool
 		// factory is the factory that produces the current TransactionManager
-		factory = NewFactory(setup.CommandFactory, setup.RepositoryFactory, newMetrics(), setup.Consumer, setup.Config.Raft, raftFactory, setup.OffloadSink)
+		factory = NewFactory(
+			WithCmdFactory(setup.CommandFactory),
+			WithRepoFactory(setup.RepositoryFactory),
+			WithMetrics(newMetrics()),
+			WithLogConsumer(setup.Consumer),
+			WithRaftConfig(setup.Config.Raft),
+			WithRaftFactory(raftFactory),
+			WithOffloadingSink(setup.OffloadSink),
+		)
+
 		// transactionManager is the current TransactionManager instance.
 		transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 		// managerErr is used for synchronizing manager closing and returning

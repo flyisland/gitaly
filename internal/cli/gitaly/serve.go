@@ -442,21 +442,23 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			}
 		}
 
+		partitionFactoryOptions := []partition.FactoryOption{
+			partition.WithCmdFactory(gitCmdFactory),
+			partition.WithRepoFactory(localrepoFactory),
+			partition.WithMetrics(partitionMetrics),
+			partition.WithLogConsumer(logConsumer),
+			partition.WithRaftConfig(cfg.Raft),
+			partition.WithRaftFactory(raftFactory),
+			partition.WithOffloadingSink(offloadingSink),
+		}
+
 		nodeMgr, err := nodeimpl.NewManager(
 			cfg.Storages,
 			storagemgr.NewFactory(
 				logger,
 				dbMgr,
 				migration.NewFactory(
-					partition.NewFactory(
-						gitCmdFactory,
-						localrepoFactory,
-						partitionMetrics,
-						logConsumer,
-						cfg.Raft,
-						raftFactory,
-						offloadingSink,
-					),
+					partition.NewFactory(partitionFactoryOptions...),
 					migrationMetrics,
 					migrations,
 				),
@@ -524,20 +526,19 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			}
 			defer dbMgr.Close()
 
+			partitionFactoryOptions := []partition.FactoryOption{
+				partition.WithCmdFactory(gitCmdFactory),
+				partition.WithRepoFactory(localrepoFactory),
+				partition.WithMetrics(partitionMetrics),
+				partition.WithRaftConfig(cfg.Raft),
+			}
+
 			nodeMgr, err := nodeimpl.NewManager(
 				cfg.Storages,
 				storagemgr.NewFactory(
 					logger,
 					dbMgr,
-					partition.NewFactory(
-						gitCmdFactory,
-						localrepoFactory,
-						partitionMetrics,
-						nil,
-						cfg.Raft,
-						nil,
-						nil,
-					),
+					partition.NewFactory(partitionFactoryOptions...),
 					// In recovery mode we don't want to keep inactive partitions active. The cache
 					// however can't be disabled so simply set it to one.
 					1,

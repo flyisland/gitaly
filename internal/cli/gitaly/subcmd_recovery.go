@@ -552,21 +552,20 @@ func setupRecoveryContext(ctx context.Context, cmd *cli.Command) (rc recoveryCon
 		return nil
 	})
 
+	partitionFactoryOptions := []partition.FactoryOption{
+		partition.WithCmdFactory(gitCmdFactory),
+		partition.WithRepoFactory(localrepo.NewFactory(logger, config.NewLocator(cfg), gitCmdFactory, catfileCache)),
+		partition.WithMetrics(partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))),
+		partition.WithRaftConfig(cfg.Raft),
+	}
+
 	node, err := nodeimpl.NewManager(
 		cfg.Storages,
 		storagemgr.NewFactory(
 			logger,
 			dbMgr,
 			migration.NewFactory(
-				partition.NewFactory(
-					gitCmdFactory,
-					localrepo.NewFactory(logger, config.NewLocator(cfg), gitCmdFactory, catfileCache),
-					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
-					nil,
-					cfg.Raft,
-					nil,
-					nil,
-				),
+				partition.NewFactory(partitionFactoryOptions...),
 				migration.NewMetrics(),
 				[]migration.Migration{},
 			),

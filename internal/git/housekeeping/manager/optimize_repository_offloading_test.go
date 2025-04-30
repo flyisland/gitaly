@@ -170,20 +170,21 @@ func setupNodeForTransaction(t *testing.T, ctx context.Context, cfg gitalycfg.Cf
 
 	raftFactory := raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
 
+	partitionFactoryOptions := []partition.FactoryOption{
+		partition.WithCmdFactory(cmdFactory),
+		partition.WithRepoFactory(localRepoFactory),
+		partition.WithMetrics(partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))),
+		partition.WithRaftConfig(cfg.Raft),
+		partition.WithRaftFactory(raftFactory),
+		partition.WithOffloadingSink(sink),
+	}
+
 	node, err := nodeimpl.NewManager(
 		cfg.Storages,
 		storagemgr.NewFactory(
 			logger,
 			dbMgr,
-			partition.NewFactory(
-				cmdFactory,
-				localRepoFactory,
-				partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
-				nil,
-				cfg.Raft,
-				raftFactory,
-				sink,
-			),
+			partition.NewFactory(partitionFactoryOptions...),
 			storagemgr.DefaultMaxInactivePartitions,
 			storagemgr.NewMetrics(cfg.Prometheus),
 		),

@@ -186,7 +186,15 @@ func TestMigrationManager_Begin(t *testing.T) {
 			require.NoError(t, err)
 
 			raftFactory := raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
-			factory := partition.NewFactory(cmdFactory, repositoryFactory, m, nil, cfg.Raft, raftFactory, nil)
+
+			partitionFactoryOptions := []partition.FactoryOption{
+				partition.WithCmdFactory(cmdFactory),
+				partition.WithRepoFactory(repositoryFactory),
+				partition.WithMetrics(m),
+				partition.WithRaftConfig(cfg.Raft),
+				partition.WithRaftFactory(raftFactory),
+			}
+			factory := partition.NewFactory(partitionFactoryOptions...)
 			tm := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
 
 			ctx, cancel := context.WithCancel(ctx)

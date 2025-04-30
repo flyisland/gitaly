@@ -386,21 +386,21 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 			raftFactory = raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
 		}
 
+		partitionFactoryOptions := []partition.FactoryOption{
+			partition.WithCmdFactory(gsd.gitCmdFactory),
+			partition.WithRepoFactory(localrepo.NewFactory(gsd.logger, gsd.locator, gsd.gitCmdFactory, gsd.catfileCache)),
+			partition.WithMetrics(partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))),
+			partition.WithRaftConfig(cfg.Raft),
+			partition.WithRaftFactory(raftFactory),
+		}
+
 		nodeMgr, err := nodeimpl.NewManager(
 			cfg.Storages,
 			storagemgr.NewFactory(
 				gsd.logger,
 				dbMgr,
 				migration.NewFactory(
-					partition.NewFactory(
-						gsd.gitCmdFactory,
-						localrepo.NewFactory(gsd.logger, gsd.locator, gsd.gitCmdFactory, gsd.catfileCache),
-						partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
-						nil,
-						cfg.Raft,
-						raftFactory,
-						nil,
-					),
+					partition.NewFactory(partitionFactoryOptions...),
 					migration.NewMetrics(),
 					migrations,
 				),

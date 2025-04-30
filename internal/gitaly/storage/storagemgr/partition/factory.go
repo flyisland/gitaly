@@ -106,27 +106,101 @@ func (f Factory) New(
 }
 
 // NewFactory creates a partition factory with the given components:
-// - cmdFactory: Used to create Git commands
-// - repoFactory: Used to create local repository instances
-// - metrics: Used to track partition operations
-// - logConsumer: Consumes WAL entries (optional, can be nil)
-// - raftFactory: Creates Raft replicas for replicated partitions (optional, can be nil)
-func NewFactory(
-	cmdFactory gitcmd.CommandFactory,
-	repoFactory localrepo.Factory,
-	partitionMetrics Metrics,
-	logConsumer storage.LogConsumer,
-	raftCfg config.Raft,
-	raftFactory raftmgr.RaftReplicaFactory,
-	offloadingSink *offloading.Sink,
-) Factory {
+func NewFactory(opts ...FactoryOption) Factory {
+	var options factoryOptions
+	for _, o := range opts {
+		o(&options)
+	}
+
+	if options.cmdFactory == nil {
+		panic("cmdFactory is required")
+	}
+
+	if options.repoFactory == nil {
+		panic("repoFactory is required")
+	}
+
+	if options.partitionMetrics == nil {
+		panic("partitionMetrics is required")
+	}
+
 	return Factory{
-		cmdFactory:       cmdFactory,
-		repoFactory:      repoFactory,
-		partitionMetrics: partitionMetrics,
-		logConsumer:      logConsumer,
-		raftCfg:          raftCfg,
-		raftFactory:      raftFactory,
-		offloadingSink:   offloadingSink,
+		cmdFactory:       options.cmdFactory,
+		repoFactory:      *options.repoFactory,
+		partitionMetrics: *options.partitionMetrics,
+		logConsumer:      options.logConsumer,
+		raftCfg:          options.raftCfg,
+		raftFactory:      options.raftFactory,
+		offloadingSink:   options.offloadingSink,
+	}
+}
+
+// FactoryOption is a functional option that configures a partition factory instance.
+type FactoryOption func(*factoryOptions)
+
+type factoryOptions struct {
+	cmdFactory       gitcmd.CommandFactory
+	repoFactory      *localrepo.Factory
+	partitionMetrics *Metrics
+	logConsumer      storage.LogConsumer
+	raftCfg          config.Raft
+	raftFactory      raftmgr.RaftReplicaFactory
+	offloadingSink   *offloading.Sink
+}
+
+// WithCmdFactory sets the command factory parameter.
+// The cmdFactory is mandatory and is used to create Git commands
+// that the partition uses for repository operations.
+func WithCmdFactory(cf gitcmd.CommandFactory) FactoryOption {
+	return func(o *factoryOptions) {
+		o.cmdFactory = cf
+	}
+}
+
+// WithRepoFactory sets the repository factory parameter.
+// The repoFactory is mandatory and is used to create local repository instances.
+func WithRepoFactory(rf localrepo.Factory) FactoryOption {
+	return func(o *factoryOptions) {
+		o.repoFactory = &rf
+	}
+}
+
+// WithMetrics sets the partition metrics parameter.
+// The partitionMetrics is mandatory and is used to track partition operations.
+func WithMetrics(m Metrics) FactoryOption {
+	return func(o *factoryOptions) {
+		o.partitionMetrics = &m
+	}
+}
+
+// WithLogConsumer sets the log consumer parameter.
+// The logConsumer is optional and is used to consume WAL entries.
+func WithLogConsumer(lc storage.LogConsumer) FactoryOption {
+	return func(o *factoryOptions) {
+		o.logConsumer = lc
+	}
+}
+
+// WithRaftConfig sets the raft configuration parameter.
+// The raft configuration is optional and is used to config Raft.
+func WithRaftConfig(rc config.Raft) FactoryOption {
+	return func(o *factoryOptions) {
+		o.raftCfg = rc
+	}
+}
+
+// WithRaftFactory sets the raft factory parameter.
+// The raft factory is optional and is used to create Raft replicas for replicated partitions.
+func WithRaftFactory(rf raftmgr.RaftReplicaFactory) FactoryOption {
+	return func(o *factoryOptions) {
+		o.raftFactory = rf
+	}
+}
+
+// WithOffloadingSink sets the offloading sink.
+// The offloading sink is optional and is used to upload or download offloaded objects.
+func WithOffloadingSink(s *offloading.Sink) FactoryOption {
+	return func(o *factoryOptions) {
+		o.offloadingSink = s
 	}
 }

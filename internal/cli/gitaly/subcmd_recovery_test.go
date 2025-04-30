@@ -334,20 +334,19 @@ Available WAL backup entries: up to LSN: %s`,
 			catfileCache := catfile.NewCache(cfg)
 			defer catfileCache.Stop()
 
+			partitionFactoryOptions := []partition.FactoryOption{
+				partition.WithCmdFactory(gitCmdFactory),
+				partition.WithRepoFactory(localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache)),
+				partition.WithMetrics(partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))),
+				partition.WithRaftConfig(cfg.Raft),
+			}
+
 			storageMgr, err := storagemgr.NewStorageManager(
 				logger,
 				cfg.Storages[0].Name,
 				cfg.Storages[0].Path,
 				dbMgr,
-				partition.NewFactory(
-					gitCmdFactory,
-					localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache),
-					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
-					nil,
-					cfg.Raft,
-					nil,
-					nil,
-				),
+				partition.NewFactory(partitionFactoryOptions...),
 				1,
 				storagemgr.NewMetrics(cfg.Prometheus),
 			)
@@ -568,7 +567,7 @@ recovery replay completed: 1 succeeded, 0 failed`,
 					expectedOutputs: []string{
 						"started processing partition 2",
 						"restore replay for partition 2 failed: failed to apply latest log entry: transaction processing stopped",
-						"ecovery replay completed: 0 succeeded, 1 failed",
+						"recovery replay completed: 0 succeeded, 1 failed",
 						`msg="partition failed" error="apply log entry: update: apply operations`,
 					},
 					expectedLSN: map[storage.PartitionID]storage.LSN{2: 1},
@@ -647,20 +646,19 @@ Successfully processed log entries up to LSN: %s`,
 			catfileCache := catfile.NewCache(cfg)
 			defer catfileCache.Stop()
 
+			partitionFactoryOptions := []partition.FactoryOption{
+				partition.WithCmdFactory(gitCmdFactory),
+				partition.WithRepoFactory(localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache)),
+				partition.WithMetrics(partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))),
+				partition.WithRaftConfig(cfg.Raft),
+			}
+
 			storageMgr, err := storagemgr.NewStorageManager(
 				logger,
 				cfg.Storages[0].Name,
 				cfg.Storages[0].Path,
 				dbMgr,
-				partition.NewFactory(
-					gitCmdFactory,
-					localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache),
-					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
-					nil,
-					cfg.Raft,
-					nil,
-					nil,
-				),
+				partition.NewFactory(partitionFactoryOptions...),
 				1,
 				storagemgr.NewMetrics(cfg.Prometheus),
 			)
@@ -702,15 +700,7 @@ Successfully processed log entries up to LSN: %s`,
 				cfg.Storages[0].Name,
 				cfg.Storages[0].Path,
 				dbMgr,
-				partition.NewFactory(
-					gitCmdFactory,
-					localrepo.NewFactory(logger, locator, gitCmdFactory, catfileCache),
-					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
-					nil,
-					cfg.Raft,
-					nil,
-					nil,
-				),
+				partition.NewFactory(partitionFactoryOptions...),
 				1,
 				storagemgr.NewMetrics(cfg.Prometheus),
 			)
