@@ -160,7 +160,7 @@ func (m *migrator) Run() {
 					state.cancelCtx = nil
 
 					if err != nil {
-						m.logger.WithFields(log.Fields{
+						m.logger.WithError(err).WithFields(log.Fields{
 							"storage_name":       data.storageName,
 							"relative_path":      data.relativePath,
 							"migration_attempts": state.attempts,
