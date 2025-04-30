@@ -61,6 +61,14 @@ variables:
   RAILS_BRANCH_FOR_JOB: "gitaly-ci-jobs-$CI_PIPELINE_IID"
   GITLAB_ADVANCED_SAST_ENABLED: "true"
 
+  # When FF_USE_GIT_NATIVE_CLONE=false: Always uses git fetch regardless of GIT_STRATEGY
+  # When FF_USE_GIT_NATIVE_CLONE=true and GIT_STRATEGY=clone:
+  #       - Git ≥2.49.0: Uses native `git clone --revision` (supports bundle URI)
+  #       - Git <2.49.0: Falls back to `git fetch` automatically
+  FF_USE_GIT_NATIVE_CLONE: "true"
+  GIT_STRATEGY: "clone"
+
+
 include:
   - template: Jobs/SAST.latest.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
@@ -209,6 +217,8 @@ workflow:
 build:
   needs: []
   stage: build
+  tags:
+    - bundle-uri
   cache:
     - <<: *cache_deps_configuration
       policy: pull-push
@@ -234,6 +244,8 @@ build:
 build:binaries:
   needs: []
   stage: build
+  tags:
+    - bundle-uri
   cache:
     - *cache_deps_configuration
     - *cache_go_configuration
@@ -256,6 +268,8 @@ build:binaries:
 
 test:
   <<: *test_definition
+  tags:
+    - bundle-uri
   parallel:
     matrix:
       # The following jobs all test with our default Git version, which is
