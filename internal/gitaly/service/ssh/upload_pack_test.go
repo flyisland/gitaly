@@ -14,6 +14,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
@@ -105,11 +106,6 @@ func testUploadPackWithSidechannelTimeout(t *testing.T, ctx context.Context, opt
 
 	cfg := testcfg.Build(t, opts...)
 
-	// Use a ticker channel so that we can observe that the ticker is being created. The channel
-	// is unbuffered on purpose so that we can assert that it is getting created exactly at the
-	// time we expect it to be.
-	tickerCh := make(chan *helper.ManualTicker)
-
 	cfg.SocketPath = runSSHServerWithOptions(t, cfg, []ServerOpt{
 		WithUploadPackRequestTimeoutTickerFactory(func() helper.Ticker {
 			// Create a ticker that will immediately tick when getting reset so that the
@@ -118,7 +114,6 @@ func testUploadPackWithSidechannelTimeout(t *testing.T, ctx context.Context, opt
 			ticker.ResetFunc = func() {
 				ticker.Tick()
 			}
-			tickerCh <- ticker
 			return ticker
 		}),
 	})
@@ -133,12 +128,11 @@ func testUploadPackWithSidechannelTimeout(t *testing.T, ctx context.Context, opt
 	client := newSSHClientWithSidechannel(t, ctx, registry, cfg.SocketPath)
 
 	ctx, waiter := sidechannel.RegisterSidechannel(ctx, registry, func(clientConn *sidechannel.ClientConn) (returnedErr error) {
-		// We should now see that the ticker limiting the request is being created. We don't need to
-		// use the ticker, but this statement is only there in order to verify that the ticker is
-		// indeed getting created at the expected point in time.
-		<-tickerCh
-
-		require.NoError(t, clientConn.CloseWrite())
+		// Discard all data and block on the connection closing. The client says nothing
+		// back to the server and doesn't finish the negotiation. This leads to the server
+		// closing the connections once the negotiation timeout fires.
+		_, err := io.Copy(io.Discard, clientConn)
+		assert.NoError(t, err)
 		return nil
 	})
 	defer testhelper.MustClose(t, waiter)
