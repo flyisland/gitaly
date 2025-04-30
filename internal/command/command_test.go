@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
 
@@ -479,22 +480,36 @@ func TestCommand_stderr(t *testing.T) {
 }
 
 func TestCommand_cgroupFailure(t *testing.T) {
-	ctx := testhelper.Context(t)
+	for _, tc := range []struct {
+		desc         string
+		extraOptions []Option
+	}{
+		{desc: "without logger"},
+		{desc: "with logger", extraOptions: []Option{WithSubprocessLogger(log.Config{Format: "text"})}},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			ctx := testhelper.Context(t)
 
-	expectedErr := errors.New("expected")
+			expectedErr := errors.New("expected")
 
-	var underlyingCmd *exec.Cmd
-	cmd, err := New(ctx, testhelper.SharedLogger(t), []string{"cat"}, WithCgroup(mockCgroupManager{
-		addCommandFunc: func(cmd *exec.Cmd, opts ...cgroups.AddCommandOption) (string, error) {
-			underlyingCmd = cmd
-			return "", expectedErr
-		},
-	}), WithSetupStdin())
-	require.Equal(t, expectedErr, err, "err: %s", err)
-	require.Nil(t, cmd)
+			var underlyingCmd *exec.Cmd
+			cmd, err := New(ctx, testhelper.SharedLogger(t), []string{"cat"}, append(
+				tc.extraOptions,
+				WithCgroup(mockCgroupManager{
+					addCommandFunc: func(cmd *exec.Cmd, opts ...cgroups.AddCommandOption) (string, error) {
+						underlyingCmd = cmd
+						return "", expectedErr
+					},
+				}),
+				WithSetupStdin(),
+			)...)
+			require.Equal(t, expectedErr, err, "err: %s", err)
+			require.Nil(t, cmd)
 
-	// The process has leaked. ProcessState is non-nil once the process finishes.
-	require.Nil(t, underlyingCmd.ProcessState)
+			// ProcessState is not nil if the process has exited.
+			require.NotNil(t, underlyingCmd.ProcessState)
+		})
+	}
 }
 
 type mockCgroupManager struct {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -261,53 +262,74 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 	// And finally inject environment variables required for tracing into the command.
 	cmd.Env = envInjector(ctx, cmd.Env)
 
+	closeLogWriter := func() {}
 	if (cfg.logConfiguration != log.Config{}) {
-		// Create a pipe the process will send its logs over.
-		logReader, logWriter, err := os.Pipe()
+		logReader, logWriter, err := func() (_ io.ReadCloser, _ io.WriteCloser, returnedErr error) {
+			var err error
+			// Create a pipe the process will send its logs over.
+			logReader, logWriter, err := os.Pipe()
+			if err != nil {
+				return nil, nil, fmt.Errorf("create log pipe: %w", err)
+			}
+			defer func() {
+				if returnedErr != nil {
+					if err := logReader.Close(); err != nil {
+						returnedErr = errors.Join(returnedErr, fmt.Errorf("close log reader: %w", err))
+					}
+					if err := logWriter.Close(); err != nil {
+						returnedErr = errors.Join(returnedErr, fmt.Errorf("close log writer: %w", err))
+					}
+				}
+			}()
+
+			// Pass the log writer to the command so it can write logs to it.
+			cmd.ExtraFiles = append(cmd.ExtraFiles, logWriter)
+			loggerEnv, err := envSubprocessLoggerConfiguration(subprocessConfiguration{
+				// The first three file descriptors, indexed from zero, are
+				// stdin, stdout and stderr. The log file descriptor is the
+				// last one in the extra files.
+				// The first three file descriptors, indexed from zero, are:
+				// (0) `stdin`, (1) `stdout` and (2) `stderr`.
+				// The log file descriptor is the last one in the extra files.
+				// To get the file descriptor of the log writer in the new sub-process,
+				// we sum the `stderr` index with the number of extra files in the slice.
+				FileDescriptor: uintptr(syscall.Stderr + len(cmd.ExtraFiles)),
+				Config:         cfg.logConfiguration,
+			})
+			if err != nil {
+				return nil, nil, fmt.Errorf("subprocess logger env: %w", err)
+			}
+			cmd.Env = append(cmd.Env, loggerEnv)
+
+			return logReader, logWriter, nil
+		}()
 		if err != nil {
-			return nil, fmt.Errorf("create log pipe: %w", err)
+			return nil, err
 		}
-		defer func() {
-			// Close the file descriptor after spawning the command as we're not
-			// the ones writing into it.
-			if err := logWriter.Close(); err != nil {
+
+		// Close the file descriptor after spawning the command as we're not
+		// the ones writing into it.
+		closeLogWriter = func() {
+			// We always close the write end after starting the command but we also
+			// close it on error to ensure the log processing goroutine will terminate
+			// if the command wasn't started. If there's an error after the command was
+			// started, this could lead to a double close. Ignore the fs.ErrClosed here
+			// to accommodate for this.
+			if err := logWriter.Close(); err != nil && !errors.Is(err, fs.ErrClosed) {
 				returnedErr = errors.Join(returnedErr, fmt.Errorf("close log writer: %w", err))
 			}
+		}
 
-			// If the command failed to be setup, it won't be waited on. Ensure
-			// the logger has stopped before returning to clean up.
+		defer func() {
+			// If starting the command fails, we have to explicitly clean up the
+			// the logger as we won't return the command, and .Wait() won't be
+			// called on it. If we don't do this, we'd leak the logger goroutine
+			// from this constructor.
 			if returnedErr != nil {
-				// Close the reader to ensure the log consuming goroutine returns if the setup
-				// fails after spawning the command. This shouldn't actually be needed as we close
-				// our file descriptor for the write end of the pipe. If the child isn't started
-				// or is terminated, there would be no open writers on the pipe and we'd receive
-				// an EOF. However, New() is leaking child processes if the cgroup setup fails after
-				// the child process was started. Once we no longer leave child processes running
-				// when returning from New() with an error, we can remove this.
-				//
-				// Issue: https://gitlab.com/gitlab-org/gitaly/-/issues/6228
-				if err := logReader.Close(); err != nil {
-					returnedErr = errors.Join(returnedErr, fmt.Errorf("close log reader: %w", err))
-				}
-
+				closeLogWriter()
 				<-command.subprocessLoggerDone
 			}
 		}()
-
-		// Pass the log writer to the command so it can write logs to it.
-		cmd.ExtraFiles = append(cmd.ExtraFiles, logWriter)
-		loggerEnv, err := envSubprocessLoggerConfiguration(subprocessConfiguration{
-			// The first three file descriptors, indexed from zero, are
-			// stdin, stdout and stderr. The log file descriptor is the
-			// last one in the extra files.
-			FileDescriptor: uintptr(2 + len(cmd.ExtraFiles)),
-			Config:         cfg.logConfiguration,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("subprocess logger env: %w", err)
-		}
-		cmd.Env = append(cmd.Env, loggerEnv)
-
 		go func() {
 			defer close(command.subprocessLoggerDone)
 			if err := command.handleSubprocessLogs(logReader); err != nil {
@@ -385,16 +407,48 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 	inFlightCommandGauge.Inc()
 	commandcounter.Increment()
 
-	// The goroutine below is responsible for terminating and reaping the process when ctx is
-	// canceled. While we must ensure that it does run when `cmd.Start()` was successful, it
-	// must not run before have fully set up the command. Otherwise, we may end up with racy
-	// access patterns when the context gets terminated early.
-	//
-	// We thus defer spawning the Goroutine.
 	defer func() {
+		// The command has been successfully started and it now has the write
+		// end of the log pipe open. Close our writer so the reader will correctly
+		// finish when the command closes its write end.
+		closeLogWriter()
+
+		teardown := func() {
+			// Before we kill the child process we need to close the process' standard streams. If
+			// we don't, it may happen that the signal gets delivered and that the process exits
+			// before we close the streams in `command.Wait()`. This would cause downstream readers
+			// to potentially miss those errors when reading stdout.
+			command.teardownStandardStreams()
+
+			// If the context has been cancelled and we didn't explicitly reap
+			// the child process then we need to manually kill it and release
+			// all associated resources.
+			if cmd.Process.Pid > 0 {
+				//nolint:errcheck // TODO: do we want to report errors?
+				// Send SIGTERM to the process group of cmd
+				syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			}
+
+			// We do not care for any potential error code, but just want to
+			// make sure that the subprocess gets properly killed and processed.
+			_ = command.Wait()
+		}
+
+		if returnedErr != nil {
+			teardown()
+			return
+		}
+
+		// The goroutine below is responsible for terminating and reaping the process when ctx is
+		// canceled. While we must ensure that it does run when `cmd.Start()` was successful, it
+		// must not run before have fully set up the command. Otherwise, we may end up with racy
+		// access patterns when the context gets terminated early.
+		//
+		// We thus defer spawning the Goroutine.
 		go func() {
 			select {
 			case <-ctx.Done():
+				teardown()
 				// Before we kill the child process we need to close the process' standard streams. If
 				// we don't, it may happen that the signal gets delivered and that the process exits
 				// before we close the streams in `command.Wait()`. This would cause downstream readers
