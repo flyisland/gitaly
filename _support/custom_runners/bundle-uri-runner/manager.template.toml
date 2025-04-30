@@ -1,0 +1,27 @@
+[[runners]]
+    [runners.autoscaler]
+        plugin = "googlecloud:latest"
+        capacity_per_instance = 1
+        max_instances = 12
+
+    [runners.autoscaler.plugin_config]
+        project = "PLACEHOLDER_PROJECT_NAME"
+        name = "PLACEHOLDER_INSTANCE_GROUP"
+        zone = "PLACEHOLDER_ZONE"
+
+    [[runners.autoscaler.policy]]
+        idle_count = 0
+        idle_time = "5m0s"
+
+    [runners.docker]
+        tls_verify = false
+        image = "alpine:latest"
+        privileged = false
+        disable_entrypoint_overwrite = false
+        oom_kill_disable = false
+        disable_cache = false
+        volumes = ["/cache"]
+        shm_size = 0
+        network_mtu = 0
+        helper_image = "registry.gitlab.com/gitlab-org/gitlab/runner-helper:git-2-49-alpine-3.21-amd64"
+        pull_policy = ["if-not-present"]
