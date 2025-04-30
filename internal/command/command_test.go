@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -477,17 +478,38 @@ func TestCommand_stderr(t *testing.T) {
 	}
 }
 
-type mockCgroupManager struct {
-	cgroups.Manager
-	path string
+func TestCommand_cgroupFailure(t *testing.T) {
+	ctx := testhelper.Context(t)
+
+	expectedErr := errors.New("expected")
+
+	var underlyingCmd *exec.Cmd
+	cmd, err := New(ctx, testhelper.SharedLogger(t), []string{"cat"}, WithCgroup(mockCgroupManager{
+		addCommandFunc: func(cmd *exec.Cmd, opts ...cgroups.AddCommandOption) (string, error) {
+			underlyingCmd = cmd
+			return "", expectedErr
+		},
+	}), WithSetupStdin())
+	require.Equal(t, expectedErr, err, "err: %s", err)
+	require.Nil(t, cmd)
+
+	// The process has leaked. ProcessState is non-nil once the process finishes.
+	require.Nil(t, underlyingCmd.ProcessState)
 }
 
-func (m mockCgroupManager) AddCommand(*exec.Cmd, ...cgroups.AddCommandOption) (string, error) {
-	return m.path, nil
+type mockCgroupManager struct {
+	cgroups.Manager
+	path            string
+	cloneIntoCgroup bool
+	addCommandFunc  func(*exec.Cmd, ...cgroups.AddCommandOption) (string, error)
+}
+
+func (m mockCgroupManager) AddCommand(cmd *exec.Cmd, opts ...cgroups.AddCommandOption) (string, error) {
+	return m.addCommandFunc(cmd, opts...)
 }
 
 func (m mockCgroupManager) SupportsCloneIntoCgroup() bool {
-	return true
+	return m.cloneIntoCgroup
 }
 
 func (m mockCgroupManager) CloneIntoCgroup(*exec.Cmd, ...cgroups.AddCommandOption) (string, io.Closer, error) {
@@ -502,9 +524,12 @@ func TestCommand_logMessage(t *testing.T) {
 	logger.LogrusEntry().Logger.SetLevel(logrus.DebugLevel) //nolint:staticcheck
 	hook := testhelper.AddLoggerHook(logger)
 
+	cgroupPath := "/sys/fs/cgroup/1"
 	cmd, err := New(ctx, logger, []string{"echo", "hello world"},
 		WithCgroup(mockCgroupManager{
-			path: "/sys/fs/cgroup/1",
+			path:            cgroupPath,
+			cloneIntoCgroup: true,
+			addCommandFunc:  func(*exec.Cmd, ...cgroups.AddCommandOption) (string, error) { return cgroupPath, nil },
 		}, nil),
 	)
 	require.NoError(t, err)
