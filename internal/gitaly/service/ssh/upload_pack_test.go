@@ -144,7 +144,7 @@ func testUploadPackWithSidechannelTimeout(t *testing.T, ctx context.Context, opt
 	// Because the client says nothing, the server would block. Because of
 	// the timeout, it won't block forever, and return with a non-zero exit
 	// code instead.
-	testhelper.RequireGrpcError(t, err, structerr.NewDeadlineExceeded("running upload-pack: waiting for negotiation: context canceled"))
+	testhelper.RequireGrpcError(t, structerr.NewDeadlineExceeded("running upload-pack: waiting for negotiation: context canceled"), err)
 }
 
 func TestUploadPackWithSidechannel_client(t *testing.T) {
