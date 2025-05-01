@@ -476,12 +476,6 @@ func TestServer_PostUploadPackWithBundleURI(t *testing.T) {
 			ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.BundleURI, true)
 			ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.BundleGeneration, true)
 
-			testhelper.SkipQuarantinedTest(
-				t,
-				"https://gitlab.com/gitlab-org/gitaly/-/issues/5982",
-				"TestServer_PostUploadPackWithBundleURI/backup_without_bundle_path",
-			)
-
 			cfg := testcfg.Build(t)
 			logger := testhelper.NewLogger(t)
 			hook := testhelper.AddLoggerHook(logger)

@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"slices"
 	"syscall"
 	"testing"
 	"time"
@@ -444,16 +443,13 @@ func GitalyOrPraefect[Type any](gitaly, praefect Type) Type {
 	return gitaly
 }
 
-// SkipQuarantinedTest skips the test if the test name has been specified as
-// quarantined. If no test names are provided the test is always skipped.
-func SkipQuarantinedTest(t *testing.T, issue string, tests ...string) {
+// SkipQuarantinedTest skips the test and marks it as quarntined.
+func SkipQuarantinedTest(t *testing.T, issue string) {
 	if issue == "" {
 		panic("issue not specified")
 	}
 
-	if len(tests) == 0 || slices.Contains(tests, t.Name()) {
-		t.Skipf("This test has been quarantined. Please see %s for more information.", issue)
-	}
+	t.Skipf("This test has been quarantined. Please see %s for more information.", issue)
 }
 
 // pkgPath is used to determine the package path using reflection.
