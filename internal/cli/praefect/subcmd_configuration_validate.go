@@ -22,8 +22,7 @@ Applies validation rules to Praefect configuration provided on stdin and returns
 errors in JSON format on stdout.
 
 Example: praefect configuration validate < praefect.config.toml`,
-		HideHelpCommand: true,
-		Action:          configurationValidateAction,
+		Action: configurationValidateAction,
 	}
 }
 

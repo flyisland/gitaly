@@ -13,11 +13,10 @@ const sqlPingCmdName = "sql-ping"
 
 func newSQLPingCommand() *cli.Command {
 	return &cli.Command{
-		Name:            sqlPingCmdName,
-		Usage:           "check reachability of the database",
-		Description:     "The subcommand checks if the database configured in the configuration file is reachable",
-		HideHelpCommand: true,
-		Action:          sqlPingAction,
+		Name:        sqlPingCmdName,
+		Usage:       "check reachability of the database",
+		Description: "The subcommand checks if the database configured in the configuration file is reachable",
+		Action:      sqlPingAction,
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
 			if cmd.Args().Present() {
 				_ = cli.ShowSubcommandHelp(cmd)

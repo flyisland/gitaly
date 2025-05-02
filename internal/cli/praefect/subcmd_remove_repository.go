@@ -39,8 +39,7 @@ Example: praefect --config praefect.config.toml remove-repository --virtual-stor
 - (Optional) Replicas of the repository on all physical storages.
 
 By default, runs in dry-run mode to check if the repository exists in the Praefect database.`,
-		HideHelpCommand: true,
-		Action:          removeRepositoryAction,
+		Action: removeRepositoryAction,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     paramVirtualStorage,

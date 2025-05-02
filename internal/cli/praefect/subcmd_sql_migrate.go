@@ -24,8 +24,7 @@ func newSQLMigrateCommand() *cli.Command {
 		Description: "The sql-migrate subcommand applies outstanding migrations to the configured database.\n" +
 			"The subcommand doesn't fail if database has migrations unknown to the version of Praefect you're using.\n" +
 			"To make the subcommand fail on unknown migrations, use the 'ignore-unknown' flag.",
-		HideHelpCommand: true,
-		Action:          sqlMigrateAction,
+		Action: sqlMigrateAction,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "ignore-unknown",

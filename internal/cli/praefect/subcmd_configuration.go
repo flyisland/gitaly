@@ -8,14 +8,9 @@ const configurationCmdName = "configuration"
 
 func newConfigurationCommand() *cli.Command {
 	return &cli.Command{
-		Name:  configurationCmdName,
-		Usage: "manage configuration",
-		Description: `Manage Praefect configuration.
-
-Provides the following subcommand:
-
-- validate`,
-		HideHelpCommand: true,
+		Name:        configurationCmdName,
+		Usage:       "manage configuration",
+		Description: "Manage Praefect configuration.",
 		Commands: []*cli.Command{
 			newConfigurationValidateCommand(),
 		},

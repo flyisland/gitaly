@@ -33,8 +33,7 @@ Examples:
 - praefect --config praefect.config.toml verify --repository-id 1
 - praefect --config praefect.config.toml verify --virtual-storage default
 - praefect --config praefect.config.toml verify --virtual-storage default --storage <physical_storage_1>`,
-		HideHelpCommand: true,
-		Action:          verifyAction,
+		Action: verifyAction,
 		Flags: []cli.Flag{
 			&cli.IntFlag{
 				Name:  "repository-id",

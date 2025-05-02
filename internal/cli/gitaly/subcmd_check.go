@@ -24,10 +24,9 @@ func newCheckCommand() *cli.Command {
 		UsageText: `gitaly check <gitaly_config_file>
 
 Example: gitaly check gitaly.config.toml`,
-		Description:     "Check that the internal Gitaly API is accessible.",
-		ArgsUsage:       "<configfile>",
-		Action:          checkAction,
-		HideHelpCommand: true,
+		Description: "Check that the internal Gitaly API is accessible.",
+		ArgsUsage:   "<configfile>",
+		Action:      checkAction,
 	}
 }
 

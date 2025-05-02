@@ -18,8 +18,7 @@ func newSQLMigrateDownCommand() *cli.Command {
 		Usage: "apply revert SQL migrations",
 		Description: "The sql-migrate-down subcommand applies revert migrations to the configured database.\n" +
 			"It accepts a single argument - amount of migrations to revert.",
-		HideHelpCommand: true,
-		Action:          sqlMigrateDownAction,
+		Action: sqlMigrateDownAction,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "f",

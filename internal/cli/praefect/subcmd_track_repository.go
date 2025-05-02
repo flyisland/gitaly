@@ -37,8 +37,7 @@ func newTrackRepositoryCommand() *cli.Command {
 			"the repository to the secondaries. The command is blocked until the\n" +
 			"replication finishes. Otherwise, replication jobs will be created and will " +
 			"be executed eventually by Praefect in the background.\n",
-		HideHelpCommand: true,
-		Action:          trackRepositoryAction,
+		Action: trackRepositoryAction,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     paramVirtualStorage,

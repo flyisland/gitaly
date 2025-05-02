@@ -35,8 +35,7 @@ func newTrackRepositoriesCommand() *cli.Command {
 			"If -replicate-immediately is used, the command will attempt to replicate the repositories\n" +
 			"to the secondaries. Otherwise, replication jobs will be created and will be executed\n" +
 			"eventually by Praefect itself.\n",
-		HideHelpCommand: true,
-		Action:          trackRepositoriesAction,
+		Action: trackRepositoriesAction,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "replicate-immediately",

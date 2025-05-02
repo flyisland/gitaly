@@ -27,8 +27,7 @@ If the virtual-storage flag:
 - Is not specified, lists physical storages for all virtual storages.
 
 Example: praefect --config praefect.config.toml list-storages --virtual-storage default`,
-		HideHelpCommand: true,
-		Action:          listStoragesAction,
+		Action: listStoragesAction,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  paramVirtualStorage,
