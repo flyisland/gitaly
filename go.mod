@@ -229,12 +229,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-exclude (
-	// CVE-2020-28483
-	github.com/gin-gonic/gin v1.4.0
-	github.com/gin-gonic/gin v1.6.3
-)
-
 // +gitaly pinVersion github.com/ProtonMail/go-crypto v1.0.0
 // The upstream introduced a significant rework on signature verification. This might affect commit signing feature
 // in Gitaly.
