@@ -16,11 +16,13 @@ import (
 	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/manager"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/transactiontest"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -300,4 +302,104 @@ func TestOptimizeRepository_logStatistics(t *testing.T) {
 	require.NoError(t, err)
 
 	requireRepositoryInfoLog(t, hook.AllEntries()...)
+}
+
+func TestOffloadingRepository_validation(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	for _, tc := range []struct {
+		desc             string
+		request          *gitalypb.OptimizeRepositoryRequest
+		offloadingConfig config.Offloading
+		expectedErr      error
+
+		// shouldSkip check if we should skip this test. If shouldSkip is nil, it means never skip this test.
+		shouldSkip func() bool
+	}{
+		{
+			desc: "offloading is disabled by default",
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_OFFLOADING,
+			},
+			expectedErr: structerr.NewUnimplemented("offloading feature not enabled"),
+		},
+		{
+			desc: "offloading not enabled in config",
+			offloadingConfig: config.Offloading{
+				Enabled: false,
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_OFFLOADING,
+			},
+			expectedErr: structerr.NewUnimplemented("offloading feature not enabled"),
+		},
+		{
+			desc: "offloading missing sink URL",
+			offloadingConfig: config.Offloading{
+				Enabled:   true,
+				CacheRoot: "/whatever_dir/",
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_OFFLOADING,
+			},
+			expectedErr: structerr.NewInvalidArgument("offloading configuration missing sink URL"),
+		},
+		{
+			desc: "offloading when WAL is disabled",
+			offloadingConfig: config.Offloading{
+				Enabled:    true,
+				CacheRoot:  "/whatever_dir/",
+				GoCloudURL: "file:://tmp",
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_OFFLOADING,
+			},
+			expectedErr: structerr.NewInternal("unable to retrieve storage node"),
+			shouldSkip: func() bool {
+				// Skip this only when WAL is enabled
+				return testhelper.IsWALEnabled()
+			},
+		},
+		{
+			desc: "offloading invalid sink URL",
+			offloadingConfig: config.Offloading{
+				Enabled:    true,
+				CacheRoot:  "/whatever_dir/",
+				GoCloudURL: "fake:://s3",
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_OFFLOADING,
+			},
+
+			// Invalid GoCloudURL prevents transaction manager from creating a bucket,
+			// resulting in an internal error.
+			expectedErr: structerr.NewInternal("absent offloading sink"),
+			shouldSkip: func() bool {
+				// Skip this only when WAL is disabled.
+				return !testhelper.IsWALEnabled()
+			},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			if tc.shouldSkip != nil && tc.shouldSkip() {
+				t.Skip("Skipping test as per 'shouldSkip' condition")
+			}
+
+			t.Parallel()
+
+			cfg := testcfg.Build(t)
+			testcfg.BuildGitalyHooks(t, cfg)
+			testcfg.BuildGitalySSH(t, cfg)
+			cfg.Offloading = tc.offloadingConfig
+			client, serverSocketPath := runRepositoryService(t, cfg)
+			cfg.SocketPath = serverSocketPath
+			repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+			tc.request.Repository = repo
+			_, err := client.OptimizeRepository(ctx, tc.request)
+			testhelper.RequireGrpcErrorContains(t, tc.expectedErr, err)
+		})
+	}
 }

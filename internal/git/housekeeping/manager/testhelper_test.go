@@ -104,19 +104,21 @@ func testWithAndWithoutTransaction(t *testing.T, ctx context.Context, desc strin
 			require.NoError(t, err)
 
 			raftFactory := raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
+
+			partitionFactoryOptions := []partition.FactoryOption{
+				partition.WithCmdFactory(cmdFactory),
+				partition.WithRepoFactory(localRepoFactory),
+				partition.WithMetrics(partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))),
+				partition.WithRaftConfig(cfg.Raft),
+				partition.WithRaftFactory(raftFactory),
+			}
+
 			node, err := nodeimpl.NewManager(
 				cfg.Storages,
 				storagemgr.NewFactory(
 					logger,
 					dbMgr,
-					partition.NewFactory(
-						cmdFactory,
-						localRepoFactory,
-						partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
-						nil,
-						cfg.Raft,
-						raftFactory,
-					),
+					partition.NewFactory(partitionFactoryOptions...),
 					storagemgr.DefaultMaxInactivePartitions,
 					storagemgr.NewMetrics(cfg.Prometheus),
 				),

@@ -58,14 +58,13 @@ type RepackObjectsConfig struct {
 
 // OffloadingConfig contains configuration that can be passed to housekeeping manager's OffloadRepository function.
 type OffloadingConfig struct {
-	// Filter is the filter used to do git-repack
-	Filter string
-	// CachePath is the absolute path of the cache folder.
-	CachePath string
-	// Prefix is the prefix used when uploading to the sink.
+	// CacheRoot is the absolute path of the cache root.
+	CacheRoot string
+	// SinkBaseURL is the URL for the sink without any query parameters. This field is NOT used to initialize
+	// the sink, but rather to build the prefix when uploading content to the sink.
+	SinkBaseURL string
+	// Prefix is the prefix used when uploading to the sink. If empty, an auto-generated prefix is used when
+	// preparing offloading. An empty prefix should be the default case. Only in some  testing cases
+	// the prefix will need to set because we need to know the prefix to look up the object beforehand.
 	Prefix string
-	// OriginalRepo is the absolute path of the repository being offloaded. It is NOT the snapshot repo's path.
-	OriginalRepo string
-	// SinkURL is the URL for the sink of the upload.
-	SinkURL string
 }

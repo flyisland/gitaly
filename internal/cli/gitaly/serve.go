@@ -53,6 +53,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter/watchers"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/offloading"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/streamcache"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/tempdir"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/tracing"
@@ -61,6 +62,7 @@ import (
 	"gitlab.com/gitlab-org/labkit/monitoring"
 	labkittracing "gitlab.com/gitlab-org/labkit/tracing"
 	"go.uber.org/automaxprocs/maxprocs"
+	"gocloud.dev/blob"
 	"google.golang.org/grpc"
 
 	// Import to register the proxy codec with gRPC.
@@ -415,20 +417,40 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			raftFactory = raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
 		}
 
+		var offloadingSink *offloading.Sink
+		if cfg.Offloading.Enabled {
+			if cfg.Offloading.GoCloudURL == "" {
+				return fmt.Errorf("empty offloading storage URL")
+			}
+			var bucket *blob.Bucket
+			var err error
+			if bucket, err = blob.OpenBucket(ctx, cfg.Offloading.GoCloudURL); err != nil {
+				return fmt.Errorf("create offloading bucket: %w", err)
+			}
+			defer func() { _ = bucket.Close() }()
+
+			if offloadingSink, err = offloading.NewSink(bucket); err != nil {
+				return fmt.Errorf("create offloading sink: %w", err)
+			}
+		}
+
+		partitionFactoryOptions := []partition.FactoryOption{
+			partition.WithCmdFactory(gitCmdFactory),
+			partition.WithRepoFactory(localrepoFactory),
+			partition.WithMetrics(partitionMetrics),
+			partition.WithLogConsumer(logConsumer),
+			partition.WithRaftConfig(cfg.Raft),
+			partition.WithRaftFactory(raftFactory),
+			partition.WithOffloadingSink(offloadingSink),
+		}
+
 		nodeMgr, err := nodeimpl.NewManager(
 			cfg.Storages,
 			storagemgr.NewFactory(
 				logger,
 				dbMgr,
 				migration.NewFactory(
-					partition.NewFactory(
-						gitCmdFactory,
-						localrepoFactory,
-						partitionMetrics,
-						logConsumer,
-						cfg.Raft,
-						raftFactory,
-					),
+					partition.NewFactory(partitionFactoryOptions...),
 					migrationMetrics,
 					migrations,
 				),
@@ -496,19 +518,19 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			}
 			defer dbMgr.Close()
 
+			partitionFactoryOptions := []partition.FactoryOption{
+				partition.WithCmdFactory(gitCmdFactory),
+				partition.WithRepoFactory(localrepoFactory),
+				partition.WithMetrics(partitionMetrics),
+				partition.WithRaftConfig(cfg.Raft),
+			}
+
 			nodeMgr, err := nodeimpl.NewManager(
 				cfg.Storages,
 				storagemgr.NewFactory(
 					logger,
 					dbMgr,
-					partition.NewFactory(
-						gitCmdFactory,
-						localrepoFactory,
-						partitionMetrics,
-						nil,
-						cfg.Raft,
-						nil,
-					),
+					partition.NewFactory(partitionFactoryOptions...),
 					// In recovery mode we don't want to keep inactive partitions active. The cache
 					// however can't be disabled so simply set it to one.
 					1,

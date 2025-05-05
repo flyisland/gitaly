@@ -29,11 +29,14 @@ import (
 )
 
 func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID storage.PartitionID, relativePath string) []transactionTestCase {
-	sink, sinkURL := setupEmptyLocalBucket(t, testhelper.TempDir(t), true)
-	unstableSink, unstableSinkURL := setupEmptyLocalBucket(t, testhelper.TempDir(t), false)
+	sink, sinkURL, bucket := setupEmptyLocalBucket(t, testhelper.TempDir(t), true)
+	unstableSink, unstableSinkURL, defectedBucket := setupEmptyLocalBucket(t, testhelper.TempDir(t), false)
+	t.Cleanup(func() {
+		_ = bucket.Close()
+		_ = defectedBucket.Close()
+	})
 
 	cacheRoot := filepath.Join(testhelper.TempDir(t), "offloading_cache")
-	filter := "blob:none"
 
 	// Run setupOffloadingRepo once to gather object information (blobs, trees, etc.) needed for test expectations.
 	// This information becomes inaccessible after customSetup() is called within transactionTestCase.
@@ -47,6 +50,12 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 		// Creating a new setup would generate different commits due to different timestamps,
 		// making it difficult to predict and verify the expected repository state.
 		setup, _, _, _, _, _ := setupOffloadingRepo(t, ctx, testPartitionID, relativePath)
+		setup.Config.Offloading = config.Offloading{
+			Enabled:    true,
+			CacheRoot:  cacheRoot,
+			GoCloudURL: sinkURL,
+		}
+		setup.OffloadSink = sink
 		return setup
 	}
 
@@ -76,7 +85,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -85,11 +93,9 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 1,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   sinkURL,
-						Prefix:    filepath.Join(relativePath, pathPrefixUUID),
-						Filter:    filter,
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: sinkURL,
+						Prefix:      filepath.Join(relativePath, pathPrefixUUID),
 					},
 				},
 				Commit{
@@ -159,9 +165,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 			desc:        "cannot offload a repository with loose objects",
 			customSetup: customSetup,
 			steps: steps{
-				StartManager{
-					Sink: sink,
-				},
+				StartManager{},
 				Begin{
 					TransactionID: 1,
 					RelativePaths: []string{relativePath},
@@ -169,10 +173,8 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 1,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   sinkURL,
-						Filter:    filter,
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: sinkURL,
 					},
 				},
 				Commit{
@@ -246,7 +248,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: unstableSink,
+					OverridingSink: unstableSink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -255,10 +257,8 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 1,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   unstableSinkURL,
-						Filter:    filter,
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: unstableSinkURL,
 					},
 				},
 				Commit{
@@ -333,7 +333,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -342,11 +341,9 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 1,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   sinkURL,
-						Prefix:    filepath.Join(relativePath, pathPrefixUUID),
-						Filter:    filter,
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: sinkURL,
+						Prefix:      filepath.Join(relativePath, pathPrefixUUID),
 					},
 				},
 				Begin{
@@ -356,11 +353,9 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 2,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   sinkURL,
-						Prefix:    filepath.Join(relativePath, anotherTxnPathPrefixUUID),
-						Filter:    filter,
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: sinkURL,
+						Prefix:      filepath.Join(relativePath, anotherTxnPathPrefixUUID),
 					},
 				},
 				Commit{
@@ -441,7 +436,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -462,10 +456,8 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 2,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   sinkURL,
-						Filter:    filter,
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: sinkURL,
 					},
 				},
 				Commit{
@@ -538,7 +530,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 				Begin{
 					TransactionID: 1,
@@ -551,11 +542,9 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 2,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   sinkURL,
-						Filter:    filter,
-						Prefix:    filepath.Join(relativePath, pathPrefixUUID),
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: sinkURL,
+						Prefix:      filepath.Join(relativePath, pathPrefixUUID),
 					},
 				},
 				Commit{
@@ -633,7 +622,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 							RelativePath:           "fake_pool",
 						})
 					},
-					Sink: sink,
 				},
 
 				Begin{
@@ -647,10 +635,8 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 2,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   sinkURL,
-						Filter:    filter,
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: sinkURL,
 					},
 				},
 
@@ -730,7 +716,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 						// ineffective when there is loose objects.
 						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
 					},
-					Sink: sink,
 				},
 
 				Begin{
@@ -744,10 +729,8 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				RunOffloading{
 					TransactionID: 2,
 					Config: housekeepingcfg.OffloadingConfig{
-						CachePath: absCachePath,
-						SinkURL:   sinkURL,
-						Filter:    filter,
-						// Other fields are determined at wrapOffloadingConfig()
+						CacheRoot:   cacheRoot,
+						SinkBaseURL: sinkURL,
 					},
 				},
 				Commit{
@@ -817,7 +800,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 }
 
 // setupEmptyLocalBucket initializes an empty Bucket backed by the local file system.
-func setupEmptyLocalBucket(t *testing.T, localBucketDir string, stable bool) (*offloading.Sink, string) {
+func setupEmptyLocalBucket(t *testing.T, localBucketDir string, stable bool) (*offloading.Sink, string, offloading.Bucket) {
 	ctx := testhelper.Context(t)
 	localBucketURL := fmt.Sprintf("file://%s", localBucketDir)
 	var bucket offloading.Bucket
@@ -830,13 +813,7 @@ func setupEmptyLocalBucket(t *testing.T, localBucketDir string, stable bool) (*o
 	require.NoError(t, err)
 	sink, err := offloading.NewSink(bucket)
 	require.NoError(t, err)
-	return sink, localBucketURL
-}
-
-// wrapOffloadingConfig
-func wrapOffloadingConfig(_ context.Context, in *housekeepingcfg.OffloadingConfig, setup testTransactionSetup) housekeepingcfg.OffloadingConfig {
-	in.OriginalRepo = setup.RepositoryPath
-	return *in
+	return sink, localBucketURL, bucket
 }
 
 func setupOffloadingRepo(t *testing.T, ctx context.Context, testPartitionID storage.PartitionID, relativePath string) (

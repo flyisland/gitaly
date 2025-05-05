@@ -760,9 +760,10 @@ func (txn *Transaction) WriteCommitGraphs(config housekeepingcfg.WriteCommitGrap
 	}
 }
 
-// OffloadRepository configures a transaction to run an offloading task
-// by setting the runOffloading struct.
-func (txn *Transaction) OffloadRepository(cfg housekeepingcfg.OffloadingConfig) {
+// SetOffloadingConfig configures a transaction to run an offloading task
+// by setting the runOffloading struct. This configuration will be picked up later
+// by the prepareOffloading function to execute an offloading task when the transaction commits.
+func (txn *Transaction) SetOffloadingConfig(cfg housekeepingcfg.OffloadingConfig) {
 	if txn.runHousekeeping == nil {
 		txn.runHousekeeping = &runHousekeeping{}
 	}
@@ -958,8 +959,8 @@ type TransactionManager struct {
 	// metrics stores reporters which facilitate metric recording of transactional operations.
 	metrics ManagerMetrics
 
-	// sink points to the offloading storage used during offloading tasks.
-	sink *offloading.Sink
+	// offloadingSink points to the offloading storage used during offloading tasks.
+	offloadingSink *offloading.Sink
 }
 
 // testHooks defines hooks for testing various stages of WAL log operations.
@@ -976,20 +977,21 @@ type testHooks struct {
 	beforeRunExiting func()
 }
 
+type transactionManagerParameters struct {
+	PtnID                    storage.PartitionID
+	Logger                   logging.Logger
+	DB                       keyvalue.Transactioner
+	StorageName, StoragePath string
+	StateDir, StagingDir     string
+	OffloadingSink           *offloading.Sink
+	CmdFactory               gitcmd.CommandFactory
+	RepositoryFactory        localrepo.StorageScopedFactory
+	Metrics                  ManagerMetrics
+	LogManager               storage.LogManager
+}
+
 // NewTransactionManager returns a new TransactionManager for the given repository.
-func NewTransactionManager(
-	ptnID storage.PartitionID,
-	logger logging.Logger,
-	db keyvalue.Transactioner,
-	storageName,
-	storagePath,
-	stateDir,
-	stagingDir string,
-	cmdFactory gitcmd.CommandFactory,
-	repositoryFactory localrepo.StorageScopedFactory,
-	metrics ManagerMetrics,
-	logManager storage.LogManager,
-) *TransactionManager {
+func NewTransactionManager(parameters *transactionManagerParameters) *TransactionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cleanupWorkers := &errgroup.Group{}
@@ -998,27 +1000,28 @@ func NewTransactionManager(
 	return &TransactionManager{
 		ctx:                 ctx,
 		close:               cancel,
-		logger:              logger,
+		logger:              parameters.Logger,
 		closing:             ctx.Done(),
 		closed:              make(chan struct{}),
-		commandFactory:      cmdFactory,
-		repositoryFactory:   repositoryFactory,
-		storageName:         storageName,
-		storagePath:         storagePath,
-		partitionID:         ptnID,
-		db:                  db,
-		logManager:          logManager,
+		commandFactory:      parameters.CmdFactory,
+		repositoryFactory:   parameters.RepositoryFactory,
+		storageName:         parameters.StorageName,
+		storagePath:         parameters.StoragePath,
+		partitionID:         parameters.PtnID,
+		db:                  parameters.DB,
+		logManager:          parameters.LogManager,
 		admissionQueue:      make(chan *Transaction),
 		completedQueue:      make(chan struct{}, 1),
 		initialized:         make(chan struct{}),
 		snapshotLocks:       make(map[storage.LSN]*snapshotLock),
 		conflictMgr:         conflict.NewManager(),
 		fsHistory:           fshistory.New(),
-		stagingDirectory:    stagingDir,
+		stagingDirectory:    parameters.StagingDir,
 		cleanupWorkers:      cleanupWorkers,
 		cleanupWorkerFailed: make(chan struct{}),
 		committedEntries:    list.New(),
-		metrics:             metrics,
+		metrics:             parameters.Metrics,
+		offloadingSink:      parameters.OffloadingSink,
 
 		testHooks: testHooks{
 			beforeInitialization:  func() {},

@@ -129,7 +129,7 @@ func (m *RepositoryManager) runInTransaction(ctx context.Context, readOnly bool,
 	defer func() {
 		if returnedErr != nil {
 			if err := tx.Rollback(ctx); err != nil {
-				returnedErr = errors.Join(err, fmt.Errorf("rollback: %w", err))
+				returnedErr = errors.Join(returnedErr, fmt.Errorf("rollback: %w", err))
 			}
 		}
 	}()

@@ -424,19 +424,20 @@ func testWithAndWithoutTransaction(t *testing.T, ctx context.Context, testFunc f
 		defer dbMgr.Close()
 
 		localRepoFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, catfileCache)
+
+		partitionFactoryOptions := []partition.FactoryOption{
+			partition.WithCmdFactory(cmdFactory),
+			partition.WithRepoFactory(localRepoFactory),
+			partition.WithMetrics(partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))),
+			partition.WithRaftConfig(cfg.Raft),
+		}
+
 		node, err := nodeimpl.NewManager(
 			cfg.Storages,
 			storagemgr.NewFactory(
 				logger,
 				dbMgr,
-				partition.NewFactory(
-					cmdFactory,
-					localRepoFactory,
-					partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus)),
-					nil,
-					cfg.Raft,
-					nil,
-				),
+				partition.NewFactory(partitionFactoryOptions...),
 				storagemgr.DefaultMaxInactivePartitions,
 				storagemgr.NewMetrics(cfg.Prometheus),
 			),

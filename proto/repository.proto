@@ -1320,6 +1320,9 @@ message OptimizeRepositoryRequest {
     // STRATEGY_EAGER performs eager optimizations in the repository. The server will optimize all
     // data structures regardless of whether they are well-optimized already.
     STRATEGY_EAGER = 2;
+
+    // STRATEGY_OFFLOADING selectively moves repository objects to secondary storage.
+    STRATEGY_OFFLOADING = 3;
   }
 
   // repository is the repository that should be optimized.
