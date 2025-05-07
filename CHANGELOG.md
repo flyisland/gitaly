@@ -14,6 +14,10 @@ No changes.
 
 - [Revert "catfile: Ensure we are not recycling catfile keys each hour"](gitlab-org/gitaly@fc605ba5ca94c0978cd26b9de8c954fc23e4fb5f) ([merge request](gitlab-org/gitaly!7783))
 
+## 17.10.6 (2025-05-07)
+
+No changes.
+
 ## 17.10.5 (2025-04-22)
 
 No changes.
