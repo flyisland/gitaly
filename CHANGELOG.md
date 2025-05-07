@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 17.11.2 (2025-05-07)
+
+No changes.
+
 ## 17.11.1 (2025-04-22)
 
 No changes.
@@ -9,6 +13,10 @@ No changes.
 ### Other (1 change)
 
 - [Revert "catfile: Ensure we are not recycling catfile keys each hour"](gitlab-org/gitaly@fc605ba5ca94c0978cd26b9de8c954fc23e4fb5f) ([merge request](gitlab-org/gitaly!7783))
+
+## 17.10.6 (2025-05-07)
+
+No changes.
 
 ## 17.10.5 (2025-04-22)
 
@@ -31,6 +39,10 @@ No changes.
 No changes.
 
 ## 17.10.0 (2025-03-19)
+
+No changes.
+
+## 17.9.8 (2025-05-07)
 
 No changes.
 
