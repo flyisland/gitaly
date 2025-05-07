@@ -793,6 +793,18 @@ func (txn *Transaction) SetOffloadingConfig(cfg housekeepingcfg.OffloadingConfig
 	}
 }
 
+// SetRehydratingConfig configures a transaction to run a rehydrating task
+// by setting the runRehydrating struct. This configuration will be picked up later
+// by the prepareRehydrating function to execute a rehydrating task when the transaction commits.
+func (txn *Transaction) SetRehydratingConfig(prefix string) {
+	if txn.runHousekeeping == nil {
+		txn.runHousekeeping = &runHousekeeping{}
+	}
+	txn.runHousekeeping.runRehydrating = &runRehydrating{
+		prefix: prefix,
+	}
+}
+
 // KV returns a handle to the key-value store snapshot of the transaction.
 func (txn *Transaction) KV() keyvalue.ReadWriter {
 	return keyvalue.NewPrefixedReadWriter(txn.recordingReadWriter, []byte("kv/"))

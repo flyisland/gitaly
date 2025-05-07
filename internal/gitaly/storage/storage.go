@@ -134,6 +134,10 @@ type Transaction interface {
 	// and schedules the offloading operation to execute when the transaction commits.
 	// It stores the offloading configuration in the transaction's runOffloading struct.
 	SetOffloadingConfig(housekeepingcfg.OffloadingConfig)
+	// SetRehydratingConfig configures the transaction with repository bucket prefix
+	// and schedules the rehydrating operation to execute when the transaction commits.
+	// It stores the bucket prefix in the transaction's runRehydrating struct.
+	SetRehydratingConfig(string)
 }
 
 // BeginOptions are used to configure a transaction that is being started.

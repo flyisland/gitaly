@@ -375,7 +375,7 @@ func TestOffloadingRepository_validation(t *testing.T) {
 
 			// Invalid GoCloudURL prevents transaction manager from creating a bucket,
 			// resulting in an internal error.
-			expectedErr: structerr.NewInternal("absent offloading sink"),
+			expectedErr: structerr.NewInternal("offloading sink is not configured"),
 			shouldSkip: func() bool {
 				// Skip this only when WAL is disabled.
 				return !testhelper.IsWALEnabled()
