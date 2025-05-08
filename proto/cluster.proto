@@ -65,6 +65,17 @@ message ReplicaID {
   }
   // metadata contains replica information.
   Metadata metadata = 4;
+  // ReplicaType indicates whether a replica is a voter or learner in the Raft cluster
+  enum ReplicaType {
+    // REPLICA_TYPE_UNSPECIFIED.
+    REPLICA_TYPE_UNSPECIFIED = 0;
+    // REPLICA_TYPE_VOTER indicates a replica that can participate in Raft elections and voting.
+    REPLICA_TYPE_VOTER = 1;
+    // REPLICA_TYPE_LEARNER indicates a replica that receives updates but cannot vote.
+    REPLICA_TYPE_LEARNER = 2;
+  }
+  // type indicates whether the replica is learner or voter.
+  ReplicaType type = 5;
 }
 
 // RaftMessageRequest is a request for the SendMessage RPC. It serves as a

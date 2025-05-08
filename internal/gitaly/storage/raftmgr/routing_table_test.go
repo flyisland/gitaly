@@ -106,6 +106,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	}
 
 	t.Run("add node", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -136,6 +137,8 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	})
 
 	t.Run("remove node", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -157,12 +160,14 @@ func TestApplyReplicaConfChange(t *testing.T) {
 					MemberId:     1,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:1234"),
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 				},
 				{
 					PartitionKey: partitionKey,
 					MemberId:     2,
 					StorageName:  "test-authority",
 					Metadata:     createMetadata("localhost:5678"),
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 				},
 			},
 			Term:  1,
@@ -185,10 +190,43 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		require.Len(t, updatedEntry.Replicas, 1)
 		require.Equal(t, uint64(1), updatedEntry.LeaderID)
 		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetMemberId())
+		require.Equal(t, gitalypb.ReplicaID_REPLICA_TYPE_VOTER, updatedEntry.Replicas[0].GetType())
 		require.Equal(t, "localhost:1234", updatedEntry.Replicas[0].GetMetadata().GetAddress())
 	})
 
+	t.Run("add learner node", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, kvStore.Close())
+		}()
+
+		rt := NewKVRoutingTable(kvStore)
+
+		partitionKey := &gitalypb.PartitionKey{
+			AuthorityName: "test-authority",
+			PartitionId:   1,
+		}
+
+		changes := NewReplicaConfChanges(1, 1, 1, createMetadata("localhost:1234"))
+		changes.AddChange(1, ConfChangeAddLearnerNode)
+
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		require.NoError(t, err)
+
+		updatedEntry, err := rt.GetEntry(partitionKey)
+		require.NoError(t, err)
+
+		require.Len(t, updatedEntry.Replicas, 1)
+		require.Equal(t, gitalypb.ReplicaID_REPLICA_TYPE_LEARNER, updatedEntry.Replicas[0].GetType())
+	})
+
 	t.Run("if member ID is zero, it should not be added to the routing table", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -212,6 +250,8 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	})
 
 	t.Run("should not add duplicate member ID", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -243,6 +283,8 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	})
 
 	t.Run("should error when updating non-existent member ID", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -274,6 +316,8 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	})
 
 	t.Run("fails if the last remaining node is removed", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -313,6 +357,8 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	})
 
 	t.Run("update node", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
@@ -359,6 +405,8 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	})
 
 	t.Run("apply multiple changes", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)

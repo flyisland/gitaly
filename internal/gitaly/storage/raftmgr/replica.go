@@ -20,6 +20,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type changeType string
+
+const (
+	addVoter   changeType = "add_voter"
+	addLearner changeType = "add_learner"
+	removeNode changeType = "remove_node"
+)
+
 // RaftReplica is an interface that defines the methods to orchestrate the Raft consensus protocol
 // for a partition in a Gitaly cluster.
 type RaftReplica interface {
@@ -35,9 +43,23 @@ type RaftReplica interface {
 	// Step processes a Raft message from a remote node.
 	// This is part of the RaftReplica interface and handles incoming Raft protocol messages
 	// from other members of the Raft group. These messages include heartbeats, vote requests,
-	// log entries, and other Raft protocol communications..
+	// log entries, and other Raft protocol communications.
 	// This is part of the Raft consensus protocol communication between nodes.
 	Step(ctx context.Context, msg raftpb.Message) error
+
+	// AddNode adds a new node to the Raft cluster.
+	// This operation can only be performed by the leader.
+	AddNode(ctx context.Context, address string) error
+
+	// RemoveNode removes a node from the Raft cluster.
+	// This operation can only be performed by the leader.
+	RemoveNode(ctx context.Context, memberID uint64) error
+
+	// AddLearner adds a new non-voting learner node to the Raft cluster.
+	// Learner nodes receive log entries but don't participate in elections.
+	// This is typically used to bring new nodes up to speed before promoting them to voters.
+	// This operation can only be performed by the leader.
+	AddLearner(ctx context.Context, address string) error
 }
 
 var (
@@ -244,6 +266,10 @@ func NewReplica(
 	options, err := applyOptions(raftCfg, opts)
 	if err != nil {
 		return nil, fmt.Errorf("invalid raft replica option: %w", err)
+	}
+
+	if raftEnabledStorage == nil {
+		return nil, fmt.Errorf("raft enabled storage is required")
 	}
 
 	logger = logger.WithFields(logging.Fields{
@@ -932,6 +958,86 @@ func (replica *Replica) Step(ctx context.Context, msg raftpb.Message) error {
 	}
 
 	return replica.node.Step(ctx, msg)
+}
+
+// AddNode implements RaftReplica.AddNode
+func (replica *Replica) AddNode(ctx context.Context, address string) error {
+	memberID := uint64(replica.AppendedLSN() + 1)
+	return replica.proposeMembershipChange(ctx, string(addVoter), memberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
+		Address: address,
+	})
+}
+
+// RemoveNode implements RaftReplica.RemoveNode
+func (replica *Replica) RemoveNode(ctx context.Context, memberID uint64) error {
+	return replica.proposeMembershipChange(ctx, string(removeNode), memberID, ConfChangeRemoveNode, nil)
+}
+
+// AddLearner implements RaftReplica.AddLearner
+func (replica *Replica) AddLearner(ctx context.Context, address string) error {
+	memberID := uint64(replica.AppendedLSN() + 1)
+	return replica.proposeMembershipChange(ctx, string(addLearner), memberID, ConfChangeAddLearnerNode, &gitalypb.ReplicaID_Metadata{
+		Address: address,
+	})
+}
+
+// proposeMembershipChange is a helper function that handles the common pattern for membership changes.
+// It checks leadership and proposes the configuration change.
+func (replica *Replica) proposeMembershipChange(
+	ctx context.Context,
+	changeType string,
+	memberID uint64,
+	confChangeType ConfChangeType,
+	metadata *gitalypb.ReplicaID_Metadata,
+) error {
+	if !replica.leadership.IsLeader() {
+		replica.metrics.IncMembershipError(changeType, "not_leader")
+		return fmt.Errorf("replica is not the leader")
+	}
+
+	if confChangeType == ConfChangeRemoveNode {
+		routingTable := replica.raftEnabledStorage.GetRoutingTable()
+		if routingTable == nil {
+			return fmt.Errorf("routing table not found")
+		}
+		if err := checkMemberID(replica, memberID, routingTable); err != nil {
+			return fmt.Errorf("checking member ID: %w", err)
+		}
+	}
+
+	changes := NewReplicaConfChanges(
+		replica.node.Status().Term,
+		uint64(replica.AppendedLSN()),
+		replica.leadership.GetLeaderID(),
+		metadata,
+	)
+	changes.AddChange(memberID, confChangeType)
+
+	cc, err := changes.ToConfChangeV2()
+	if err != nil {
+		return fmt.Errorf("convert to conf change v2: %w", err)
+	}
+
+	if err := replica.node.ProposeConfChange(ctx, cc); err != nil {
+		replica.metrics.IncMembershipError(changeType, "propose_failed")
+		return fmt.Errorf("propose conf change: %w", err)
+	}
+
+	replica.metrics.IncMembershipChange(changeType)
+	return nil
+}
+
+func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {
+	partitionKey := &gitalypb.PartitionKey{
+		AuthorityName: replica.authorityName,
+		PartitionId:   uint64(replica.ptnID),
+	}
+
+	_, err := routingTable.Translate(partitionKey, memberID)
+	if err != nil {
+		return fmt.Errorf("translating member ID: %w", err)
+	}
+	return nil
 }
 
 var _ = (storage.LogManager)(&Replica{}) // Ensure Replica implements LogManager interface
