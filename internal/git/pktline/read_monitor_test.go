@@ -24,7 +24,9 @@ func TestReadMonitorTimeout(t *testing.T) {
 		waitPipeR, // this pipe reader lets us block the multi reader
 	)
 
-	r, monitor, cleanup, err := NewReadMonitor(ctx, in)
+	logger := testhelper.NewLogger(t)
+
+	r, monitor, cleanup, err := NewReadMonitor(ctx, in, logger)
 	require.NoError(t, err)
 
 	timeoutTicker := helper.NewManualTicker()
@@ -63,7 +65,9 @@ func TestReadMonitorSuccess(t *testing.T) {
 		strings.NewReader(postTimeoutPayload),
 	)
 
-	r, monitor, cleanup, err := NewReadMonitor(ctx, in)
+	logger := testhelper.NewLogger(t)
+
+	r, monitor, cleanup, err := NewReadMonitor(ctx, in, logger)
 	require.NoError(t, err)
 	defer cleanup()
 

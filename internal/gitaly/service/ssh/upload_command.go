@@ -43,7 +43,7 @@ func (s *server) runUploadCommand(
 	// Use large copy buffer to reduce the number of system calls
 	stdout = &largeBufferReaderFrom{Writer: stdoutCounter}
 
-	stdinPipe, monitor, cleanup, err := pktline.NewReadMonitor(ctx, stdin)
+	stdinPipe, monitor, cleanup, err := pktline.NewReadMonitor(ctx, stdin, s.logger)
 	if err != nil {
 		return fmt.Errorf("create monitor: %w", err)
 	}
