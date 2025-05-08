@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -107,6 +108,9 @@ func newObjectReader(
 		},
 		gitcmd.WithSetupStdin(),
 		gitcmd.WithSetupStdout(),
+		gitcmd.WithCompletionErrorLogFilter(func(cmd *command.Command, stderr string) bool {
+			return isEvictedCatfileProcessWithMigratedQuarantine(cmd.Env(), stderr)
+		}),
 	)
 	if err != nil {
 		return nil, err
@@ -221,4 +225,23 @@ func (o *objectReader) Info(ctx context.Context, revision git.Revision) (*Object
 	}
 
 	return objectInfo, nil
+}
+
+// isEvictedCatfileProcessWithMigratedQuarantine tests whether a command with the given env and stderr output
+// is likely a cat-file process that was operating on a quarantine repository. When a quarantine is applied, the
+// GIT_OBJECT_DIRECTORY and GIT_ALTERNATE_OBJECT_DIRECTORIES are set to point Git at the quarantined objects.
+func isEvictedCatfileProcessWithMigratedQuarantine(env []string, stderr string) bool {
+	if !strings.HasPrefix(stderr, "fatal: not a git repository") {
+		return false
+	}
+
+	matchedConditions := 0
+
+	for _, env := range env {
+		if strings.HasPrefix(env, "GIT_OBJECT_DIRECTORY") || strings.HasPrefix(env, "GIT_ALTERNATE_OBJECT_DIRECTORIES") {
+			matchedConditions++
+		}
+	}
+
+	return matchedConditions == 2
 }

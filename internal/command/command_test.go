@@ -300,11 +300,10 @@ func TestCommand_stderr(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name           string
-		script         string
-		expectedLevel  logrus.Level
-		expectedOutput string
-		expectedLen    int
+		name      string
+		script    string
+		lastEntry *logrus.Entry
+		opts      []Option
 	}{
 		{
 			name: "basic stderr logging",
@@ -315,21 +314,24 @@ func TestCommand_stderr(t *testing.T) {
 				done
 				exit 1
 			`,
-			expectedOutput: strings.Repeat("hello world\n", 5),
-			expectedLevel:  logrus.ErrorLevel,
+			lastEntry: &logrus.Entry{
+				Level:   logrus.ErrorLevel,
+				Message: strings.Repeat("hello world\n", 5),
+			},
 		},
 		{
 			name: "stderr logging truncation",
 			script: `#!/usr/bin/env bash
 				for i in {1..1000}
 				do
-					printf '%06d zzzzzzzzzz\n' $i >&2
+					printf 'zzzzzzzzzz\n' $i >&2
 				done
 				exit 1
 			`,
-			expectedOutput: "",
-			expectedLevel:  logrus.ErrorLevel,
-			expectedLen:    maxStderrBytes,
+			lastEntry: &logrus.Entry{
+				Level:   logrus.ErrorLevel,
+				Message: strings.Repeat("zzzzzzzzzz\n", 1000)[:maxStderrBytes],
+			},
 		},
 		{
 			name: "stderr logging with null bytes",
@@ -337,8 +339,10 @@ func TestCommand_stderr(t *testing.T) {
 				dd if=/dev/zero bs=1000 count=1000 status=none >&2
 				exit 1
 			`,
-			expectedOutput: strings.Repeat("\x00", maxStderrLineLength),
-			expectedLevel:  logrus.ErrorLevel,
+			lastEntry: &logrus.Entry{
+				Level:   logrus.ErrorLevel,
+				Message: strings.Repeat("\x00", maxStderrLineLength),
+			},
 		},
 		{
 			name: "stderr with exit code 0",
@@ -346,8 +350,10 @@ func TestCommand_stderr(t *testing.T) {
 				echo "warning message" >&2
 				exit 0
 			`,
-			expectedLevel:  logrus.WarnLevel,
-			expectedOutput: "warning message\n",
+			lastEntry: &logrus.Entry{
+				Level:   logrus.WarnLevel,
+				Message: "warning message\n",
+			},
 		},
 		{
 			name: "stderr with non-zero exit code",
@@ -355,8 +361,10 @@ func TestCommand_stderr(t *testing.T) {
 				echo "error message" >&2
 				exit 1
 			`,
-			expectedLevel:  logrus.ErrorLevel,
-			expectedOutput: "error message\n",
+			lastEntry: &logrus.Entry{
+				Level:   logrus.ErrorLevel,
+				Message: "error message\n",
+			},
 		},
 		{
 			name: "stderr logging long line",
@@ -366,11 +374,13 @@ func TestCommand_stderr(t *testing.T) {
 				printf 'b%.0s' {1..8192} >&2
 				exit 1
 			`,
-			expectedOutput: strings.Join([]string{
-				strings.Repeat("a", maxStderrLineLength),
-				strings.Repeat("b", maxStderrLineLength),
-			}, "\n"),
-			expectedLevel: logrus.ErrorLevel,
+			lastEntry: &logrus.Entry{
+				Level: logrus.ErrorLevel,
+				Message: strings.Join([]string{
+					strings.Repeat("a", maxStderrLineLength),
+					strings.Repeat("b", maxStderrLineLength),
+				}, "\n"),
+			},
 		},
 		{
 			name: "stderr logging max bytes",
@@ -398,9 +408,37 @@ func TestCommand_stderr(t *testing.T) {
 				printf '\na\n' >&2
 				exit 1
 			`,
-			expectedOutput: "",
-			expectedLevel:  logrus.ErrorLevel,
-			expectedLen:    maxStderrBytes,
+			lastEntry: &logrus.Entry{
+				Level: logrus.ErrorLevel,
+				Message: fmt.Sprintf("%s\n%s\n%s\na\n",
+					strings.Repeat("a", 3333),
+					strings.Repeat("a", 3331),
+					strings.Repeat("a", 3331)),
+			},
+		},
+		{
+			name: "doesn't log when a process exits with an error and a filter is specified",
+			script: `#!/usr/bin/env bash
+				echo "fatal: not a git repository" >&2
+				exit 128
+			`,
+			opts: []Option{WithCompletionErrorLogFilter(func(cmd *Command, stderr string) bool {
+				return strings.HasPrefix(stderr, "fatal: not a git repository") && cmd.cmd.ProcessState.ExitCode() == 128
+			})},
+		},
+		{
+			name: "logs when a process exits with an error and an ineffective filter is specified",
+			script: `#!/usr/bin/env bash
+				echo "fatal: not a git repository" >&2
+				exit 128
+			`,
+			opts: []Option{WithCompletionErrorLogFilter(func(cmd *Command, stderr string) bool {
+				return strings.HasPrefix(stderr, "fatal: not a git repository") && cmd.cmd.ProcessState.ExitCode() == 1
+			})},
+			lastEntry: &logrus.Entry{
+				Level:   logrus.ErrorLevel,
+				Message: "fatal: not a git repository\n",
+			},
 		},
 	}
 
@@ -415,27 +453,26 @@ func TestCommand_stderr(t *testing.T) {
 			ctx := testhelper.Context(t)
 
 			var stdout bytes.Buffer
-			cmd, err := New(ctx, logger, []string{binaryPath}, WithStdout(&stdout))
+			cmd, err := New(ctx, logger, []string{binaryPath}, append(tc.opts, WithStdout(&stdout))...)
 			require.NoError(t, err)
 
 			err = cmd.Wait()
-			if tc.expectedLevel == logrus.ErrorLevel {
+
+			if tc.lastEntry == nil {
+				require.Nil(t, hook.LastEntry())
+				return
+			}
+
+			require.Equal(t, tc.lastEntry.Level, hook.LastEntry().Level)
+			require.Equal(t, tc.lastEntry.Message, hook.LastEntry().Message)
+
+			if tc.lastEntry.Level == logrus.ErrorLevel {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 			}
 
 			require.Empty(t, stdout.Bytes())
-
-			lastEntry := hook.LastEntry()
-			if tc.expectedLen > 0 {
-				require.Len(t, lastEntry.Message, tc.expectedLen)
-			}
-
-			if tc.expectedOutput != "" {
-				require.Equal(t, tc.expectedOutput, lastEntry.Message)
-			}
-			require.Equal(t, tc.expectedLevel, lastEntry.Level)
 		})
 	}
 }

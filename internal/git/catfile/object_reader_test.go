@@ -14,6 +14,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/quarantine"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -702,5 +704,50 @@ func TestObjectReader_queue(t *testing.T) {
 
 		_, err = io.ReadAll(object)
 		require.Equal(t, os.ErrClosed, err)
+	})
+}
+
+func TestObjectReader_logging(t *testing.T) {
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+	locator := config.NewLocator(cfg)
+
+	t.Run("no error logs produced due to an invalid quarantine", func(t *testing.T) {
+		logger := testhelper.SharedLogger(t)
+		hook := testhelper.AddLoggerHook(logger)
+
+		repoProto, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+		})
+
+		quarantineDir, err := quarantine.New(ctx, repoProto, logger, locator)
+		require.NoError(t, err)
+
+		reader, err := newObjectReader(ctx, newRepoExecutor(t, cfg, quarantineDir.QuarantinedRepo()), nil)
+		require.NoError(t, err)
+
+		require.NoError(t, quarantineDir.Migrate(ctx))
+
+		reader.close()
+
+		require.Nil(t, hook.LastEntry())
+	})
+
+	t.Run("error logs produced when no quarantine is used", func(t *testing.T) {
+		logger := testhelper.SharedLogger(t)
+		hook := testhelper.AddLoggerHook(logger)
+
+		repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+		})
+
+		reader, err := newObjectReader(ctx, newRepoExecutor(t, cfg, repoProto), nil)
+		require.NoError(t, err)
+
+		require.NoError(t, os.RemoveAll(repoPath))
+
+		reader.close()
+
+		require.NotNil(t, hook.LastEntry())
 	})
 }

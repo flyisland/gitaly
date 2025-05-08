@@ -27,7 +27,8 @@ type config struct {
 	cgroupsAddCommandOpts []cgroups.AddCommandOption
 	// logConfiguration contains the logging configuration to pass to the
 	// command if subprocess logging is in use.
-	logConfiguration log.Config
+	logConfiguration         log.Config
+	completionErrorLogFilter func(*Command, string) bool
 }
 
 // Option is an option that can be passed to `New()` for controlling how the command is being
@@ -131,5 +132,13 @@ func WithFinalizer(finalizer func(context.Context, *Command)) Option {
 func WithSubprocessLogger(logConfig log.Config) Option {
 	return func(cfg *config) {
 		cfg.logConfiguration = logConfig
+	}
+}
+
+// WithCompletionErrorLogFilter configures a function that should return true if an errored
+// command should not produce logs.
+func WithCompletionErrorLogFilter(fn func(cmd *Command, stderr string) bool) Option {
+	return func(cfg *config) {
+		cfg.completionErrorLogFilter = fn
 	}
 }
