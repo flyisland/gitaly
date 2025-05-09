@@ -30,6 +30,7 @@ type CatfileInfoResult struct {
 type catfileInfoConfig struct {
 	skipResult func(*catfile.ObjectInfo) bool
 	diskUsage  bool
+	objectType ObjectType
 }
 
 // CatfileInfoOption is an option for the CatfileInfo and CatfileInfoAllObjects pipeline steps.
@@ -49,6 +50,15 @@ func WithSkipCatfileInfoResult(skipResult func(*catfile.ObjectInfo) bool) Catfil
 func WithDiskUsageSize() CatfileInfoOption {
 	return func(cfg *catfileInfoConfig) {
 		cfg.diskUsage = true
+	}
+}
+
+// WithCatfileObjectTypeFilter will set up a `--filter=object:type=` filter for git-cat-file(1).
+// This will cause it to filter out any objects which do not match the given type. This mode should
+// only be used with `CatfileInfoAllObjects()`.
+func WithCatfileObjectTypeFilter(t ObjectType) CatfileInfoOption {
+	return func(cfg *catfileInfoConfig) {
+		cfg.objectType = t
 	}
 }
 
@@ -219,6 +229,9 @@ func CatfileInfoAllObjects(
 		}
 		if featureflag.MailmapOptions.IsEnabled(ctx) {
 			options = append([]gitcmd.Option{gitcmd.Flag{Name: "--use-mailmap"}}, options...)
+		}
+		if cfg.objectType != "" {
+			options = append(options, gitcmd.Flag{Name: fmt.Sprintf("--filter=object:type=%s", cfg.objectType)})
 		}
 
 		var stderr bytes.Buffer

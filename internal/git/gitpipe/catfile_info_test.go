@@ -389,6 +389,40 @@ func TestCatfileInfoAllObjects(t *testing.T) {
 			err: context.Canceled,
 		}, it.Result())
 	})
+
+	gitVersion, err := gittest.NewCommandFactory(t, cfg).GitVersion(ctx)
+	require.NoError(t, err)
+
+	for _, objectType := range []ObjectType{
+		ObjectTypeBlob,
+		ObjectTypeCommit,
+		ObjectTypeTag,
+		ObjectTypeTree,
+	} {
+		t.Run(string(objectType), func(t *testing.T) {
+			it := CatfileInfoAllObjects(ctx, repo, WithCatfileObjectTypeFilter(objectType))
+
+			var results []CatfileInfoResult
+			for it.Next() {
+				results = append(results, it.Result())
+			}
+
+			if gitVersion.IsCatfileObjectTypeFilterSupported() {
+				require.NoError(t, it.Err())
+			} else {
+				require.ErrorContains(t, it.Err(), "error: option `filters' takes no value")
+				return
+			}
+
+			expectedResults := []CatfileInfoResult{}
+			for _, actualObject := range actualObjects {
+				if actualObject.ObjectInfo.ObjectType() == string(objectType) {
+					expectedResults = append(expectedResults, actualObject)
+				}
+			}
+			require.ElementsMatch(t, expectedResults, results)
+		})
+	}
 }
 
 func TestCatfileInfo_WithDiskUsageSize(t *testing.T) {

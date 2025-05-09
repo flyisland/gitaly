@@ -1,6 +1,7 @@
 package commit
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
@@ -23,8 +25,12 @@ import (
 
 func TestListAllCommits(t *testing.T) {
 	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.CatfileObjectTypeFilter).Run(t, testListAllCommits)
+}
 
-	ctx := testhelper.Context(t)
+func testListAllCommits(t *testing.T, ctx context.Context) {
+	t.Parallel()
+
 	cfg, client := setupCommitService(t, ctx)
 
 	type setupData struct {

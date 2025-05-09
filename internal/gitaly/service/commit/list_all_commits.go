@@ -3,6 +3,7 @@ package commit
 import (
 	"context"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitpipe"
@@ -33,12 +34,17 @@ func (s *server) ListAllCommits(
 	}
 	defer cancel()
 
+	gitVersion, err := repo.GitVersion(ctx)
+	if err != nil {
+		return structerr.NewInternal("detecting availability of object type filter: %w", err)
+	}
+
 	// If we've got a pagination token, then we will only start to print commits as soon as
 	// we've seen the token.
 	token := request.GetPaginationParams().GetPageToken()
 	waitingForToken := token != ""
 
-	catfileInfoIter := gitpipe.CatfileInfoAllObjects(ctx, repo,
+	catfileInfoOptions := []gitpipe.CatfileInfoOption{
 		gitpipe.WithSkipCatfileInfoResult(func(objectInfo *catfile.ObjectInfo) bool {
 			if waitingForToken {
 				waitingForToken = objectInfo.Oid != git.ObjectID(token)
@@ -49,8 +55,12 @@ func (s *server) ListAllCommits(
 
 			return objectInfo.Type != "commit"
 		}),
-	)
+	}
+	if featureflag.CatfileObjectTypeFilter.IsEnabled(ctx) && gitVersion.IsCatfileObjectTypeFilterSupported() {
+		catfileInfoOptions = append(catfileInfoOptions, gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeCommit))
+	}
 
+	catfileInfoIter := gitpipe.CatfileInfoAllObjects(ctx, repo, catfileInfoOptions...)
 	catfileObjectIter, err := gitpipe.CatfileObject(ctx, objectReader, catfileInfoIter)
 	if err != nil {
 		return err
