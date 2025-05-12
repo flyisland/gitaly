@@ -3,7 +3,6 @@ package pktline
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"os"
 	"strings"
@@ -15,14 +14,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 )
 
-type errGenReader struct {
-	err error
-}
-
-func (e *errGenReader) Read(p []byte) (int, error) {
-	return 0, e.err
-}
-
 func TestReadMonitorTimeout(t *testing.T) {
 	waitPipeR, waitPipeW := io.Pipe()
 	defer waitPipeW.Close()
@@ -33,9 +24,7 @@ func TestReadMonitorTimeout(t *testing.T) {
 		waitPipeR, // this pipe reader lets us block the multi reader
 	)
 
-	logger := testhelper.NewLogger(t)
-
-	r, monitor, cleanup, err := NewReadMonitor(ctx, in, logger)
+	r, monitor, cleanup, err := NewReadMonitor(ctx, in)
 	require.NoError(t, err)
 
 	timeoutTicker := helper.NewManualTicker()
@@ -74,9 +63,7 @@ func TestReadMonitorSuccess(t *testing.T) {
 		strings.NewReader(postTimeoutPayload),
 	)
 
-	logger := testhelper.NewLogger(t)
-
-	r, monitor, cleanup, err := NewReadMonitor(ctx, in, logger)
+	r, monitor, cleanup, err := NewReadMonitor(ctx, in)
 	require.NoError(t, err)
 	defer cleanup()
 
@@ -107,48 +94,4 @@ func TestReadMonitorSuccess(t *testing.T) {
 	require.Equal(t, postTimeoutPayload, scanner.Text())
 
 	require.NoError(t, ctx.Err())
-}
-
-func TestReadMonitorReadError(t *testing.T) {
-	ctx, cancel := context.WithCancel(testhelper.Context(t))
-
-	preErrPayload := "000ftest string"
-	expectedErr := errors.New("read error")
-
-	in := io.MultiReader(
-		strings.NewReader(preErrPayload),
-		&errGenReader{err: expectedErr},
-	)
-
-	logger := testhelper.NewLogger(t)
-	hook := testhelper.AddLoggerHook(logger)
-
-	r, monitor, cleanup, err := NewReadMonitor(ctx, in, logger)
-	require.NoError(t, err)
-	defer cleanup()
-
-	timeoutTicker := helper.NewManualTicker()
-
-	stopCh := make(chan any)
-	timeoutTicker.StopFunc = func() {
-		close(stopCh)
-	}
-
-	go monitor.Monitor(ctx, PktFlush(), timeoutTicker, cancel)
-
-	// Simulate read error
-	scanner := NewScanner(r)
-	require.True(t, scanner.Scan())
-	require.Equal(t, preErrPayload, scanner.Text())
-	require.False(t, scanner.Scan())
-
-	// Timer stoped on read error
-	<-stopCh
-
-	// Ensure the read error is logged properly
-	var logs []string
-	for _, entry := range hook.AllEntries() {
-		logs = append(logs, entry.Message)
-	}
-	require.Contains(t, logs, "failed scanning stream for specified packet")
 }
