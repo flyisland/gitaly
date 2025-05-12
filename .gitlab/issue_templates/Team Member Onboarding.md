@@ -36,6 +36,9 @@ Please complete all but the "Reading material" section in your first few working
   - [ ] check out the [team page](https://about.gitlab.com/handbook/engineering/development/enablement/systems/gitaly/)
      - [ ] for day-to-day work, get familiar with how we [schedule work](https://about.gitlab.com/handbook/engineering/development/enablement/systems/gitaly/#working-with-product). It may be useful to bookmark the [Gitaly ongoing work issue board](https://gitlab.com/groups/gitlab-org/-/boards/1140874?label_name%5B%5D=group%3A%3Agitaly&milestone_title=Upcoming)
      - [ ] for the big picture, see the team [vision and roadmap](https://about.gitlab.com/handbook/engineering/development/enablement/systems/gitaly/#roadmap) (click through on the links)
+  - [ ] create an MR in the [chef-repo](https://gitlab.com/gitlab-com/gl-infra/chef-repo/) to add a [data bag](https://gitlab.com/gitlab-com/gl-infra/chef-repo/-/blob/master/doc/user-administration.md#add-a-new-developer)
+    for yourself to create your user on production machines. Be sure to include
+    `"gitaly-team"` under the `groups` field.
 
 /confidential
 /assign me
