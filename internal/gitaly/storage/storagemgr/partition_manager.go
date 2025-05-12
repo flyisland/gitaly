@@ -578,9 +578,6 @@ func (sm *StorageManager) startPartition(ctx context.Context, partitionID storag
 					//
 					// All transactions must eventually finish, so we don't wait on a context cancellation here.
 					<-ptn.closing
-					sm.mu.Lock()
-					sm.closingPartitions[ptn] = struct{}{}
-					sm.mu.Unlock()
 
 					// Now that all handles to the partition have been closed, there can be no more transactions
 					// using the snapshots, nor can there be new snapshots starting. Close the snapshots that
@@ -592,8 +589,14 @@ func (sm *StorageManager) startPartition(ctx context.Context, partitionID storag
 					if err := os.RemoveAll(stagingDir); err != nil {
 						logger.WithError(err).Error("failed removing partition's staging directory")
 					}
-					sm.metrics.partitionsStopped.Inc()
+
+					sm.mu.Lock()
 					close(ptn.closed)
+					// Remove the partition from the list of closing partitions so that it can be garbage collected.
+					delete(sm.closingPartitions, ptn)
+					sm.mu.Unlock()
+
+					sm.metrics.partitionsStopped.Inc()
 					sm.runningPartitionGoroutines.Done()
 				}()
 

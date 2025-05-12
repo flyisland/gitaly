@@ -190,6 +190,13 @@ func blockOnPartitionClosing(t *testing.T, mgr *StorageManager, waitForFullClose
 	for _, closed := range waitFor {
 		<-closed
 	}
+
+	if waitForFullClose {
+		mgr.mu.Lock()
+		closingCount := len(mgr.closingPartitions)
+		mgr.mu.Unlock()
+		require.Equal(t, 0, closingCount, "closingPartitions map should be empty after partition cleanup")
+	}
 }
 
 // partitionState contains state used to assert the state of partition in a StorageManager.
