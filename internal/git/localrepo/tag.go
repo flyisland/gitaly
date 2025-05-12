@@ -71,6 +71,11 @@ type MktagError struct {
 	stderr  string
 }
 
+// Stderr returns the stderr that was generated during the mktag call
+func (e MktagError) Stderr() string {
+	return e.stderr
+}
+
 func (e MktagError) Error() string {
 	// TODO: Upper-case error message purely for transitory backwards compatibility
 	return fmt.Sprintf("Could not update refs/tags/%s. Please refresh and try again.", e.tagName)
