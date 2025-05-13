@@ -368,6 +368,7 @@ func TestTransactionManager(t *testing.T) {
 		"Consumer":                         generateConsumerTests(t, setup),
 		"KeyValue":                         generateKeyValueTests(t, setup),
 		"Offloading":                       generateOffloadingTests(t, ctx, testPartitionID, relativePath),
+		"Rehydrating":                      generateRehydratingTests(t, ctx, testPartitionID, relativePath),
 	}
 
 	for desc, tests := range subTests {
