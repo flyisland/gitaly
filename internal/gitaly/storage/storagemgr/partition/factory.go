@@ -2,13 +2,18 @@ package partition
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
@@ -58,6 +63,16 @@ func (f Factory) New(
 	var logManager storage.LogManager
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
+
+		migrator, err := NewReplicaPartitionMigrator(absoluteStateDir, storageName)
+		if err != nil {
+			panic(fmt.Errorf("creating replica partition migrator: %w", err))
+		}
+		if err = migrator.Forward(); err != nil {
+			panic(fmt.Errorf("migrating replica partitions: %w", err))
+		}
+
+		absoluteStateDir = getRaftPartitionPath(storageName, partitionID, absoluteStateDir)
 
 		replicaLogStore, err := raftmgr.NewReplicaLogStore(
 			storageName,
