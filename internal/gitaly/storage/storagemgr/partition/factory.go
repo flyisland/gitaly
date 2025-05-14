@@ -107,6 +107,40 @@ func (f Factory) New(
 	return NewTransactionManager(parameters)
 }
 
+// getRaftPartitionPath returns the path where a Raft replica should be stored for a partition.
+func getRaftPartitionPath(storageName string, partitionID storage.PartitionID, absoluteStateDir string) string {
+	hasher := sha256.New()
+	raftPartitionPath := storage.CreateRaftPartitionPath(storageName, partitionID.String())
+	hasher.Write([]byte(raftPartitionPath))
+
+	partitionsDir, err := getPartitionsDir(absoluteStateDir)
+	if err != nil {
+		panic(fmt.Errorf("determining partitions directory: %w", err))
+	}
+
+	return storage.HashRaftPartitionPath(hasher, partitionsDir, raftPartitionPath)
+}
+
+// getPartitionsDir determines the partitions directory derived from the state directory
+// if there is no /partitions in the path, it creates one from the state directory
+func getPartitionsDir(stateDir string) (string, error) {
+	var partitionsDir string
+	const partitionsSubdir = "/partitions"
+	index := strings.LastIndex(stateDir, partitionsSubdir)
+	// If "/partitions" is not in the path, use the standard partition computation
+	// Typically for tests a tmp file system is used that does not have this structure
+	if index == -1 {
+		partitionsDir = filepath.Join(stateDir, partitionsSubdir)
+		if err := os.MkdirAll(partitionsDir, mode.Directory); err != nil {
+			return "", fmt.Errorf("failed to create partitions directory %s: %w", partitionsDir, err)
+		}
+	} else {
+		index += len(partitionsSubdir)
+		partitionsDir = stateDir[:index]
+	}
+	return partitionsDir, nil
+}
+
 // NewFactory creates a partition factory with the given components:
 func NewFactory(opts ...FactoryOption) Factory {
 	var options factoryOptions
