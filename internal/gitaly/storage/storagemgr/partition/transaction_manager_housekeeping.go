@@ -24,6 +24,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal/reftree"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/tracing"
@@ -226,6 +227,16 @@ func (mgr *TransactionManager) prepareRepacking(ctx context.Context, transaction
 		return fmt.Errorf("collecting existing packfiles: %w", err)
 	}
 
+	// midx file is different from other pack files because the file name stays
+	// same after repacking but it's content changes. We need to save the stat
+	// information of the midx file to compare modification times after repacking.
+	midxFileName := "multi-pack-index"
+	midxPath := filepath.Join(repoPath, "objects", "pack", midxFileName)
+	oldMidxInode, err := wal.GetInode(midxPath)
+	if err != nil {
+		return fmt.Errorf("get midx inode before repacking: %w", err)
+	}
+
 	// All of the repacking operations pack/remove all loose objects. New ones are not written anymore with transactions.
 	// As we're packing them away not, log their removal.
 	objectsDirRelativePath := filepath.Join(transaction.relativePath, "objects")
@@ -304,9 +315,14 @@ func (mgr *TransactionManager) prepareRepacking(ctx context.Context, transaction
 		return fmt.Errorf("collecting new packfiles: %w", err)
 	}
 
+	newMidxInode, err := wal.GetInode(midxPath)
+	if err != nil {
+		return fmt.Errorf("get midx inode after repacking: %w", err)
+	}
+
 	for file := range beforeFiles {
 		// We delete the files only if it's missing from the before set.
-		if _, exist := afterFiles[file]; !exist {
+		if _, exist := afterFiles[file]; !exist || (file == midxFileName && newMidxInode != oldMidxInode) {
 			transaction.walEntry.RemoveDirectoryEntry(filepath.Join(
 				objectsDirRelativePath, "pack", file,
 			))
@@ -315,7 +331,7 @@ func (mgr *TransactionManager) prepareRepacking(ctx context.Context, transaction
 
 	for file := range afterFiles {
 		// Similarly, we don't need to link existing packfiles.
-		if _, exist := beforeFiles[file]; !exist {
+		if _, exist := beforeFiles[file]; !exist || (file == midxFileName && newMidxInode != oldMidxInode) {
 			fileRelativePath := filepath.Join(objectsDirRelativePath, "pack", file)
 
 			if err := transaction.walEntry.CreateFile(

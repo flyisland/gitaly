@@ -3373,6 +3373,139 @@ func generateHousekeepingRepackingStrategyTests(t *testing.T, ctx context.Contex
 				},
 			},
 		},
+		{
+			desc:        "run repacking second time after new packfiles added",
+			customSetup: customSetup,
+			steps: steps{
+				StartManager{
+					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
+						repoPath := filepath.Join(storagePath, setup.RelativePath)
+						gittest.Exec(tb, cfg, "-C", repoPath, "repack", "-ad")
+					},
+				},
+				Begin{
+					TransactionID:       1,
+					RelativePaths:       []string{setup.RelativePath},
+					ExpectedSnapshotLSN: 0,
+				},
+				RunRepack{
+					TransactionID: 1,
+					Config: housekeepingcfg.RepackObjectsConfig{
+						Strategy:            housekeepingcfg.RepackObjectsStrategyFullWithUnreachable,
+						WriteBitmap:         true,
+						WriteMultiPackIndex: true,
+					},
+				},
+				Commit{
+					TransactionID: 1,
+				},
+				Begin{
+					TransactionID:       2,
+					RelativePaths:       []string{setup.RelativePath},
+					ExpectedSnapshotLSN: 1,
+				},
+				Commit{
+					TransactionID: 2,
+					ReferenceUpdates: git.ReferenceUpdates{
+						"refs/heads/main": {OldOID: setup.Commits.Third.OID, NewOID: setup.Commits.Diverging.OID},
+					},
+					QuarantinedPacks: [][]byte{
+						setup.Commits.Diverging.Pack,
+					},
+				},
+				Begin{
+					TransactionID:       3,
+					RelativePaths:       []string{setup.RelativePath},
+					ExpectedSnapshotLSN: 2,
+				},
+				RunRepack{
+					TransactionID: 3,
+					Config: housekeepingcfg.RepackObjectsConfig{
+						Strategy:            housekeepingcfg.RepackObjectsStrategyFullWithUnreachable,
+						WriteBitmap:         true,
+						WriteMultiPackIndex: true,
+					},
+				},
+				Commit{
+					TransactionID: 3,
+				},
+				AssertMetrics{histogramMetric("gitaly_housekeeping_tasks_latency"): {
+					"housekeeping_task=total,stage=prepare":  2,
+					"housekeeping_task=total,stage=verify":   2,
+					"housekeeping_task=repack,stage=prepare": 2,
+					"housekeeping_task=repack,stage=verify":  2,
+				}},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN): storage.LSN(3).ToProto(),
+				},
+				Repositories: RepositoryStates{
+					setup.RelativePath: {
+						DefaultBranch: "refs/heads/main",
+						References: gittest.FilesOrReftables(
+							&ReferencesState{
+								FilesBackend: &FilesBackendState{
+									LooseReferences: map[git.ReferenceName]git.ObjectID{
+										"refs/heads/main":   setup.Commits.Diverging.OID,
+										"refs/heads/branch": setup.Commits.Diverging.OID,
+									},
+								},
+							}, &ReferencesState{
+								ReftableBackend: &ReftableBackendState{
+									Tables: []ReftableTable{
+										{
+											MinIndex: 1,
+											MaxIndex: 3,
+											References: []git.Reference{
+												{
+													Name:       "HEAD",
+													Target:     "refs/heads/main",
+													IsSymbolic: true,
+												},
+												{
+													Name:   "refs/heads/branch",
+													Target: setup.Commits.Diverging.OID.String(),
+												},
+												{
+													Name:   "refs/heads/main",
+													Target: setup.Commits.Third.OID.String(),
+												},
+											},
+										},
+										{
+											MinIndex: 4,
+											MaxIndex: 4,
+											References: []git.Reference{
+												{
+													Name:   "refs/heads/main",
+													Target: setup.Commits.Diverging.OID.String(),
+												},
+											},
+										},
+									},
+								},
+							},
+						),
+						Packfiles: &PackfilesState{
+							LooseObjects: nil,
+							Packfiles: []*PackfileState{
+								{
+									Objects: append(defaultReachableObjects,
+										setup.Commits.Orphan.OID,
+										setup.Commits.Unreachable.OID,
+									),
+									HasBitmap:       false,
+									HasReverseIndex: true,
+								},
+							},
+							HasMultiPackIndex: true,
+						},
+						FullRepackTimestamp: &FullRepackTimestamp{Exists: true},
+					},
+				},
+			},
+		},
 	}
 }
 
