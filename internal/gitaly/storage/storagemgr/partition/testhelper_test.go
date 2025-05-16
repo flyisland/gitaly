@@ -3,6 +3,7 @@ package partition
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -1764,7 +1765,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 
 	expectedDirectory = modifyDirectoryStateForRaft(t, expectedDirectory, transactionManager, raftEntryRecorder)
 
-	testhelper.RequireDirectoryState(t, stateDir, "", expectedDirectory)
+	testhelper.RequireDirectoryState(t, stateDir, "", dirStateWithOrWithoutRaft(expectedDirectory, storageName, setup.PartitionID.String()))
 
 	expectedStagingDirState := testhelper.DirectoryState{
 		"/": {Mode: mode.Directory},
@@ -1905,4 +1906,53 @@ func updateGitConfig(t *testing.T, ctx context.Context, repo *localrepo.Repo, co
 	relPath, err := filepath.Rel(tx.FS().Root(), configPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.FS().RecordFile(relPath))
+}
+
+// convertToReplicaState transforms a DirectoryState with "/wal" paths
+// to the new partitioned format with "/partitions/XX/YY/storageName_id/wal".
+func convertToReplicaState(state testhelper.DirectoryState, storageName, partitionID string) testhelper.DirectoryState {
+	// Calculate the hash-based path
+
+	// Empty dir state - no conversion
+	if len(state) == 0 {
+		return testhelper.DirectoryState{
+			"/":           {Mode: mode.Directory},
+			"/partitions": {Mode: mode.Directory},
+		}
+	}
+
+	raftPartitionPath := storage.CreateRaftPartitionPath(storageName, partitionID)
+	hasher := sha256.New()
+	hasher.Write([]byte(raftPartitionPath))
+	hash := fmt.Sprintf("%x", hasher.Sum(nil))
+
+	// Create partition directory structure
+	prefix := fmt.Sprintf("/partitions/%s/%s/%s", hash[:2], hash[2:4], raftPartitionPath)
+	result := testhelper.DirectoryState{
+		"/":                       {Mode: mode.Directory},
+		"/partitions":             {Mode: mode.Directory},
+		"/partitions/" + hash[:2]: {Mode: mode.Directory},
+		"/partitions/" + hash[:2] + "/" + hash[2:4]: {Mode: mode.Directory},
+		prefix:          {Mode: mode.Directory},
+		prefix + "/wal": {Mode: mode.Directory},
+	}
+	// Copy and transform all entries
+	for path, entry := range state {
+		if strings.HasPrefix(path, "/wal") {
+			// Replace "/wal" with the partition prefix
+			newPath := prefix + path // 4 is len("/wal")
+			result[newPath] = entry
+		}
+	}
+
+	return result
+}
+
+// dirStateWithOrWithoutRaft returns the appropriate DatabaseState
+// based on whether Raft is enabled
+func dirStateWithOrWithoutRaft(state testhelper.DirectoryState, storageName, partitionID string) testhelper.DirectoryState {
+	if testhelper.IsRaftEnabled() {
+		return convertToReplicaState(state, storageName, partitionID)
+	}
+	return state
 }

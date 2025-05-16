@@ -2,13 +2,18 @@ package partition
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
@@ -59,6 +64,16 @@ func (f Factory) New(
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
 
+		migrator, err := NewReplicaPartitionMigrator(absoluteStateDir, storageName)
+		if err != nil {
+			panic(fmt.Errorf("creating replica partition migrator: %w", err))
+		}
+		if err = migrator.Forward(); err != nil {
+			panic(fmt.Errorf("migrating replica partitions: %w", err))
+		}
+
+		absoluteStateDir = getRaftPartitionPath(storageName, partitionID, absoluteStateDir)
+
 		replicaLogStore, err := raftmgr.NewReplicaLogStore(
 			storageName,
 			partitionID,
@@ -105,6 +120,40 @@ func (f Factory) New(
 	}
 
 	return NewTransactionManager(parameters)
+}
+
+// getRaftPartitionPath returns the path where a Raft replica should be stored for a partition.
+func getRaftPartitionPath(storageName string, partitionID storage.PartitionID, absoluteStateDir string) string {
+	hasher := sha256.New()
+	raftPartitionPath := storage.CreateRaftPartitionPath(storageName, partitionID.String())
+	hasher.Write([]byte(raftPartitionPath))
+
+	partitionsDir, err := getPartitionsDir(absoluteStateDir)
+	if err != nil {
+		panic(fmt.Errorf("determining partitions directory: %w", err))
+	}
+
+	return storage.HashRaftPartitionPath(hasher, partitionsDir, raftPartitionPath)
+}
+
+// getPartitionsDir determines the partitions directory derived from the state directory
+// if there is no /partitions in the path, it creates one from the state directory
+func getPartitionsDir(stateDir string) (string, error) {
+	var partitionsDir string
+	const partitionsSubdir = "/partitions"
+	index := strings.LastIndex(stateDir, partitionsSubdir)
+	// If "/partitions" is not in the path, use the standard partition computation
+	// Typically for tests a tmp file system is used that does not have this structure
+	if index == -1 {
+		partitionsDir = filepath.Join(stateDir, partitionsSubdir)
+		if err := os.MkdirAll(partitionsDir, mode.Directory); err != nil {
+			return "", fmt.Errorf("failed to create partitions directory %s: %w", partitionsDir, err)
+		}
+	} else {
+		index += len(partitionsSubdir)
+		partitionsDir = stateDir[:index]
+	}
+	return partitionsDir, nil
 }
 
 // NewFactory creates a partition factory with the given components:

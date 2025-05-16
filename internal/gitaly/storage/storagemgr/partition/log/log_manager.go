@@ -284,7 +284,7 @@ func (mgr *Manager) createStateDirectory() error {
 		mgr.stateDirectory,
 		filepath.Join(mgr.stateDirectory, "wal"),
 	} {
-		err := os.Mkdir(path, mode.Directory)
+		err := os.MkdirAll(path, mode.Directory)
 		switch {
 		case errors.Is(err, fs.ErrExist):
 			continue
