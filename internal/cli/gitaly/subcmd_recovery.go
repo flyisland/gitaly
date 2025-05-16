@@ -489,7 +489,7 @@ func setupRecoveryContext(ctx context.Context, cmd *cli.Command) (rc recoveryCon
 	if parallel < 1 {
 		parallel = 1
 	}
-	recoveryContext.parallel = int(parallel)
+	recoveryContext.parallel = parallel
 
 	logger := log.ConfigureCommand()
 

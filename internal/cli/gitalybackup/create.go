@@ -36,8 +36,8 @@ type createSubcommand struct {
 
 func (cmd *createSubcommand) flags(ctx *cli.Command) {
 	cmd.backupPath = ctx.String("path")
-	cmd.parallel = int(ctx.Int("parallel"))
-	cmd.parallelStorage = int(ctx.Int("parallel-storage"))
+	cmd.parallel = ctx.Int("parallel")
+	cmd.parallelStorage = ctx.Int("parallel-storage")
 	cmd.layout = ctx.String("layout")
 	cmd.incremental = ctx.Bool("incremental")
 	cmd.backupID = ctx.String("id")
@@ -53,7 +53,7 @@ func createFlags() []cli.Flag {
 		&cli.IntFlag{
 			Name:  "parallel",
 			Usage: "maximum number of parallel backups",
-			Value: int64(runtime.NumCPU()),
+			Value: runtime.NumCPU(),
 		},
 		&cli.IntFlag{
 			Name:  "parallel-storage",
