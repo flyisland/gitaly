@@ -149,7 +149,6 @@ Gitaly's tests are mostly in Go and we apply the following guidelines:
 - (Optional) Add unit tests for functions that need more coverage.
 
 To run the full test suite, use `make test`.
-You'll need some [test repositories](test_repos.md), you can set these up with `make prepare-tests`.
 
 ### Integration Tests
 
