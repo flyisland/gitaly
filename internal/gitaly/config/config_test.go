@@ -46,10 +46,12 @@ func TestLoadTransactions(t *testing.T) {
 	cfg, err := Load(strings.NewReader(`
 [transactions]
 enabled = true
+max_inactive_partitions = 1
 	`))
 	require.NoError(t, err)
 
 	require.True(t, cfg.Transactions.Enabled)
+	require.Equal(t, cfg.Transactions.MaxInactivePartitions, uint(1))
 }
 
 func TestLoadEmptyConfig(t *testing.T) {
@@ -3175,4 +3177,57 @@ func TestOffloadingConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadDefaults(t *testing.T) {
+	cfg, err := Load(strings.NewReader(""))
+	require.NoError(t, err)
+
+	require.Equal(t, Cfg{
+		Logging: Logging{
+			Config: log.Config{
+				Format: "text",
+				Level:  "info",
+			},
+		},
+		Prometheus: prometheus.Config{
+			ScrapeTimeout:      duration.Duration(10 * time.Second),
+			GRPCLatencyBuckets: []float64{0.001, 0.005, 0.025, 0.1, 0.5, 1, 10, 30, 60, 300, 1500},
+		},
+		TLS: TLS{
+			MinVersion: tls.VersionTLS12,
+		},
+		Gitlab: Gitlab{
+			SecretFile: ".gitlab_shell_secret",
+		},
+		GracefulRestartTimeout: duration.Duration(time.Minute),
+		DailyMaintenance: DailyJob{
+			Hour:     12,
+			Duration: duration.Duration(10 * time.Minute),
+			Storages: []string{},
+		},
+		Cgroups: cgroups.Config{
+			Mountpoint:    "/sys/fs/cgroup",
+			HierarchyRoot: "gitaly",
+		},
+		PackObjectsCache: StreamCacheConfig{
+			MinOccurrences: 1,
+			Backpressure:   true,
+		},
+		PackObjectsLimiting: PackObjectsLimiting{
+			MaxConcurrency: 200,
+			MaxQueueLength: 200,
+		},
+		Backup: BackupConfig{
+			WALWorkerCount: 1,
+			Layout:         "pointer",
+		},
+		Timeout: TimeoutConfig{
+			UploadPackNegotiation:    duration.Duration(10 * time.Minute),
+			UploadArchiveNegotiation: duration.Duration(time.Minute),
+		},
+		Transactions: Transactions{
+			MaxInactivePartitions: 100,
+		},
+	}, cfg)
 }

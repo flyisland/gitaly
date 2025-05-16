@@ -27,7 +27,7 @@ import (
 )
 
 // DefaultMaxInactivePartitions is the default number of inactive partitions to keep on standby.
-var DefaultMaxInactivePartitions = 100
+var DefaultMaxInactivePartitions = uint(100)
 
 // ErrPartitionManagerClosed is returned when the PartitionManager stops processing transactions.
 var ErrPartitionManagerClosed = errors.New("partition manager closed")
@@ -82,7 +82,7 @@ type StorageManager struct {
 	// one or more open handles to them.
 	activePartitions map[storage.PartitionID]*partition
 	// maxInactivePartitions is the maximum number of partitions to keep on standby in inactivePartitions.
-	maxInactivePartitions int
+	maxInactivePartitions uint
 	// inactivePartitions contains partitions that are not actively accessed. They're kept open and ready
 	// to immediately serve new requests without the initialization overhead.
 	inactivePartitions *lru.Cache[storage.PartitionID, *partition]
@@ -116,7 +116,7 @@ func NewStorageManager(
 	path string,
 	dbMgr *databasemgr.DBManager,
 	partitionFactory PartitionFactory,
-	maxInactivePartitions int,
+	maxInactivePartitions uint,
 	metrics *Metrics,
 ) (*StorageManager, error) {
 	internalDir := internalDirectoryPath(path)
@@ -142,7 +142,7 @@ func NewStorageManager(
 		return nil, fmt.Errorf("new partition assigner: %w", err)
 	}
 
-	cache, err := lru.New[storage.PartitionID, *partition](maxInactivePartitions)
+	cache, err := lru.New[storage.PartitionID, *partition](int(maxInactivePartitions))
 	if err != nil {
 		return nil, fmt.Errorf("new lru: %w", err)
 	}
@@ -408,7 +408,7 @@ func (p *partitionHandle) Close() {
 
 		// The partition no longer has active users. Move it to the inactive partition
 		// list to stay on standby and evict other standbys as necessary to make space.
-		if p.sm.inactivePartitions.Len() == p.sm.maxInactivePartitions {
+		if p.sm.inactivePartitions.Len() == int(p.sm.maxInactivePartitions) {
 			_, evictedPartition, _ := p.sm.inactivePartitions.RemoveOldest()
 			evictedPartition.close()
 			p.sm.closingPartitions[evictedPartition] = struct{}{}

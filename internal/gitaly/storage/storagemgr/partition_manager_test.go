@@ -324,7 +324,7 @@ func TestStorageManager(t *testing.T) {
 
 	for _, tc := range []struct {
 		desc                  string
-		maxInactivePartitions int
+		maxInactivePartitions uint
 		setup                 func(t *testing.T, cfg config.Cfg) setupData
 	}{
 		{

@@ -152,6 +152,9 @@ type Transactions struct {
 	// Enabled enables transaction support. This option is experimental
 	// and intended for development only. Do not enable for other uses.
 	Enabled bool `json:"enabled,omitempty" toml:"enabled,omitempty"`
+	// MaxInactivePartitions specifies the maximum number of standby partitions. Defaults to 100 if not set.
+	// It does not depend on whether Transactions is enabled.
+	MaxInactivePartitions uint `json:"max_inactive_partitions,omitempty" toml:"max_inactive_partitions,omitempty"`
 }
 
 // TimeoutConfig represents negotiation timeouts for remote Git operations
@@ -971,6 +974,10 @@ func (cfg *Cfg) Sanitize() error {
 
 	if cfg.Logging.Config.Level == "" {
 		cfg.Logging.Config.Level = "info"
+	}
+
+	if cfg.Transactions.MaxInactivePartitions == 0 {
+		cfg.Transactions.MaxInactivePartitions = 100
 	}
 
 	return nil
