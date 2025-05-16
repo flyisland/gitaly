@@ -75,6 +75,9 @@ type runPackRefs struct {
 	// PrunedRefs contain a list of references pruned by the `git-pack-refs` command. They are used
 	// for comparing to the ref list of the destination repository
 	PrunedRefs map[git.ReferenceName]struct{}
+	// emptyDirectories contain a list of empty directories in the transaction snapshot. It is used
+	// to delete those directories during pack refs' post stage.
+	emptyDirectories map[string]struct{}
 	// reftablesBefore contains the data in 'tables.list' before the compaction. This is used to
 	// compare with the destination repositories 'tables.list'.
 	reftablesBefore []string
@@ -733,11 +736,16 @@ func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transact
 		return nil, fmt.Errorf("walking committed entries: %w", err)
 	}
 
-	// Build a tree of the loose references we need to prune.
-	prunedRefs := reftree.New()
+	// Build a tree of the loose references and empty directories we need to prune.
+	prunedPaths := reftree.New()
 	for reference := range packRefs.PrunedRefs {
-		if err := prunedRefs.InsertReference(reference.String()); err != nil {
+		if err := prunedPaths.InsertReference(reference.String()); err != nil {
 			return nil, fmt.Errorf("insert reference: %w", err)
+		}
+	}
+	for directory := range packRefs.emptyDirectories {
+		if err := prunedPaths.InsertNode(directory, true, true); err != nil {
+			return nil, fmt.Errorf("insert directory: %w", err)
 		}
 	}
 
@@ -755,8 +763,8 @@ func (mgr *TransactionManager) verifyPackRefsFiles(ctx context.Context, transact
 	// path that became empty as a result of removing the references. As we're operating on the real
 	// repository here, we can't actually perform deletions in it. We instead keep track of the
 	// files and directories we've deleted in-memory to ensure we only delete empty directories.
-	deletedPaths := make(map[string]struct{}, len(packRefs.PrunedRefs))
-	if err := prunedRefs.WalkPostOrder(func(path string, isDir bool) error {
+	deletedPaths := make(map[string]struct{}, len(packRefs.PrunedRefs)+len(packRefs.emptyDirectories))
+	if err := prunedPaths.WalkPostOrder(func(path string, isDir bool) error {
 		relativePath := filepath.Join(transaction.relativePath, path)
 		if _, ok := directoriesToKeep[relativePath]; ok {
 			return nil
