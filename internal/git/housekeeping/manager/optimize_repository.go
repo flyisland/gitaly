@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/sirupsen/logrus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
@@ -182,13 +184,26 @@ func (m *RepositoryManager) optimizeRepository(
 		return err
 	}
 
+	var cleanStaleDataTime, cleanWorktreesTime, repackTime, packRefsTime,
+		pruneTime, commitGraphTime time.Duration
+
 	finishTotalTimer := m.metrics.ReportTaskLatency("total", "apply")
 	totalStatus := "failure"
 
 	optimizations := make(map[string]string)
 	defer func() {
-		finishTotalTimer()
-		m.logger.WithField("optimizations", optimizations).Info("optimized repository")
+		totalTime := finishTotalTimer()
+
+		m.logger.WithFields(logrus.Fields{
+			"optimizations":         optimizations,
+			"total_time":            totalTime,
+			"clean_stale_data_time": cleanStaleDataTime,
+			"clean_work_trees_time": cleanWorktreesTime,
+			"repack_time":           repackTime,
+			"pack_refs_time":        packRefsTime,
+			"prune_time":            pruneTime,
+			"commit_graph_time":     commitGraphTime,
+		}).Info("optimized repository")
 
 		for task, status := range optimizations {
 			m.metrics.TasksTotal.WithLabelValues(task, status).Inc()
@@ -201,13 +216,13 @@ func (m *RepositoryManager) optimizeRepository(
 	if err := m.CleanStaleData(ctx, repo, housekeeping.DefaultStaleDataCleanup()); err != nil {
 		return fmt.Errorf("could not execute housekeeping: %w", err)
 	}
-	finishTimer()
+	cleanStaleDataTime = finishTimer()
 
 	finishTimer = m.metrics.ReportTaskLatency("clean-worktrees", "apply")
 	if err := housekeeping.CleanupWorktrees(ctx, repo); err != nil {
 		return fmt.Errorf("could not clean up worktrees: %w", err)
 	}
-	finishTimer()
+	cleanWorktreesTime = finishTimer()
 
 	finishTimer = m.metrics.ReportTaskLatency("repack", "apply")
 	didRepack, repackCfg, err := repackIfNeeded(ctx, repo, strategy)
@@ -232,7 +247,7 @@ func (m *RepositoryManager) optimizeRepository(
 			optimizations["written_multi_pack_index"] = "success"
 		}
 	}
-	finishTimer()
+	repackTime = finishTimer()
 
 	finishTimer = m.metrics.ReportTaskLatency("prune", "apply")
 	didPrune, err := pruneIfNeeded(ctx, repo, strategy)
@@ -242,7 +257,7 @@ func (m *RepositoryManager) optimizeRepository(
 	} else if didPrune {
 		optimizations["pruned_objects"] = "success"
 	}
-	finishTimer()
+	pruneTime = finishTimer()
 
 	finishTimer = m.metrics.ReportTaskLatency("pack-refs", "apply")
 	didPackRefs, err := m.packRefsIfNeeded(ctx, repo, strategy)
@@ -252,7 +267,7 @@ func (m *RepositoryManager) optimizeRepository(
 	} else if didPackRefs {
 		optimizations["packed_refs"] = "success"
 	}
-	finishTimer()
+	packRefsTime = finishTimer()
 
 	finishTimer = m.metrics.ReportTaskLatency("commit-graph", "apply")
 	if didWriteCommitGraph, writeCommitGraphCfg, err := writeCommitGraphIfNeeded(ctx, repo, strategy); err != nil {
@@ -266,7 +281,7 @@ func (m *RepositoryManager) optimizeRepository(
 			optimizations["written_commit_graph_incremental"] = "success"
 		}
 	}
-	finishTimer()
+	commitGraphTime = finishTimer()
 
 	totalStatus = "success"
 
