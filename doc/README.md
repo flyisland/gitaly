@@ -14,7 +14,6 @@ The reference guide is documented in <https://docs.gitlab.com/administration/git
 
 - When new to Gitaly development, start by reading the [beginners guide](beginners_guide.md)
 - The Gitaly release process is described in [our process doc](PROCESS.md)
-- Tests use Git repositories too, [read more about them](test_repos.md)
 - Praefect uses SQL. To create a new SQL migration see [sql_migrations.md](sql_migrations.md)
 - For Gitaly hooks documentation, see [Gitaly hooks documentation](hooks.md)
 - To configure an environment for developing Gitaly on Kubernetes, see the
