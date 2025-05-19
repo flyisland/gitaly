@@ -404,7 +404,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 					migration.NewMetrics(),
 					migrations,
 				),
-				storagemgr.DefaultMaxInactivePartitions,
+				config.DefaultMaxInactivePartitions,
 				storagemgr.NewMetrics(cfg.Prometheus),
 			),
 		)

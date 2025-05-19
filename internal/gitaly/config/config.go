@@ -48,6 +48,9 @@ const (
 	// defaultConcurrencyQueueSize defines the default queue size for RPC concurrency limits. This type of limiter
 	// is scoped by the RPC and by repository.
 	defaultConcurrencyQueueSize = 500
+
+	// DefaultMaxInactivePartitions is the default number of inactive partitions to keep on standby.
+	DefaultMaxInactivePartitions = uint(100)
 )
 
 // configKeyRegex is intended to verify config keys in their `core.gc` or
@@ -977,7 +980,7 @@ func (cfg *Cfg) Sanitize() error {
 	}
 
 	if cfg.Transactions.MaxInactivePartitions == 0 {
-		cfg.Transactions.MaxInactivePartitions = 100
+		cfg.Transactions.MaxInactivePartitions = DefaultMaxInactivePartitions
 	}
 
 	return nil

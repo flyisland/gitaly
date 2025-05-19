@@ -26,9 +26,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 )
 
-// DefaultMaxInactivePartitions is the default number of inactive partitions to keep on standby.
-var DefaultMaxInactivePartitions = uint(100)
-
 // ErrPartitionManagerClosed is returned when the PartitionManager stops processing transactions.
 var ErrPartitionManagerClosed = errors.New("partition manager closed")
 
