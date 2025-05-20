@@ -16,6 +16,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -36,9 +37,14 @@ func TestRepositoryInfo(t *testing.T) {
 		return path
 	}
 
+	filter := snapshot.NewDefaultFilter()
+	if testhelper.IsWALEnabled() {
+		filter = snapshot.NewRegexSnapshotFilter()
+	}
+
 	emptyRepoSize := func() uint64 {
 		_, repoPath := gittest.CreateRepository(t, ctx, cfg)
-		size, err := dirSizeInBytes(repoPath)
+		size, err := dirSizeInBytes(repoPath, filter)
 		require.NoError(t, err)
 		return uint64(size)
 	}()
@@ -71,8 +77,10 @@ func TestRepositoryInfo(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		desc  string
-		setup func(t *testing.T) setupData
+		desc         string
+		setup        func(t *testing.T) setupData
+		ignore       bool
+		ignoreReason string
 	}{
 		{
 			desc: "unset repository",
@@ -338,6 +346,8 @@ func TestRepositoryInfo(t *testing.T) {
 					},
 				}
 			},
+			ignore:       testhelper.IsWALEnabled(),
+			ignoreReason: "transaction snapshot exclude .mtime file in objects/pack",
 		},
 		{
 			desc: "repository with keep pack",
@@ -370,6 +380,8 @@ func TestRepositoryInfo(t *testing.T) {
 					},
 				}
 			},
+			ignore:       testhelper.IsWALEnabled(),
+			ignoreReason: "transaction snapshots exclude .keep file in objects/pack",
 		},
 		{
 			desc: "repository with different pack types",
@@ -409,6 +421,8 @@ func TestRepositoryInfo(t *testing.T) {
 					},
 				}
 			},
+			ignore:       testhelper.IsWALEnabled(),
+			ignoreReason: "transaction snapshot exclude .keep and .mtime file in objects/pack",
 		},
 		{
 			desc: "repository with commit-graph",
@@ -430,7 +444,7 @@ func TestRepositoryInfo(t *testing.T) {
 				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
 				require.NoError(t, err)
 
-				repoSize, err := dirSizeInBytes(repoPath)
+				repoSize, err := dirSizeInBytes(repoPath, filter)
 				require.NoError(t, err)
 
 				return setupData{
@@ -478,7 +492,8 @@ func TestRepositoryInfo(t *testing.T) {
 				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
 				require.NoError(t, err)
 
-				repoSize, err := dirSizeInBytes(repoPath)
+				repoSize, err := dirSizeInBytes(repoPath, filter)
+
 				require.NoError(t, err)
 
 				return setupData{
@@ -531,7 +546,8 @@ func TestRepositoryInfo(t *testing.T) {
 				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
 				require.NoError(t, err)
 
-				repoSize, err := dirSizeInBytes(repoPath)
+				repoSize, err := dirSizeInBytes(repoPath, filter)
+
 				require.NoError(t, err)
 
 				return setupData{
@@ -581,7 +597,8 @@ func TestRepositoryInfo(t *testing.T) {
 				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
 				require.NoError(t, err)
 
-				repoSize, err := dirSizeInBytes(repoPath)
+				repoSize, err := dirSizeInBytes(repoPath, filter)
+
 				require.NoError(t, err)
 
 				return setupData{
@@ -628,7 +645,8 @@ func TestRepositoryInfo(t *testing.T) {
 				repoStats, err := stats.RepositoryInfoForRepository(ctx, localrepo.NewTestRepo(t, cfg, repo))
 				require.NoError(t, err)
 
-				repoSize, err := dirSizeInBytes(repoPath)
+				repoSize, err := dirSizeInBytes(repoPath, filter)
+
 				require.NoError(t, err)
 
 				return setupData{
@@ -644,9 +662,13 @@ func TestRepositoryInfo(t *testing.T) {
 							),
 						},
 						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
-							Size:                     repoStats.Packfiles.Size,
-							RecentSize:               repoStats.Packfiles.Size,
-							LooseObjectsGarbageCount: 1,
+							Size:       repoStats.Packfiles.Size,
+							RecentSize: repoStats.Packfiles.Size,
+
+							// When WAL is enabled and snapshot filtering is enabled then the
+							// garbage filtered out from snapshot, so it is not counted as
+							// a loose object garbage
+							LooseObjectsGarbageCount: testhelper.WithOrWithoutWAL(uint64(0), uint64(1)),
 						},
 						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
@@ -683,7 +705,8 @@ func TestRepositoryInfo(t *testing.T) {
 					require.NoError(t, err)
 				}
 
-				repoSize, err := dirSizeInBytes(repoPath)
+				repoSize, err := dirSizeInBytes(repoPath, filter)
+
 				require.NoError(t, err)
 
 				return setupData{
@@ -710,6 +733,10 @@ func TestRepositoryInfo(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
+			if tc.ignore {
+				t.Skip(tc.ignoreReason)
+			}
+
 			t.Parallel()
 
 			setup := tc.setup(t)

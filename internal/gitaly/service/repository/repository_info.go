@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -26,7 +27,8 @@ func (s *server) RepositoryInfo(
 		return nil, err
 	}
 
-	repoSize, err := dirSizeInBytes(repoPath)
+	filter := snapshot.NewDefaultFilter()
+	repoSize, err := dirSizeInBytes(repoPath, filter)
 	if err != nil {
 		return nil, fmt.Errorf("calculating repository size: %w", err)
 	}

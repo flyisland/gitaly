@@ -701,7 +701,8 @@ func TestOptimizeRepository(t *testing.T) {
 				moreThanTwoWeeksAgo := time.Now().Add(stats.StaleObjectsGracePeriod).Add(-time.Minute)
 
 				for i := 0; i < housekeeping.LooseObjectLimit+1; i++ {
-					blobPath := filepath.Join(repoPath, "objects", "17", fmt.Sprintf("%d", i))
+					// write a blob with correct format but invalid content
+					blobPath := filepath.Join(repoPath, "objects", "17", fmt.Sprintf("%038x", i+1))
 					require.NoError(t, os.WriteFile(blobPath, nil, mode.File))
 					require.NoError(t, os.Chtimes(blobPath, moreThanTwoWeeksAgo, moreThanTwoWeeksAgo))
 				}

@@ -296,6 +296,10 @@ func TestUpdateReferences(t *testing.T) {
 		{
 			desc: "locked reference",
 			setup: func(t *testing.T) setupData {
+				// In the context of transaction management, refs do not require a .lock file for concurrency control.
+				// This is because transaction manager ensures that no two transactions can operate
+				// on the same ref concurrently and tracks all ongoing ref transactions enforces mutual exclusion.
+				testhelper.SkipWithWAL(t, "snapshot ignore ref .lock file")
 				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
 				repo := localrepo.NewTestRepo(t, cfg, repoProto)
 

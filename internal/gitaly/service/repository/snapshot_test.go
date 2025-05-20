@@ -149,16 +149,24 @@ func TestGetSnapshot(t *testing.T) {
 					mode.File,
 				))
 
-				expected := testhelper.DirectoryState{
-					"HEAD": {
+				expected := func() testhelper.DirectoryState {
+					info := testhelper.DirectoryEntry{
 						Mode:         archive.TarFileMode,
 						ParseContent: ignoreContent,
-					},
-					"shallow": {
-						Mode:         archive.TarFileMode,
-						ParseContent: ignoreContent,
-					},
-				}
+					}
+					if testhelper.IsWALEnabled() {
+						// Only HEAD is included in snapshots
+						// when snapshot filter is enabled in transaction manager.
+						return testhelper.DirectoryState{
+							"HEAD": info,
+						}
+					}
+					return testhelper.DirectoryState{
+						"HEAD":    info,
+						"shallow": info,
+					}
+				}()
+
 				expected[fmt.Sprintf("objects/%s/%s", treeID[0:2], treeID[2:])] = testhelper.DirectoryEntry{
 					Mode:         archive.TarFileMode,
 					ParseContent: ignoreContent,

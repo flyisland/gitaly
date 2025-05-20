@@ -99,10 +99,13 @@ func TestRepositorySize_normalRepository(t *testing.T) {
 	invalidateSnapshot()
 	requireRepositorySize(t, ctx, client, repo, 16)
 
-	// Even garbage should increase the size.
 	require.NoError(t, os.WriteFile(filepath.Join(repoPath, "garbage"), incompressibleData(5*1024), mode.File))
 	invalidateSnapshot()
-	requireRepositorySize(t, ctx, client, repo, 21)
+
+	// when snapshot filter is enabled in transaction manager
+	// garbage is not included in object directory's size
+	// Otherwise, even garbage should increase the size.
+	requireRepositorySize(t, ctx, client, repo, testhelper.WithOrWithoutWAL(int64(16), int64(21)))
 }
 
 func TestRepositorySize_failure(t *testing.T) {
