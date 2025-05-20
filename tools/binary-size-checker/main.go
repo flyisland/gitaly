@@ -16,7 +16,7 @@ func checker(ctx context.Context, cmd *cli.Command) error {
 	gitalyBinary := filepath.Join(gitalyDir, "_build", "bin", "gitaly")
 
 	info, _ := os.Stat(gitalyBinary)
-	if info.Size() > thresholdMB*1000000 {
+	if info.Size() > int64(thresholdMB*1000000) {
 		log.Fatal(fmt.Errorf("gitaly binary size (%dM) is over %dM",
 			info.Size()/1000000, thresholdMB))
 	}

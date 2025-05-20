@@ -20,7 +20,7 @@ type partitionCreateSubcommand struct {
 }
 
 func (cmd *partitionCreateSubcommand) flags(ctx *cli.Command) {
-	cmd.parallel = int(ctx.Int("parallel"))
+	cmd.parallel = ctx.Int("parallel")
 }
 
 func partitionCreateFlags() []cli.Flag {

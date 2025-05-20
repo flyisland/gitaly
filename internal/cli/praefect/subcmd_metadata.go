@@ -75,7 +75,7 @@ func metadataAction(ctx context.Context, cmd *cli.Command) error {
 		if virtualStorage != "" || relativePath != "" {
 			return errors.New("virtual storage and relative path can't be provided with a repository ID")
 		}
-		request.Query = &gitalypb.GetRepositoryMetadataRequest_RepositoryId{RepositoryId: repositoryID}
+		request.Query = &gitalypb.GetRepositoryMetadataRequest_RepositoryId{RepositoryId: int64(repositoryID)}
 	case virtualStorage != "" || relativePath != "":
 		if virtualStorage == "" {
 			return errors.New("virtual storage is required with relative path")

@@ -77,7 +77,7 @@ func verifyAction(ctx context.Context, cmd *cli.Command) error {
 			return errors.New("virtual storage and storage can't be provided with a repository ID")
 		}
 
-		request.Selector = &gitalypb.MarkUnverifiedRequest_RepositoryId{RepositoryId: repositoryID}
+		request.Selector = &gitalypb.MarkUnverifiedRequest_RepositoryId{RepositoryId: int64(repositoryID)}
 	case storage != "":
 		if virtualStorage == "" {
 			return errors.New("virtual storage must be passed with storage")
