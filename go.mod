@@ -40,7 +40,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
-	github.com/urfave/cli/v3 v3.3.2
+	github.com/urfave/cli/v3 v3.3.3
 	gitlab.com/gitlab-org/labkit v1.24.0
 	go.etcd.io/raft/v3 v3.6.0
 	go.uber.org/automaxprocs v1.6.0
