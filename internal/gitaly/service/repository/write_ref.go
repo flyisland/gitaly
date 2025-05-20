@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus/ctxlogrus"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
@@ -18,6 +20,12 @@ func (s *server) WriteRef(ctx context.Context, req *gitalypb.WriteRefRequest) (*
 	if err := validateWriteRefRequest(ctx, s.locator, req); err != nil {
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
+
+	ctxlogrus.AddFields(ctx, logrus.Fields{
+		"ref":      string(req.GetRef()),
+		"revision": string(req.GetRevision()),
+	})
+
 	if err := s.writeRef(ctx, req); err != nil {
 		return nil, structerr.NewInternal("%w", err)
 	}
