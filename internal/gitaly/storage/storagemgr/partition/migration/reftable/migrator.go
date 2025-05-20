@@ -105,9 +105,13 @@ func (m *migrator) migrate(ctx context.Context, storageName, relativePath string
 				returnedErr = errors.Join(err, fmt.Errorf("rollback: %w", err))
 			}
 		} else {
-			if err := tx.Commit(ctx); err != nil {
+			commitLSN, err := tx.Commit(ctx)
+			if err != nil {
 				returnedErr = errors.Join(err, fmt.Errorf("commit: %w", err))
+				return
 			}
+
+			storage.LogTransactionCommit(ctx, m.logger, commitLSN, "reftable migration")
 		}
 	}()
 

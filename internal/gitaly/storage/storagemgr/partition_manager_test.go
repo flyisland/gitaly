@@ -69,14 +69,14 @@ func newStubPartitionFactory() PartitionFactory {
 					}
 
 					return mockTransaction{
-						commit: func(ctx context.Context) error {
+						commit: func(ctx context.Context) (storage.LSN, error) {
 							select {
 							case <-closing:
 								// Commits fail if partition is closed.
-								return storage.ErrTransactionProcessingStopped
+								return 0, storage.ErrTransactionProcessingStopped
 							default:
 								// Commits fail if context is done.
-								return ctx.Err()
+								return 0, ctx.Err()
 							}
 						},
 						rollback: func(context.Context) error { return nil },
@@ -144,11 +144,11 @@ func (m *mockPartition) CloseSnapshots() error {
 
 type mockTransaction struct {
 	storage.Transaction
-	commit   func(context.Context) error
+	commit   func(context.Context) (storage.LSN, error)
 	rollback func(context.Context) error
 }
 
-func (m mockTransaction) Commit(ctx context.Context) error {
+func (m mockTransaction) Commit(ctx context.Context) (storage.LSN, error) {
 	return m.commit(ctx)
 }
 
@@ -1317,7 +1317,8 @@ func TestStorageManager(t *testing.T) {
 						commitCtx = step.ctx
 					}
 
-					require.ErrorIs(t, data.txn.Commit(commitCtx), step.expectedError)
+					_, err := data.txn.Commit(commitCtx)
+					require.ErrorIs(t, err, step.expectedError)
 
 					blockOnPartitionClosing(t, storageMgr, true)
 					checkExpectedState(t, storageMgr, step.expectedState)

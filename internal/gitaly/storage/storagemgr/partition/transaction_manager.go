@@ -106,6 +106,15 @@ const (
 	transactionStateCommit
 )
 
+// commitResult returns the result of the commit from transaction manager back to the goroutine that ran
+// the transaction.
+type commitResult struct {
+	// error returns a possible error in committing the transaction.
+	error error
+	// commitLSN is the LSN the transaction committed under if error is nil.
+	commitLSN storage.LSN
+}
+
 // Transaction is a unit-of-work that contains reference changes to perform on the repository.
 type Transaction struct {
 	// write denotes whether or not this transaction is a write transaction.
@@ -126,10 +135,10 @@ type Transaction struct {
 	stateLatch sync.Mutex
 
 	// commit commits the Transaction through the TransactionManager.
-	commit func(context.Context, *Transaction) error
+	commit func(context.Context, *Transaction) (storage.LSN, error)
 	// result is where the outcome of the transaction is sent to by TransactionManager once it
 	// has been determined.
-	result chan error
+	result chan commitResult
 	// admitted is set when the transaction was admitted for processing in the TransactionManager.
 	// Transaction queues in admissionQueue to be committed, and is considered admitted once it has
 	// been dequeued by TransactionManager.Run(). Once the transaction is admitted, its ownership moves
@@ -528,11 +537,11 @@ func (txn *Transaction) updateState(newState transactionState) error {
 
 // Commit performs the changes. If no error is returned, the transaction was successful and the changes
 // have been performed. If an error was returned, the transaction may or may not be persisted.
-func (txn *Transaction) Commit(ctx context.Context) (returnedErr error) {
+func (txn *Transaction) Commit(ctx context.Context) (commitLSN storage.LSN, returnedErr error) {
 	defer trace.StartRegion(ctx, "commit").End()
 
 	if err := txn.updateState(transactionStateCommit); err != nil {
-		return err
+		return 0, err
 	}
 
 	defer prometheus.NewTimer(txn.metrics.commitDuration(txn.write)).ObserveDuration()
@@ -549,18 +558,18 @@ func (txn *Transaction) Commit(ctx context.Context) (returnedErr error) {
 		// performed as read-only transactions are not committed through the manager.
 		switch {
 		case txn.runHousekeeping != nil:
-			return errReadOnlyHousekeeping
+			return 0, errReadOnlyHousekeeping
 		case len(txn.recordingReadWriter.WriteSet()) > 0:
-			return errReadOnlyKeyValue
+			return 0, errReadOnlyKeyValue
 		default:
-			return nil
+			return 0, nil
 		}
 	}
 
 	if txn.runHousekeeping != nil && (txn.referenceUpdates != nil ||
 		txn.deleteRepository ||
 		txn.includedObjects != nil) {
-		return errHousekeepingConflictOtherUpdates
+		return 0, errHousekeepingConflictOtherUpdates
 	}
 
 	return txn.commit(ctx, txn)
@@ -1035,10 +1044,10 @@ func NewTransactionManager(parameters *transactionManagerParameters) *Transactio
 
 // resultChannel represents a future that will yield the result of a transaction once its
 // outcome has been decided.
-type resultChannel chan error
+type resultChannel chan commitResult
 
 // commit queues the transaction for processing and returns once the result has been determined.
-func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transaction) error {
+func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transaction) (storage.LSN, error) {
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.Commit", nil)
 	defer span.Finish()
 
@@ -1050,20 +1059,20 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 		if err := mgr.stageRepositoryCreation(ctx, transaction); err != nil {
 			if errors.Is(err, storage.ErrRepositoryNotFound) {
 				// The repository wasn't created as part of this transaction.
-				return nil
+				return 0, nil
 			}
 
-			return fmt.Errorf("stage repository creation: %w", err)
+			return 0, fmt.Errorf("stage repository creation: %w", err)
 		}
 	}
 
 	if transaction.repositoryCreation == nil {
 		if err := mgr.packObjects(ctx, transaction); err != nil {
-			return fmt.Errorf("pack objects: %w", err)
+			return 0, fmt.Errorf("pack objects: %w", err)
 		}
 
 		if err := mgr.prepareHousekeeping(ctx, transaction); err != nil {
-			return fmt.Errorf("preparing housekeeping: %w", err)
+			return 0, fmt.Errorf("preparing housekeeping: %w", err)
 		}
 
 		// If there were objects packed that should be committed, record the packfile's creation.
@@ -1074,7 +1083,7 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 					filepath.Join(transaction.stagingDirectory, "objects"+fileExtension),
 					filepath.Join(packDir, transaction.packPrefix+fileExtension),
 				); err != nil {
-					return fmt.Errorf("record file creation: %w", err)
+					return 0, fmt.Errorf("record file creation: %w", err)
 				}
 			}
 		}
@@ -1090,7 +1099,7 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 		// to the recorder.
 		if transaction.referenceRecorder != nil && (len(transaction.referenceUpdates) > 0 || transaction.runHousekeeping != nil) {
 			if err := transaction.referenceRecorder.StagePackedRefs(); err != nil {
-				return fmt.Errorf("stage packed refs: %w", err)
+				return 0, fmt.Errorf("stage packed refs: %w", err)
 			}
 		}
 	}
@@ -1106,17 +1115,17 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 	}
 
 	if err := transaction.stageKeyValueOperations(); err != nil {
-		return fmt.Errorf("stage key-value operations: %w", err)
+		return 0, fmt.Errorf("stage key-value operations: %w", err)
 	}
 	transaction.manifest.Operations = transaction.walEntry.Operations()
 
 	if err := wal.WriteManifest(ctx, transaction.walEntry.Directory(), transaction.manifest); err != nil {
-		return fmt.Errorf("writing manifest file: %w", err)
+		return 0, fmt.Errorf("writing manifest file: %w", err)
 	}
 
 	// Sync the log entry completely.
 	if err := safe.NewSyncer().SyncRecursive(ctx, transaction.walEntry.Directory()); err != nil {
-		return fmt.Errorf("flush log entry: %w", err)
+		return 0, fmt.Errorf("flush log entry: %w", err)
 	}
 
 	if err := func() error {
@@ -1135,15 +1144,15 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 			return storage.ErrTransactionProcessingStopped
 		}
 	}(); err != nil {
-		return err
+		return 0, err
 	}
 
 	defer trace.StartRegion(ctx, "result wait").End()
 	select {
-	case err := <-transaction.result:
-		return unwrapExpectedError(err)
+	case result := <-transaction.result:
+		return result.commitLSN, unwrapExpectedError(result.error)
 	case <-ctx.Done():
-		return ctx.Err()
+		return 0, ctx.Err()
 	}
 }
 
@@ -1707,18 +1716,18 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.processTransaction", nil)
 	defer span.Finish()
 
-	transaction.result <- func() (commitErr error) {
+	transaction.result <- func() commitResult {
 		var zeroOID git.ObjectID
 		if transaction.repositoryTarget() {
 			repositoryExists, err := mgr.doesRepositoryExist(ctx, transaction.relativePath)
 			if err != nil {
-				return fmt.Errorf("does repository exist: %w", err)
+				return commitResult{error: fmt.Errorf("does repository exist: %w", err)}
 			}
 
 			if transaction.repositoryCreation != nil && repositoryExists {
-				return ErrRepositoryAlreadyExists
+				return commitResult{error: ErrRepositoryAlreadyExists}
 			} else if transaction.repositoryCreation == nil && !repositoryExists {
-				return storage.ErrRepositoryNotFound
+				return commitResult{error: storage.ErrRepositoryNotFound}
 			}
 
 			if repositoryExists {
@@ -1726,7 +1735,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 
 				objectHash, err := targetRepository.ObjectHash(ctx)
 				if err != nil {
-					return fmt.Errorf("object hash: %w", err)
+					return commitResult{error: fmt.Errorf("object hash: %w", err)}
 				}
 
 				zeroOID = objectHash.ZeroOID
@@ -1736,25 +1745,25 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 				// is based on. If an object dependency is missing, the transaction is aborted as applying it would
 				// result in repository corruption.
 				if err := mgr.verifyObjectsExist(ctx, targetRepository, transaction.objectDependencies); err != nil {
-					return fmt.Errorf("verify object dependencies: %w", err)
+					return commitResult{error: fmt.Errorf("verify object dependencies: %w", err)}
 				}
 
 				refBackend, err := targetRepository.ReferenceBackend(ctx)
 				if err != nil {
-					return fmt.Errorf("reference backend: %w", err)
+					return commitResult{error: fmt.Errorf("reference backend: %w", err)}
 				}
 
 				if refBackend == git.ReferenceBackendReftables || transaction.runHousekeeping != nil {
 					if refBackend == git.ReferenceBackendReftables {
 						if err := mgr.verifyReferences(ctx, transaction); err != nil {
-							return fmt.Errorf("verify references: %w", err)
+							return commitResult{error: fmt.Errorf("verify references: %w", err)}
 						}
 					}
 
 					if transaction.runHousekeeping != nil {
 						housekeepingEntry, err := mgr.verifyHousekeeping(ctx, transaction, refBackend, objectHash.ZeroOID)
 						if err != nil {
-							return fmt.Errorf("verifying pack refs: %w", err)
+							return commitResult{error: fmt.Errorf("verifying pack refs: %w", err)}
 						}
 						transaction.manifest.Housekeeping = housekeepingEntry
 					}
@@ -1763,22 +1772,22 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 					// The transaction has already written the manifest to the disk as a read-only file
 					// before queuing for commit. Remove the old file so we can replace it below.
 					if err := wal.RemoveManifest(ctx, transaction.walEntry.Directory()); err != nil {
-						return fmt.Errorf("remove outdated manifest")
+						return commitResult{error: fmt.Errorf("remove outdated manifest")}
 					}
 
 					// Operations working on the staging snapshot add more files into the log entry,
 					// and modify the manifest.
 					if err := wal.WriteManifest(ctx, transaction.walEntry.Directory(), transaction.manifest); err != nil {
-						return fmt.Errorf("writing manifest file: %w", err)
+						return commitResult{error: fmt.Errorf("writing manifest file: %w", err)}
 					}
 
 					// Fsync only the file itself and the parent directory.
 					syncer := safe.NewSyncer()
 					if err := syncer.Sync(ctx, wal.ManifestPath(transaction.walEntry.Directory())); err != nil {
-						return fmt.Errorf("flush updated maninest file: %w", err)
+						return commitResult{error: fmt.Errorf("flush updated maninest file: %w", err)}
 					}
 					if err := syncer.Sync(ctx, transaction.walEntry.Directory()); err != nil {
-						return fmt.Errorf("flush parent dir of updated manifest file: %w", err)
+						return commitResult{error: fmt.Errorf("flush parent dir of updated manifest file: %w", err)}
 					}
 				}
 			}
@@ -1796,30 +1805,31 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 		})
 		mgr.mutex.Unlock()
 		if err != nil {
-			return fmt.Errorf("prepare: %w", err)
+			return commitResult{error: fmt.Errorf("prepare: %w", err)}
 		}
 
 		if err := mgr.verifyKeyValueOperations(ctx, transaction); err != nil {
-			return fmt.Errorf("verify key-value operations: %w", err)
+			return commitResult{error: fmt.Errorf("verify key-value operations: %w", err)}
 		}
 
 		commitFS, err := mgr.verifyFileSystemOperations(ctx, transaction)
 		if err != nil {
-			return fmt.Errorf("verify file system operations: %w", err)
+			return commitResult{error: fmt.Errorf("verify file system operations: %w", err)}
 		}
 
 		mgr.testHooks.beforeAppendLogEntry(mgr.logManager.AppendedLSN() + 1)
 		if err := mgr.appendLogEntry(ctx, transaction.objectDependencies, transaction.manifest, transaction.walFilesPath()); err != nil {
-			return fmt.Errorf("append log entry: %w", err)
+			return commitResult{error: fmt.Errorf("append log entry: %w", err)}
 		}
 
 		// Commit the prepared transaction now that we've managed to commit the log entry.
 		mgr.mutex.Lock()
-		preparedTX.Commit(ctx, mgr.logManager.AppendedLSN())
-		commitFS(mgr.logManager.AppendedLSN())
+		appendedLSN := mgr.logManager.AppendedLSN()
+		preparedTX.Commit(ctx, appendedLSN)
+		commitFS(appendedLSN)
 		mgr.mutex.Unlock()
 
-		return nil
+		return commitResult{commitLSN: appendedLSN}
 	}()
 
 	return nil

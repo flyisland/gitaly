@@ -89,7 +89,8 @@ func TestReplicaSnapshotter_materializeSnapshot(t *testing.T) {
 	defer tar.Close()
 
 	// This commit is a no-op
-	require.NoError(t, txn.Commit(ctx))
+	_, err = txn.Commit(ctx)
+	require.NoError(t, err)
 
 	// Tar should contain a directory with repository
 	directoryState := testhelper.DirectoryState{
@@ -260,7 +261,7 @@ func (m *mockTransaction) FS() storage.FS {
 	return m.fs
 }
 
-func (m *mockTransaction) Commit(context.Context) error {
+func (m *mockTransaction) Commit(context.Context) (storage.LSN, error) {
 	// No-Op
-	return nil
+	return 0, nil
 }

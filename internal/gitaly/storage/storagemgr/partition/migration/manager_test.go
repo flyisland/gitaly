@@ -222,7 +222,8 @@ func TestMigrationManager_Begin(t *testing.T) {
 				require.NoError(t, err)
 
 				require.NoError(t, txn.KV().Set(migrationKey(relativePath), uint64ToBytes(tc.startingMigration.ID)))
-				require.NoError(t, txn.Commit(ctx))
+				_, err = txn.Commit(ctx)
+				require.NoError(t, err)
 			}
 
 			ctx = metadata.NewIncomingContext(ctx, md)
@@ -249,7 +250,8 @@ func TestMigrationManager_Begin(t *testing.T) {
 					}
 				}
 
-				require.NoError(t, txn.Commit(ctx))
+				_, err := txn.Commit(ctx)
+				require.NoError(t, err)
 			}
 
 			if state, ok := mm.migrationStates[relativePath]; ok {

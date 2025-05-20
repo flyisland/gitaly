@@ -123,9 +123,12 @@ func (o *ObjectPool) FetchFromOrigin(ctx context.Context, origin *localrepo.Repo
 	// the initial intention of running housekeeping after fetching. As a result, this RPC needs to
 	// manage the transaction itself so that two transactions can be committed in the right order.
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		if err := tx.Commit(ctx); err != nil {
+		commitLSN, err := tx.Commit(ctx)
+		if err != nil {
 			return fmt.Errorf("commit: %w", err)
 		}
+
+		storage.LogTransactionCommit(ctx, o.logger, commitLSN, "FetchFromOrigin")
 	}
 
 	// We've committed the original transaction above. OptimizeRepository internally starts

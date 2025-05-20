@@ -94,11 +94,11 @@ func (m mockTransaction) KV() keyvalue.ReadWriter {
 	return nil
 }
 
-func (m mockTransaction) Commit(ctx context.Context) error {
+func (m mockTransaction) Commit(ctx context.Context) (storage.LSN, error) {
 	if m.commitFn != nil {
-		return m.commitFn(ctx)
+		return 0, m.commitFn(ctx)
 	}
-	return nil
+	return 0, nil
 }
 
 func (m mockTransaction) Rollback(ctx context.Context) error {

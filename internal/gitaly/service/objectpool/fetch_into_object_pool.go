@@ -89,9 +89,12 @@ func (s *server) executeMaybeWithTransaction(ctx context.Context, repo *localrep
 		return err
 	}
 
-	if err := transaction.Commit(ctx); err != nil {
+	commitLSN, err := transaction.Commit(ctx)
+	if err != nil {
 		return fmt.Errorf("fail to commit WAL transaction: %w", err)
 	}
+
+	storage.LogTransactionCommit(ctx, s.logger, commitLSN, "FetchIntoObjectPool housekeeping")
 
 	return nil
 }

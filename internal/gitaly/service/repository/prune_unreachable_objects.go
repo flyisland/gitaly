@@ -56,9 +56,12 @@ func (s *server) PruneUnreachableObjects(
 				ReplaceChain: true,
 			})
 
-			if err := tx.Commit(ctx); err != nil {
+			commitLSN, err := tx.Commit(ctx)
+			if err != nil {
 				return nil, fmt.Errorf("commit: %w", err)
 			}
+
+			storage.LogTransactionCommit(ctx, s.logger, commitLSN, "prune unreachable objects")
 		}
 
 		return &gitalypb.PruneUnreachableObjectsResponse{}, nil

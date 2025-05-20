@@ -244,14 +244,13 @@ func beginTransactionForPartition(ctx context.Context, logger log.Logger, txRegi
 		}
 	}()
 
-	tx, err := partition.Begin(ctx, storage.BeginOptions{
-		Write: !isReadOnly(methodInfo),
-	})
+	isWrite := !isReadOnly(methodInfo)
+	tx, err := partition.Begin(ctx, storage.BeginOptions{Write: isWrite})
 	if err != nil {
 		return transactionalizedRequest{}, fmt.Errorf("begin: %w", err)
 	}
 
-	return newTransactionalizedRequest(ctx, logger, txRegistry, req, newFinalizableTransaction(tx, partition.Close)), nil
+	return newTransactionalizedRequest(ctx, logger, txRegistry, req, newFinalizableTransaction(tx, partition.Close), isWrite), nil
 }
 
 func beginTransactionForRepository(ctx context.Context, logger log.Logger, txRegistry *TransactionRegistry, node storage.Node, locator storage.Locator, methodInfo protoregistry.MethodInfo, req proto.Message) (_ transactionalizedRequest, returnedErr error) {
@@ -373,8 +372,10 @@ func beginTransactionForRepository(ctx context.Context, logger log.Logger, txReg
 		return transactionalizedRequest{}, fmt.Errorf("get storage: %w", err)
 	}
 
+	readOnly := isReadOnly(methodInfo)
+
 	tx, err := storageHandle.Begin(ctx, storage.TransactionOptions{
-		ReadOnly:              isReadOnly(methodInfo),
+		ReadOnly:              readOnly,
 		RelativePath:          targetRepo.GetRelativePath(),
 		AlternateRelativePath: alternateRelativePath,
 		AllowPartitionAssignmentWithoutRepository: isRepositoryCreation,
@@ -408,10 +409,10 @@ func beginTransactionForRepository(ctx context.Context, logger log.Logger, txReg
 		return transactionalizedRequest{}, fmt.Errorf("rewrite request: %w", err)
 	}
 
-	return newTransactionalizedRequest(ctx, logger, txRegistry, rewrittenReq, tx), nil
+	return newTransactionalizedRequest(ctx, logger, txRegistry, rewrittenReq, tx, !readOnly), nil
 }
 
-func newTransactionalizedRequest(ctx context.Context, logger log.Logger, txRegistry *TransactionRegistry, firstMessage proto.Message, tx storage.Transaction) transactionalizedRequest {
+func newTransactionalizedRequest(ctx context.Context, logger log.Logger, txRegistry *TransactionRegistry, firstMessage proto.Message, tx storage.Transaction, isWrite bool) transactionalizedRequest {
 	txID := txRegistry.register(tx)
 	return transactionalizedRequest{
 		ctx: storage.ContextWithTransactionID(
@@ -431,8 +432,17 @@ func newTransactionalizedRequest(ctx context.Context, logger log.Logger, txRegis
 
 			// If the proc-receive or post-receive hook is invoked, the transaction may already be committed
 			// to ensure the new data is readable. Ignore the already committed errors here.
-			if err := tx.Commit(ctx); err != nil && !errors.Is(err, storage.ErrTransactionAlreadyCommitted) {
-				return fmt.Errorf("commit: %w", err)
+			if commitLSN, err := tx.Commit(ctx); err != nil {
+				if !errors.Is(err, storage.ErrTransactionAlreadyCommitted) {
+					return fmt.Errorf("commit: %w", err)
+				}
+
+				// If the transaction was already committed, we've logged it elsewhere. We don't log it
+				// here again.
+			} else if isWrite {
+				// No need to log the read-only transaction as we're mostly interested in
+				// logging writes to identify conflicting transactions.
+				storage.LogTransactionCommit(ctx, logger, commitLSN, "middleware")
 			}
 
 			return nil

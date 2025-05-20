@@ -144,8 +144,15 @@ func (m *RepositoryManager) runInTransaction(ctx context.Context, readOnly bool,
 		return fmt.Errorf("run: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	commitLSN, err := tx.Commit(ctx)
+	if err != nil {
 		return fmt.Errorf("commit: %w", err)
+	}
+
+	// No need to log the read-only transaction gathering the heuristics as
+	// we're only interested in logging write transactions to identify conflicts.
+	if !readOnly {
+		storage.LogTransactionCommit(ctx, m.logger, commitLSN, "housekeeping")
 	}
 
 	return nil

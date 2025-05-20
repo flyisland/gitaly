@@ -2271,7 +2271,8 @@ func BenchmarkTransactionManager(b *testing.B) {
 						initialReferenceUpdates,
 					))
 					require.NoError(b, transaction.UpdateReferences(ctx, initialReferenceUpdates))
-					require.NoError(b, transaction.Commit(ctx))
+					_, err = transaction.Commit(ctx)
+					require.NoError(b, err)
 
 					transactionWG.Add(1)
 					go func() {
@@ -2289,7 +2290,8 @@ func BenchmarkTransactionManager(b *testing.B) {
 								updateA,
 							))
 							require.NoError(b, transaction.UpdateReferences(ctx, updateA))
-							assert.NoError(b, transaction.Commit(ctx))
+							_, err = transaction.Commit(ctx)
+							assert.NoError(b, err)
 							updateA, updateB = updateB, updateA
 						}
 					}()
