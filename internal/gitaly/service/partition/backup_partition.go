@@ -17,8 +17,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
-const kvStateFileName = "kv-state"
-
 // BackupPartition creates a backup of entire partition streamed directly to object-storage.
 func (s *server) BackupPartition(ctx context.Context, in *gitalypb.BackupPartitionRequest) (_ *gitalypb.BackupPartitionResponse, returnErr error) {
 	if s.backupSink == nil {
@@ -83,7 +81,7 @@ func (s *server) BackupPartition(ctx context.Context, in *gitalypb.BackupPartiti
 func writeTarball(partitionRoot string, kvFile *os.File, w io.Writer) error {
 	builder := archive.NewTarBuilder(partitionRoot, w)
 
-	if err := builder.VirtualFileWithContents(kvStateFileName, kvFile); err != nil {
+	if err := builder.VirtualFileWithContents(storage.KVStateFileName, kvFile); err != nil {
 		return fmt.Errorf("tar builder: virtual file: %w", err)
 	}
 

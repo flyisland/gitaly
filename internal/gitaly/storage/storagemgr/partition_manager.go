@@ -303,7 +303,7 @@ func clearStagingDirectory(stagingDir string) error {
 }
 
 func keyPrefixPartition(ptnID storage.PartitionID) []byte {
-	return []byte(fmt.Sprintf("%s%s/", prefixPartition, ptnID.MarshalBinary()))
+	return []byte(fmt.Sprintf("%s%s/", PrefixPartition, ptnID.MarshalBinary()))
 }
 
 // internalDirectoryPath returns the full path of Gitaly's internal data directory for the storage.
@@ -682,7 +682,7 @@ func deriveStateDirectory(id storage.PartitionID) string {
 func (sm *StorageManager) ListPartitions(partitionID storage.PartitionID) (storage.PartitionIterator, error) {
 	txn := sm.database.NewTransaction(false)
 	iter := txn.NewIterator(keyvalue.IteratorOptions{
-		Prefix: []byte(prefixPartition),
+		Prefix: []byte(PrefixPartition),
 	})
 
 	pi := &partitionIterator{
@@ -766,7 +766,7 @@ func (pi *partitionIterator) extractPartitionID() (storage.PartitionID, error) {
 	var partitionID storage.PartitionID
 
 	key := pi.it.Item().Key()
-	unprefixedKey, hasPrefix := bytes.CutPrefix(key, []byte(prefixPartition))
+	unprefixedKey, hasPrefix := bytes.CutPrefix(key, []byte(PrefixPartition))
 	if !hasPrefix || len(unprefixedKey) < binary.Size(partitionID) {
 		return invalidPartitionID, fmt.Errorf("invalid partition key format: %q", key)
 	}

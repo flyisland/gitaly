@@ -6,11 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
@@ -18,6 +20,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/repoutil"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/counter"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
@@ -26,9 +29,11 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/proto"
 )
@@ -40,6 +45,7 @@ type setupOptions struct {
 	gitCmdFactory gitcmd.CommandFactory
 	catfileCache  catfile.Cache
 	backupRoot    string
+	backupSink    *backup.Sink
 }
 
 type setupData struct {
@@ -48,6 +54,8 @@ type setupData struct {
 	expectedErr     error
 	expectedOutputs []string
 	expectedLSN     map[storage.PartitionID]storage.LSN
+	relativePath    string
+	checksum        string
 }
 
 func TestRecoveryCLI_status(t *testing.T) {
@@ -319,6 +327,7 @@ Available WAL backup entries: up to LSN: %s`,
 			backupRoot := t.TempDir()
 			ctx := testhelper.Context(t)
 			cfg := testcfg.Build(t)
+			cfg.Backup.GoCloudURL = backupRoot
 			cfg.Backup.WALGoCloudURL = backupRoot
 			configPath := testcfg.WriteTemporaryGitalyConfigFile(t, cfg)
 			testcfg.BuildGitaly(t, cfg)
@@ -628,6 +637,7 @@ Successfully processed log entries up to LSN: %s`,
 			backupRoot := t.TempDir()
 			tCtx := testhelper.Context(t)
 			cfg := testcfg.Build(t)
+			cfg.Backup.GoCloudURL = backupRoot
 			cfg.Backup.WALGoCloudURL = backupRoot
 			configPath := testcfg.WriteTemporaryGitalyConfigFile(t, cfg)
 			testcfg.BuildGitaly(t, cfg)
@@ -717,6 +727,122 @@ Successfully processed log entries up to LSN: %s`,
 				require.NoError(t, tr.Rollback(ctx))
 				require.Equal(t, lsn, appliedLSN)
 			}
+		})
+	}
+}
+
+func TestRecoveryCLI_restore(t *testing.T) {
+	t.Parallel()
+
+	if !testhelper.IsWALEnabled() {
+		t.Skip("Transactions must be enabled as the test rely on creating partition backup")
+	}
+
+	testhelper.SkipWithRaft(t, "Raft must not be enabled during recovery")
+
+	for _, tc := range []struct {
+		desc  string
+		setup func(tb testing.TB, ctx context.Context, opts setupOptions) setupData
+	}{
+		{
+			desc: "unknown storage",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				return setupData{
+					storageName:     "unknown",
+					expectedErr:     errors.New("exit status 1"),
+					expectedOutputs: []string{"setup recovery context: storage not found in the config"},
+				}
+			},
+		},
+		{
+			desc: "partition 0",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				return setupData{
+					storageName:     opts.cfg.Storages[0].Name,
+					args:            []string{"-partition", storage.PartitionID(0).String()},
+					expectedErr:     errors.New("exit status 1"),
+					expectedOutputs: []string{fmt.Sprintf("invalid partition ID %s\n", storage.PartitionID(0))},
+				}
+			},
+		},
+		{
+			desc: "no manifest for given partition",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				return setupData{
+					storageName: opts.cfg.Storages[0].Name,
+					args:        []string{"-partition", storage.PartitionID(42).String()},
+					expectedErr: errors.New("exit status 1"),
+					expectedOutputs: []string{
+						fmt.Sprintf("get backup entry: get backup manifest reader: sink: new reader for \"partition-manifests/%s/42.json\": doesn't exist",
+							opts.cfg.Storages[0].Name),
+					},
+				}
+			},
+		},
+		{
+			desc: "success, restore single partition",
+			setup: func(tb testing.TB, ctx context.Context, opts setupOptions) setupData {
+				storageName := opts.cfg.Storages[0].Name
+				partitionID := storage.PartitionID(2)
+
+				relativePath, checksum := createBackup(t, ctx, opts, storageName, partitionID)
+
+				return setupData{
+					storageName:  storageName,
+					args:         []string{"-partition", partitionID.String()},
+					relativePath: relativePath,
+					checksum:     checksum,
+				}
+			},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			ctx := testhelper.Context(t)
+
+			backupRoot := t.TempDir()
+			backupSink, err := backup.ResolveSink(ctx, backupRoot)
+			require.NoError(t, err)
+
+			cfg := testcfg.Build(t)
+			cfg.Backup.GoCloudURL = backupRoot
+			cfg.Backup.WALGoCloudURL = backupRoot
+			testcfg.BuildGitaly(t, cfg)
+
+			data := tc.setup(t, ctx, setupOptions{
+				cfg:        cfg,
+				backupRoot: backupRoot,
+				backupSink: backupSink,
+			})
+
+			configPath := testcfg.WriteTemporaryGitalyConfigFile(t, cfg)
+			args := []string{"recovery", "-config", configPath, "restore", "-storage", data.storageName}
+			args = append(args, data.args...)
+			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
+			output, err := cmd.CombinedOutput()
+			for _, expectedOutput := range data.expectedOutputs {
+				require.Contains(t, string(output), expectedOutput)
+			}
+			if data.expectedErr != nil {
+				testhelper.RequireGrpcError(t, data.expectedErr, err)
+				return
+			}
+
+			addr := testserver.RunGitalyServer(t, cfg, setup.RegisterAll, testserver.WithDisablePraefect())
+			cfg.SocketPath = addr
+
+			cc, err := client.New(testhelper.Context(t), cfg.SocketPath)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, cc)
+
+			repoClient := gitalypb.NewRepositoryServiceClient(cc)
+			checksum, err := repoClient.CalculateChecksum(ctx, &gitalypb.CalculateChecksumRequest{
+				Repository: &gitalypb.Repository{
+					StorageName:  data.storageName,
+					RelativePath: data.relativePath,
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, data.checksum, checksum.GetChecksum())
 		})
 	}
 }
@@ -835,4 +961,45 @@ func createRepository(t *testing.T, ctx context.Context, opts setupOptions) (*gi
 
 	_, err = txn1.Commit(ctx)
 	return repo, err
+}
+
+// createBackup creates real partition backup using gitaly server
+func createBackup(t *testing.T, ctx context.Context, opts setupOptions, targetStorage string, partitionID storage.PartitionID) (string, string) {
+	// We need to run this in a different storage because recovery binary also needs to access
+	// to the storage but accessing the same storage is not possible due to locks.
+	gitalyCfg := testcfg.Build(t, testcfg.WithStorages("gitaly-test"))
+	addr := testserver.RunGitalyServer(t, gitalyCfg, setup.RegisterAll, testserver.WithDisablePraefect(), testserver.WithBackupSink(opts.backupSink))
+	gitalyCfg.SocketPath = addr
+
+	cc, err := client.New(testhelper.Context(t), gitalyCfg.SocketPath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, cc)
+
+	repoClient := gitalypb.NewRepositoryServiceClient(cc)
+	repo, repoPath := gittest.CreateRepository(t, ctx, gitalyCfg)
+	gittest.WriteCommit(t, gitalyCfg, repoPath, gittest.WithBranch("something"))
+	_, err = repoClient.WriteRef(ctx, &gitalypb.WriteRefRequest{
+		Repository: repo,
+		Ref:        []byte("HEAD"),
+		Revision:   []byte("refs/heads/something"),
+	})
+	require.NoError(t, err)
+	checksum, err := repoClient.CalculateChecksum(ctx, &gitalypb.CalculateChecksumRequest{Repository: repo})
+	require.NoError(t, err)
+	repoRelPath, err := filepath.Rel(gitalyCfg.Storages[0].Path, repoPath)
+	require.NoError(t, err)
+
+	resp, err := gitalypb.NewPartitionServiceClient(cc).BackupPartition(ctx, &gitalypb.BackupPartitionRequest{
+		StorageName: "gitaly-test",
+		PartitionId: partitionID.String(),
+	})
+	require.NoError(t, err)
+	testhelper.ProtoEqual(t, &gitalypb.BackupPartitionResponse{}, resp)
+
+	// Since we created this in a different storage, move it to the right location
+	// so that recovery binary can find it.
+	require.NoError(t, os.Rename(filepath.Join(opts.backupRoot, "partition-manifests", "gitaly-test"),
+		filepath.Join(opts.backupRoot, "partition-manifests", targetStorage)))
+
+	return repoRelPath, checksum.GetChecksum()
 }

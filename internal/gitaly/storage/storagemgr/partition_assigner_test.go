@@ -29,7 +29,7 @@ func getPartitionAssignments(tb testing.TB, db keyvalue.Transactioner) partition
 	state := partitionAssignments{}
 	require.NoError(tb, db.View(func(txn keyvalue.ReadWriter) error {
 		it := txn.NewIterator(keyvalue.IteratorOptions{
-			Prefix: []byte(prefixPartitionAssignment),
+			Prefix: []byte(PrefixPartitionAssignment),
 		})
 		defer it.Close()
 
@@ -40,7 +40,7 @@ func getPartitionAssignments(tb testing.TB, db keyvalue.Transactioner) partition
 			var ptnID storage.PartitionID
 			ptnID.UnmarshalBinary(value)
 
-			relativePath := strings.TrimPrefix(string(it.Item().Key()), prefixPartitionAssignment)
+			relativePath := strings.TrimPrefix(string(it.Item().Key()), PrefixPartitionAssignment)
 			state[relativePath] = ptnID
 		}
 

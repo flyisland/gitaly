@@ -39,8 +39,10 @@ type recoveryContext struct {
 	cmd           *cli.Command
 	parallel      int
 	nodeStorage   storage.Storage
+	kvStore       keyvalue.Store
 	storage       config.Storage
 	partitions    []storage.PartitionID
+	backupSink    *backup.Sink
 	logEntryStore backup.LogEntryStore
 	cleanupFuncs  *list.List
 }
@@ -56,6 +58,7 @@ func newRecoveryCommand() *cli.Command {
 		Commands: []*cli.Command{
 			newRecoveryStatusCommand(),
 			newRecoveryReplayCommand(),
+			newRecoveryRestoreCommand(),
 		},
 	}
 }
@@ -85,14 +88,25 @@ func setupRecoveryContext(ctx context.Context, cmd *cli.Command) (rc recoveryCon
 		return recoveryContext, fmt.Errorf("load config: %w", err)
 	}
 
+	// WAL sink
 	if cfg.Backup.WALGoCloudURL == "" {
 		return recoveryContext, fmt.Errorf("write-ahead log backup is not configured")
 	}
-	sink, err := backup.ResolveSink(ctx, cfg.Backup.WALGoCloudURL)
+	walSink, err := backup.ResolveSink(ctx, cfg.Backup.WALGoCloudURL)
 	if err != nil {
-		return recoveryContext, fmt.Errorf("resolve sink: %w", err)
+		return recoveryContext, fmt.Errorf("resolve WAL sink: %w", err)
 	}
-	recoveryContext.logEntryStore = backup.NewLogEntryStore(sink)
+	recoveryContext.logEntryStore = backup.NewLogEntryStore(walSink)
+
+	// Backup sink
+	if cfg.Backup.GoCloudURL == "" {
+		return recoveryContext, fmt.Errorf("backup sink is not configured")
+	}
+	backupSink, err := backup.ResolveSink(ctx, cfg.Backup.GoCloudURL, backup.WithBufferSize(cfg.Backup.BufferSize))
+	if err != nil {
+		return recoveryContext, fmt.Errorf("resolve backup sink: %w", err)
+	}
+	recoveryContext.backupSink = backupSink
 
 	runtimeDir, err := os.MkdirTemp("", "gitaly-recovery-*")
 	if err != nil {
@@ -186,6 +200,10 @@ func setupRecoveryContext(ctx context.Context, cmd *cli.Command) (rc recoveryCon
 		return recoveryContext, fmt.Errorf("get storage: %w", err)
 	}
 	recoveryContext.nodeStorage = nodeStorage
+	recoveryContext.kvStore, err = dbMgr.GetDB(storageName)
+	if err != nil {
+		return recoveryContext, fmt.Errorf("get db: %w", err)
+	}
 
 	if cmd.Bool("all") {
 		iter, err := nodeStorage.ListPartitions(storage.PartitionID(0))

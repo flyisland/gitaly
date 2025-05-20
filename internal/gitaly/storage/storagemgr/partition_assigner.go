@@ -19,8 +19,10 @@ import (
 var ErrRepositoriesAreInDifferentPartitions = errors.New("repositories are in different partitions")
 
 const (
-	prefixPartitionAssignment = "partition_assignment/"
-	prefixPartition           = "p/"
+	// PrefixPartitionAssignment is the key prefix for partition assignment in the keyvalue store.
+	PrefixPartitionAssignment = "partition_assignment/"
+	// PrefixPartition is the key prefix for partition related keys in the keyvalue store.
+	PrefixPartition = "p/"
 )
 
 const (
@@ -48,7 +50,7 @@ func newPartitionAssignmentTable(db keyvalue.Store) *partitionAssignmentTable {
 }
 
 func (pt *partitionAssignmentTable) key(relativePath string) []byte {
-	return []byte(fmt.Sprintf("%s%s", prefixPartitionAssignment, relativePath))
+	return []byte(fmt.Sprintf("%s%s", PrefixPartitionAssignment, relativePath))
 }
 
 func (pt *partitionAssignmentTable) getPartitionID(relativePath string) (storage.PartitionID, error) {
