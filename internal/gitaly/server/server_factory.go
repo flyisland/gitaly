@@ -6,6 +6,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/cache"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/housekeeping"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/limithandler"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"google.golang.org/grpc"
@@ -13,14 +14,15 @@ import (
 
 // GitalyServerFactory is a factory of gitaly grpc servers
 type GitalyServerFactory struct {
-	registry         *backchannel.Registry
-	cacheInvalidator cache.Invalidator
-	limitHandlers    []*limithandler.LimiterMiddleware
-	cfg              config.Cfg
-	logger           log.Logger
-	externalServers  []*grpc.Server
-	internalServers  []*grpc.Server
-	txMiddleware     TransactionMiddleware
+	registry               *backchannel.Registry
+	cacheInvalidator       cache.Invalidator
+	limitHandlers          []*limithandler.LimiterMiddleware
+	cfg                    config.Cfg
+	logger                 log.Logger
+	externalServers        []*grpc.Server
+	internalServers        []*grpc.Server
+	txMiddleware           TransactionMiddleware
+	housekeepingMiddleware *housekeeping.Middleware
 }
 
 // TransactionMiddleware collects transaction middleware into a single struct that can be
@@ -39,15 +41,17 @@ func NewGitalyServerFactory(
 	registry *backchannel.Registry,
 	cacheInvalidator cache.Invalidator,
 	limitHandlers []*limithandler.LimiterMiddleware,
+	housekeepingMiddleware *housekeeping.Middleware,
 	txMiddleware TransactionMiddleware,
 ) *GitalyServerFactory {
 	return &GitalyServerFactory{
-		cfg:              cfg,
-		logger:           logger,
-		registry:         registry,
-		cacheInvalidator: cacheInvalidator,
-		limitHandlers:    limitHandlers,
-		txMiddleware:     txMiddleware,
+		cfg:                    cfg,
+		logger:                 logger,
+		registry:               registry,
+		cacheInvalidator:       cacheInvalidator,
+		limitHandlers:          limitHandlers,
+		txMiddleware:           txMiddleware,
+		housekeepingMiddleware: housekeepingMiddleware,
 	}
 }
 

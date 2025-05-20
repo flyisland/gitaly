@@ -46,6 +46,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
+	housekeepingmw "gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/housekeeping"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/limithandler"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
@@ -557,12 +558,16 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	housekeepingManager := housekeepingmgr.New(cfg.Prometheus, logger, transactionManager, node)
 	prometheus.MustRegister(housekeepingManager)
 
+	housekeepingMiddleware := housekeepingmw.NewHousekeepingMiddleware(logger, protoregistry.GitalyProtoPreregistered, localrepoFactory, housekeepingManager, 20)
+	defer housekeepingMiddleware.WaitForWorkers()
+
 	gitalyServerFactory := server.NewGitalyServerFactory(
 		cfg,
 		logger,
 		registry,
 		diskCache,
 		[]*limithandler.LimiterMiddleware{perRPCLimitHandler},
+		housekeepingMiddleware,
 		txMiddleware,
 	)
 	defer gitalyServerFactory.Stop()
