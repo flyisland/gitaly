@@ -677,6 +677,21 @@ func (cf *ExecCommandFactory) GlobalConfiguration(ctx context.Context) ([]Config
 		{Key: "core.bigFileThreshold", Value: fmt.Sprintf("%dm", BigFileThresholdMB)},
 	}
 
+	if featureflag.MultiPackReuse.IsEnabled(ctx) {
+		// When generating packfiles, Git tries to reuse parts of the packfile verbatim so that it does not have
+		// to recompute deltas. The goal of this is to speed up the generation of the packfile while reducing
+		// computational resources required. This optimization only works for the preferred packfile though,
+		// which typically is the largest packfile in the repository. Especially larger repositories may have a
+		// significant amount of objects stored in different packfiles, so none of those objects would be
+		// reused.
+		//
+		// Git has recently introduced multi-pack reuse of objects to address this inefficiency and make reuse
+		// of objects work across multiple packfiles as long as those objects are mapped by a multi-pack index
+		// with an accompanying bitmap. As this is a recent addition to Git this feature is not enabled by
+		// default yet, but needs to be opted in with a configuration.
+		config = append(config, ConfigPair{Key: "pack.allowPackReuse", Value: "multi"})
+	}
+
 	if cf.cfg.Transactions.Enabled {
 		config = append(config,
 			// When transactions are enabled, the TransactionManager is responsible for

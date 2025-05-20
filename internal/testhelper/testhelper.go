@@ -313,6 +313,8 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 
 	// Randomly enable mailmap
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.MailmapOptions, rnd.Int()%2 == 0)
+	// Randomly enable multi-pack reuse of objects.
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.MultiPackReuse, rnd.Int()%2 == 0)
 	// Disable LogGitTraces
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LogGitTraces, false)
 	// Enable reftable backend, if env variable set
