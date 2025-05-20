@@ -438,7 +438,7 @@ func testWithAndWithoutTransaction(t *testing.T, ctx context.Context, testFunc f
 				logger,
 				dbMgr,
 				partition.NewFactory(partitionFactoryOptions...),
-				storagemgr.DefaultMaxInactivePartitions,
+				config.DefaultMaxInactivePartitions,
 				storagemgr.NewMetrics(cfg.Prometheus),
 			),
 		)

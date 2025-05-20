@@ -216,7 +216,7 @@ func TestMigrator(t *testing.T) {
 	partitionFactory := partition.NewFactory(partitionFactoryOptions...)
 
 	ptnMgr, err := node.NewManager(cfg.Storages, storagemgr.NewFactory(
-		logger, dbMgr, partitionFactory, storagemgr.DefaultMaxInactivePartitions, storagemgr.NewMetrics(cfg.Prometheus),
+		logger, dbMgr, partitionFactory, config.DefaultMaxInactivePartitions, storagemgr.NewMetrics(cfg.Prometheus),
 	))
 	require.NoError(t, err)
 	defer ptnMgr.Close()

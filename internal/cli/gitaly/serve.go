@@ -454,7 +454,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 					migrationMetrics,
 					migrations,
 				),
-				2,
+				cfg.Transactions.MaxInactivePartitions,
 				storageMetrics,
 			),
 		)

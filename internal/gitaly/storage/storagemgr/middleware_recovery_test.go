@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
@@ -60,7 +61,7 @@ func TestTransactionRecoveryMiddleware(t *testing.T) {
 	defer cache.Stop()
 
 	ptnMgr, err := node.NewManager(cfg.Storages, NewFactory(
-		logger, dbMgr, newStubPartitionFactory(), DefaultMaxInactivePartitions, NewMetrics(cfg.Prometheus),
+		logger, dbMgr, newStubPartitionFactory(), config.DefaultMaxInactivePartitions, NewMetrics(cfg.Prometheus),
 	))
 	require.NoError(t, err)
 	defer ptnMgr.Close()

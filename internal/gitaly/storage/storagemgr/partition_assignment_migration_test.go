@@ -142,7 +142,7 @@ func setupDefaultNode(t *testing.T, ctx context.Context, cfg config.Cfg, dbMgr *
 			logger,
 			dbMgr,
 			nil,
-			DefaultMaxInactivePartitions,
+			config.DefaultMaxInactivePartitions,
 			NewMetrics(cfg.Prometheus),
 		),
 	)

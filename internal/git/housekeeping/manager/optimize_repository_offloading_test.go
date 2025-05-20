@@ -185,7 +185,7 @@ func setupNodeForTransaction(t *testing.T, ctx context.Context, cfg gitalycfg.Cf
 			logger,
 			dbMgr,
 			partition.NewFactory(partitionFactoryOptions...),
-			storagemgr.DefaultMaxInactivePartitions,
+			gitalycfg.DefaultMaxInactivePartitions,
 			storagemgr.NewMetrics(cfg.Prometheus),
 		),
 	)

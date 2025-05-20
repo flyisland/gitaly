@@ -11,7 +11,7 @@ type Factory struct {
 	logger                log.Logger
 	dbMgr                 *databasemgr.DBManager
 	partitionFactory      PartitionFactory
-	maxInactivePartitions int
+	maxInactivePartitions uint
 	metrics               *Metrics
 }
 
@@ -20,7 +20,7 @@ func NewFactory(
 	logger log.Logger,
 	dbMgr *databasemgr.DBManager,
 	partitionFactory PartitionFactory,
-	maxInactivePartitions int,
+	maxInactivePartitions uint,
 	metrics *Metrics,
 ) Factory {
 	return Factory{
