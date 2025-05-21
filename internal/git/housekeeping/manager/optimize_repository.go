@@ -104,10 +104,10 @@ func (m *RepositoryManager) maybeStartTransaction(ctx context.Context, repo *loc
 		return run(ctx, nil, repo)
 	}
 
-	return m.runInTransaction(ctx, true, repo, run)
+	return m.runInTransaction(ctx, "housekeeping/heuristics", true, repo, run)
 }
 
-func (m *RepositoryManager) runInTransaction(ctx context.Context, readOnly bool, repo *localrepo.Repo, run func(context.Context, storage.Transaction, *localrepo.Repo) error) (returnedErr error) {
+func (m *RepositoryManager) runInTransaction(ctx context.Context, transactionName string, readOnly bool, repo *localrepo.Repo, run func(context.Context, storage.Transaction, *localrepo.Repo) error) (returnedErr error) {
 	originalRepo := &gitalypb.Repository{
 		StorageName:  repo.GetStorageName(),
 		RelativePath: repo.GetRelativePath(),
@@ -152,7 +152,7 @@ func (m *RepositoryManager) runInTransaction(ctx context.Context, readOnly bool,
 	// No need to log the read-only transaction gathering the heuristics as
 	// we're only interested in logging write transactions to identify conflicts.
 	if !readOnly {
-		storage.LogTransactionCommit(ctx, m.logger, commitLSN, "housekeeping")
+		storage.LogTransactionCommit(ctx, m.logger, commitLSN, transactionName)
 	}
 
 	return nil
@@ -324,7 +324,7 @@ func (m *RepositoryManager) optimizeRepositoryWithTransaction(
 
 	var errPackReferences error
 	if packRefsNeeded {
-		if err := m.runInTransaction(ctx, false, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
+		if err := m.runInTransaction(ctx, "housekeeping/pack-refs", false, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
 			tx.PackRefs()
 			return nil
 		}); err != nil {
@@ -334,7 +334,7 @@ func (m *RepositoryManager) optimizeRepositoryWithTransaction(
 
 	var errRepackObjects error
 	if repackNeeded || writeCommitGraphNeeded {
-		if err := m.runInTransaction(ctx, false, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
+		if err := m.runInTransaction(ctx, "housekeeping/pack-objects", false, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
 			if repackNeeded {
 				tx.Repack(repackCfg)
 			}

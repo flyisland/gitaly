@@ -15,7 +15,7 @@ func (m *RepositoryManager) OffloadRepository(ctx context.Context, repo *localre
 		return fmt.Errorf("unable to retrieve storage node")
 	}
 
-	return m.runInTransaction(ctx, false, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
+	return m.runInTransaction(ctx, "housekeeping/offload", false, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
 		if tx != nil {
 			tx.SetOffloadingConfig(cfg)
 			return nil
