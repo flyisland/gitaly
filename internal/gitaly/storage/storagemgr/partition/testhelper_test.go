@@ -93,6 +93,8 @@ type ReftableTable struct {
 	MaxIndex uint64
 	// References is the complete list of references.
 	References []git.Reference
+	// Locked determines whether the table should have a lock file as well.
+	Locked bool
 }
 
 // ReftableBackendState holds the reference state for the reftable backend. Since
@@ -390,6 +392,17 @@ func collectReftableReferencesState(
 	require.NoError(tb, err)
 
 	for _, entry := range dirEntries {
+		if strings.HasSuffix(entry.Name(), ".lock") {
+			// Begin writes always a lock file for write transactions for the latest table
+			// in the repository to prevent auto-compaction from touching the existing tables.
+			// This would lead to conflicts as multiple transactions could auto-compact the
+			// tables in their own snapshots.
+			//
+			// Skip the lock files as they are not present in the tables.list file, and they
+			// are asserted individually for each table.
+			continue
+		}
+
 		actualFiles[entry.Name()] = struct{}{}
 	}
 	require.Equal(tb, expectedFiles, actualFiles, "reftables directory contained unexpected files not present in tables.list")
@@ -399,7 +412,9 @@ func collectReftableReferencesState(
 	for _, tableName := range tableNames {
 		table := ReftableTable{}
 
-		data, err := os.ReadFile(filepath.Join(repoPath, "reftable", tableName))
+		tablePath := filepath.Join(repoPath, "reftable", tableName)
+
+		data, err := os.ReadFile(tablePath)
 		require.NoError(tb, err)
 
 		table.MinIndex, table.MaxIndex, err = git.ParseReftableName(tableName)
@@ -413,6 +428,14 @@ func collectReftableReferencesState(
 
 		for _, reference := range table.References {
 			actualReferences[reference.Name] = git.ObjectID(reference.Target)
+		}
+
+		// Check whether the table file had an associated lock. Begin creates
+		// a lock for the latest table file for write transactions.
+		table.Locked = true
+		if _, err := os.Stat(tablePath + ".lock"); err != nil {
+			require.ErrorIs(tb, err, os.ErrNotExist)
+			table.Locked = false
 		}
 
 		state.ReftableBackend.Tables = append(state.ReftableBackend.Tables, table)
