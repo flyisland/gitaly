@@ -681,6 +681,10 @@ message FindCommitsRequest {
   // respectively with `refs/heads`. By sending both, the response will include all
   // references that match either pattern.
   repeated bytes include_referenced_by = 18; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+
+  // message_regex is used to select only commits with messages matching the provided pattern.
+  // The pattern is a case-insensitive basic Posix regular expression.
+  string message_regex = 19;
 }
 
 // FindCommitsResponse is the response for the FindCommits RPC. The response will be
@@ -775,7 +779,7 @@ message RawBlameError {
     // actual_lines contains the actual number of lines that can be blamed in the file.
     uint64 actual_lines = 1;
   }
-  
+
   // InvalidIgnoreRevsFormatError indicates that the file containing ignored
   // revisions has an invalid format.
   message InvalidIgnoreRevsFormatError {
