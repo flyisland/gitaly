@@ -308,6 +308,11 @@ func getLogCommandSubCmd(req *gitalypb.FindCommitsRequest) gitcmd.Command {
 		}
 	}
 
+	if req.GetMessageRegex() != "" {
+		subCmd.Flags = append(subCmd.Flags, gitcmd.ValueFlag{Name: "--grep", Value: req.GetMessageRegex()})
+		subCmd.Flags = append(subCmd.Flags, gitcmd.Flag{Name: "--regexp-ignore-case"})
+	}
+
 	return subCmd
 }
 

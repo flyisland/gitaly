@@ -8,6 +8,7 @@ import (
 	grpcmwlogrus "github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/sirupsen/logrus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/server/auth"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
@@ -27,6 +28,7 @@ import (
 	grpccorrelation "gitlab.com/gitlab-org/labkit/correlation/grpc"
 	grpctracing "gitlab.com/gitlab-org/labkit/tracing/grpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	expcredentials "google.golang.org/grpc/experimental/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -51,6 +53,24 @@ func WithUnaryInterceptor(interceptor grpc.UnaryServerInterceptor) Option {
 func WithStreamInterceptor(interceptor grpc.StreamServerInterceptor) Option {
 	return func(cfg *serverConfig) {
 		cfg.streamInterceptors = append(cfg.streamInterceptors, interceptor)
+	}
+}
+
+// The default CodeToLevel function is at github.com/grpc-ecosystem/go-grpc-middleware/blob/v2.1.0/interceptors/logging/options.go
+var levelFunc = func(code codes.Code) logrus.Level {
+	switch code {
+	case codes.OK, codes.NotFound, codes.Canceled, codes.AlreadyExists,
+		codes.InvalidArgument, codes.Unauthenticated:
+		return logrus.InfoLevel
+	case codes.DeadlineExceeded, codes.PermissionDenied,
+		codes.FailedPrecondition, codes.Aborted,
+		codes.OutOfRange, codes.ResourceExhausted:
+		return logrus.WarnLevel
+	case codes.Unknown, codes.Unimplemented, codes.Internal, codes.DataLoss,
+		codes.Unavailable:
+		return logrus.ErrorLevel
+	default:
+		return logrus.ErrorLevel
 	}
 }
 
@@ -111,6 +131,7 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 		selector.StreamServerInterceptor(s.logger.WithField("component", "gitaly.StreamServerInterceptor").StreamServerInterceptor(
 			grpcmwlogrus.WithTimestampFormat(gitalylog.LogTimestampFormat),
 			logMsgProducer,
+			grpcmwlogrus.WithLevels(levelFunc),
 		), logMatcher),
 		loghandler.StreamLogDataCatcherServerInterceptor(),
 		sentryhandler.StreamLogHandler(),
@@ -125,6 +146,7 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 		selector.UnaryServerInterceptor(s.logger.WithField("component", "gitaly.UnaryServerInterceptor").UnaryServerInterceptor(
 			grpcmwlogrus.WithTimestampFormat(gitalylog.LogTimestampFormat),
 			logMsgProducer,
+			grpcmwlogrus.WithLevels(levelFunc),
 		), logMatcher),
 		loghandler.UnaryLogDataCatcherServerInterceptor(),
 		sentryhandler.UnaryLogHandler(),

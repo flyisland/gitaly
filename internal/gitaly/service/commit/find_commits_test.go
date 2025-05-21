@@ -697,6 +697,68 @@ func TestFindCommits(t *testing.T) {
 			},
 		},
 		{
+			desc: "with message regex",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				// Create commits with specific messages
+				commitID1, commit1 := writeCommit(t, repo, gittest.WithMessage("test commit message for query"))
+				commitID2, _ := writeCommit(t, repo, gittest.WithMessage("another commit message"), gittest.WithParents(commitID1))
+
+				return setupData{
+					request: &gitalypb.FindCommitsRequest{
+						Repository:   repo,
+						Revision:     []byte(commitID2),
+						MessageRegex: "test commit message",
+						Limit:        9000,
+					},
+					expectedCommits: []*gitalypb.GitCommit{commit1},
+				}
+			},
+		},
+		{
+			desc: "with differently cased message regex",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				// Create commits with specific messages
+				commitID1, commit1 := writeCommit(t, repo, gittest.WithMessage("test commit message for query"))
+				commitID2, _ := writeCommit(t, repo, gittest.WithMessage("another commit message"), gittest.WithParents(commitID1))
+
+				return setupData{
+					request: &gitalypb.FindCommitsRequest{
+						Repository:   repo,
+						Revision:     []byte(commitID2),
+						MessageRegex: "TEST COMMIT",
+						Limit:        9000,
+					},
+					expectedCommits: []*gitalypb.GitCommit{commit1},
+				}
+			},
+		},
+		{
+			desc: "with message regex matching multiple commits",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				// Create commits with messages that will both match the query
+				commitID1, commit1 := writeCommit(t, repo, gittest.WithMessage("first test commit with matching text"))
+				commitID2, commit2 := writeCommit(t, repo, gittest.WithMessage("second test commit with matching text"), gittest.WithParents(commitID1))
+				commitID3, _ := writeCommit(t, repo, gittest.WithMessage("non-matching commit message"), gittest.WithParents(commitID2))
+
+				return setupData{
+					request: &gitalypb.FindCommitsRequest{
+						Repository:   repo,
+						Revision:     []byte(commitID3),
+						MessageRegex: "matching text",
+						Limit:        9000,
+					},
+					// Both commits should be returned, with the most recent first
+					expectedCommits: []*gitalypb.GitCommit{commit2, commit1},
+				}
+			},
+		},
+		{
 			desc: "no commits found due to ambiguous argument",
 			setup: func(t *testing.T) setupData {
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
