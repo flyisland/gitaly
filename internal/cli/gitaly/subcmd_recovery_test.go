@@ -65,7 +65,7 @@ func TestRecoveryCLI_status(t *testing.T) {
 				return setupData{
 					storageName:     "pineapple",
 					expectedErr:     errors.New("exit status 1"),
-					expectedOutputs: []string{"get storage: storage name not found\n"},
+					expectedOutputs: []string{"setup recovery context: storage not found in the config"},
 				}
 			},
 		},
@@ -393,7 +393,7 @@ func TestRecoveryCLI_replay(t *testing.T) {
 				return setupData{
 					storageName:     "pineapple",
 					expectedErr:     errors.New("exit status 1"),
-					expectedOutputs: []string{"get storage: storage name not found\n"},
+					expectedOutputs: []string{"setup recovery context: storage not found in the config"},
 					expectedLSN:     nil,
 				}
 			},
