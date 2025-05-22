@@ -316,7 +316,7 @@ test:nightly:
   allow_failure: true
   variables:
     <<: *test_variables
-    OVERRIDE_GIT_VERSION: ""
+    OVERRIDE_GIT_VERSION: "v99.99.99"
   parallel:
     matrix:
       - GIT_VERSION: ["master", "next"]
