@@ -4,11 +4,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus/ctxlogrus"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
@@ -47,8 +50,13 @@ func TestHooksPayload(t *testing.T) {
 	})
 
 	t.Run("roundtrip succeeds", func(t *testing.T) {
+		ctx := metadata.AppendToIncomingContext(ctx, metadata.ClientContextMetadataKey, "foobar")
+
+		logFields := log.Fields{"log_field": "log_value"}
+		ctx = ctxlogrus.ToContext(ctx, logrus.NewEntry(nil).WithFields(logFields))
+
 		env, err := gitcmd.NewHooksPayload(
-			metadata.AppendToIncomingContext(ctx, metadata.ClientContextMetadataKey, "foobar"),
+			ctx,
 			cfg,
 			repo,
 			gittest.DefaultObjectHash,
@@ -84,6 +92,7 @@ func TestHooksPayload(t *testing.T) {
 			},
 			TransactionID:       1,
 			GitalyClientContext: []byte("foobar"),
+			LogFields:           logFields,
 		}, payload)
 	})
 
@@ -111,6 +120,7 @@ func TestHooksPayload(t *testing.T) {
 			InternalSocket: cfg.InternalSocketPath(),
 			Transaction:    &tx,
 			RequestedHooks: gitcmd.UpdateHook,
+			LogFields:      log.Fields{},
 		}, payload)
 	})
 
@@ -159,6 +169,7 @@ func TestHooksPayload(t *testing.T) {
 				Protocol: "ssh",
 			},
 			RequestedHooks: gitcmd.PostReceiveHook,
+			LogFields:      log.Fields{},
 		}, payload)
 	})
 }

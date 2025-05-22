@@ -265,6 +265,8 @@ func TestReceivePack_success(t *testing.T) {
 		transactionID = 6
 	}
 
+	payload.LogFields = nil
+
 	require.Equal(t, gitcmd.HooksPayload{
 		ObjectFormat:        gittest.DefaultObjectHash.Format,
 		RuntimeDir:          cfg.RuntimeDir,
