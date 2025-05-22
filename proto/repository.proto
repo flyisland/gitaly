@@ -3,7 +3,6 @@ syntax = "proto3";
 package gitaly;
 
 import "errors.proto";
-import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "lint.proto";
 import "shared.proto";
@@ -397,14 +396,6 @@ service RepositoryService {
   rpc FastExport(FastExportRequest) returns (stream FastExportResponse) {
     option (op_type) = {
       op: ACCESSOR
-    };
-  }
-
-  // DryRunReftableMigration is an RPC used to dry-run the reftable migration.
-  // This will be removed once the migration tests have finished.
-  rpc DryRunReftableMigration(DryRunReftableMigrationRequest) returns (DryRunReftableMigrationResponse) {
-    option (op_type) = {
-      op: MUTATOR
     };
   }
 }
@@ -1428,16 +1419,4 @@ message FastExportRequest {
 message FastExportResponse {
   // data contains the content of the export of the repository.
   bytes data = 1;
-}
-
-// DryRunReftableMigrationRequest is a request for the DryRunReftableMigration RPC.
-message DryRunReftableMigrationRequest {
-  // repository is the repository to dry-run migrations on.
-  Repository repository = 1 [(target_repository)=true];
-}
-
-// DryRunReftableMigrationResponse is a response for the DryRunReftableMigration RPC.
-message DryRunReftableMigrationResponse {
-  // time is the amount of time the migrations took.
-  google.protobuf.Duration time = 1;
 }
