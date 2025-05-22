@@ -72,7 +72,7 @@ func sendStats(batch []*gitalypb.DiffStats, stream gitalypb.DiffService_DiffStat
 	}
 
 	if err := stream.Send(&gitalypb.DiffStatsResponse{Stats: batch}); err != nil {
-		return structerr.NewAborted("send: %w", err)
+		return structerr.NewInternal("send: %w", err)
 	}
 
 	return nil

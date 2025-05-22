@@ -68,7 +68,7 @@ func (s *server) RangeDiff(in *gitalypb.RangeDiffRequest, stream gitalypb.DiffSe
 			response.EndOfPatch = true
 
 			if err := stream.Send(response); err != nil {
-				return structerr.NewAborted("send: %w", err)
+				return structerr.NewInternal("send: %w", err)
 			}
 		} else {
 			for len(patchData) > 0 {
@@ -80,7 +80,7 @@ func (s *server) RangeDiff(in *gitalypb.RangeDiffRequest, stream gitalypb.DiffSe
 				response.PatchData = patchData[:partSize]
 
 				if err := stream.Send(response); err != nil {
-					return structerr.NewAborted("send: %w", err)
+					return structerr.NewInternal("send: %w", err)
 				}
 				response = &gitalypb.RangeDiffResponse{}
 				patchData = patchData[partSize:]

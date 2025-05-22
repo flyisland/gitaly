@@ -47,7 +47,7 @@ func sendGetBlobsResponse(
 
 		if treeEntry == nil || len(treeEntry.GetOid()) == 0 {
 			if err := stream.Send(response); err != nil {
-				return structerr.NewAborted("send: %w", err)
+				return structerr.NewInternal("send: %w", err)
 			}
 
 			continue
@@ -61,7 +61,7 @@ func sendGetBlobsResponse(
 			response.Type = gitalypb.ObjectType_COMMIT
 
 			if err := stream.Send(response); err != nil {
-				return structerr.NewAborted("send: %w", err)
+				return structerr.NewInternal("send: %w", err)
 			}
 
 			continue
@@ -83,7 +83,7 @@ func sendGetBlobsResponse(
 
 		if response.GetType() != gitalypb.ObjectType_BLOB {
 			if err := stream.Send(response); err != nil {
-				return structerr.NewAborted("send: %w", err)
+				return structerr.NewInternal("send: %w", err)
 			}
 			continue
 		}
@@ -116,7 +116,7 @@ func sendBlobTreeEntry(
 	// blobObj.
 	if readLimit == 0 {
 		if err := stream.Send(response); err != nil {
-			return structerr.NewAborted("send: %w", err)
+			return structerr.NewInternal("send: %w", err)
 		}
 		return nil
 	}
@@ -148,7 +148,7 @@ func sendBlobTreeEntry(
 
 	_, err = io.CopyN(sw, blobObj, readLimit)
 	if err != nil {
-		return structerr.NewAborted("send: %w", err)
+		return structerr.NewInternal("send: %w", err)
 	}
 
 	return nil

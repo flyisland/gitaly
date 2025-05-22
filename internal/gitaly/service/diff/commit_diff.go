@@ -103,7 +103,7 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 			response.EndOfPatch = true
 
 			if err := stream.Send(response); err != nil {
-				return structerr.NewAborted("send: %w", err)
+				return structerr.NewInternal("send: %w", err)
 			}
 		} else {
 			patch := diff.Patch
@@ -119,7 +119,7 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 				}
 
 				if err := stream.Send(response); err != nil {
-					return structerr.NewAborted("send: %w", err)
+					return structerr.NewInternal("send: %w", err)
 				}
 
 				// Use a new response so we don't send other fields (FromPath, ...) over and over

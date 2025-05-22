@@ -100,7 +100,7 @@ func sendRawRangeDiffOutput(ctx context.Context, repo *localrepo.Repo, sender io
 	}
 
 	if _, err := io.Copy(sender, cmd); err != nil {
-		return structerr.NewAborted("send: %w", err)
+		return structerr.NewInternal("send: %w", err)
 	}
 
 	return cmd.Wait()
