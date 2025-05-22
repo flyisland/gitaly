@@ -74,6 +74,7 @@ var transactionRPCs = map[string]transactionsCondition{
 	"/gitaly.RepositoryService/FetchBundle":                  transactionsEnabled,
 	"/gitaly.RepositoryService/FetchRemote":                  transactionsEnabled,
 	"/gitaly.RepositoryService/FetchSourceBranch":            transactionsEnabled,
+	"/gitaly.RepositoryService/MigrateReferenceBackend":      transactionsEnabled,
 	"/gitaly.RepositoryService/RemoveRepository":             transactionsEnabled,
 	"/gitaly.RepositoryService/ReplicateRepository":          transactionsEnabled,
 	"/gitaly.RepositoryService/RestoreCustomHooks":           transactionsEnabled,

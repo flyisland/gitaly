@@ -3,6 +3,7 @@ syntax = "proto3";
 package gitaly;
 
 import "errors.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "lint.proto";
 import "shared.proto";
@@ -396,6 +397,14 @@ service RepositoryService {
   rpc FastExport(FastExportRequest) returns (stream FastExportResponse) {
     option (op_type) = {
       op: ACCESSOR
+    };
+  }
+
+  // MigrateReferenceBackend allows migrating a repository between the different Git
+  // reference backends. Transactions must be enabled.
+  rpc MigrateReferenceBackend(MigrateReferenceBackendRequest) returns (MigrateReferenceBackendResponse) {
+    option (op_type) = {
+      op: MUTATOR
     };
   }
 }
@@ -1419,4 +1428,28 @@ message FastExportRequest {
 message FastExportResponse {
   // data contains the content of the export of the repository.
   bytes data = 1;
+}
+
+// MigrateReferenceBackendRequest is a request for the MigrateReferenceBackend RPC.
+message MigrateReferenceBackendRequest {
+  // ReferenceBackend denotes the type of backend used to store references.
+  enum ReferenceBackend {
+    // REFERENCE_BACKEND_UNSPECIFIED is the default value and should never be set.
+    REFERENCE_BACKEND_UNSPECIFIED = 0;
+    // REFERENCE_BACKEND_FILES is the traditional backend built using files/directories.
+    REFERENCE_BACKEND_FILES = 1;
+    // REFERENCE_BACKEND_REFTABLE is the new backend using customized binary file format.
+    REFERENCE_BACKEND_REFTABLE = 2;
+  };
+
+  // repository is the repository to run migrations on.
+  Repository repository = 1 [(target_repository)=true];
+  // target_reference_backend is the backend to migrate to.
+  ReferenceBackend target_reference_backend = 2;
+}
+
+// MigrateReferenceBackendResponse is a response for the MigrateReferenceBackend RPC.
+message MigrateReferenceBackendResponse {
+  // time is the amount of time the migrations took.
+  google.protobuf.Duration time = 1;
 }
