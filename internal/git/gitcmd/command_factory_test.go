@@ -681,6 +681,10 @@ func TestExecCommandFactory_config(t *testing.T) {
 		"core.bigfilethreshold=50m",
 	}
 
+	if featureflag.MultiPackReuse.IsEnabled(ctx) {
+		expectedEnv = append(expectedEnv, "pack.allowpackreuse=multi")
+	}
+
 	if testhelper.IsWALEnabled() {
 		expectedEnv = append(expectedEnv,
 			"core.fsync=none",
