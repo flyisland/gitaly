@@ -6,5 +6,5 @@ var CatfileObjectTypeFilter = NewFeatureFlag(
 	"catfile_object_type_filter",
 	"v18.0.0",
 	"https://gitlab.com/gitlab-org/gitaly/-/issues/6720",
-	false,
+	true,
 )
