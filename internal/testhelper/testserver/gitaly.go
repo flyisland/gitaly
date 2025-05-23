@@ -216,6 +216,7 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 		deps.GetBackchannelRegistry(),
 		deps.GetDiskCache(),
 		[]*limithandler.LimiterMiddleware{deps.GetLimitHandler()},
+		nil,
 		txMiddleware,
 	)
 

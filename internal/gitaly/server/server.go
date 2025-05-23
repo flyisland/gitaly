@@ -159,6 +159,11 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 		unaryServerInterceptors = append(unaryServerInterceptors, limitHandler.UnaryInterceptor())
 	}
 
+	if s.housekeepingMiddleware != nil {
+		streamServerInterceptors = append(streamServerInterceptors, s.housekeepingMiddleware.StreamServerInterceptor())
+		unaryServerInterceptors = append(unaryServerInterceptors, s.housekeepingMiddleware.UnaryServerInterceptor())
+	}
+
 	streamServerInterceptors = append(streamServerInterceptors,
 		grpctracing.StreamServerTracingInterceptor(),
 		cache.StreamInvalidator(s.cacheInvalidator, protoregistry.GitalyProtoPreregistered, s.logger),

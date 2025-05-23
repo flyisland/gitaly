@@ -268,6 +268,7 @@ func TestConnectivity(t *testing.T) {
 				backchannel.NewRegistry(),
 				cache.New(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t)),
 				nil,
+				nil,
 				server.TransactionMiddleware{},
 			)
 			t.Cleanup(sf.Stop)

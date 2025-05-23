@@ -89,6 +89,7 @@ func TestGitalyServerFactory(t *testing.T) {
 			backchannel.NewRegistry(),
 			cache.New(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t)),
 			nil,
+			nil,
 			TransactionMiddleware{},
 		)
 		t.Cleanup(sf.Stop)
@@ -109,6 +110,7 @@ func TestGitalyServerFactory(t *testing.T) {
 			testhelper.SharedLogger(t),
 			backchannel.NewRegistry(),
 			cache.New(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t)),
+			nil,
 			nil,
 			TransactionMiddleware{},
 		)
@@ -131,6 +133,7 @@ func TestGitalyServerFactory(t *testing.T) {
 			testhelper.SharedLogger(t),
 			backchannel.NewRegistry(),
 			cache.New(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t)),
+			nil,
 			nil,
 			TransactionMiddleware{},
 		)
@@ -158,6 +161,7 @@ func TestGitalyServerFactory(t *testing.T) {
 			testhelper.SharedLogger(t),
 			backchannel.NewRegistry(),
 			cache.New(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t)),
+			nil,
 			nil,
 			TransactionMiddleware{},
 		)
@@ -190,6 +194,7 @@ func TestGitalyServerFactory(t *testing.T) {
 			logger,
 			backchannel.NewRegistry(),
 			cache.New(cfg, config.NewLocator(cfg), logger),
+			nil,
 			nil,
 			TransactionMiddleware{},
 		)
@@ -226,6 +231,7 @@ func TestGitalyServerFactory_closeOrder(t *testing.T) {
 		testhelper.SharedLogger(t),
 		backchannel.NewRegistry(),
 		cache.New(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t)),
+		nil,
 		nil,
 		TransactionMiddleware{},
 	)
