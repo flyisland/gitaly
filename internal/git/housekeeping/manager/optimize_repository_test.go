@@ -267,9 +267,7 @@ func TestRepackIfNeeded(t *testing.T) {
 	})
 }
 
-func TestPackRefsIfNeeded(t *testing.T) {
-	testhelper.SkipWithReftable(t, "only applicable to the files reference backend")
-
+func TestPackRefsInhibitors(t *testing.T) {
 	t.Parallel()
 
 	type setupData struct {
@@ -320,7 +318,7 @@ func TestPackRefsIfNeeded(t *testing.T) {
 		{
 			desc: "few inhibitors present",
 			setup: func(t *testing.T, ctx context.Context, m *RepositoryManager, repo storage.Repository, b *blockingCommandFactory) setupData {
-				for i := 0; i < 10; i++ {
+				for range 10 {
 					success, cleanup, err := m.repositoryStates.addPackRefsInhibitor(ctx, repo)
 					require.True(t, success)
 					require.NoError(t, err)
@@ -338,7 +336,7 @@ func TestPackRefsIfNeeded(t *testing.T) {
 		{
 			desc: "inhibitors finish before pack refs call",
 			setup: func(t *testing.T, ctx context.Context, m *RepositoryManager, repo storage.Repository, b *blockingCommandFactory) setupData {
-				for i := 0; i < 10; i++ {
+				for range 10 {
 					success, cleanup, err := m.repositoryStates.addPackRefsInhibitor(ctx, repo)
 					require.True(t, success)
 					require.NoError(t, err)
@@ -355,7 +353,7 @@ func TestPackRefsIfNeeded(t *testing.T) {
 		{
 			desc: "only some inhibitors finish before pack refs call",
 			setup: func(t *testing.T, ctx context.Context, m *RepositoryManager, repo storage.Repository, b *blockingCommandFactory) setupData {
-				for i := 0; i < 10; i++ {
+				for range 10 {
 					success, cleanup, err := m.repositoryStates.addPackRefsInhibitor(ctx, repo)
 					require.True(t, success)
 					require.NoError(t, err)
@@ -435,9 +433,6 @@ func TestPackRefsIfNeeded(t *testing.T) {
 			// Write an empty commit such that we can create valid refs.
 			gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
 
-			packedRefsPath := filepath.Join(repoPath, "packed-refs")
-			looseRefPath := filepath.Join(repoPath, "refs", "heads", "main")
-
 			manager := New(gitalycfgprom.Config{}, logger, nil, nil)
 			data := tc.setup(t, ctx, manager, repo, &gitCmdFactory)
 
@@ -446,16 +441,7 @@ func TestPackRefsIfNeeded(t *testing.T) {
 			})
 
 			require.Equal(t, data.errExpected, err)
-
-			if data.refsShouldBePacked {
-				require.True(t, didRepack)
-				require.FileExists(t, packedRefsPath)
-				require.NoFileExists(t, looseRefPath)
-			} else {
-				require.False(t, didRepack)
-				require.NoFileExists(t, packedRefsPath)
-				require.FileExists(t, looseRefPath)
-			}
+			require.Equal(t, didRepack, data.refsShouldBePacked)
 
 			_, ok := manager.repositoryStates.values[repositoryStatesKey(repo)]
 			require.Equal(t, tc.repoStateExists, ok)
