@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/renderer"
+	"github.com/olekukonko/tablewriter/tw"
 	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
@@ -52,18 +54,28 @@ func listStoragesAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	table := tablewriter.NewWriter(cmd.Writer)
-	table.SetHeader([]string{"VIRTUAL_STORAGE", "NODE", "ADDRESS"})
-	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-	table.SetAutoFormatHeaders(false)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetCenterSeparator("")
-	table.SetColumnSeparator("")
-	table.SetRowSeparator("")
-	table.SetHeaderLine(false)
-	table.SetBorder(false)
-	table.SetTablePadding("\t") // pad with tabs
-	table.SetNoWhiteSpace(true)
+	table := tablewriter.NewTable(cmd.Writer,
+		tablewriter.WithRenderer(renderer.NewBlueprint(tw.Rendition{
+			Borders: tw.BorderNone,
+			Settings: tw.Settings{
+				Lines: tw.Lines{
+					ShowHeaderLine: tw.Off,
+				},
+				Separators: tw.Separators{
+					BetweenRows:    tw.Off,
+					BetweenColumns: tw.Off,
+				},
+			},
+		})),
+	)
+
+	table.Configure(func(cfg *tablewriter.Config) {
+		cfg.Header.Formatting.AutoFormat = false
+		cfg.Header.Formatting.Alignment = tw.AlignLeft
+		cfg.Row.Formatting.Alignment = tw.AlignLeft
+	})
+
+	table.Header([]string{"VIRTUAL_STORAGE", "NODE", "ADDRESS"})
 
 	if pickedVirtualStorage := cmd.String(paramVirtualStorage); pickedVirtualStorage != "" {
 		for _, virtualStorage := range conf.VirtualStorages {
@@ -72,12 +84,12 @@ func listStoragesAction(ctx context.Context, cmd *cli.Command) error {
 			}
 
 			for _, node := range virtualStorage.Nodes {
-				table.Append([]string{virtualStorage.Name, node.Storage, node.Address})
+				if err := table.Append([]string{virtualStorage.Name, node.Storage, node.Address}); err != nil {
+					return fmt.Errorf("append: %w", err)
+				}
 			}
 
-			table.Render()
-
-			return nil
+			return table.Render()
 		}
 
 		fmt.Fprintf(cmd.Writer, "No virtual storages named %s.\n", pickedVirtualStorage)
@@ -87,11 +99,11 @@ func listStoragesAction(ctx context.Context, cmd *cli.Command) error {
 
 	for _, virtualStorage := range conf.VirtualStorages {
 		for _, node := range virtualStorage.Nodes {
-			table.Append([]string{virtualStorage.Name, node.Storage, node.Address})
+			if err := table.Append([]string{virtualStorage.Name, node.Storage, node.Address}); err != nil {
+				return fmt.Errorf("append: %w", err)
+			}
 		}
 	}
 
-	table.Render()
-
-	return nil
+	return table.Render()
 }

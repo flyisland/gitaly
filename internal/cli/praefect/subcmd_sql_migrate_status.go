@@ -2,6 +2,7 @@ package praefect
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/olekukonko/tablewriter"
@@ -43,8 +44,10 @@ func sqlMigrateStatusAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	table := tablewriter.NewWriter(cmd.Writer)
-	table.SetHeader([]string{"Migration", "Applied"})
-	table.SetColWidth(60)
+	table.Header([]string{"Migration", "Applied"})
+	table.Configure(func(cfg *tablewriter.Config) {
+		cfg.MaxWidth = 60
+	})
 
 	// Display the rows in order of name
 	var keys []string
@@ -63,13 +66,13 @@ func sqlMigrateStatusAction(ctx context.Context, cmd *cli.Command) error {
 			applied = m.AppliedAt.String()
 		}
 
-		table.Append([]string{
+		if err := table.Append([]string{
 			k,
 			applied,
-		})
+		}); err != nil {
+			return fmt.Errorf("append: %w", err)
+		}
 	}
 
-	table.Render()
-
-	return err
+	return table.Render()
 }
