@@ -2,8 +2,6 @@ module gitlab.com/gitlab-org/gitaly/tools/gitaly-deps
 
 go 1.23.0
 
-toolchain go1.23.8
-
 require (
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v3 v3.1.0
