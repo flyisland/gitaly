@@ -14,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/middleware"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/labkit/correlation"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )
@@ -239,20 +240,28 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 
 	m.wg.Add(1)
 	go func() {
+		// We need to call OptimizeRepository with a fresh context as we're executing it asynchronously.
+		// Providing the existing `ctx` would cause it to fail, since `ctx` would be cancelled when this
+		// request completes.
+		housekeepingCtx, housekeepingCancel := context.WithCancel(context.Background())
+		// We should ensure the correlation ID is propagated across to the new context so we can effectively
+		// trace housekeeping jobs to their origin.
+		housekeepingCtx = correlation.ContextWithCorrelation(housekeepingCtx, correlation.ExtractFromContextOrGenerate(ctx))
+
 		defer func() {
 			m.markHousekeepingInactive(key)
-
-			m.logger.InfoContext(ctx, "ended scheduled housekeeping")
+			m.logger.InfoContext(housekeepingCtx, "ended scheduled housekeeping")
+			housekeepingCancel()
 			m.wg.Done()
 		}()
 
 		localRepo := m.localRepoFactory.Build(repo)
-		if err := m.manager.OptimizeRepository(ctx, localRepo, manager.WithOptimizationStrategyConstructor(
+		if err := m.manager.OptimizeRepository(housekeepingCtx, localRepo, manager.WithOptimizationStrategyConstructor(
 			func(info stats.RepositoryInfo) housekeeping.OptimizationStrategy {
 				return housekeeping.NewHeuristicalOptimizationStrategy(info)
 			},
 		)); err != nil {
-			m.logger.WithError(err).ErrorContext(ctx, "failed scheduled housekeeping")
+			m.logger.WithError(err).ErrorContext(housekeepingCtx, "failed scheduled housekeeping")
 		}
 	}()
 }
