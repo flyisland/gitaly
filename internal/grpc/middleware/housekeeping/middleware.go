@@ -252,7 +252,7 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 				return housekeeping.NewHeuristicalOptimizationStrategy(info)
 			},
 		)); err != nil {
-			m.logger.ErrorContext(ctx, "failed scheduled housekeeping")
+			m.logger.WithError(err).ErrorContext(ctx, "failed scheduled housekeeping")
 		}
 	}()
 }
