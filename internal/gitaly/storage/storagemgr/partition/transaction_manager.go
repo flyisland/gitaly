@@ -442,6 +442,17 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 							return nil, fmt.Errorf("new reference recorder: %w", err)
 						}
 					}
+
+					if refBackend == git.ReferenceBackendReftables {
+						snapshotRepositoryPath, err := txn.snapshotRepository.Path(ctx)
+						if err != nil {
+							return nil, fmt.Errorf("snapshot repository path: %w", err)
+						}
+
+						if err := preventReftableCompaction(snapshotRepositoryPath); err != nil {
+							return nil, fmt.Errorf("prevent reftable compaction: %w", err)
+						}
+					}
 				} else {
 					// The repository does not exist, and this is a write. This should thus create the repository. As the repository's final state
 					// is still being logged in TransactionManager, we already log here the creation of any missing parent directories of
@@ -1455,6 +1466,10 @@ func (mgr *TransactionManager) packObjects(ctx context.Context, transaction *Tra
 func (mgr *TransactionManager) preparePackRefsReftable(ctx context.Context, transaction *Transaction) error {
 	runPackRefs := transaction.runHousekeeping.packRefs
 	repoPath := mgr.getAbsolutePath(transaction.snapshotRepository.GetRelativePath())
+
+	if err := allowReftableCompaction(repoPath); err != nil {
+		return fmt.Errorf("allow reftable compaction: %w", err)
+	}
 
 	tablesListPre, err := git.ReadReftablesList(repoPath)
 	if err != nil {

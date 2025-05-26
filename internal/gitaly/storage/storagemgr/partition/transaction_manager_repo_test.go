@@ -1198,6 +1198,7 @@ func generateDeleteRepositoryTests(t *testing.T, setup testTransactionSetup) []t
 											{
 												MinIndex: 2,
 												MaxIndex: 3,
+												Locked:   true,
 												References: []git.Reference{
 													{
 														Name:       "HEAD",

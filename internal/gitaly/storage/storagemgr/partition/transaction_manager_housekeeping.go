@@ -663,7 +663,7 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) 
 	finalTableListPath := filepath.Join(snapshotRepoPath, "reftable", "tables.list")
 	if err := os.WriteFile(
 		finalTableListPath,
-		[]byte(strings.Join(finalTableList, "\n")),
+		[]byte(strings.Join(finalTableList, "\n")+"\n"),
 		mode.File,
 	); err != nil {
 		return nil, fmt.Errorf("writing tables.list: %w", err)

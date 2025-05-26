@@ -2038,6 +2038,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 										{
 											MinIndex: 7,
 											MaxIndex: 7,
+											Locked:   true,
 											References: []git.Reference{
 												{
 													Name:   "refs/heads/main",
@@ -2082,6 +2083,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 										{
 											MinIndex: 1,
 											MaxIndex: 7,
+											Locked:   true,
 											References: []git.Reference{
 												{
 													Name:       "HEAD",
@@ -2179,6 +2181,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 										{
 											MinIndex: 8,
 											MaxIndex: 8,
+											Locked:   true,
 											References: []git.Reference{
 												{
 													Name:   "refs/heads/branch-1",
@@ -2369,6 +2372,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 										{
 											MinIndex: 7,
 											MaxIndex: 7,
+											Locked:   true,
 											References: func() (list []git.Reference) {
 												for i := 0; i < 20; i++ {
 													list = append(list, git.Reference{
@@ -2416,6 +2420,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 										{
 											MinIndex: 1,
 											MaxIndex: 7,
+											Locked:   true,
 											References: func() (list []git.Reference) {
 												list = append(list, git.Reference{
 													Name:       "HEAD",
@@ -2523,6 +2528,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 										{
 											MinIndex: 8,
 											MaxIndex: 8,
+											Locked:   true,
 											References: []git.Reference{
 												{
 													Name:   "refs/heads/branch-1",
@@ -2616,6 +2622,7 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 										{
 											MinIndex: 9,
 											MaxIndex: 9,
+											Locked:   true,
 											References: []git.Reference{
 												{
 													Name:   "refs/heads/branch-2",

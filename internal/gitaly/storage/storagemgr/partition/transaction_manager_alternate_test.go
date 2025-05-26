@@ -1451,6 +1451,7 @@ func generateAlternateTests(t *testing.T, setup testTransactionSetup) []transact
 											{
 												MinIndex: 1,
 												MaxIndex: 2,
+												Locked:   true,
 												References: []git.Reference{
 													{
 														Name:       "HEAD",
@@ -1741,6 +1742,7 @@ func generateAlternateTests(t *testing.T, setup testTransactionSetup) []transact
 											{
 												MinIndex: 1,
 												MaxIndex: 3,
+												Locked:   true,
 												References: []git.Reference{
 													{
 														Name:       "HEAD",
@@ -1917,6 +1919,7 @@ func generateAlternateTests(t *testing.T, setup testTransactionSetup) []transact
 											{
 												MinIndex: 1,
 												MaxIndex: 2,
+												Locked:   true,
 												References: []git.Reference{
 													{
 														Name:       "HEAD",

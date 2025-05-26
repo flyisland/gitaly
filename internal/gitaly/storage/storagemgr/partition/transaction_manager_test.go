@@ -690,6 +690,7 @@ func generateCommonTests(t *testing.T, ctx context.Context, setup testTransactio
 											{
 												MinIndex: 2,
 												MaxIndex: 2,
+												Locked:   true,
 												References: []git.Reference{
 													{
 														Name:   "refs/heads/main",
@@ -1629,6 +1630,7 @@ func generateCommonTests(t *testing.T, ctx context.Context, setup testTransactio
 											{
 												MinIndex: 2,
 												MaxIndex: 3,
+												Locked:   true,
 												References: []git.Reference{
 													{
 														Name:       "HEAD",
