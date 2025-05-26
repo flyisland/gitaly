@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
@@ -13,7 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
-func TestDryRunReftableMigration(t *testing.T) {
+func TestMigrateReferenceBackend(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
@@ -28,13 +29,13 @@ func TestDryRunReftableMigration(t *testing.T) {
 
 	for _, tc := range []struct {
 		desc            string
-		req             *gitalypb.DryRunReftableMigrationRequest
+		req             *gitalypb.MigrateReferenceBackendRequest
 		expectedErr     error
 		expectedSuccess bool
 	}{
 		{
 			desc: "repository nil",
-			req: &gitalypb.DryRunReftableMigrationRequest{
+			req: &gitalypb.MigrateReferenceBackendRequest{
 				Repository: nil,
 			},
 			expectedErr:     structerr.NewInvalidArgument("%w", storage.ErrRepositoryNotSet),
@@ -42,14 +43,18 @@ func TestDryRunReftableMigration(t *testing.T) {
 		},
 		{
 			desc: "repository exists",
-			req: &gitalypb.DryRunReftableMigrationRequest{
+			req: &gitalypb.MigrateReferenceBackendRequest{
 				Repository: &gitalypb.Repository{
 					StorageName:  repoProto.GetStorageName(),
 					RelativePath: repoProto.GetRelativePath(),
 				},
+				TargetReferenceBackend: gittest.FilesOrReftables(
+					gitalypb.MigrateReferenceBackendRequest_REFERENCE_BACKEND_REFTABLE,
+					gitalypb.MigrateReferenceBackendRequest_REFERENCE_BACKEND_FILES,
+				),
 			},
-			expectedErr: testhelper.WithOrWithoutWAL(
-				structerr.NewInternal("error to rollback transaction"),
+			expectedErr: testhelper.WithOrWithoutWAL[error](
+				nil,
 				structerr.NewInternal("transaction not found"),
 			),
 			expectedSuccess: testhelper.WithOrWithoutWAL(true, false),
@@ -58,17 +63,16 @@ func TestDryRunReftableMigration(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			before, err := localrepo.NewTestRepo(t, cfg, repoProto).ReferenceBackend(ctx)
 			require.NoError(t, err)
+			require.Equal(t, gittest.FilesOrReftables(git.ReferenceBackendFiles, git.ReferenceBackendReftables), before)
 
-			resp, err := client.DryRunReftableMigration(ctx, tc.req)
+			resp, err := client.MigrateReferenceBackend(ctx, tc.req)
 			testhelper.RequireGrpcError(t, tc.expectedErr, err)
 
 			after, err := localrepo.NewTestRepo(t, cfg, repoProto).ReferenceBackend(ctx)
 			require.NoError(t, err)
 
-			// Ensure that the dry-run doesn't actually modify the repository
-			require.Equal(t, before, after)
-
 			if tc.expectedSuccess {
+				require.Equal(t, gittest.FilesOrReftables(git.ReferenceBackendReftables, git.ReferenceBackendFiles), after)
 				for _, entry := range hook.AllEntries() {
 					if entry.Message == "migration ran successfully" {
 						return

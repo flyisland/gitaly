@@ -61,7 +61,7 @@ const (
 	RepositoryService_RestoreRepository_FullMethodName            = "/gitaly.RepositoryService/RestoreRepository"
 	RepositoryService_GetFileAttributes_FullMethodName            = "/gitaly.RepositoryService/GetFileAttributes"
 	RepositoryService_FastExport_FullMethodName                   = "/gitaly.RepositoryService/FastExport"
-	RepositoryService_DryRunReftableMigration_FullMethodName      = "/gitaly.RepositoryService/DryRunReftableMigration"
+	RepositoryService_MigrateReferenceBackend_FullMethodName      = "/gitaly.RepositoryService/MigrateReferenceBackend"
 )
 
 // RepositoryServiceClient is the client API for RepositoryService service.
@@ -246,9 +246,9 @@ type RepositoryServiceClient interface {
 	GetFileAttributes(ctx context.Context, in *GetFileAttributesRequest, opts ...grpc.CallOption) (*GetFileAttributesResponse, error)
 	// FastExport runs git-fast-export on the repository, streaming the data back through the response
 	FastExport(ctx context.Context, in *FastExportRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FastExportResponse], error)
-	// DryRunReftableMigration is an RPC used to dry-run the reftable migration.
-	// This will be removed once the migration tests have finished.
-	DryRunReftableMigration(ctx context.Context, in *DryRunReftableMigrationRequest, opts ...grpc.CallOption) (*DryRunReftableMigrationResponse, error)
+	// MigrateReferenceBackend allows migrating a repository between the different Git
+	// reference backends. Transactions must be enabled.
+	MigrateReferenceBackend(ctx context.Context, in *MigrateReferenceBackendRequest, opts ...grpc.CallOption) (*MigrateReferenceBackendResponse, error)
 }
 
 type repositoryServiceClient struct {
@@ -799,10 +799,10 @@ func (c *repositoryServiceClient) FastExport(ctx context.Context, in *FastExport
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RepositoryService_FastExportClient = grpc.ServerStreamingClient[FastExportResponse]
 
-func (c *repositoryServiceClient) DryRunReftableMigration(ctx context.Context, in *DryRunReftableMigrationRequest, opts ...grpc.CallOption) (*DryRunReftableMigrationResponse, error) {
+func (c *repositoryServiceClient) MigrateReferenceBackend(ctx context.Context, in *MigrateReferenceBackendRequest, opts ...grpc.CallOption) (*MigrateReferenceBackendResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DryRunReftableMigrationResponse)
-	err := c.cc.Invoke(ctx, RepositoryService_DryRunReftableMigration_FullMethodName, in, out, cOpts...)
+	out := new(MigrateReferenceBackendResponse)
+	err := c.cc.Invoke(ctx, RepositoryService_MigrateReferenceBackend_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -991,9 +991,9 @@ type RepositoryServiceServer interface {
 	GetFileAttributes(context.Context, *GetFileAttributesRequest) (*GetFileAttributesResponse, error)
 	// FastExport runs git-fast-export on the repository, streaming the data back through the response
 	FastExport(*FastExportRequest, grpc.ServerStreamingServer[FastExportResponse]) error
-	// DryRunReftableMigration is an RPC used to dry-run the reftable migration.
-	// This will be removed once the migration tests have finished.
-	DryRunReftableMigration(context.Context, *DryRunReftableMigrationRequest) (*DryRunReftableMigrationResponse, error)
+	// MigrateReferenceBackend allows migrating a repository between the different Git
+	// reference backends. Transactions must be enabled.
+	MigrateReferenceBackend(context.Context, *MigrateReferenceBackendRequest) (*MigrateReferenceBackendResponse, error)
 	mustEmbedUnimplementedRepositoryServiceServer()
 }
 
@@ -1130,8 +1130,8 @@ func (UnimplementedRepositoryServiceServer) GetFileAttributes(context.Context, *
 func (UnimplementedRepositoryServiceServer) FastExport(*FastExportRequest, grpc.ServerStreamingServer[FastExportResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method FastExport not implemented")
 }
-func (UnimplementedRepositoryServiceServer) DryRunReftableMigration(context.Context, *DryRunReftableMigrationRequest) (*DryRunReftableMigrationResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DryRunReftableMigration not implemented")
+func (UnimplementedRepositoryServiceServer) MigrateReferenceBackend(context.Context, *MigrateReferenceBackendRequest) (*MigrateReferenceBackendResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MigrateReferenceBackend not implemented")
 }
 func (UnimplementedRepositoryServiceServer) mustEmbedUnimplementedRepositoryServiceServer() {}
 func (UnimplementedRepositoryServiceServer) testEmbeddedByValue()                           {}
@@ -1767,20 +1767,20 @@ func _RepositoryService_FastExport_Handler(srv interface{}, stream grpc.ServerSt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RepositoryService_FastExportServer = grpc.ServerStreamingServer[FastExportResponse]
 
-func _RepositoryService_DryRunReftableMigration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DryRunReftableMigrationRequest)
+func _RepositoryService_MigrateReferenceBackend_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MigrateReferenceBackendRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RepositoryServiceServer).DryRunReftableMigration(ctx, in)
+		return srv.(RepositoryServiceServer).MigrateReferenceBackend(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RepositoryService_DryRunReftableMigration_FullMethodName,
+		FullMethod: RepositoryService_MigrateReferenceBackend_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RepositoryServiceServer).DryRunReftableMigration(ctx, req.(*DryRunReftableMigrationRequest))
+		return srv.(RepositoryServiceServer).MigrateReferenceBackend(ctx, req.(*MigrateReferenceBackendRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1893,8 +1893,8 @@ var RepositoryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RepositoryService_GetFileAttributes_Handler,
 		},
 		{
-			MethodName: "DryRunReftableMigration",
-			Handler:    _RepositoryService_DryRunReftableMigration_Handler,
+			MethodName: "MigrateReferenceBackend",
+			Handler:    _RepositoryService_MigrateReferenceBackend_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

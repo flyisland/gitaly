@@ -13,10 +13,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *server) DryRunReftableMigration(
+func (s *server) MigrateReferenceBackend(
 	ctx context.Context,
-	in *gitalypb.DryRunReftableMigrationRequest,
-) (*gitalypb.DryRunReftableMigrationResponse, error) {
+	in *gitalypb.MigrateReferenceBackendRequest,
+) (*gitalypb.MigrateReferenceBackendResponse, error) {
 	if err := s.locator.ValidateRepository(ctx, in.GetRepository()); err != nil {
 		return nil, structerr.NewInvalidArgument("%w", err)
 	}
@@ -26,7 +26,15 @@ func (s *server) DryRunReftableMigration(
 		return nil, structerr.NewInternal("transaction not found")
 	}
 
-	migrator := migration.NewReferenceBackendMigration(1, git.ReferenceBackendReftables, s.localRepoFactory, nil)
+	targetBackend := git.ReferenceBackendFiles
+	switch in.GetTargetReferenceBackend() {
+	case gitalypb.MigrateReferenceBackendRequest_REFERENCE_BACKEND_UNSPECIFIED:
+		return nil, structerr.NewInvalidArgument("target reference backend not set")
+	case gitalypb.MigrateReferenceBackendRequest_REFERENCE_BACKEND_REFTABLE:
+		targetBackend = git.ReferenceBackendReftables
+	}
+
+	migrator := migration.NewReferenceBackendMigration(1, targetBackend, s.localRepoFactory, nil)
 
 	logger := log.FromContext(ctx)
 	t := time.Now()
@@ -40,12 +48,11 @@ func (s *server) DryRunReftableMigration(
 	}
 
 	duration := time.Since(t)
-	resp := &gitalypb.DryRunReftableMigrationResponse{
+	resp := &gitalypb.MigrateReferenceBackendResponse{
 		Time: durationpb.New(duration),
 	}
 
 	logger.WithField("migration_time", duration).Info("migration ran successfully")
 
-	// Return an error on purpose so that the transaction is rolled back.
-	return resp, structerr.NewInternal("error to rollback transaction")
+	return resp, nil
 }

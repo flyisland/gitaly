@@ -400,9 +400,9 @@ service RepositoryService {
     };
   }
 
-  // DryRunReftableMigration is an RPC used to dry-run the reftable migration.
-  // This will be removed once the migration tests have finished.
-  rpc DryRunReftableMigration(DryRunReftableMigrationRequest) returns (DryRunReftableMigrationResponse) {
+  // MigrateReferenceBackend allows migrating a repository between the different Git
+  // reference backends. Transactions must be enabled.
+  rpc MigrateReferenceBackend(MigrateReferenceBackendRequest) returns (MigrateReferenceBackendResponse) {
     option (op_type) = {
       op: MUTATOR
     };
@@ -1430,14 +1430,26 @@ message FastExportResponse {
   bytes data = 1;
 }
 
-// DryRunReftableMigrationRequest is a request for the DryRunReftableMigration RPC.
-message DryRunReftableMigrationRequest {
-  // repository is the repository to dry-run migrations on.
+// MigrateReferenceBackendRequest is a request for the MigrateReferenceBackend RPC.
+message MigrateReferenceBackendRequest {
+  // ReferenceBackend denotes the type of backend used to store references.
+  enum ReferenceBackend {
+    // REFERENCE_BACKEND_UNSPECIFIED is the default value and should never be set.
+    REFERENCE_BACKEND_UNSPECIFIED = 0;
+    // REFERENCE_BACKEND_FILES is the traditional backend built using files/directories.
+    REFERENCE_BACKEND_FILES = 1;
+    // REFERENCE_BACKEND_REFTABLE is the new backend using customized binary file format.
+    REFERENCE_BACKEND_REFTABLE = 2;
+  };
+
+  // repository is the repository to run migrations on.
   Repository repository = 1 [(target_repository)=true];
+  // target_reference_backend is the backend to migrate to.
+  ReferenceBackend target_reference_backend = 2;
 }
 
-// DryRunReftableMigrationResponse is a response for the DryRunReftableMigration RPC.
-message DryRunReftableMigrationResponse {
+// MigrateReferenceBackendResponse is a response for the MigrateReferenceBackend RPC.
+message MigrateReferenceBackendResponse {
   // time is the amount of time the migrations took.
   google.protobuf.Duration time = 1;
 }
