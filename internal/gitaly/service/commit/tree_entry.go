@@ -39,7 +39,7 @@ func sendTreeEntry(
 			Oid:  treeEntry.GetOid(),
 		}
 		if err := stream.Send(response); err != nil {
-			return structerr.NewAborted("send: %w", err)
+			return structerr.NewInternal("send: %w", err)
 		}
 
 		return nil
@@ -59,7 +59,7 @@ func sendTreeEntry(
 		}
 
 		if err := stream.Send(response); err != nil {
-			return structerr.NewAborted("sending response: %w", err)
+			return structerr.NewInternal("sending response: %w", err)
 		}
 
 		return nil
@@ -98,7 +98,7 @@ func sendTreeEntry(
 	}
 	if dataLength == 0 {
 		if err := stream.Send(response); err != nil {
-			return structerr.NewAborted("sending response: %w", err)
+			return structerr.NewInternal("sending response: %w", err)
 		}
 
 		return nil
@@ -116,7 +116,7 @@ func sendTreeEntry(
 		response.Data = p
 
 		if err := stream.Send(response); err != nil {
-			return structerr.NewAborted("send: %w", err)
+			return structerr.NewInternal("send: %w", err)
 		}
 
 		// Use a new response so we don't send other fields (Size, ...) over and over

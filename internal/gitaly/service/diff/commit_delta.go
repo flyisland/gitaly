@@ -59,7 +59,7 @@ func (s *server) CommitDelta(in *gitalypb.CommitDeltaRequest, stream gitalypb.Di
 		}
 
 		if err := stream.Send(&gitalypb.CommitDeltaResponse{Deltas: batch}); err != nil {
-			return structerr.NewAborted("send: %w", err)
+			return structerr.NewInternal("send: %w", err)
 		}
 
 		return nil
