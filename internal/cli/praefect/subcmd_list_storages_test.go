@@ -1,10 +1,8 @@
 package praefect
 
 import (
-	"bytes"
 	"testing"
 
-	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v3"
@@ -21,7 +19,7 @@ func TestListStoragesSubcommand(t *testing.T) {
 		desc            string
 		virtualStorages []*config.VirtualStorage
 		args            []string
-		expectedOutput  func(*tablewriter.Table)
+		expectedOutput  string
 	}{
 		{
 			desc: "one virtual storage",
@@ -40,11 +38,8 @@ func TestListStoragesSubcommand(t *testing.T) {
 					},
 				},
 			},
-			args: []string{},
-			expectedOutput: func(t *tablewriter.Table) {
-				t.Append([]string{"vs-1", "storage-1", "tcp://1.2.3.4"})
-				t.Append([]string{"vs-1", "storage-2", "tcp://4.3.2.1"})
-			},
+			args:           []string{},
+			expectedOutput: " VIRTUAL_STORAGE  NODE       ADDRESS       \n vs-1             storage-1  tcp://1.2.3.4 \n vs-1             storage-2  tcp://4.3.2.1 \n",
 		},
 		{
 			desc: "multiple virtual storages but only show one",
@@ -89,11 +84,8 @@ func TestListStoragesSubcommand(t *testing.T) {
 					},
 				},
 			},
-			args: []string{"-virtual-storage", "vs-2"},
-			expectedOutput: func(t *tablewriter.Table) {
-				t.Append([]string{"vs-2", "storage-3", "tcp://1.1.3.4"})
-				t.Append([]string{"vs-2", "storage-4", "tcp://1.3.2.1"})
-			},
+			args:           []string{"-virtual-storage", "vs-2"},
+			expectedOutput: " VIRTUAL_STORAGE  NODE       ADDRESS       \n vs-2             storage-3  tcp://1.1.3.4 \n vs-2             storage-4  tcp://1.3.2.1 \n",
 		},
 		{
 			desc: "one virtual storage with virtual storage arg",
@@ -112,32 +104,13 @@ func TestListStoragesSubcommand(t *testing.T) {
 					},
 				},
 			},
-			args: []string{"-virtual-storage", "vs-1"},
-			expectedOutput: func(t *tablewriter.Table) {
-				t.Append([]string{"vs-1", "storage-1", "tcp://1.2.3.4"})
-				t.Append([]string{"vs-1", "storage-2", "tcp://4.3.2.1"})
-			},
+			args:           []string{"-virtual-storage", "vs-1"},
+			expectedOutput: " VIRTUAL_STORAGE  NODE       ADDRESS       \n vs-1             storage-1  tcp://1.2.3.4 \n vs-1             storage-2  tcp://4.3.2.1 \n",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			var expectedOutput bytes.Buffer
-			table := tablewriter.NewWriter(&expectedOutput)
-			table.SetHeader([]string{"VIRTUAL_STORAGE", "NODE", "ADDRESS"})
-			table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-			table.SetAutoFormatHeaders(false)
-			table.SetAlignment(tablewriter.ALIGN_LEFT)
-			table.SetCenterSeparator("")
-			table.SetColumnSeparator("")
-			table.SetRowSeparator("")
-			table.SetHeaderLine(false)
-			table.SetBorder(false)
-			table.SetTablePadding("\t") // pad with tabs
-			table.SetNoWhiteSpace(true)
-			tc.expectedOutput(table)
-			table.Render()
-
 			conf := config.Config{
 				ListenAddr:      ":0",
 				VirtualStorages: tc.virtualStorages,
@@ -146,7 +119,7 @@ func TestListStoragesSubcommand(t *testing.T) {
 			stdout, stderr, exitCode := runApp(t, ctx, append([]string{"-config", confPath, "list-storages"}, tc.args...))
 			assert.Empty(t, stderr)
 			require.Zero(t, exitCode)
-			require.Equal(t, expectedOutput.String(), stdout)
+			require.Equal(t, tc.expectedOutput, stdout)
 		})
 	}
 
