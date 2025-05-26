@@ -59,6 +59,11 @@ GOCOVER_COBERTURA           := ${TOOLS_DIR}/gocover-cobertura
 DELVE                       := ${TOOLS_DIR}/dlv
 GOVULNCHECK                 := ${TOOLS_DIR}/govulncheck
 
+# Go toolchain options
+## Ensure that newer toolchains aren't downloaded and used automatically. See the discussion
+## at https://gitlab.com/gitlab-org/gitaly/-/merge_requests/7913#note_2524556226
+export GOTOOLCHAIN = local
+
 # Tool options
 GOLANGCI_LINT_OPTIONS ?=
 GOLANGCI_LINT_CONFIG  ?= ${SOURCE_DIR}/.golangci.yml
