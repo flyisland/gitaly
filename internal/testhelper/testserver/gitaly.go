@@ -723,3 +723,11 @@ func WithTransactionInterceptors(
 		return deps
 	}
 }
+
+// WithMigrations registers migration tasks to be executed before any transaction begins.
+func WithMigrations(migrations *[]migration.Migration) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.migrations = migrations
+		return deps
+	}
+}

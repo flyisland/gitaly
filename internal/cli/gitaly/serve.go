@@ -372,7 +372,9 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	reftableMigratorMetrics := reftable.NewMetrics()
 	prometheus.MustRegister(housekeepingMetrics, storageMetrics, partitionMetrics, migrationMetrics, raftMetrics, reftableMigratorMetrics)
 
-	migrations := []migration.Migration{}
+	migrations := []migration.Migration{
+		migration.NewLeftoverFileMigration(locator),
+	}
 
 	var txMiddleware server.TransactionMiddleware
 	var node storage.Node
