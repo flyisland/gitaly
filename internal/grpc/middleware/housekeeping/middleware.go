@@ -14,7 +14,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/middleware"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"gitlab.com/gitlab-org/labkit/correlation"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )
@@ -240,13 +239,10 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 
 	m.wg.Add(1)
 	go func() {
-		// We need to call OptimizeRepository with a fresh context as we're executing it asynchronously.
-		// Providing the existing `ctx` would cause it to fail, since `ctx` would be cancelled when this
-		// request completes.
-		housekeepingCtx, housekeepingCancel := context.WithCancel(context.Background())
-		// We should ensure the correlation ID is propagated across to the new context so we can effectively
-		// trace housekeeping jobs to their origin.
-		housekeepingCtx = correlation.ContextWithCorrelation(housekeepingCtx, correlation.ExtractFromContextOrGenerate(ctx))
+		// We need to call OptimizeRepository with a child context that's disowned from the parent's
+		// cancellation signals we're executing it asynchronously. Providing the existing `ctx` would
+		// cause it to fail, since `ctx` would be cancelled when this request completes.
+		housekeepingCtx, housekeepingCancel := context.WithCancel(context.WithoutCancel(ctx))
 
 		defer func() {
 			m.markHousekeepingInactive(key)
