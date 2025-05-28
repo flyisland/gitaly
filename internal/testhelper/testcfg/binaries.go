@@ -125,6 +125,30 @@ func BuildBinary(tb testing.TB, targetDir, sourcePath string) string {
 		cmd.Env = filteredEnvironment
 
 		output, err := cmd.CombinedOutput()
+
+		// When the user's system has multiple Go toolchains managed by a version manager like
+		// asdf or mise, issues can occur if tests are run within an IDE that isn't aware of
+		// these tools. The tools rely on executing a hook command (i.e. `mise activate`) in
+		// the user's shell profile to reconfigure environment variables to dynamically change
+		// the Go version. Mise for instance will overwrite PATH and various GO* variables.
+		//
+		// If the IDE doesn't also execute this hook command, it will be reliant on using the
+		// environment variables inherited from the shell which started it, which will likely
+		// point to a global version of Go, not the one defined in .tool-versions.
+		//
+		// We can check the error and provide some guidance to the user on reconfiguring the
+		// global Go version to match. This is preferable from manipulating the environment
+		// variables as we would then be compiling binaries with a random version of Go.
+		//
+		// For example, if mise was configured globally to use Go 1.24.2 globally via
+		// `mise use -g go@1.24.2` but the .tool-versions file declares 1.23.6, the following
+		// error occurs:
+		//
+		//    compile: version "go1.23.6" does not match go tool version "go1.24.2"
+		if err != nil && strings.Contains(string(output), "does not match go tool version") {
+			require.Failf(tb, "The Go executable failed to build because you are likely using asdf or mise to manage Go, and running the test via an IDE which is not aware of these tools. Ensure the global Go version is configured to be the same as version in Gitaly's .tool-versions file, i.e. by running `mise use -g go@x.xx.x`.", string(output))
+		}
+
 		require.NoError(tb, err, "building Go executable: %v, output: %q", err, output)
 	})
 
