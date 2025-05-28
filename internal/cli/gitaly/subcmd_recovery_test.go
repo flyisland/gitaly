@@ -833,5 +833,6 @@ func createRepository(t *testing.T, ctx context.Context, opts setupOptions) (*gi
 		return nil, err
 	}
 
-	return repo, txn1.Commit(ctx)
+	_, err = txn1.Commit(ctx)
+	return repo, err
 }

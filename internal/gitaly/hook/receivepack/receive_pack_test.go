@@ -481,6 +481,6 @@ type mockTransaction struct {
 	commitFunc func(context.Context) error
 }
 
-func (m mockTransaction) Commit(ctx context.Context) error {
-	return m.commitFunc(ctx)
+func (m mockTransaction) Commit(ctx context.Context) (storage.LSN, error) {
+	return 0, m.commitFunc(ctx)
 }

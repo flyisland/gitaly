@@ -195,6 +195,11 @@ func TestPostReceivePack_successful(t *testing.T) {
 		transactionID = 3
 	}
 
+	// Assert the presence of log fields separately. It's not practical to assert
+	// every single log field here, so set it nil afterwards.
+	require.NotEmpty(t, payload.LogFields)
+	payload.LogFields = nil
+
 	require.Equal(t, gitcmd.HooksPayload{
 		ObjectFormat:        gittest.DefaultObjectHash.Format,
 		RuntimeDir:          cfg.RuntimeDir,

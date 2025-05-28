@@ -206,9 +206,12 @@ func (m *migrationManager) performMigrations(ctx context.Context, relativePaths 
 		logger.WithField("duration", duration).Info("migration successful")
 	}
 
-	if err := txn.Commit(ctx); err != nil {
+	commitLSN, err := txn.Commit(ctx)
+	if err != nil {
 		return fmt.Errorf("commit migration update: %w", err)
 	}
+
+	storage.LogTransactionCommit(ctx, m.logger, commitLSN, "migrator")
 
 	return nil
 }
@@ -269,7 +272,7 @@ func (m *migrationManager) readMigrationKey(ctx context.Context, relativePath st
 		return nil, false, fmt.Errorf("getting migration key: %w", err)
 	}
 
-	if err := txn.Commit(ctx); returnedErr == nil && err != nil {
+	if _, err := txn.Commit(ctx); err != nil {
 		return nil, false, fmt.Errorf("commit migration key transaction: %w", err)
 	}
 

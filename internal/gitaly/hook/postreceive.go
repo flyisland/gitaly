@@ -135,8 +135,14 @@ func (m *GitLabHookManager) PostReceiveHook(ctx context.Context, repo *gitalypb.
 
 		// The transaction may already be committed if the RPC invokes git-receive-pack(1) with the
 		// proc-receive hook enabled. Ignore the error indicating that here.
-		if err := tx.Commit(ctx); err != nil && !errors.Is(err, storage.ErrTransactionAlreadyCommitted) {
-			return fmt.Errorf("commit transaction: %w", err)
+		if commitLSN, err := tx.Commit(ctx); err != nil {
+			if !errors.Is(err, storage.ErrTransactionAlreadyCommitted) {
+				return fmt.Errorf("commit transaction: %w", err)
+			}
+
+			// If the transaction was already committed, we don't log the line below.
+		} else {
+			storage.LogTransactionCommit(ctx, m.logger.WithFields(payload.LogFields), commitLSN, "post-receive")
 		}
 
 		storageHandle, err := m.node.GetStorage(originalRepo.GetStorageName())
@@ -152,7 +158,8 @@ func (m *GitLabHookManager) PostReceiveHook(ctx context.Context, repo *gitalypb.
 			return fmt.Errorf("begin transaction: %w", err)
 		}
 		defer func() {
-			if err := tx.Commit(ctx); err != nil {
+			// We don't log the commitLSN here as read transactions do not get an LSN.
+			if _, err := tx.Commit(ctx); err != nil {
 				m.logger.WithError(err).Error("failed committing post-receive transaction")
 			}
 		}()

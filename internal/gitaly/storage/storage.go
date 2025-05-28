@@ -72,8 +72,9 @@ type FS interface {
 // Transaction is a single unit-of-work that executes as a whole.
 type Transaction interface {
 	// Commit commits the transaction. It returns once the transaction's
-	// changes have been durably persisted.
-	Commit(context.Context) error
+	// changes have been durably persisted. The commit LSN of the transaction
+	// is returned when it commits successfully
+	Commit(context.Context) (LSN, error)
 	// Rollback aborts the transactions and discards all of its changes.
 	Rollback(context.Context) error
 	// SnapshotLSN returns the Log Sequence Number (LSN) of the transaction's snapshot. This value is used to track and order transactions.

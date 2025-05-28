@@ -1456,7 +1456,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 				commitCtx = step.Context
 			}
 
-			commitErr := transaction.Commit(commitCtx)
+			_, commitErr := transaction.Commit(commitCtx)
 			switch expectedErr := step.ExpectedError.(type) {
 			case func(testing.TB, error):
 				expectedErr(t, commitErr)
@@ -1868,7 +1868,7 @@ func checkManagerError(t *testing.T, ctx context.Context, managerErrChannel chan
 
 	testTransaction := &Transaction{
 		relativePath: "sentinel-non-existent",
-		result:       make(chan error, 1),
+		result:       make(resultChannel, 1),
 		finish:       func(bool) error { return nil },
 	}
 
@@ -1891,8 +1891,8 @@ func checkManagerError(t *testing.T, ctx context.Context, managerErrChannel chan
 		// If the manager was closed, it might manage to admit the testTransaction but not process it. To determine
 		// whether that was the case, we also keep waiting on the managerErr channel.
 		select {
-		case err := <-testTransaction.result:
-			require.Error(t, err, "test transaction is expected to error out")
+		case result := <-testTransaction.result:
+			require.Error(t, result.error, "test transaction is expected to error out")
 
 			// Begin a transaction to wait until the manager has applied all log entries currently
 			// committed. This ensures the disk state assertions run with all log entries fully applied

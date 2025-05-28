@@ -138,9 +138,12 @@ func procReceiveHook(
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	commitLSN, err := tx.Commit(ctx)
+	if err != nil {
 		return fmt.Errorf("committing transaction: %w", err)
 	}
+
+	storage.LogTransactionCommit(ctx, logger, commitLSN, "proc-receive")
 
 	for _, update := range handler.ReferenceUpdates() {
 		if reason, rejected := rejectedUpdates[update.Ref]; rejected {

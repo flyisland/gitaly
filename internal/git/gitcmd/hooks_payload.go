@@ -13,6 +13,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -99,6 +100,10 @@ type HooksPayload struct {
 
 	// GitalyClientContext contains the context passed through the RPCs.
 	GitalyClientContext []byte `json:"gitaly_client_context,omitempty"`
+
+	// LogFields contains the log fields in the current context. They are passed
+	// to the HookService so the calls can be correlated with the main RPC call.
+	LogFields log.Fields
 }
 
 // UserDetails contains all information which is required for hooks
@@ -170,6 +175,7 @@ func NewHooksPayload(
 		FeatureFlagsWithValue: flags,
 		TransactionID:         transactionID,
 		GitalyClientContext:   clientContext,
+		LogFields:             log.FromContext(ctx).Data(),
 	}
 }
 

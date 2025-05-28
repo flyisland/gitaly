@@ -215,7 +215,7 @@ type finalizableTransaction struct {
 }
 
 // Commit commits the transaction and runs the finalizer.
-func (tx *finalizableTransaction) Commit(ctx context.Context) error {
+func (tx *finalizableTransaction) Commit(ctx context.Context) (storage.LSN, error) {
 	defer tx.finalize()
 	return tx.Transaction.Commit(ctx)
 }
