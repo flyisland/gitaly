@@ -511,8 +511,12 @@ func (cf *ExecCommandFactory) newCommand(ctx context.Context, repo storage.Repos
 
 	var cgroupsAddCommandOpts []cgroups.AddCommandOption
 	if repo != nil {
+		relativePath := repo.GetRelativePath()
+		if tx := storage.ExtractTransaction(ctx); tx != nil {
+			relativePath = tx.OriginalRepository(repo).GetRelativePath()
+		}
 		cgroupsAddCommandOpts = []cgroups.AddCommandOption{
-			cgroups.WithCgroupKey(repo.GetStorageName() + "/" + repo.GetRelativePath()),
+			cgroups.WithCgroupKey(repo.GetStorageName() + "/" + relativePath),
 		}
 	}
 
