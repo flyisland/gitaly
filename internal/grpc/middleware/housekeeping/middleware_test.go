@@ -23,6 +23,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type testService struct {
@@ -62,6 +63,14 @@ func (ts *testService) OptimizeRepository(context.Context, *gitalypb.OptimizeRep
 // Maintenance, Unary
 func (ts *testService) PruneUnreachableObjects(context.Context, *gitalypb.PruneUnreachableObjectsRequest) (*gitalypb.PruneUnreachableObjectsResponse, error) {
 	return nil, nil
+}
+
+type healthServer struct {
+	healthpb.UnimplementedHealthServer
+}
+
+func (*healthServer) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+	return &healthpb.HealthCheckResponse{}, nil
 }
 
 type mockHousekeepingManager struct {
@@ -157,6 +166,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 	service := &testService{}
 
 	gitalypb.RegisterRepositoryServiceServer(server, service)
+	healthpb.RegisterHealthServer(server, &healthServer{})
 
 	listener, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
@@ -391,5 +401,14 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 
 		housekeepingMiddleware.WaitForWorkers()
 		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 2, 0), housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "another invocation after the interval")
+	})
+
+	t.Run("when an RPC not registered with protoregistry.GitalyProtoPreregistered is intercepted", func(t *testing.T) {
+		hook := testhelper.AddLoggerHook(logger)
+
+		_, err := healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{})
+		require.NoError(t, err)
+
+		require.Empty(t, hook.LastEntry(), "it does not log an error")
 	})
 }

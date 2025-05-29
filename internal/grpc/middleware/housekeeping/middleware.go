@@ -68,7 +68,8 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 
 		methodInfo, err := m.registry.LookupMethod(info.FullMethod)
 		if err != nil {
-			m.logger.WithError(err).ErrorContext(ctx, "lookup method for housekeeping")
+			// The only error that occurs here is the failure to find the method in the registry, which
+			// happens for health checks and other implicit RPCs not registered with protoregistry.Registry.
 			return handler(ctx, req)
 		}
 
@@ -123,7 +124,8 @@ func (m *Middleware) StreamServerInterceptor() grpc.StreamServerInterceptor {
 
 		methodInfo, err := m.registry.LookupMethod(info.FullMethod)
 		if err != nil {
-			m.logger.WithError(err).ErrorContext(ss.Context(), "lookup method for housekeeping")
+			// The only error that occurs here is the failure to find the method in the registry, which
+			// happens for health checks and other implicit RPCs not registered with protoregistry.Registry.
 			return handler(srv, ss)
 		}
 
