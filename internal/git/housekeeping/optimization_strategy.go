@@ -315,10 +315,31 @@ func (s HeuristicalOptimizationStrategy) ShouldRepackReferences(context.Context)
 		return false
 	}
 
-	// For reftables, always try to compact. Here we simply rely on Git, since it considers
-	// heuristics to see if compaction is needed and only compacts if it's needed.
+	// Reftables auto-compact their tables on the fly and don't generally rely
+	// on housekeeping or 'git-pack-refs(1)' to be run. In Gitaly, we override
+	// the auto-compaction capabilities because we want finer control and to
+	// also prevent conflicts between concurrent writes.
+	//
+	// This replicates the behavior in Git (reftable_stack_auto_compact from
+	// reftable/stack.c) to ensure that the tables follow a geometric progression.
 	if len(s.info.References.ReftableTables) > 1 {
-		return true
+		// Git uses a different overhead based on the version of the reftable
+		// format. Let's just use the bigger value, this makes our calculations
+		// here slightly different from Git, but that is okay, since we would
+		// still maintain geometric progression.
+		var overhead uint64 = 28
+
+		tables := s.info.References.ReftableTables
+
+		for i := len(tables) - 1; i > 0; i-- {
+			sizePrev := tables[i-1].Size - overhead
+			sizeCur := tables[i].Size - overhead
+
+			if sizePrev < sizeCur*2 {
+				return true
+			}
+		}
+		return false
 	}
 
 	// Packing loose references into the packed-refs file scales with the number of references

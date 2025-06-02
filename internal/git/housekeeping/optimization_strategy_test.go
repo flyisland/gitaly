@@ -583,16 +583,30 @@ func TestHeuristicalOptimizationStrategy_ShouldRepackReftables(t *testing.T) {
 			expectedRepacking: false,
 		},
 		{
-			desc: "multiple similar tables require repacking",
+			desc: "tables not following geometric progression",
 			info: stats.RepositoryInfo{
 				References: stats.ReferencesInfo{
 					ReftableTables: []stats.ReftableTable{
-						{Size: 100},
-						{Size: 100},
+						{Size: 1963},
+						{Size: 996},
+						{Size: 512},
 					},
 				},
 			},
 			expectedRepacking: true,
+		},
+		{
+			desc: "tables following geometric progression",
+			info: stats.RepositoryInfo{
+				References: stats.ReferencesInfo{
+					ReftableTables: []stats.ReftableTable{
+						{Size: 1964},
+						{Size: 996},
+						{Size: 512},
+					},
+				},
+			},
+			expectedRepacking: false,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
