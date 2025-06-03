@@ -756,7 +756,8 @@ func (txn *Transaction) PackRefs() {
 		txn.runHousekeeping = &runHousekeeping{}
 	}
 	txn.runHousekeeping.packRefs = &runPackRefs{
-		PrunedRefs: map[git.ReferenceName]struct{}{},
+		PrunedRefs:       map[git.ReferenceName]struct{}{},
+		emptyDirectories: map[string]struct{}{},
 	}
 }
 
@@ -1575,14 +1576,24 @@ func (mgr *TransactionManager) preparePackRefsFiles(ctx context.Context, transac
 		if err != nil {
 			return err
 		}
-		if !entry.IsDir() {
-			// Get fully qualified refs.
-			ref, err := filepath.Rel(repoPath, path)
-			if err != nil {
-				return fmt.Errorf("extracting ref name: %w", err)
-			}
-			looseReferences[git.ReferenceName(ref)] = struct{}{}
+
+		relPath, err := filepath.Rel(repoPath, path)
+		if err != nil {
+			return fmt.Errorf("extracting ref name: %w", err)
 		}
+
+		// Since we are walking a child of the parent directory, parent can't be empty.
+		delete(runPackRefs.emptyDirectories, filepath.Dir(relPath))
+
+		if entry.IsDir() {
+			// Mark the directory as potential empty
+			runPackRefs.emptyDirectories[relPath] = struct{}{}
+			return nil
+		}
+
+		// Get fully qualified refs.
+		looseReferences[git.ReferenceName(relPath)] = struct{}{}
+
 		return nil
 	}); err != nil {
 		return fmt.Errorf("initial walking refs directory: %w", err)

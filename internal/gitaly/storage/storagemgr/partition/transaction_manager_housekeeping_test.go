@@ -1385,6 +1385,70 @@ func generateHousekeepingPackRefsTests(t *testing.T, ctx context.Context, testPa
 			},
 		},
 		{
+			desc: "empty directories without references are pruned during pack-refs",
+			skip: func(t *testing.T) {
+				testhelper.SkipWithReftable(t, "we don't deal with directories for reftable")
+			},
+			steps: steps{
+				StartManager{
+					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
+						repoPath := filepath.Join(storagePath, setup.RelativePath)
+
+						// Create nested empty directories
+						nestedDirPath1 := filepath.Join(repoPath, "refs", "heads", "first-branch", "empty-dir", "another-empty-dir")
+						require.NoError(tb, os.MkdirAll(nestedDirPath1, mode.Directory))
+						nestedDirPath2 := filepath.Join(repoPath, "refs", "heads", "second-branch", "empty-dir")
+						require.NoError(tb, os.MkdirAll(nestedDirPath2, mode.Directory))
+
+						// Add a reference that would be packed
+						gittest.WriteRef(tb, cfg, repoPath, "refs/heads/first-branch/someRef", setup.Commits.First.OID)
+					},
+				},
+				Begin{
+					TransactionID: 1,
+					RelativePaths: []string{setup.RelativePath},
+				},
+				RunPackRefs{
+					TransactionID: 1,
+				},
+				Begin{
+					TransactionID: 2,
+					RelativePaths: []string{setup.RelativePath},
+				},
+				Commit{
+					// We are commit a reference from another transaction which would prevent it being packed,
+					// which will help us verify that non-empty directory won't get removed.
+					ReferenceUpdates: git.ReferenceUpdates{
+						"refs/heads/first-branch/main": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
+					},
+					TransactionID: 2,
+				},
+				Commit{
+					TransactionID: 1,
+				},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN): storage.LSN(2).ToProto(),
+				},
+				Repositories: RepositoryStates{
+					relativePath: {
+						DefaultBranch: "refs/heads/main",
+						References: &ReferencesState{
+							FilesBackend: &FilesBackendState{
+								PackedReferences: map[git.ReferenceName]git.ObjectID{
+									"refs/heads/first-branch/someRef": setup.Commits.First.OID,
+								},
+								LooseReferences: map[git.ReferenceName]git.ObjectID{
+									"refs/heads/first-branch/main": setup.Commits.First.OID,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			desc:        "housekeeping fails in read-only transaction",
 			customSetup: customSetup,
 			steps: steps{
