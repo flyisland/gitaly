@@ -70,9 +70,9 @@ func listStoragesAction(ctx context.Context, cmd *cli.Command) error {
 	)
 
 	table.Configure(func(cfg *tablewriter.Config) {
-		cfg.Header.Formatting.AutoFormat = false
-		cfg.Header.Formatting.Alignment = tw.AlignLeft
-		cfg.Row.Formatting.Alignment = tw.AlignLeft
+		cfg.Header.Formatting.AutoFormat = tw.Off
+		cfg.Header.Alignment.Global = tw.AlignLeft
+		cfg.Row.Alignment.Global = tw.AlignLeft
 	})
 
 	table.Header([]string{"VIRTUAL_STORAGE", "NODE", "ADDRESS"})
