@@ -128,19 +128,16 @@ func (m *RepositoryManager) runInTransaction(ctx context.Context, transactionNam
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
-	defer func() {
-		if returnedErr != nil {
-			if err := tx.Rollback(ctx); err != nil {
-				returnedErr = errors.Join(returnedErr, fmt.Errorf("rollback: %w", err))
-			}
-		}
-	}()
 
 	if err := run(
 		storage.ContextWithTransaction(ctx, tx),
 		tx,
 		localrepo.NewFrom(repo, tx.RewriteRepository(originalRepo)),
 	); err != nil {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			err = errors.Join(err, fmt.Errorf("rollback: %w", rollbackErr))
+		}
+
 		return fmt.Errorf("run: %w", err)
 	}
 
