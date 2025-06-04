@@ -160,9 +160,6 @@ type Transaction struct {
 	// quarantineDirectory is the directory within the stagingDirectory where the new objects of the
 	// transaction are quarantined.
 	quarantineDirectory string
-	// packPrefix contains the prefix (`pack-<digest>`) of the transaction's pack if the transaction
-	// had objects to log.
-	packPrefix string
 	// snapshotRepository is a snapshot of the target repository with a possible quarantine applied
 	// if this is a read-write transaction.
 	snapshotRepository *localrepo.Repo
@@ -1074,19 +1071,6 @@ func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transact
 			return 0, fmt.Errorf("preparing housekeeping: %w", err)
 		}
 
-		// If there were objects packed that should be committed, record the packfile's creation.
-		if transaction.packPrefix != "" {
-			packDir := filepath.Join(transaction.relativePath, "objects", "pack")
-			for _, fileExtension := range []string{".pack", ".idx", ".rev"} {
-				if err := transaction.walEntry.CreateFile(
-					filepath.Join(transaction.stagingDirectory, "objects"+fileExtension),
-					filepath.Join(packDir, transaction.packPrefix+fileExtension),
-				); err != nil {
-					return 0, fmt.Errorf("record file creation: %w", err)
-				}
-			}
-		}
-
 		// Reference changes are only recorded if the repository exists when the transaction
 		// began. Repository creations record the entire state of the repository at the end
 		// of the transaction so ReferenceRecorder is not used. ReferenceRecorder is not used
@@ -1422,7 +1406,18 @@ func (mgr *TransactionManager) packObjects(ctx context.Context, transaction *Tra
 				return structerr.New("unexpected index-pack output").WithMetadata("stdout", stdout.String())
 			}
 
-			transaction.packPrefix = fmt.Sprintf("pack-%s", matches[1])
+			packPrefix := fmt.Sprintf("pack-%s", matches[1])
+
+			// Log the freshly created packfile and the associated files.
+			packDir := filepath.Join(transaction.relativePath, "objects", "pack")
+			for _, fileExtension := range []string{".pack", ".idx", ".rev"} {
+				if err := transaction.walEntry.CreateFile(
+					filepath.Join(transaction.stagingDirectory, "objects"+fileExtension),
+					filepath.Join(packDir, packPrefix+fileExtension),
+				); err != nil {
+					return fmt.Errorf("record file creation: %w", err)
+				}
+			}
 
 			return nil
 		})
