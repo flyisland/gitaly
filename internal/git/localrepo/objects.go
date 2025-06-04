@@ -154,3 +154,27 @@ func (repo *Repo) UnpackObjects(ctx context.Context, packFile io.Reader) error {
 
 	return nil
 }
+
+// ListObjects writes into output a newline separated list of all object IDs in the
+// repository. Objects IDs are returned only once even there are multiple copies of
+// the object in the repository. The output is not ordered.
+func (repo *Repo) ListObjects(ctx context.Context, output io.Writer) error {
+	stderr := &bytes.Buffer{}
+	if err := repo.ExecAndWait(ctx,
+		gitcmd.Command{
+			Name: "cat-file",
+			Flags: []gitcmd.Option{
+				gitcmd.Flag{Name: "--batch-check=%(objectname)"},
+				gitcmd.Flag{Name: "--batch-all-objects"},
+				gitcmd.Flag{Name: "--buffer"},
+				gitcmd.Flag{Name: "--unordered"},
+			},
+		},
+		gitcmd.WithStderr(stderr),
+		gitcmd.WithStdout(output),
+	); err != nil {
+		return structerr.New("cat-file: %w", err).WithMetadata("stderr", stderr.String())
+	}
+
+	return nil
+}
