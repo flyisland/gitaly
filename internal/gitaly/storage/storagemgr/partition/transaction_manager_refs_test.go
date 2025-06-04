@@ -503,8 +503,7 @@ func generateModifyReferencesTests(t *testing.T, setup testTransactionSetup) []t
 				},
 				Commit{
 					TransactionID:    1,
-					QuarantinedPacks: [][]byte{setup.Commits.First.Pack},
-					IncludeObjects:   []git.ObjectID{setup.Commits.First.OID},
+					QuarantinedPacks: [][]byte{setup.Commits.First.Pack}, // This commit is not reachable
 				},
 				Begin{
 					TransactionID:       2,

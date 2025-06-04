@@ -3668,7 +3668,6 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 						setup.Commits.Second.Pack,
 						setup.Commits.Diverging.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Diverging.OID},
 				},
 				Begin{
 					TransactionID:       2,
@@ -3765,7 +3764,6 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 						setup.Commits.Second.Pack,
 						setup.Commits.Diverging.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Diverging.OID},
 				},
 				Begin{
 					TransactionID:       2,
@@ -3891,9 +3889,8 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 					QuarantinedPacks: [][]byte{
 						setup.Commits.First.Pack,
 						setup.Commits.Second.Pack,
-						setup.Commits.Diverging.Pack,
+						setup.Commits.Diverging.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Diverging.OID},
 				},
 				Begin{
 					TransactionID:       2,
@@ -4018,9 +4015,8 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 					QuarantinedPacks: [][]byte{
 						setup.Commits.First.Pack,
 						setup.Commits.Second.Pack,
-						setup.Commits.Diverging.Pack,
+						setup.Commits.Diverging.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Diverging.OID},
 				},
 				Begin{
 					TransactionID:       2,
@@ -4744,10 +4740,9 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 					ReferenceUpdates: git.ReferenceUpdates{
 						"refs/heads/branch-1": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Diverging.OID},
 					QuarantinedPacks: [][]byte{
 						setup.Commits.First.Pack,
-						setup.Commits.Diverging.Pack,
+						setup.Commits.Diverging.Pack, // This commit is not reachable
 					},
 				},
 				Begin{
@@ -4872,8 +4867,7 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				},
 				Commit{
 					TransactionID:    1,
-					IncludeObjects:   []git.ObjectID{setup.Commits.First.OID},
-					QuarantinedPacks: [][]byte{setup.Commits.First.Pack},
+					QuarantinedPacks: [][]byte{setup.Commits.First.Pack}, // This commit is not reachable
 				},
 				Begin{
 					TransactionID:       2,
@@ -4986,8 +4980,7 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				},
 				Commit{
 					TransactionID:    1,
-					IncludeObjects:   []git.ObjectID{setup.Commits.First.OID},
-					QuarantinedPacks: [][]byte{setup.Commits.First.Pack},
+					QuarantinedPacks: [][]byte{setup.Commits.First.Pack}, // This commit is not reachable
 				},
 				Begin{
 					TransactionID:       2,
@@ -5000,10 +4993,9 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 					ExpectedSnapshotLSN: 1,
 				},
 				Commit{
-					TransactionID:  2,
-					IncludeObjects: []git.ObjectID{setup.Commits.Second.OID},
+					TransactionID: 2,
 					QuarantinedPacks: [][]byte{
-						setup.Commits.Second.Pack,
+						setup.Commits.Second.Pack, // This commit is not reachable
 					},
 				},
 				RunRepack{
@@ -5117,9 +5109,8 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				Commit{
 					TransactionID: 5,
 					QuarantinedPacks: [][]byte{
-						setup.Commits.Second.Pack,
+						setup.Commits.Second.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Second.OID},
 				},
 				Begin{
 					TransactionID:       6,
@@ -5499,9 +5490,8 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 					},
 					QuarantinedPacks: [][]byte{
 						setup.Commits.Third.Pack,
-						setup.Commits.Diverging.Pack,
+						setup.Commits.Diverging.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Diverging.OID},
 				},
 				Begin{
 					TransactionID:       5,
@@ -5511,9 +5501,8 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				Commit{
 					TransactionID: 5,
 					QuarantinedPacks: [][]byte{
-						setup.Commits.Second.Pack,
+						setup.Commits.Second.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Second.OID},
 				},
 				Begin{
 					TransactionID:       6,
@@ -5713,9 +5702,8 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 					QuarantinedPacks: [][]byte{
 						setup.Commits.Second.Pack,
 						setup.Commits.Third.Pack,
-						setup.Commits.Diverging.Pack,
+						setup.Commits.Diverging.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Diverging.OID},
 				},
 				Begin{
 					TransactionID:       4,
@@ -5725,9 +5713,8 @@ func generateHousekeepingRepackingConcurrentTests(t *testing.T, ctx context.Cont
 				Commit{
 					TransactionID: 4,
 					QuarantinedPacks: [][]byte{
-						setup.Commits.Second.Pack,
+						setup.Commits.Second.Pack, // This commit is not reachable
 					},
-					IncludeObjects: []git.ObjectID{setup.Commits.Second.OID},
 				},
 				Begin{
 					TransactionID:       5,
@@ -6249,10 +6236,7 @@ func generateHousekeepingCommitGraphsTests(t *testing.T, ctx context.Context, se
 					QuarantinedPacks: [][]byte{
 						setup.Commits.First.Pack,
 						setup.Commits.Second.Pack,
-						setup.Commits.Diverging.Pack,
-					},
-					IncludeObjects: []git.ObjectID{
-						setup.Commits.Diverging.OID,
+						setup.Commits.Diverging.Pack, // This commit is not reachable
 					},
 				},
 				Begin{
