@@ -184,6 +184,12 @@ func TestWalkObjects(t *testing.T) {
 			Mode: "100644",
 			Path: "blob1",
 		},
+		// Add a duplicate blob into the tree to assert we only see it returned once.
+		{
+			OID:  blob1,
+			Mode: "100644",
+			Path: "duplicate_blob1",
+		},
 	})
 
 	// Create two commits that diverge from the same parent. When walking one, we don't expect to get the other one reported.
@@ -223,6 +229,16 @@ func TestWalkObjects(t *testing.T) {
 			},
 		},
 		{
+			desc: "duplicate missing start point",
+			heads: []git.ObjectID{
+				missingBlob,
+				missingBlob,
+			},
+			expectedOutput: []string{
+				"?" + missingBlob.String(),
+			},
+		},
+		{
 			desc: "commit missing parent commit",
 			heads: []git.ObjectID{
 				commitMissingParent,
@@ -236,6 +252,17 @@ func TestWalkObjects(t *testing.T) {
 		{
 			desc: "annotated tag missing referenced commit",
 			heads: []git.ObjectID{
+				tagMissingParent,
+			},
+			expectedOutput: []string{
+				tagMissingParent.String() + " refs/tags/tag-missing-parent",
+				"?" + missingRootCommit.String(),
+			},
+		},
+		{
+			desc: "duplicate start point",
+			heads: []git.ObjectID{
+				tagMissingParent,
 				tagMissingParent,
 			},
 			expectedOutput: []string{
