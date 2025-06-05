@@ -217,8 +217,6 @@ workflow:
 build:
   needs: []
   stage: build
-  tags:
-    - bundle-uri
   cache:
     - <<: *cache_deps_configuration
       policy: pull-push
@@ -244,8 +242,6 @@ build:
 build:binaries:
   needs: []
   stage: build
-  tags:
-    - bundle-uri
   cache:
     - *cache_deps_configuration
     - *cache_go_configuration
@@ -268,8 +264,6 @@ build:binaries:
 
 test:
   <<: *test_definition
-  tags:
-    - bundle-uri
   parallel:
     matrix:
       # The following jobs all test with our default Git version, which is
