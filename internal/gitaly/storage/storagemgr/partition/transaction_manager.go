@@ -1330,25 +1330,6 @@ func (mgr *TransactionManager) packObjects(ctx context.Context, transaction *Tra
 		return nil
 	})
 
-	// Check if we have anything to pack, and if not, exit without spawning further commands.
-	// We first check whether there were any reference updates that would depend on any objects.
-	// If not, we check whether any objects were written in the quarantine that need committing.
-	// If neither hold, then we have nothing to do and can return directly.
-	var peekedListObjectsOutput []byte
-	if len(heads) == 0 {
-		// Check whether the command has output. If we don't receive an EOF, there's output and
-		// that means there are objects in the quarantine we need to commit. We read the output into
-		// peekedListObjectsOutput so we can recover the byte we possibly read into the stream.
-		peekedListObjectsOutput = make([]byte, 1)
-		if _, err := io.ReadAtLeast(listObjectsReader, peekedListObjectsOutput, len(peekedListObjectsOutput)); err != nil {
-			if !errors.Is(err, io.EOF) {
-				return fmt.Errorf("check for quarantined objects: %w", err)
-			}
-
-			return group.Wait()
-		}
-	}
-
 	objectWalkReader, objectWalkWriter := io.Pipe()
 	group.Go(func() (returnedErr error) {
 		defer listObjectsReader.CloseWithError(returnedErr)
@@ -1359,7 +1340,7 @@ func (mgr *TransactionManager) packObjects(ctx context.Context, transaction *Tra
 		// objects during the walk are recorded as the transaction's dependencies.
 		if err := quarantineOnlySnapshotRepository.WalkObjects(ctx,
 			io.MultiReader(
-				io.MultiReader(bytes.NewReader(peekedListObjectsOutput), listObjectsReader),
+				listObjectsReader,
 				strings.NewReader(strings.Join(heads, "\n")),
 			),
 			objectWalkWriter,
