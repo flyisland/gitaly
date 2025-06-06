@@ -108,7 +108,7 @@ func (f fileInstance) IsExcluded() bool {
 // count.
 func (f fileInstance) DetermineStats(object gitpipe.CatfileObjectResult) (string, uint64, error) {
 	// Read arbitrary number of bytes considered enough to determine language
-	content, err := io.ReadAll(io.LimitReader(object, 2048))
+	content, err := io.ReadAll(io.LimitReader(object, 1024*16))
 	if err != nil {
 		return "", 0, fmt.Errorf("determine stats read blob: %w", err)
 	}
