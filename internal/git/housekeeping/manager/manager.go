@@ -22,8 +22,6 @@ type Manager interface {
 	// OptimizeRepository optimizes the repository's data structures such that it can be more
 	// efficiently served.
 	OptimizeRepository(context.Context, *localrepo.Repo, ...OptimizeRepositoryOption) error
-	// AddPackRefsInhibitor allows clients to block housekeeping from running git-pack-refs(1).
-	AddPackRefsInhibitor(ctx context.Context, repo storage.Repository) (bool, func(), error)
 	// OffloadRepository offloads the repository objects onto a second storage
 	OffloadRepository(context.Context, *localrepo.Repo, config.OffloadingConfig) error
 }
@@ -125,62 +123,6 @@ func (s *repositoryStates) tryRunningHousekeeping(repo storage.Repository) (succ
 	}
 }
 
-// addPackRefsInhibitor is used to add an inhibitor over running `git-pack-refs(1)`.
-// If `git-pack-refs(1)` is currently running, the caller waits till it finishes. The caller
-// can also exit early by using a context cancellation instead.
-//
-// The function returns a cleanup function which decreases the inhibitor count and must
-// be called by the client when it no longer blocks `git-pack-refs(1)`.
-func (s *repositoryStates) addPackRefsInhibitor(ctx context.Context, repo storage.Repository) (successful bool, _ func(), err error) {
-	state, cleanup := s.getState(repo)
-	defer func() {
-		if !successful {
-			cleanup()
-		}
-	}()
-
-	// We don't defer unlock here to ensure that a single inhibitor doesn't lock the others.
-	// We want inhibitors to be able to use context cancellation to exit early without being
-	// locked by other inhibitors.
-	state.Lock()
-
-	for {
-		packRefsDone := state.packRefsDone
-		if packRefsDone == nil {
-			break
-		}
-
-		state.Unlock()
-
-		select {
-		case <-ctx.Done():
-			return false, nil, ctx.Err()
-		case <-packRefsDone:
-			// We don't use state.packRefsDone, cause there is possibility that it is set
-			// to `nil` by the cleanup function after running `git-pack-refs(1)`.
-			//
-			// We obtain a lock and continue the loop here to avoid a race wherein another
-			// goroutine has invoked git-pack-refs(1). By continuing the loop and checking
-			// the value of packRefsDone, we can avoid that scenario.
-			state.Lock()
-			continue
-		}
-	}
-
-	defer state.Unlock()
-
-	state.packRefsInhibitors++
-
-	return true, func() {
-		defer cleanup()
-
-		state.Lock()
-		defer state.Unlock()
-
-		state.packRefsInhibitors--
-	}, nil
-}
-
 // tryRunningPackRefs checks if we can run `git-pack-refs(1)` for a given repository. If there
 // is at least one inhibitors then we return false. If there are no inhibitors, we setup the `packRefsDone`
 // channel to denote when `git-pack-refs(1)` finishes, this is handled when the caller calls the
@@ -247,11 +189,4 @@ func (m *RepositoryManager) Describe(descs chan<- *prometheus.Desc) {
 // Collect is used to collect Prometheus metrics.
 func (m *RepositoryManager) Collect(metrics chan<- prometheus.Metric) {
 	m.metrics.Collect(metrics)
-}
-
-// AddPackRefsInhibitor exposes the internal function addPackRefsInhibitor on the
-// RepositoryManager level. This can then be used by other clients to block housekeeping
-// from running git-pack-refs(1).
-func (m *RepositoryManager) AddPackRefsInhibitor(ctx context.Context, repo storage.Repository) (successful bool, _ func(), err error) {
-	return m.repositoryStates.addPackRefsInhibitor(ctx, repo)
 }

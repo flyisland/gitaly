@@ -16,7 +16,6 @@ import (
 	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/manager"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	gitalycfg "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -125,10 +124,6 @@ func (m *mockHousekeepingManager) OptimizeRepository(ctx context.Context, repo *
 	}
 
 	return nil
-}
-
-func (m *mockHousekeepingManager) AddPackRefsInhibitor(ctx context.Context, repo storage.Repository) (bool, func(), error) {
-	return false, nil, nil
 }
 
 func (m *mockHousekeepingManager) OffloadRepository(context.Context, *localrepo.Repo, config.OffloadingConfig) error {
