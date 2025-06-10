@@ -808,6 +808,11 @@ func (txn *Transaction) KV() keyvalue.ReadWriter {
 	return keyvalue.NewPrefixedReadWriter(txn.recordingReadWriter, []byte("kv/"))
 }
 
+// RawKV returns a handle to the key-value store snapshot of the transaction without prefix.
+func (txn *Transaction) RawKV() keyvalue.ReadWriter {
+	return txn.recordingReadWriter
+}
+
 // FS returns a handle to the transaction's file system snapshot.
 func (txn *Transaction) FS() storage.FS {
 	return txn.fs

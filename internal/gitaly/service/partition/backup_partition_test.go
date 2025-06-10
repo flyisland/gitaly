@@ -24,6 +24,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/protobuf/encoding/protodelim"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestBackupPartition(t *testing.T) {
@@ -138,10 +139,13 @@ func TestBackupPartition(t *testing.T) {
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, tar)
 
+			marshaledLSN, err := proto.Marshal(storage.LSN(1).ToProto())
+			require.NoError(t, err)
 			expectedKV := new(bytes.Buffer)
 			expectedEntries := []*gitalypb.KVPair{
-				{Key: []byte(fmt.Sprintf("m/%s", repo.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
-				{Key: []byte(fmt.Sprintf("r/%s", repo.GetRelativePath())), Value: nil},
+				{Key: []byte("applied_lsn"), Value: marshaledLSN},
+				{Key: []byte(fmt.Sprintf("kv/m/%s", repo.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
+				{Key: []byte(fmt.Sprintf("kv/r/%s", repo.GetRelativePath())), Value: nil},
 			}
 			for _, entry := range expectedEntries {
 				_, err = protodelim.MarshalTo(
@@ -203,11 +207,14 @@ func TestBackupPartition(t *testing.T) {
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, tar2)
 
+			marshaledLSN, err = proto.Marshal(storage.LSN(2).ToProto())
+			require.NoError(t, err)
 			expectedEntries = []*gitalypb.KVPair{
-				{Key: []byte(fmt.Sprintf("m/%s", repo.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
-				{Key: []byte(fmt.Sprintf("m/%s", forkRepository.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
-				{Key: []byte(fmt.Sprintf("r/%s", repo.GetRelativePath()))},
-				{Key: []byte(fmt.Sprintf("r/%s", forkRepository.GetRelativePath())), Value: nil},
+				{Key: []byte(fmt.Sprintf("kv/m/%s", repo.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
+				{Key: []byte(fmt.Sprintf("kv/m/%s", forkRepository.GetRelativePath())), Value: []byte{0, 0, 0, 0, 0, 0, 0, 0}},
+				{Key: []byte(fmt.Sprintf("kv/r/%s", repo.GetRelativePath()))},
+				{Key: []byte(fmt.Sprintf("kv/r/%s", forkRepository.GetRelativePath())), Value: nil},
+				{Key: []byte("applied_lsn"), Value: marshaledLSN},
 			}
 			// We need to sort the entries before comparing because badger iterator also returns the keys in lexicographically sorted order.
 			sort.Slice(expectedEntries, func(i, j int) bool {

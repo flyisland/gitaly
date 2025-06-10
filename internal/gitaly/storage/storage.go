@@ -82,6 +82,9 @@ type Transaction interface {
 	// KV returns a ReadWriter that can be used to read or write the key-value state
 	// in the transaction's snapshot.
 	KV() keyvalue.ReadWriter
+	// RawKV returns a ReadWriter that can be used to read or write the raw key-value state
+	// in the transaction's snapshot.
+	RawKV() keyvalue.ReadWriter
 	// FS is the interface of the transaction's file system snapshot.
 	FS() FS
 	// UpdateReferences updates the given references as part of the transaction. Each call is treated as
