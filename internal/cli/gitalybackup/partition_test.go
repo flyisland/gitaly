@@ -29,6 +29,7 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 		name               string
 		serverOpts         func(ctx context.Context, backupRoot string) []testserver.GitalyServerOpt
 		envSetup           func(ctx context.Context, cfg config.Cfg)
+		commandArgs        []string
 		expectedErrMessage string
 	}{
 		{
@@ -42,6 +43,7 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 				}
 			},
 			envSetup:           func(ctx context.Context, cfg config.Cfg) {},
+			commandArgs:        []string{"partition", "create", "--parallel", "2"},
 			expectedErrMessage: "extract gitaly servers: empty metadata",
 		},
 		{
@@ -57,6 +59,7 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 			envSetup: func(ctx context.Context, cfg config.Cfg) {
 				t.Setenv("GITALY_SERVERS", "")
 			},
+			commandArgs:        []string{"partition", "create", "--parallel", "2"},
 			expectedErrMessage: "extract gitaly servers: empty metadata",
 		},
 		{
@@ -74,6 +77,43 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 				require.NoError(t, err)
 				t.Setenv("GITALY_SERVERS", metadata.GetValue(metadata.OutgoingToIncoming(ctx), "gitaly-servers"))
 			},
+			commandArgs:        []string{"partition", "create", "--parallel", "2"},
+			expectedErrMessage: "",
+		},
+		{
+			name: "when wrong timeout format is given",
+			serverOpts: func(ctx context.Context, backupRoot string) []testserver.GitalyServerOpt {
+				backupSink, err := backup.ResolveSink(ctx, backupRoot)
+				require.NoError(t, err)
+
+				return []testserver.GitalyServerOpt{
+					testserver.WithBackupSink(backupSink),
+				}
+			},
+			envSetup: func(ctx context.Context, cfg config.Cfg) {
+				ctx, err := storage.InjectGitalyServers(ctx, "default", cfg.SocketPath, cfg.Auth.Token)
+				require.NoError(t, err)
+				t.Setenv("GITALY_SERVERS", metadata.GetValue(metadata.OutgoingToIncoming(ctx), "gitaly-servers"))
+			},
+			commandArgs:        []string{"partition", "create", "--parallel", "2", "--timeout", "30"},
+			expectedErrMessage: "parse timeout duration: time: missing unit in duration",
+		},
+		{
+			name: "when correct timeout format is given",
+			serverOpts: func(ctx context.Context, backupRoot string) []testserver.GitalyServerOpt {
+				backupSink, err := backup.ResolveSink(ctx, backupRoot)
+				require.NoError(t, err)
+
+				return []testserver.GitalyServerOpt{
+					testserver.WithBackupSink(backupSink),
+				}
+			},
+			envSetup: func(ctx context.Context, cfg config.Cfg) {
+				ctx, err := storage.InjectGitalyServers(ctx, "default", cfg.SocketPath, cfg.Auth.Token)
+				require.NoError(t, err)
+				t.Setenv("GITALY_SERVERS", metadata.GetValue(metadata.OutgoingToIncoming(ctx), "gitaly-servers"))
+			},
+			commandArgs:        []string{"partition", "create", "--parallel", "2", "--timeout", "30s"},
 			expectedErrMessage: "",
 		},
 	}
@@ -92,14 +132,12 @@ func TestPartitionSubcommand_Create(t *testing.T) {
 				SkipSnapshotInvalidation: true,
 			})
 
-			stdout, stderr, exitCode := runGitalyBackup(t, ctx, cfg, bytes.NewReader(nil),
-				"partition", "create", "--parallel", "2",
-			)
+			stdout, stderr, exitCode := runGitalyBackup(t, ctx, cfg, bytes.NewReader(nil), tc.commandArgs...)
 			require.Empty(t, stderr)
 
 			// The test relies on the interceptor being configured in the test server. If WAL is not enabled, the interceptor won't be configured,
 			// and as a result the transaction won't be initialized.
-			if !testhelper.IsWALEnabled() && tc.expectedErrMessage != "extract gitaly servers: empty metadata" {
+			if !testhelper.IsWALEnabled() && tc.expectedErrMessage == "" {
 				tc.expectedErrMessage = "partition create: list partitions: rpc error: code = Internal desc = transactions not enabled"
 			}
 			if tc.expectedErrMessage != "" {
