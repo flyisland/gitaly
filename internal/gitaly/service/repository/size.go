@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -26,7 +27,8 @@ func (s *server) RepositorySize(ctx context.Context, in *gitalypb.RepositorySize
 		return nil, err
 	}
 
-	sizeInBytes, err := dirSizeInBytes(path)
+	filter := snapshot.NewDefaultFilter()
+	sizeInBytes, err := dirSizeInBytes(path, filter)
 	if err != nil {
 		return nil, fmt.Errorf("calculating directory size: %w", err)
 	}
@@ -45,8 +47,8 @@ func (s *server) GetObjectDirectorySize(ctx context.Context, in *gitalypb.GetObj
 	if err != nil {
 		return nil, err
 	}
-
-	sizeInBytes, err := dirSizeInBytes(path)
+	// path is the objects directory path, not repo's path
+	sizeInBytes, err := dirSizeInBytes(path, snapshot.NewDefaultFilter())
 	if err != nil {
 		return nil, fmt.Errorf("calculating directory size: %w", err)
 	}
@@ -54,10 +56,10 @@ func (s *server) GetObjectDirectorySize(ctx context.Context, in *gitalypb.GetObj
 	return &gitalypb.GetObjectDirectorySizeResponse{Size: sizeInBytes / 1024}, nil
 }
 
-func dirSizeInBytes(path string) (int64, error) {
+func dirSizeInBytes(dirPath string, filter snapshot.Filter) (int64, error) {
 	var totalSize int64
 
-	if err := filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// It can happen that we try to walk a directory like the object shards or
 			// an empty reference directory that gets deleted concurrently. This is fine
@@ -70,6 +72,15 @@ func dirSizeInBytes(path string) (int64, error) {
 		}
 
 		if d.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(dirPath, path)
+		if err != nil {
+			return fmt.Errorf("calculating path relative to repo root: %w", err)
+		}
+
+		if !filter.Matches(relPath) {
 			return nil
 		}
 

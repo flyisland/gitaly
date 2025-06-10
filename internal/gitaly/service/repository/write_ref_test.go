@@ -393,6 +393,10 @@ func TestWriteRef(t *testing.T) {
 }
 
 func TestWriteRef_locked(t *testing.T) {
+	// In the context of transaction management, refs do not require a .lock file for concurrency control.
+	// This is because transaction manager ensures that no two transactions can operate
+	// on the same ref concurrently and tracks all ongoing ref transactions enforces mutual exclusion.
+	testhelper.SkipWithWAL(t, "snapshots ignore ref .lock files")
 	t.Parallel()
 
 	ctx := testhelper.Context(t)

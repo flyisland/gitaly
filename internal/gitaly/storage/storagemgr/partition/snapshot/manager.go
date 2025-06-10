@@ -14,6 +14,7 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"golang.org/x/sync/errgroup"
@@ -145,7 +146,7 @@ func (mgr *Manager) closeSnapshots(snapshots []*sharedSnapshot) {
 }
 
 // GetSnapshot returns a file system snapshot. If exclusive is set, the snapshot is a new one and not shared with
-// any other caller. If exclusive is not set, the snaphot is a shared one and may be shared with other callers.
+// any other caller. If exclusive is not set, the snapshot is a shared one and may be shared with other callers.
 //
 // GetSnapshot is safe to call concurrently with itself. The caller is responsible for ensuring the state of the
 // snapshotted file system is not modified while the snapshot is taken.
@@ -179,6 +180,16 @@ func (mgr *Manager) GetSnapshot(ctx context.Context, relativePaths []string, exc
 
 	// This is a shared snapshot.
 	key := mgr.key(relativePaths)
+
+	// Include snapshot_filter in the cache key to prevent the following issue:
+	// 1. When snapshot_filter is enabled, a read-only snapshot is taken using the regex filter
+	//    and then cached by the manager.
+	// 2. If snapshot_filter is later disabled, subsequent requests would still use the cached
+	//    snapshot—which was created with filtering enabled. If that filtering produced an
+	//    incomplete or broken repository, those requests could fail.
+	// By including snapshot_filter in the cache key, we ensure a fresh snapshot is taken
+	// when the feature flag's state changes, avoiding reuse of incompatible snapshots.
+	key = fmt.Sprintf("%s-with_snapshot_filter_enabled_%t", key, featureflag.SnapshotFilter.IsEnabled(ctx))
 
 	mgr.mutex.Lock()
 	lsn := mgr.currentLSN
@@ -322,10 +333,16 @@ func (mgr *Manager) logSnapshotCreation(ctx context.Context, exclusive bool, sta
 }
 
 func (mgr *Manager) newSnapshot(ctx context.Context, relativePaths []string, readOnly bool) (*snapshot, error) {
+	snapshotFilter := NewDefaultFilter()
+	if readOnly && featureflag.SnapshotFilter.IsEnabled(ctx) {
+		snapshotFilter = NewRegexSnapshotFilter()
+	}
+
 	return newSnapshot(ctx,
 		mgr.storageDir,
 		filepath.Join(mgr.workingDir, strconv.FormatUint(mgr.nextDirectory.Add(1), 36)),
 		relativePaths,
+		snapshotFilter,
 		readOnly,
 	)
 }
