@@ -81,27 +81,24 @@ func testUnaryInterceptor(t *testing.T, ctx context.Context) {
 	md := testcfg.GitalyServersMetadataFromCfg(t, cfg)
 	ctx = testhelper.MergeOutgoingMetadata(ctx, md)
 
-	expectedBackend := testhelper.EnabledOrDisabledFlag(ctx, featureflag.ReftableMigration, git.ReferenceBackendReftables, git.ReferenceBackendFiles)
+	_, err = client.FindCommit(ctx, request)
+	require.NoError(t, err)
 
-	// Since `RegisterMigration` is non-blocking, there is no guarantee that the function
-	// actually triggered a migration. So we attempt 3 times.
-	for range 3 {
-		_, err = client.FindCommit(ctx, request)
-		require.NoError(t, err)
+	// Block to ensure the previous migration was successful.
+	reftableMigrator.migrateCh <- migrationData{}
 
-		// Block to ensure the previous migration was successful.
-		reftableMigrator.migrateCh <- migrationData{}
+	repoInfo, err := gitalypb.NewRepositoryServiceClient(conn).RepositoryInfo(ctx, &gitalypb.RepositoryInfoRequest{
+		Repository: repoProto,
+	})
+	require.NoError(t, err)
 
-		repo = localrepo.NewTestRepo(t, cfg, repoProto)
-		backend, err = repo.ReferenceBackend(ctx)
-		require.NoError(t, err)
-
-		if expectedBackend.Name == backend.Name {
-			break
-		}
-	}
-
-	require.Equal(t, expectedBackend, backend)
+	require.Equal(t,
+		testhelper.EnabledOrDisabledFlag(ctx, featureflag.ReftableMigration,
+			gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+			gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+		),
+		repoInfo.GetReferences().GetReferenceBackend(),
+	)
 
 	reftableMigrator.Close()
 }
@@ -163,39 +160,36 @@ func testStreamInterceptor(t *testing.T, ctx context.Context) {
 	md := testcfg.GitalyServersMetadataFromCfg(t, cfg)
 	ctx = testhelper.MergeOutgoingMetadata(ctx, md)
 
-	expectedBackend := testhelper.EnabledOrDisabledFlag(ctx, featureflag.ReftableMigration, git.ReferenceBackendReftables, git.ReferenceBackendFiles)
+	stream, err := client.FindCommits(ctx, request)
+	require.NoError(t, err)
 
-	// Since `RegisterMigration` is non-blocking, there is no guarantee that the function
-	// actually triggered a migration. So we attempt 3 times.
-	for range 3 {
-		stream, err := client.FindCommits(ctx, request)
-		require.NoError(t, err)
-
-		_, err = testhelper.ReceiveAndFold(stream.Recv, func(
-			result []*gitalypb.GitCommit,
-			response *gitalypb.FindCommitsResponse,
-		) []*gitalypb.GitCommit {
-			if response == nil {
-				return result
-			}
-
-			return append(result, response.GetCommits()...)
-		})
-		require.NoError(t, err)
-
-		// Block to ensure the previous migration was successful.
-		reftableMigrator.migrateCh <- migrationData{}
-
-		repo = localrepo.NewTestRepo(t, cfg, repoProto)
-		backend, err = repo.ReferenceBackend(ctx)
-		require.NoError(t, err)
-
-		if expectedBackend.Name == backend.Name {
-			break
+	_, err = testhelper.ReceiveAndFold(stream.Recv, func(
+		result []*gitalypb.GitCommit,
+		response *gitalypb.FindCommitsResponse,
+	) []*gitalypb.GitCommit {
+		if response == nil {
+			return result
 		}
-	}
 
-	require.Equal(t, expectedBackend, backend)
+		return append(result, response.GetCommits()...)
+	})
+	require.NoError(t, err)
+
+	// Block to ensure the previous migration was successful.
+	reftableMigrator.migrateCh <- migrationData{}
+
+	repoInfo, err := gitalypb.NewRepositoryServiceClient(conn).RepositoryInfo(ctx, &gitalypb.RepositoryInfoRequest{
+		Repository: repoProto,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t,
+		testhelper.EnabledOrDisabledFlag(ctx, featureflag.ReftableMigration,
+			gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+			gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+		),
+		repoInfo.GetReferences().GetReferenceBackend(),
+	)
 
 	reftableMigrator.Close()
 }
