@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.0.2 (2025-06-11)
+
+No changes.
+
 ## 18.0.1 (2025-05-21)
 
 No changes.
@@ -10,6 +14,10 @@ No changes.
 
 - [pktline: Add test for ReadMonitor error logging](gitlab-org/gitaly@bcbfee5ab681c6248220d17bd8224a05920874c4) by @santhanuv ([merge request](gitlab-org/gitaly!7866))
 - [pktline: Log read errors in ReadMonitor](gitlab-org/gitaly@62674c1f784971350c5e13aceb64ddd50904db0c) by @santhanuv ([merge request](gitlab-org/gitaly!7866))
+
+## 17.11.4 (2025-06-11)
+
+No changes.
 
 ## 17.11.3 (2025-05-21)
 
@@ -28,6 +36,10 @@ No changes.
 ### Other (1 change)
 
 - [Revert "catfile: Ensure we are not recycling catfile keys each hour"](gitlab-org/gitaly@fc605ba5ca94c0978cd26b9de8c954fc23e4fb5f) ([merge request](gitlab-org/gitaly!7783))
+
+## 17.10.8 (2025-06-11)
+
+No changes.
 
 ## 17.10.7 (2025-05-21)
 
