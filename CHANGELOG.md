@@ -15,6 +15,10 @@ No changes.
 - [pktline: Add test for ReadMonitor error logging](gitlab-org/gitaly@bcbfee5ab681c6248220d17bd8224a05920874c4) by @santhanuv ([merge request](gitlab-org/gitaly!7866))
 - [pktline: Log read errors in ReadMonitor](gitlab-org/gitaly@62674c1f784971350c5e13aceb64ddd50904db0c) by @santhanuv ([merge request](gitlab-org/gitaly!7866))
 
+## 17.11.4 (2025-06-11)
+
+No changes.
+
 ## 17.11.3 (2025-05-21)
 
 No changes.
