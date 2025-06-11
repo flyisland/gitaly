@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	cli "github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
@@ -17,10 +18,12 @@ import (
 
 type partitionCreateSubcommand struct {
 	parallel int
+	timeout  string
 }
 
 func (cmd *partitionCreateSubcommand) flags(ctx *cli.Command) {
 	cmd.parallel = ctx.Int("parallel")
+	cmd.timeout = ctx.String("timeout")
 }
 
 func partitionCreateFlags() []cli.Flag {
@@ -29,6 +32,11 @@ func partitionCreateFlags() []cli.Flag {
 			Name:  "parallel",
 			Usage: "maximum number of parallel backups per storage",
 			Value: 2,
+		},
+		&cli.StringFlag{
+			Name:  "timeout",
+			Usage: `timeout for a single partition backup operation, e.g. "30s", "1m", "2h45m"`,
+			Value: "5m",
 		},
 	}
 }
@@ -102,7 +110,16 @@ func (cmd *partitionCreateSubcommand) run(ctx context.Context, logger log.Logger
 		returnErr = errors.Join(returnErr, pool.Close())
 	}()
 
-	manager := backup.NewPartitionBackupManager(pool, backup.WithPartitionConcurrencyLimit(cmd.parallel))
+	timeout, err := time.ParseDuration(cmd.timeout)
+	if err != nil {
+		return fmt.Errorf("parse timeout duration: %w", err)
+	}
+
+	manager := backup.NewPartitionBackupManager(
+		pool,
+		backup.WithPartitionConcurrencyLimit(cmd.parallel),
+		backup.WithPartitionBackupTimeout(timeout),
+	)
 
 	gitalyServers, err := storage.ExtractGitalyServers(ctx)
 	if err != nil {
