@@ -21,7 +21,7 @@ func RepositoryKey(relativePath string) []byte {
 	return []byte(RepositoryKeyPrefix + relativePath)
 }
 
-// CreateKvFile creates a file storing the transaction snapshot's kv state
+// CreateKvFile creates a file storing the transaction snapshot's raw kv state
 func CreateKvFile(tx Transaction) (kvFile *os.File, returnErr error) {
 	kvFile, err := os.CreateTemp("", kvStateFileName)
 	if err != nil {
@@ -32,11 +32,10 @@ func CreateKvFile(tx Transaction) (kvFile *os.File, returnErr error) {
 		return nil, fmt.Errorf("remove temp KV file: %w", err)
 	}
 
-	kvIter := tx.KV().NewIterator(keyvalue.IteratorOptions{})
+	kvIter := tx.RawKV().NewIterator(keyvalue.IteratorOptions{})
 	defer kvIter.Close()
 	for kvIter.Rewind(); kvIter.Valid(); kvIter.Next() {
 		item := kvIter.Item()
-
 		if err := item.Value(func(v []byte) error {
 			if _, err := protodelim.MarshalTo(kvFile, &gitalypb.KVPair{Key: item.Key(), Value: v}); err != nil {
 				return fmt.Errorf("write KV entry to temp file: %w", err)

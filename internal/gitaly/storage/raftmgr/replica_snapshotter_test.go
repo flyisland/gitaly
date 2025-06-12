@@ -253,7 +253,7 @@ func (*mockTransaction) SnapshotLSN() storage.LSN {
 	return storage.LSN(1)
 }
 
-func (m *mockTransaction) KV() keyvalue.ReadWriter {
+func (m *mockTransaction) RawKV() keyvalue.ReadWriter {
 	return m.db.NewTransaction(true)
 }
 
