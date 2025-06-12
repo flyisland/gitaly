@@ -40,7 +40,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 
 	// Run setupOffloadingRepo once to gather object information (blobs, trees, etc.) needed for test expectations.
 	// This information becomes inaccessible after customSetup() is called within transactionTestCase.
-	preRunSetup, blobs, trees, commits, refs, originalAlternatesFileContent := setupOffloadingRepo(t, ctx, testPartitionID, relativePath)
+	_, blobs, trees, commits, refs, alternatesFileContent := setupOffloadingRepo(t, ctx, testPartitionID, relativePath)
 
 	noneBlobObjects := append(trees, commits...)
 	allObjects := append(blobs, noneBlobObjects...)
@@ -62,11 +62,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 	absCachePath := filepath.Join(cacheRoot, relativePath, objectsDir)
 	err := os.MkdirAll(absCachePath, mode.Directory)
 	require.NoError(t, err)
-
-	// The alternate file contains a relative path from the repository's objects directory to the cache directory
-	relCachePath, err := filepath.Rel(filepath.Join(preRunSetup.RepositoryPath, objectsDir), absCachePath)
-	require.NoError(t, err)
-	afterOffloadingAlternatesFileContent := fmt.Sprintf("%s\n%s\n", originalAlternatesFileContent, relCachePath)
 
 	// pathPrefixUuid is a unique path prefix for when uploading
 	pathPrefixUUID := uuid.New().String()
@@ -109,7 +104,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				},
 				Repositories: RepositoryStates{
 					relativePath: {
-						Alternate:     afterOffloadingAlternatesFileContent,
+						Alternate:     alternatesFileContent,
 						DefaultBranch: "refs/heads/main",
 						References: gittest.FilesOrReftables(&ReferencesState{
 							FilesBackend: &FilesBackendState{
@@ -186,7 +181,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				Database: DatabaseState{},
 				Repositories: RepositoryStates{
 					relativePath: {
-						Alternate:     originalAlternatesFileContent,
+						Alternate:     alternatesFileContent,
 						DefaultBranch: "refs/heads/main",
 						References: gittest.FilesOrReftables(&ReferencesState{
 							FilesBackend: &FilesBackendState{
@@ -270,7 +265,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				Database: DatabaseState{},
 				Repositories: RepositoryStates{
 					relativePath: {
-						Alternate:     originalAlternatesFileContent,
+						Alternate:     alternatesFileContent,
 						DefaultBranch: "refs/heads/main",
 						References: gittest.FilesOrReftables(&ReferencesState{
 							FilesBackend: &FilesBackendState{
@@ -372,7 +367,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				},
 				Repositories: RepositoryStates{
 					relativePath: {
-						Alternate:     afterOffloadingAlternatesFileContent,
+						Alternate:     alternatesFileContent,
 						DefaultBranch: "refs/heads/main",
 						References: gittest.FilesOrReftables(&ReferencesState{
 							FilesBackend: &FilesBackendState{
@@ -474,7 +469,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				},
 				Repositories: RepositoryStates{
 					relativePath: {
-						Alternate:     originalAlternatesFileContent,
+						Alternate:     alternatesFileContent,
 						DefaultBranch: "refs/heads/main",
 						References: gittest.FilesOrReftables(&ReferencesState{
 							FilesBackend: &FilesBackendState{
@@ -602,109 +597,6 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 			},
 		},
 		{
-			desc:        "conflict when there is a committed change on the alternate file",
-			customSetup: customSetup,
-			steps: steps{
-				StartManager{
-					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
-						repoPath := filepath.Join(storagePath, relativePath)
-
-						// Do a git gc to clean loose objects. git repack with filter may be
-						// ineffective when there is loose objects.
-						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
-
-						// Removes the alternates file, later in the test file
-						// we will recreate one
-						require.NoError(t, os.Remove(filepath.Join(stats.AlternatesFilePath(repoPath))))
-
-						gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
-							SkipCreationViaService: true,
-							RelativePath:           "fake_pool",
-						})
-					},
-				},
-
-				Begin{
-					TransactionID: 1,
-					RelativePaths: []string{relativePath, "fake_pool"},
-				},
-				Begin{
-					TransactionID: 2,
-					RelativePaths: []string{relativePath},
-				},
-				RunOffloading{
-					TransactionID: 2,
-					Config: housekeepingcfg.OffloadingConfig{
-						CacheRoot:   cacheRoot,
-						SinkBaseURL: sinkURL,
-					},
-				},
-
-				Commit{
-					TransactionID:   1,
-					UpdateAlternate: &alternateUpdate{RelativePath: "fake_pool"},
-				},
-				Commit{
-					TransactionID: 2,
-					ExpectedError: fshistory.NewReadWriteConflictError(
-						filepath.Join(stats.AlternatesFilePath(relativePath)),
-						0, 1),
-				},
-			},
-			expectedState: StateAssertion{
-				Database: DatabaseState{
-					string(keyAppliedLSN): storage.LSN(1).ToProto(),
-				},
-				Repositories: RepositoryStates{
-					"fake_pool": {
-						Objects: []git.ObjectID{},
-					},
-					relativePath: {
-						Alternate:     "../../../../../fake_pool/objects",
-						DefaultBranch: "refs/heads/main",
-						References: gittest.FilesOrReftables(&ReferencesState{
-							FilesBackend: &FilesBackendState{
-								PackedReferences: refs,
-								LooseReferences:  map[git.ReferenceName]git.ObjectID{},
-							},
-						}, &ReferencesState{
-							ReftableBackend: &ReftableBackendState{
-								Tables: []ReftableTable{
-									{
-										MinIndex: 1,
-										MaxIndex: 4,
-										References: []git.Reference{
-											{
-												Name:       "HEAD",
-												Target:     "refs/heads/main",
-												IsSymbolic: true,
-											},
-											{
-												Name:       "refs/heads/first",
-												Target:     refs["refs/heads/first"].String(),
-												IsSymbolic: false,
-											},
-											{
-												Name:       "refs/heads/main",
-												Target:     refs["refs/heads/main"].String(),
-												IsSymbolic: false,
-											},
-											{
-												Name:       "refs/heads/second",
-												Target:     refs["refs/heads/second"].String(),
-												IsSymbolic: false,
-											},
-										},
-									},
-								},
-							},
-						}),
-						Objects: allObjects,
-					},
-				},
-			},
-		},
-		{
 			desc:        "conflict when committed changes on the gitconfig file",
 			customSetup: customSetup,
 			steps: steps{
@@ -752,7 +644,7 @@ func generateOffloadingTests(t *testing.T, ctx context.Context, testPartitionID 
 				},
 				Repositories: RepositoryStates{
 					relativePath: {
-						Alternate:     originalAlternatesFileContent,
+						Alternate:     alternatesFileContent,
 						DefaultBranch: "refs/heads/main",
 						References: gittest.FilesOrReftables(&ReferencesState{
 							FilesBackend: &FilesBackendState{

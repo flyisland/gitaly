@@ -66,18 +66,20 @@ func TestOffloadRepository_HappyPath(t *testing.T) {
 		SinkBaseURL: cfg.Offloading.GoCloudURL,
 	}
 
-	cachePath := filepath.Join(cfg.Offloading.CacheRoot, repo.GetRelativePath(), "objects", "pack")
 	require.NoError(t, housekeepingManager.OffloadRepository(ctx, repo, offloadingCfg))
 	applyWAL(t, ctx, repo, node)
 
 	// First, verify blobs are properly offloaded and no longer present in the repository
-	assertOffloadedRepoObjects(t, false, blobs, trees, commits, repoPath, cfg)
+	assertOffloadedRepoObjects(t, false, "", blobs, trees, commits, repoPath, cfg)
 
 	// Then, verify that downloading offloaded files to the cache resolves missing objects, which confirms:
 	// 1. Offloaded files contain the expected blob content
-	// 2. The alternates mechanism works correctly: downloaded files are recognized as part of the repository
-	downloadFilesToCache(t, ctx, repoPath, cachePath, sink, repo, cfg)
-	assertOffloadedRepoObjects(t, true, blobs, trees, commits, repoPath, cfg)
+	// 2. After injecting the cache path into GIT_ALTERNATE_OBJECT_DIRECTORIES, the downloaded files are
+	//    recognized as part of the repository
+	cachePathObjectsDir := filepath.Join(cfg.Offloading.CacheRoot, repo.GetRelativePath(), "objects")
+	cachePathPackDir := filepath.Join(cachePathObjectsDir, "pack")
+	downloadFilesToCache(t, ctx, repoPath, cachePathPackDir, sink, repo, cfg)
+	assertOffloadedRepoObjects(t, true, cachePathObjectsDir, blobs, trees, commits, repoPath, cfg)
 }
 
 type offloadingRepoSetup struct {
@@ -224,7 +226,7 @@ func downloadFilesToCache(t *testing.T, ctx context.Context, repoPath, cachePath
 	}
 }
 
-func assertOffloadedRepoObjects(t *testing.T, downloadToCache bool, blobs, trees, commits []git.ObjectID, repoPath string, cfg gitalycfg.Cfg) {
+func assertOffloadedRepoObjects(t *testing.T, downloadToCache bool, cachePath string, blobs, trees, commits []git.ObjectID, repoPath string, cfg gitalycfg.Cfg) {
 	expectedObjects := make([]git.ObjectID, 0, len(trees)+len(commits))
 	expectedObjects = append(expectedObjects, commits...)
 	expectedObjects = append(expectedObjects, trees...)
@@ -244,7 +246,10 @@ func assertOffloadedRepoObjects(t *testing.T, downloadToCache bool, blobs, trees
 	}
 
 	actualObjectHashes := make([]string, 0, len(trees)+len(commits)+len(blobs))
-	output := gittest.Exec(t, cfg, "-C", repoPath, "rev-list", "--objects", "--all", "--missing=print", "--no-object-names")
+	execOpt := gittest.ExecConfig{
+		Env: []string{fmt.Sprintf("GIT_ALTERNATE_OBJECT_DIRECTORIES=%s", cachePath)},
+	}
+	output := gittest.ExecOpts(t, cfg, execOpt, "-C", repoPath, "rev-list", "--objects", "--all", "--missing=print", "--no-object-names")
 	actualObjectHashes = append(actualObjectHashes, strings.Split(text.ChompBytes(output), "\n")...)
 	require.ElementsMatch(t, expectedObjectHashes, actualObjectHashes)
 }
