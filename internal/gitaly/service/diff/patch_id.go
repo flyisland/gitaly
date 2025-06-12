@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -48,17 +47,10 @@ func (s *server) GetPatchID(ctx context.Context, in *gitalypb.GetPatchIDRequest)
 	var patchIDStdout strings.Builder
 	var patchIDStderr strings.Builder
 
-	var patchIDType string
-	if featureflag.VerbatimPatchID.IsEnabled(ctx) {
-		patchIDType = "--verbatim"
-	} else {
-		patchIDType = "--stable"
-	}
-
 	patchIDCmd, err := s.gitCmdFactory.NewWithoutRepo(ctx,
 		gitcmd.Command{
 			Name:  "patch-id",
-			Flags: []gitcmd.Option{gitcmd.Flag{Name: patchIDType}},
+			Flags: []gitcmd.Option{gitcmd.Flag{Name: "--verbatim"}},
 		},
 		gitcmd.WithStdin(diffCmd),
 		gitcmd.WithStdout(&patchIDStdout),
