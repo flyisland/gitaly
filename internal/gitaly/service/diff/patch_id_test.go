@@ -1,13 +1,11 @@
 package diff
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -18,10 +16,7 @@ import (
 func TestGetPatchID(t *testing.T) {
 	t.Parallel()
 
-	testhelper.NewFeatureSets(featureflag.VerbatimPatchID).Run(t, testGetPatchID)
-}
-
-func testGetPatchID(t *testing.T, ctx context.Context) {
+	ctx := testhelper.Context(t)
 	cfg, client := setupDiffService(t)
 
 	type setupData struct {
@@ -58,14 +53,9 @@ func testGetPatchID(t *testing.T, ctx context.Context) {
 						OldRevision: []byte("main~"),
 						NewRevision: []byte("main"),
 					},
-					expectedResponse: testhelper.EnabledOrDisabledFlag(ctx, featureflag.VerbatimPatchID,
-						&gitalypb.GetPatchIDResponse{
-							PatchId: "1e1b601449ca8244bcf20f1d8bb3b12b6b899445",
-						},
-						&gitalypb.GetPatchIDResponse{
-							PatchId: "a79c7e9df0094ee44fa7a2a9ae27e914e6b7e00b",
-						},
-					),
+					expectedResponse: &gitalypb.GetPatchIDResponse{
+						PatchId: "1e1b601449ca8244bcf20f1d8bb3b12b6b899445",
+					},
 				}
 			},
 		},
@@ -93,14 +83,9 @@ func testGetPatchID(t *testing.T, ctx context.Context) {
 						OldRevision: []byte("main~"),
 						NewRevision: []byte("main"),
 					},
-					expectedResponse: testhelper.EnabledOrDisabledFlag(ctx, featureflag.VerbatimPatchID,
-						&gitalypb.GetPatchIDResponse{
-							PatchId: "f7ca149454782d7113b74d5b032dd72abd5223fd",
-						},
-						&gitalypb.GetPatchIDResponse{
-							PatchId: "a79c7e9df0094ee44fa7a2a9ae27e914e6b7e00b",
-						},
-					),
+					expectedResponse: &gitalypb.GetPatchIDResponse{
+						PatchId: "f7ca149454782d7113b74d5b032dd72abd5223fd",
+					},
 				}
 			},
 		},
@@ -126,15 +111,9 @@ func testGetPatchID(t *testing.T, ctx context.Context) {
 						OldRevision: []byte(oldCommit),
 						NewRevision: []byte(newCommit),
 					},
-					expectedResponse: testhelper.EnabledOrDisabledFlag(ctx, featureflag.VerbatimPatchID,
-						&gitalypb.GetPatchIDResponse{
-							PatchId: "1e1b601449ca8244bcf20f1d8bb3b12b6b899445",
-						},
-
-						&gitalypb.GetPatchIDResponse{
-							PatchId: "a79c7e9df0094ee44fa7a2a9ae27e914e6b7e00b",
-						},
-					),
+					expectedResponse: &gitalypb.GetPatchIDResponse{
+						PatchId: "1e1b601449ca8244bcf20f1d8bb3b12b6b899445",
+					},
 				}
 			},
 		},
@@ -160,15 +139,9 @@ func testGetPatchID(t *testing.T, ctx context.Context) {
 						OldRevision: []byte(fmt.Sprintf("%s:file", oldCommit)),
 						NewRevision: []byte(fmt.Sprintf("%s:file", newCommit)),
 					},
-					expectedResponse: testhelper.EnabledOrDisabledFlag(ctx, featureflag.VerbatimPatchID,
-						&gitalypb.GetPatchIDResponse{
-							PatchId: "1e1b601449ca8244bcf20f1d8bb3b12b6b899445",
-						},
-
-						&gitalypb.GetPatchIDResponse{
-							PatchId: "a79c7e9df0094ee44fa7a2a9ae27e914e6b7e00b",
-						},
-					),
+					expectedResponse: &gitalypb.GetPatchIDResponse{
+						PatchId: "1e1b601449ca8244bcf20f1d8bb3b12b6b899445",
+					},
 				}
 			},
 		},
@@ -194,47 +167,32 @@ func testGetPatchID(t *testing.T, ctx context.Context) {
 						OldRevision: []byte(oldCommit),
 						NewRevision: []byte(newCommit),
 					},
-					expectedResponse: testhelper.EnabledOrDisabledFlag(ctx, featureflag.VerbatimPatchID,
-						&gitalypb.GetPatchIDResponse{
-							PatchId: func() string {
-								// Before Git v2.39.0, git-patch-id(1) would skip over any
-								// lines that have an "index " prefix. This causes issues
-								// with diffs of binaries though: we don't generate the diff
-								// with `--binary`, so the "index" line that contains the
-								// pre- and post-image blob IDs of the binary is the only
-								// bit of information we have that something changed. But
-								// because Git used to skip over it we wouldn't actually
-								// take into account the contents of the changed blob at
-								// all.
-								//
-								// This was fixed in Git v2.39.0 so that "index" lines will
-								// now be hashed to correctly account for binary changes. As
-								// a result, the patch ID has changed.
-								switch gittest.DefaultObjectHash.Format {
-								case "sha1":
-									return "f0cecc652860f8dd490cefad3c6e5ab451192acf"
-								case "sha256":
-									return "860a2112006def90fbb900226d2424bc6e004a61"
-								default:
-									require.FailNow(t, "unsupported object hash")
-									return ""
-								}
-							}(),
-						},
-						&gitalypb.GetPatchIDResponse{
-							PatchId: func() string {
-								switch gittest.DefaultObjectHash.Format {
-								case "sha1":
-									return "13e4e9b9cd44ec511bac24fdbdeab9b74ba3000b"
-								case "sha256":
-									return "32f6beb9a210ac89a3e15e44dcd174c87c904e9d"
-								default:
-									require.FailNow(t, "unsupported object hash")
-									return ""
-								}
-							}(),
-						},
-					),
+					expectedResponse: &gitalypb.GetPatchIDResponse{
+						PatchId: func() string {
+							// Before Git v2.39.0, git-patch-id(1) would skip over any
+							// lines that have an "index " prefix. This causes issues
+							// with diffs of binaries though: we don't generate the diff
+							// with `--binary`, so the "index" line that contains the
+							// pre- and post-image blob IDs of the binary is the only
+							// bit of information we have that something changed. But
+							// because Git used to skip over it we wouldn't actually
+							// take into account the contents of the changed blob at
+							// all.
+							//
+							// This was fixed in Git v2.39.0 so that "index" lines will
+							// now be hashed to correctly account for binary changes. As
+							// a result, the patch ID has changed.
+							switch gittest.DefaultObjectHash.Format {
+							case "sha1":
+								return "f0cecc652860f8dd490cefad3c6e5ab451192acf"
+							case "sha256":
+								return "860a2112006def90fbb900226d2424bc6e004a61"
+							default:
+								require.FailNow(t, "unsupported object hash")
+								return ""
+							}
+						}(),
+					},
 				}
 			},
 		},
@@ -263,34 +221,19 @@ func testGetPatchID(t *testing.T, ctx context.Context) {
 						OldRevision: []byte(oldCommit),
 						NewRevision: []byte(newCommit),
 					},
-					expectedResponse: testhelper.EnabledOrDisabledFlag(ctx, featureflag.VerbatimPatchID,
-						&gitalypb.GetPatchIDResponse{
-							PatchId: func() string {
-								switch gittest.DefaultObjectHash.Format {
-								case "sha1":
-									return "77171d407829b8297287a7252916269e19573bbb"
-								case "sha256":
-									return "722dd7c167e4e96c3ff109f7bb52f4436acc544a"
-								default:
-									require.FailNow(t, "unsupported object hash")
-									return ""
-								}
-							}(),
-						},
-						&gitalypb.GetPatchIDResponse{
-							PatchId: func() string {
-								switch gittest.DefaultObjectHash.Format {
-								case "sha1":
-									return "f678855867b112ac2c5466260b3b3a5e75fca875"
-								case "sha256":
-									return "10443cf318b577ea41526825ba034aaaedfeaa4b"
-								default:
-									require.FailNow(t, "unsupported object hash")
-									return ""
-								}
-							}(),
-						},
-					),
+					expectedResponse: &gitalypb.GetPatchIDResponse{
+						PatchId: func() string {
+							switch gittest.DefaultObjectHash.Format {
+							case "sha1":
+								return "77171d407829b8297287a7252916269e19573bbb"
+							case "sha256":
+								return "722dd7c167e4e96c3ff109f7bb52f4436acc544a"
+							default:
+								require.FailNow(t, "unsupported object hash")
+								return ""
+							}
+						}(),
+					},
 				}
 			},
 		},
