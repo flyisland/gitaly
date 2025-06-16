@@ -839,7 +839,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		RelativePath: workingRepository.GetRelativePath(),
 	}
 	originalRepo = transaction.OriginalRepository(originalRepo)
-	originalRepoAbsPath := mgr.getAbsolutePath(originalRepo.GetRelativePath())
+	// originalRepoAbsPath := mgr.getAbsolutePath(originalRepo.GetRelativePath())
 
 	// cfg.Prefix should be empty in production, which triggers automatic UUID generation.
 	// Non-empty prefix values are only used in test environments.
@@ -917,27 +917,6 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		return fmt.Errorf("setting offloading git config: %w", err)
 	}
 
-	// If the alternates file does not exist in the original repo, we will not log a removal entry.
-	// Otherwise, if it does exist, we will log a removal.
-	if _, err := os.Stat(stats.AlternatesFilePath(workingRepoPath)); !os.IsNotExist(err) {
-		transaction.walEntry.RemoveDirectoryEntry(stats.AlternatesFilePath(transaction.relativePath))
-	}
-
-	alternatesInWorkingRepo := stats.AlternatesFilePath(workingRepoPath)
-	// We are calculating the relative path of the cache entry based on the original repo path instead of the
-	// snapshot repo path here. This is because the alternate file will eventually be copied back to the
-	// original repo after offloading is completed. If we calculate relative to the snapshot repo path,
-	// it will not work.
-
-	cacheAbsPath := filepath.Join(cfg.CacheRoot, originalRepo.GetRelativePath(), objectsDir) // Must have objectsDir
-	relativeCacheEntry, err := filepath.Rel(filepath.Join(originalRepoAbsPath, objectsDir), cacheAbsPath)
-	if err != nil {
-		return fmt.Errorf("find relative cache entry: %w", err)
-	}
-	if err := housekeeping.AddCacheAlternateEntry(alternatesInWorkingRepo, relativeCacheEntry); err != nil {
-		return fmt.Errorf("adding cache alternate entry: %w", err)
-	}
-
 	// Record WAL entry
 	for file := range oldPackFiles {
 		transaction.walEntry.RemoveDirectoryEntry(filepath.Join(transaction.relativePath, objectsDir, packFileDir, file))
@@ -959,13 +938,6 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		filepath.Join(transaction.relativePath, configFile),
 	); err != nil {
 		return fmt.Errorf("record config file replacement: %w", err)
-	}
-
-	if err := transaction.walEntry.CreateFile(
-		stats.AlternatesFilePath(workingRepoPath),
-		stats.AlternatesFilePath(transaction.relativePath),
-	); err != nil {
-		return fmt.Errorf("record alternates file replacement: %w", err)
 	}
 
 	return nil
