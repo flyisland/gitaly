@@ -12,6 +12,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 )
@@ -184,6 +185,12 @@ func TestWalkObjects(t *testing.T) {
 			Mode: "100644",
 			Path: "blob1",
 		},
+		// Add a duplicate blob into the tree to assert we only see it returned once.
+		{
+			OID:  blob1,
+			Mode: "100644",
+			Path: "duplicate_blob1",
+		},
 	})
 
 	// Create two commits that diverge from the same parent. When walking one, we don't expect to get the other one reported.
@@ -223,6 +230,16 @@ func TestWalkObjects(t *testing.T) {
 			},
 		},
 		{
+			desc: "duplicate missing start point",
+			heads: []git.ObjectID{
+				missingBlob,
+				missingBlob,
+			},
+			expectedOutput: []string{
+				"?" + missingBlob.String(),
+			},
+		},
+		{
 			desc: "commit missing parent commit",
 			heads: []git.ObjectID{
 				commitMissingParent,
@@ -236,6 +253,17 @@ func TestWalkObjects(t *testing.T) {
 		{
 			desc: "annotated tag missing referenced commit",
 			heads: []git.ObjectID{
+				tagMissingParent,
+			},
+			expectedOutput: []string{
+				tagMissingParent.String() + " refs/tags/tag-missing-parent",
+				"?" + missingRootCommit.String(),
+			},
+		},
+		{
+			desc: "duplicate start point",
+			heads: []git.ObjectID{
+				tagMissingParent,
 				tagMissingParent,
 			},
 			expectedOutput: []string{
@@ -427,4 +455,63 @@ func TestPackAndUnpackObjects(t *testing.T) {
 			require.ElementsMatch(t, tc.expectedObjects, gittest.ListObjects(t, cfg, repoPath))
 		})
 	}
+}
+
+func TestListObjects(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	cfg, repo, repoPath := setupRepo(t)
+
+	t.Run("no objects", func(t *testing.T) {
+		output := &bytes.Buffer{}
+
+		require.NoError(t, repo.ListObjects(ctx, output))
+		require.Empty(t, output.String())
+	})
+
+	t.Run("objects", func(t *testing.T) {
+		output := &bytes.Buffer{}
+
+		blobID := gittest.WriteBlob(t, cfg, repoPath, []byte("content"))
+		treeID := gittest.WriteTree(t, cfg, repoPath, []gittest.TreeEntry{
+			{OID: blobID, Mode: "100644", Path: "file-1"},
+		})
+		commitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTree(treeID))
+		tagID := gittest.WriteTag(t, cfg, repoPath, "tag-1", commitID.Revision(), gittest.WriteTagConfig{Message: "annotated tag"})
+
+		// In order to assert that duplicates are not returned in the output, we'll pack the
+		// loose objects, and then write a duplicate blob as a loose object. We expect that the blob
+		// is still returned only once even if it exists in the repository multiple times.
+		looseBlobPath := filepath.Join(repoPath, "objects", blobID[:2].String(), blobID[2:].String())
+
+		// Make a copy of the loose blob first so we can recover it after it has been repacked.
+		looseBlobCopyPath := looseBlobPath + ".copy"
+		require.NoError(t, os.Link(looseBlobPath, looseBlobCopyPath))
+
+		// Pack the objects. We expect the loose blob to be gone.
+		gittest.Exec(t, cfg, "-C", repoPath, "repack", "-ald")
+		require.NoFileExists(t, looseBlobPath)
+
+		// Rename the copy of the blob in its original location.
+		require.NoError(t, os.Rename(looseBlobCopyPath, looseBlobPath))
+
+		require.NoError(t, repo.ListObjects(ctx, output))
+
+		// First check that we have all the expected objects. The ordering is not stable so we
+		// only check the correct elements exist.
+		objectIDs := strings.Split(text.ChompBytes(output.Bytes()), "\n")
+		require.ElementsMatch(t, objectIDs, []string{
+			blobID.String(),
+			commitID.String(),
+			treeID.String(),
+			tagID.String(),
+		})
+
+		// Now that we know the ordering from the parsed output of ListObjects,
+		// check that the output matches exactly what we expect, and doens't have
+		// for example extra or missing whitespace at the end.
+		require.Equal(t, strings.Join(objectIDs, "\n")+"\n", output.String())
+	})
 }
