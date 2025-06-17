@@ -64,7 +64,7 @@ func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Met
 }
 
 func (m *migrationManager) Begin(ctx context.Context, opts storage.BeginOptions) (storage.Transaction, error) {
-	if err := m.migrate(ctx, opts.RelativePaths); err != nil {
+	if err := m.migrate(ctx, opts); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
@@ -77,7 +77,8 @@ func (m *migrationManager) Close() {
 }
 
 // migrate handles setting up migration state and executing outstanding migrations.
-func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) error {
+func (m *migrationManager) migrate(ctx context.Context, opts storage.BeginOptions) error {
+	relativePaths := opts.RelativePaths
 	// To perform a migration, the manager must have migrations configured and the transaction must
 	// target a repository. If not, skip migration handling and proceed with the transaction.
 	if len(m.migrations) == 0 || len(relativePaths) == 0 {
@@ -119,7 +120,7 @@ func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) 
 		mCtx = metadata.NewIncomingContext(mCtx, md)
 	}
 
-	if err := m.performMigrations(mCtx, relativePaths); err != nil {
+	if err := m.performMigrations(mCtx, opts); err != nil {
 		// Record the error as part of the migration state so concurrent transactions are notified.
 		state.err = err
 		return fmt.Errorf("performing migrations: %w", err)
@@ -129,8 +130,8 @@ func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) 
 }
 
 // performMigrations performs any missing migrations on a repository.
-func (m *migrationManager) performMigrations(ctx context.Context, relativePaths []string) (returnedErr error) {
-	relativePath := relativePaths[0]
+func (m *migrationManager) performMigrations(ctx context.Context, opts storage.BeginOptions) (returnedErr error) {
+	relativePath := opts.RelativePaths[0]
 
 	id, err := m.getLastMigrationID(ctx, relativePath)
 	if errors.Is(err, storage.ErrRepositoryNotFound) {
@@ -152,8 +153,9 @@ func (m *migrationManager) performMigrations(ctx context.Context, relativePaths 
 
 	// Start a single transaction that records all outstanding migrations that get executed.
 	txn, err := m.Partition.Begin(ctx, storage.BeginOptions{
-		Write:         true,
-		RelativePaths: relativePaths,
+		Write:                            true,
+		RelativePaths:                    opts.RelativePaths,
+		SkipPreventingReftableCompaction: true,
 	})
 	if err != nil {
 		return fmt.Errorf("begin migration update: %w", err)

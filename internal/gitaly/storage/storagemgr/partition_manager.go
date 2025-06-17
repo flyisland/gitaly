@@ -358,9 +358,10 @@ func (sm *StorageManager) Begin(ctx context.Context, opts storage.TransactionOpt
 	}
 
 	transaction, err := ptn.Begin(ctx, storage.BeginOptions{
-		Write:                  !opts.ReadOnly,
-		RelativePaths:          relativePaths,
-		ForceExclusiveSnapshot: opts.ForceExclusiveSnapshot,
+		Write:                            !opts.ReadOnly,
+		RelativePaths:                    relativePaths,
+		ForceExclusiveSnapshot:           opts.ForceExclusiveSnapshot,
+		SkipPreventingReftableCompaction: opts.SkipPreventingReftableCompaction,
 	})
 	if err != nil {
 		return nil, err

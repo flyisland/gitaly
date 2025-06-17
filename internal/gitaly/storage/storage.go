@@ -158,6 +158,12 @@ type BeginOptions struct {
 	// This is a temporary workaround for some RPCs that do not work well with shared
 	// read-only snapshots yet.
 	ForceExclusiveSnapshot bool
+
+	// SkipPreventingReftableCompaction controls whether a transaction should skip the
+	// preventReftableCompaction() operation. The preventReftableCompaction() writes a .lock file on
+	// the latest reftable in the repository to prevent new tables written in a transaction
+	// from being merged with the existing tables.
+	SkipPreventingReftableCompaction bool
 }
 
 // LogConsumer is the interface of a log consumer that is passed to a TransactionManager.
@@ -264,6 +270,12 @@ type TransactionOptions struct {
 	// ForceExclusiveSnapshot forces the transactions to use an exclusive snapshot. This is a temporary
 	// workaround for some RPCs that do not work well with shared read-only snapshots yet.
 	ForceExclusiveSnapshot bool
+
+	// SkipPreventingReftableCompaction controls whether a transaction should skip the
+	// preventReftableCompaction() operation. The preventReftableCompaction() writes a .lock file on
+	// the latest reftable in the repository to prevent new tables written in a transaction
+	// from being merged with the existing tables.
+	SkipPreventingReftableCompaction bool
 }
 
 // Storage is the interface of a storage.
