@@ -150,6 +150,7 @@ type Replica struct {
 	ctx    context.Context // Context for controlling replica's lifecycle
 	cancel context.CancelFunc
 
+	memberID      uint64                // Member ID of the replica
 	authorityName string                // Name of the storage this partition belongs to
 	ptnID         storage.PartitionID   // Unique identifier for the managed partition
 	node          raft.Node             // etcd/raft node representation
@@ -204,6 +205,7 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ReplicaOptions, error
 // RaftReplicaFactory defines a function type that creates a new Raft Replica instance.
 // This factory is used to create and initialize Replica objects for partitions.
 type RaftReplicaFactory func(
+	memberID uint64,
 	storageName string,
 	partitionID storage.PartitionID,
 	logStore *ReplicaLogStore,
@@ -215,6 +217,7 @@ type RaftReplicaFactory func(
 // This function creates a Replica and registers it with the appropriate RaftEnabledStorage.
 func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionFunc) RaftReplicaFactory {
 	return func(
+		memberID uint64,
 		storageName string,
 		partitionID storage.PartitionID,
 		logStore *ReplicaLogStore,
@@ -231,7 +234,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
 
-		replica, err := NewReplica(storageName, partitionID, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
+		replica, err := NewReplica(memberID, storageName, partitionID, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("create replica %q: %w", storageName, err)
 		}
@@ -250,6 +253,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 // start the Raft protocol. The Initialize method must be called separately to start
 // the Raft protocol operation.
 func NewReplica(
+	memberID uint64,
 	authorityName string,
 	partitionID storage.PartitionID,
 	raftCfg config.Raft,
@@ -281,6 +285,7 @@ func NewReplica(
 	scopedMetrics := metrics.Scope(authorityName)
 
 	return &Replica{
+		memberID:           memberID,
 		authorityName:      authorityName,
 		ptnID:              partitionID,
 		raftCfg:            raftCfg,
@@ -345,10 +350,9 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 	// identification across the group's lifetime.
 	//
 	// https://gitlab.com/gitlab-org/gitaly/-/issues/6304 tracks the work to bootstrap new cluster members.
-	var memberID uint64 = 1
 
 	config := &raft.Config{
-		ID:              memberID,
+		ID:              replica.memberID,
 		ElectionTick:    int(replica.raftCfg.ElectionTicks),
 		HeartbeatTick:   int(replica.raftCfg.HeartbeatTicks),
 		Storage:         replica.logStore,
@@ -373,7 +377,7 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 	switch initStatus {
 	case InitStatusUnbootstrapped:
 		// For first-time bootstrap, initialize with self as the only peer
-		peers := []raft.Peer{{ID: memberID}}
+		peers := []raft.Peer{{ID: replica.memberID}}
 		replica.node = raft.StartNode(config, peers)
 	case InitStatusBootstrapped:
 		// For restarts, set Applied to latest committed LSN
@@ -385,12 +389,12 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 		// steps: Create a configuration with the node itself as the only voter and set the commit point to
 		// include all existing backfilled entries, ensuring they're considered committed by the Raft protocol.
 		if err := replica.logStore.saveConfState(raftpb.ConfState{
-			Voters: []uint64{memberID},
+			Voters: []uint64{replica.memberID},
 		}); err != nil {
 			return fmt.Errorf("saving conf state: %w", err)
 		}
 		if err := replica.logStore.saveHardState(raftpb.HardState{
-			Vote:   memberID,
+			Vote:   replica.memberID,
 			Commit: uint64(replica.logStore.readCommittedLSN()),
 		}); err != nil {
 			return fmt.Errorf("saving hard state: %w", err)
@@ -883,15 +887,22 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 func (replica *Replica) sendMessages(rd *raft.Ready) error {
 	replica.hooks.BeforeSendMessages()
 	if len(rd.Messages) > 0 {
-		// This code path will be properly implemented when network communication is added.
-		// When implemented, this will use gRPC to transfer messages through a single RPC,
-		// `RaftService.SendMessage`, which enhances Raft messages with partition identity metadata.
-		//
 		// To mitigate the "chatty" nature of the Raft protocol, Gitaly will implement
 		// techniques such as batching health checks and quiescing inactive groups.
 		//
 		// See https://gitlab.com/gitlab-org/gitaly/-/issues/6304
-		replica.logger.Error("networking for raft cluster is not implemented yet")
+		partitionKey := &gitalypb.PartitionKey{
+			AuthorityName: replica.authorityName,
+			PartitionId:   uint64(replica.ptnID),
+		}
+		transport := replica.raftEnabledStorage.GetTransport()
+		if transport == nil {
+			return fmt.Errorf("transport not found")
+		}
+		err := transport.Send(replica.ctx, replica, partitionKey, rd.Messages)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

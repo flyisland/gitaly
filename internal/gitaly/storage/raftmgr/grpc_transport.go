@@ -147,6 +147,9 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 					PartitionKey: partitionKey,
 					MemberId:     msg.To,
 					StorageName:  replica.GetStorageName(),
+					Metadata: &gitalypb.ReplicaID_Metadata{
+						Address: replica.GetMetadata().GetAddress(),
+					},
 				},
 				Message: &msg,
 			})
@@ -210,8 +213,11 @@ func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.Part
 	// Retrieve the replica from the registry, assumption is that all the messages are from the same partition key.
 	replica, err := t.registry.GetReplica(partitionKey)
 	if err != nil {
-		return status.Errorf(codes.NotFound, "replica not found for partition %d: %v",
-			partitionKey.GetPartitionId(), err)
+		// If the replica is not found, return nil until we add a way to bootstrap the replica - https://gitlab.com/gitlab-org/gitaly/-/issues/6304
+		if errors.Is(err, errNoReplicaFound) {
+			return nil
+		}
+		return err
 	}
 
 	for _, entry := range raftMsg.Entries {

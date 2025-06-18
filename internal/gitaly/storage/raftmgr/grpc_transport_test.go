@@ -47,7 +47,7 @@ const (
 type mockStorageNode struct {
 	id              uint64
 	name            string
-	transport       *GrpcTransport
+	transport       Transport
 	server          *grpc.Server
 	managerRegistry ReplicaRegistry
 }
@@ -167,9 +167,9 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 
 			t.Cleanup(func() {
 				for _, follower := range testCluster.followers {
-					require.NoError(t, follower.transport.connectionPool.Close())
+					require.NoError(t, follower.transport.(*GrpcTransport).connectionPool.Close())
 				}
-				require.NoError(t, leader.transport.connectionPool.Close())
+				require.NoError(t, leader.transport.(*GrpcTransport).connectionPool.Close())
 			})
 
 			partitionKey := &gitalypb.PartitionKey{
@@ -527,9 +527,9 @@ func TestGrpcTransport_SendSnapshot(t *testing.T) {
 
 			t.Cleanup(func() {
 				for _, follower := range testCluster.followers {
-					require.NoError(t, follower.transport.connectionPool.Close())
+					require.NoError(t, follower.transport.(*GrpcTransport).connectionPool.Close())
 				}
-				require.NoError(t, leader.transport.connectionPool.Close())
+				require.NoError(t, leader.transport.(*GrpcTransport).connectionPool.Close())
 			})
 
 			follower := testCluster.followers[0]

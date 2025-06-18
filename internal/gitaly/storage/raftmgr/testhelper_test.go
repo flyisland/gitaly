@@ -2,6 +2,7 @@ package raftmgr
 
 import (
 	"context"
+	"net"
 	"sync"
 	"testing"
 
@@ -11,11 +12,14 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	logger "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3/raftpb"
+	"google.golang.org/grpc"
 )
 
 func TestMain(m *testing.M) {
@@ -84,29 +88,78 @@ func getTestDBManager(t *testing.T, ctx context.Context, cfg config.Cfg, logger 
 	return db
 }
 
-func createRaftReplica(t *testing.T, ctx context.Context, raftCfg config.Raft, partitionID storage.PartitionID, metrics *Metrics, opts ...OptionFunc) (*Replica, error) {
-	logger := testhelper.NewLogger(t)
+// TestReplicaConfig holds configuration for creating test replicas
+type TestReplicaConfig struct {
+	MemberID    uint64
+	PartitionID storage.PartitionID
+	Address     string // Optional: if provided, creates a replica with server
+	Options     []OptionFunc
+}
+
+func createRaftReplica(t *testing.T, ctx context.Context, memberID uint64, address string, raftCfg config.Raft, partitionID storage.PartitionID, metrics *Metrics, opts ...OptionFunc) (*Replica, error) {
+	config := TestReplicaConfig{
+		MemberID:    memberID,
+		PartitionID: partitionID,
+		Address:     address,
+		Options:     opts,
+	}
+
+	return createRaftReplicaWithConfig(t, ctx, raftCfg, config, metrics)
+}
+
+func createRaftReplicaWithConfig(t *testing.T, ctx context.Context, raftCfg config.Raft, config TestReplicaConfig, metrics *Metrics) (*Replica, error) {
 	cfg := testcfg.Build(t)
 
+	logger := testhelper.NewLogger(t)
+	dbMgr := openTestDB(t, ctx, cfg, logger)
 	storageName := cfg.Storages[0].Name
+	db, err := dbMgr.GetDB(storageName)
+	require.NoError(t, err)
+
+	if config.Address != "" {
+		cfg.SocketPath = config.Address
+	}
+
 	stagingDir := testhelper.TempDir(t)
 	stateDir := testhelper.TempDir(t)
 	posTracker := log.NewPositionTracker()
 
-	dbMgr := openTestDB(t, ctx, cfg, logger)
+	logStore, err := NewReplicaLogStore(storageName, config.PartitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+	if err != nil {
+		return nil, err
+	}
 
-	db, err := dbMgr.GetDB(storageName)
+	conns := client.NewPool(client.WithDialOptions(client.UnaryInterceptor(), client.StreamInterceptor()))
+	t.Cleanup(func() {
+		err := conns.Close()
+		require.NoError(t, err)
+	})
+
+	raftNode, err := NewNode(cfg, logger, dbMgr, conns)
+	if err != nil {
+		return nil, err
+	}
+
+	raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, config.Options...)
+	return raftFactory(config.MemberID, storageName, config.PartitionID, logStore, logger, metrics)
+}
+
+func createTempServer(t *testing.T, transport *GrpcTransport) (string, *grpc.Server) {
+	socketPath := testhelper.GetTemporaryGitalySocketFileName(t)
+	listener, err := net.Listen("unix", socketPath)
 	require.NoError(t, err)
 
-	logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
-	require.NoError(t, err)
+	srv := grpc.NewServer()
 
-	raftNode, err := NewNode(cfg, logger, dbMgr, nil)
-	require.NoError(t, err)
+	destinationRaftServer := &mockRaftServer{
+		node: mockStorageNode{
+			transport: transport,
+		},
+	}
 
-	raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, opts...)
+	gitalypb.RegisterRaftServiceServer(srv, destinationRaftServer)
 
-	manager, err := raftFactory(storageName, partitionID, logStore, logger, metrics)
+	go testhelper.MustServe(t, srv, listener)
 
-	return manager, err
+	return socketPath, srv
 }
