@@ -127,7 +127,7 @@ type block struct {
 }
 
 type reftable struct {
-	blockSize *uint
+	blockSize uint
 	size      uint
 	src       []byte
 	footer    *footer
@@ -141,14 +141,9 @@ func (t *reftable) shaFormat() git.ObjectHash {
 	return git.ObjectHashSHA1
 }
 
-// parseBlockSize parses the table's header for the block size.
-func (t *reftable) parseBlockSize() uint {
-	if t.blockSize == nil {
-		blockSize := uint(big.NewInt(0).SetBytes(t.footer.BlockSize[:]).Uint64())
-		t.blockSize = &blockSize
-	}
-
-	return *t.blockSize
+// parseUInt24 parses a big endian encoded uint24 into a uint.
+func parseUint24(data [3]byte) uint {
+	return uint(data[2]) | uint(data[1])<<8 | uint(data[0])<<16
 }
 
 // getBlockRange provides the abs block range if the block is smaller
@@ -275,7 +270,7 @@ func (t *reftable) getRefsFromBlock(b *block) ([]git.Reference, error) {
 func (t *reftable) parseRefBlock(headerOffset, blockStart, blockEnd uint) ([]git.Reference, error) {
 	currentBS := t.extractBlockLen(blockStart + headerOffset)
 
-	fullBlockSize := t.parseBlockSize()
+	fullBlockSize := t.blockSize
 	if fullBlockSize == 0 {
 		fullBlockSize = currentBS
 	} else if currentBS < fullBlockSize && currentBS < (blockEnd-blockStart) && t.src[blockStart+currentBS] != 0 {
@@ -311,7 +306,7 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 			headerOffset = uint(t.footer.Version.HeaderSize())
 		}
 
-		blockStart, blockEnd := t.getBlockRange(offset, t.parseBlockSize())
+		blockStart, blockEnd := t.getBlockRange(offset, t.blockSize)
 		if blockStart == 0 && blockEnd == 0 {
 			break
 		}
@@ -357,6 +352,8 @@ func NewReftable(content []byte) (*reftable, error) {
 	if h != f.header {
 		return nil, fmt.Errorf("footer doesn't match header")
 	}
+
+	t.blockSize = parseUint24(f.BlockSize)
 
 	// TODO: CRC32 validation of the data
 	// https://gitlab.com/gitlab-org/git/-/blob/master/reftable/reader.c#L143
