@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -47,11 +46,6 @@ func TestParseTable(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
-
-	tableName := [4]byte{}
-	n, err := strings.NewReader("REFT").Read(tableName[:])
-	require.NoError(t, err)
-	require.Equal(t, 4, n)
 
 	type setupData struct {
 		repoPath   string
