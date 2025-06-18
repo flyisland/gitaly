@@ -16,10 +16,40 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 )
 
+// version represents a reftable version.
+type version uint8
+
+// HeaderSize returns the size of the header for this reftable version.
+func (v version) HeaderSize() int {
+	switch v {
+	case 1:
+		// The Size is documented at https://git-scm.com/docs/reftable#_header_version_1
+		return 24
+	case 2:
+		// The size  is documented at https://git-scm.com/docs/reftable#_header_version_2
+		return 28
+	default:
+		panic(fmt.Errorf("unsupported version: %d", v))
+	}
+}
+
+// FooterSize returns the size of the footer for this reftable version.
+func (v version) FooterSize() int {
+	// The footer sizes are documented at https://git-scm.com/docs/reftable#_footer.
+	switch v {
+	case 1:
+		return 68
+	case 2:
+		return 72
+	default:
+		panic(fmt.Errorf("unsupported version: %d", v))
+	}
+}
+
 // headerV1 represents the header in reftable version 1.
 type headerV1 struct {
 	Magic          [4]byte
-	Version        uint8
+	Version        version
 	BlockSize      [3]byte
 	MinUpdateIndex uint64
 	MaxUpdateIndex uint64
@@ -97,12 +127,10 @@ type block struct {
 }
 
 type reftable struct {
-	blockSize  *uint
-	headerSize uint
-	footerSize uint
-	size       uint
-	src        []byte
-	footer     *footer
+	blockSize *uint
+	size      uint
+	src       []byte
+	footer    *footer
 }
 
 // shaFormat maps reftable sha format to Gitaly's hash object.
@@ -280,7 +308,7 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 	for offset < t.size {
 		headerOffset := uint(0)
 		if offset == 0 {
-			headerOffset = t.headerSize
+			headerOffset = uint(t.footer.Version.HeaderSize())
 		}
 
 		blockStart, blockEnd := t.getBlockRange(offset, t.parseBlockSize())
@@ -319,13 +347,7 @@ func NewReftable(content []byte) (*reftable, error) {
 		return nil, fmt.Errorf("parse header: %w", err)
 	}
 
-	t.footerSize = uint(68)
-	t.headerSize = uint(24)
-	if h.Version == 2 {
-		t.footerSize = 72
-		t.headerSize = 28
-	}
-	t.size = uint(len(t.src)) - t.footerSize
+	t.size = uint(len(t.src) - h.Version.FooterSize())
 
 	var f footer
 	if err := parseFooter(bytes.NewReader(t.src[t.size:]), &f); err != nil {
