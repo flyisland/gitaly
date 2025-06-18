@@ -15,16 +15,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 )
 
-// nameRegex is a regex for matching reftable names
-// e.g. 0x000000000001-0x00000000000a-b54f3b59.ref would result in the following submatches:
-//   - 000000000001 (UpdateIndexMin)
-//   - 00000000000a (UpdateIndexMax)
-//   - b54f3b59     (Suffix)
-//
-// See the reftable documentation at https://www.git-scm.com/docs/reftable#_layout for more
-// information.
-var nameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-([0-9a-zA-Z]{8}).ref")
-
 type header struct {
 	Name           [4]byte
 	Version        uint8
@@ -383,6 +373,16 @@ type Name struct {
 func (n Name) String() string {
 	return fmt.Sprintf("0x%012x-0x%012x-%s.ref", n.MinUpdateIndex, n.MaxUpdateIndex, n.Suffix)
 }
+
+// nameRegex is a regex for matching reftable names
+// e.g. 0x000000000001-0x00000000000a-b54f3b59.ref would result in the following submatches:
+//   - 000000000001 (UpdateIndexMin)
+//   - 00000000000a (UpdateIndexMax)
+//   - b54f3b59     (Suffix)
+//
+// See the reftable documentation at https://www.git-scm.com/docs/reftable#_layout for more
+// information.
+var nameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-([0-9a-zA-Z]{8}).ref")
 
 // ParseName parses the name of a reftable file.
 func ParseName(reftableName string) (Name, error) {
