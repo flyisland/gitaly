@@ -268,7 +268,7 @@ func TestParseReftable(t *testing.T) {
 	}
 }
 
-func TestParseReftableName(t *testing.T) {
+func TestParseName(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -321,7 +321,7 @@ func TestParseReftableName(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			min, max, err := ParseReftableName(tc.reftableName)
+			min, max, err := ParseName(tc.reftableName)
 			if tc.expectedErrorStr != "" {
 				require.EqualError(t, err, tc.expectedErrorStr)
 				return

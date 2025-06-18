@@ -291,7 +291,7 @@ func ReferencesInfoForRepository(ctx context.Context, repo *localrepo.Repo) (Ref
 				Size: uint64(reftableStat.Size()),
 			}
 
-			rt.UpdateIndexMin, rt.UpdateIndexMax, err = reftable.ParseReftableName(reftableName)
+			rt.UpdateIndexMin, rt.UpdateIndexMax, err = reftable.ParseName(reftableName)
 			if err != nil {
 				return ReferencesInfo{}, fmt.Errorf("parse reftable name: %w", err)
 			}

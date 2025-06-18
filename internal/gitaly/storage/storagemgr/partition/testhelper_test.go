@@ -380,7 +380,7 @@ func collectReftableReferencesState(
 		},
 	}
 
-	tableNames, err := reftable.ReadReftablesList(repoPath)
+	tableNames, err := reftable.ReadTablesList(repoPath)
 	require.NoError(tb, err)
 
 	expectedFiles := map[string]struct{}{"tables.list": {}}
@@ -418,7 +418,7 @@ func collectReftableReferencesState(
 		data, err := os.ReadFile(tablePath)
 		require.NoError(tb, err)
 
-		table.MinIndex, table.MaxIndex, err = reftable.ParseReftableName(tableName)
+		table.MinIndex, table.MaxIndex, err = reftable.ParseName(tableName)
 		require.NoError(tb, err)
 
 		reftable, err := reftable.NewReftable(data)

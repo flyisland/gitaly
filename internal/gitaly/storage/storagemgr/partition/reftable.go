@@ -41,7 +41,7 @@ func getLatestReftableName(reftableDir string) (string, error) {
 	latestTable := string(bytes.TrimSuffix(data, []byte("\n")))
 
 	// This is purely for sanity checking that we're not reading garbage from the file.
-	if !reftable.ReftableTableNameRegex.MatchString(latestTable) {
+	if !reftable.NameRegex.MatchString(latestTable) {
 		return "", fmt.Errorf("invalid reftable name: %q", latestTable)
 	}
 

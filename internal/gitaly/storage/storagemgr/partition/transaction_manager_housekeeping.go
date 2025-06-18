@@ -655,7 +655,7 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) 
 	// wrote new tables to the target repository. We shouldn't loose that data. So we merge
 	// the compacted tables.list with the newer tables from the target repository's tables.list.
 	repoPath := mgr.getAbsolutePath(transaction.relativePath)
-	newTableList, err := reftable.ReadReftablesList(repoPath)
+	newTableList, err := reftable.ReadTablesList(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading tables.list: %w", err)
 	}

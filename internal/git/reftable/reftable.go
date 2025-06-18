@@ -15,16 +15,16 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 )
 
-// ReftableTableNameRegex is a regex for matching reftable names
+// NameRegex is a regex for matching reftable names
 // e.g. 0x000000000001-0x00000000000a-b54f3b59.ref would result in the following submatches:
 //   - 000000000001 (UpdateIndexMin)
 //   - 00000000000a (UpdateIndexMax)
 //
 // See the reftable documentation at https://www.git-scm.com/docs/reftable#_layout for more
 // information.
-var ReftableTableNameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-[0-9a-zA-Z]{8}.ref")
+var NameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-[0-9a-zA-Z]{8}.ref")
 
-type reftableHeader struct {
+type header struct {
 	Name           [4]byte
 	Version        uint8
 	BlockSize      [3]byte
@@ -34,7 +34,7 @@ type reftableHeader struct {
 	HashID [4]byte
 }
 
-type reftableFooterBase struct {
+type footerBase struct {
 	Name           [4]byte
 	Version        uint8
 	BlockSize      [3]byte
@@ -42,7 +42,7 @@ type reftableFooterBase struct {
 	MaxUpdateIndex uint64
 }
 
-type reftableFooterEnd struct {
+type footerEnd struct {
 	RefIndexOffset     uint64
 	ObjectOffsetAndLen uint64
 	ObjectIndexOffset  uint64
@@ -51,13 +51,13 @@ type reftableFooterEnd struct {
 	CR32               uint32
 }
 
-type reftableFooter struct {
-	reftableFooterBase
+type footer struct {
+	footerBase
 	HashID [4]byte
-	reftableFooterEnd
+	footerEnd
 }
 
-type reftableBlock struct {
+type block struct {
 	BlockStart    uint
 	FullBlockSize uint
 	HeaderOffset  uint
@@ -71,8 +71,8 @@ type reftable struct {
 	footerSize uint
 	size       uint
 	src        []byte
-	header     *reftableHeader
-	footer     *reftableFooter
+	header     *header
+	footer     *footer
 }
 
 // shaFormat maps reftable sha format to Gitaly's hash object.
@@ -131,7 +131,7 @@ func (t *reftable) getVarInt(start uint, blockEnd uint) (uint, uint, error) {
 }
 
 // getRefsFromBlock provides the ref udpates from a reference block.
-func (t *reftable) getRefsFromBlock(b *reftableBlock) ([]git.Reference, error) {
+func (t *reftable) getRefsFromBlock(b *block) ([]git.Reference, error) {
 	var references []git.Reference
 
 	prefix := ""
@@ -224,7 +224,7 @@ func (t *reftable) parseRefBlock(headerOffset, blockStart, blockEnd uint) ([]git
 		fullBlockSize = currentBS
 	}
 
-	b := &reftableBlock{
+	b := &block{
 		BlockStart:    blockStart + headerOffset,
 		FullBlockSize: fullBlockSize,
 	}
@@ -285,7 +285,7 @@ func NewReftable(content []byte) (*reftable, error) {
 	t := &reftable{src: content}
 	block := t.src[0:28]
 
-	var h reftableHeader
+	var h header
 	if err := binary.Read(bytes.NewBuffer(block), binary.BigEndian, &h); err != nil {
 		return nil, fmt.Errorf("reading header: %w", err)
 	}
@@ -310,8 +310,8 @@ func NewReftable(content []byte) (*reftable, error) {
 
 	block = t.src[t.size:len(t.src)]
 
-	var f reftableFooter
-	if err := binary.Read(bytes.NewBuffer(block), binary.BigEndian, &f.reftableFooterBase); err != nil {
+	var f footer
+	if err := binary.Read(bytes.NewBuffer(block), binary.BigEndian, &f.footerBase); err != nil {
 		return nil, fmt.Errorf("reading footer: %w", err)
 	}
 
@@ -332,11 +332,11 @@ func NewReftable(content []byte) (*reftable, error) {
 			return nil, fmt.Errorf("footer doesn't match header")
 		}
 
-		if err := binary.Read(bytes.NewBuffer(block[t.headerSize:]), binary.BigEndian, &f.reftableFooterEnd); err != nil {
+		if err := binary.Read(bytes.NewBuffer(block[t.headerSize:]), binary.BigEndian, &f.footerEnd); err != nil {
 			return nil, fmt.Errorf("reading footer: %w", err)
 		}
 	} else {
-		if err := binary.Read(bytes.NewBuffer(block[t.headerSize:]), binary.BigEndian, &f.reftableFooterEnd); err != nil {
+		if err := binary.Read(bytes.NewBuffer(block[t.headerSize:]), binary.BigEndian, &f.footerEnd); err != nil {
 			return nil, fmt.Errorf("reading footer: %w", err)
 		}
 	}
@@ -348,9 +348,9 @@ func NewReftable(content []byte) (*reftable, error) {
 	return t, nil
 }
 
-// ReadReftablesList returns a list of tables in the "tables.list" for the
+// ReadTablesList returns a list of tables in the "tables.list" for the
 // reftable backend.
-func ReadReftablesList(repoPath string) ([]string, error) {
+func ReadTablesList(repoPath string) ([]string, error) {
 	tablesListPath := filepath.Join(repoPath, "reftable", "tables.list")
 
 	data, err := os.ReadFile(tablesListPath)
@@ -360,7 +360,7 @@ func ReadReftablesList(repoPath string) ([]string, error) {
 
 	list := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	for _, line := range list {
-		if !ReftableTableNameRegex.MatchString(line) {
+		if !NameRegex.MatchString(line) {
 			return list, fmt.Errorf("unrecognized reftable name: %s", line)
 		}
 	}
@@ -368,10 +368,10 @@ func ReadReftablesList(repoPath string) ([]string, error) {
 	return list, nil
 }
 
-// ParseReftableName validates the reftable name and returns the
+// ParseName validates the reftable name and returns the
 // min and max index from the table name.
-func ParseReftableName(reftableName string) (uint64, uint64, error) {
-	matches := ReftableTableNameRegex.FindAllStringSubmatch(reftableName, -1)
+func ParseName(reftableName string) (uint64, uint64, error) {
+	matches := NameRegex.FindAllStringSubmatch(reftableName, -1)
 	if len(matches) != 1 || len(matches[0]) != 3 {
 		return 0, 0, fmt.Errorf("reftable name %q malformed", reftableName)
 	}

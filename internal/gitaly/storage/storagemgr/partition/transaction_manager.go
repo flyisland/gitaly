@@ -1491,7 +1491,7 @@ func (mgr *TransactionManager) preparePackRefsReftable(ctx context.Context, tran
 		return fmt.Errorf("allow reftable compaction: %w", err)
 	}
 
-	tablesListPre, err := reftable.ReadReftablesList(repoPath)
+	tablesListPre, err := reftable.ReadTablesList(repoPath)
 	if err != nil {
 		return fmt.Errorf("reading tables.list pre-compaction: %w", err)
 	}
@@ -1509,7 +1509,7 @@ func (mgr *TransactionManager) preparePackRefsReftable(ctx context.Context, tran
 		return structerr.New("exec pack-refs: %w", err).WithMetadata("stderr", stderr.String())
 	}
 
-	tablesListPost, err := reftable.ReadReftablesList(repoPath)
+	tablesListPost, err := reftable.ReadTablesList(repoPath)
 	if err != nil {
 		return fmt.Errorf("reading tables.list post-compaction: %w", err)
 	}
