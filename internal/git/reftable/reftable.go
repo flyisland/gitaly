@@ -102,7 +102,6 @@ type reftable struct {
 	footerSize uint
 	size       uint
 	src        []byte
-	header     *header
 	footer     *footer
 }
 
@@ -117,7 +116,7 @@ func (t *reftable) shaFormat() git.ObjectHash {
 // parseBlockSize parses the table's header for the block size.
 func (t *reftable) parseBlockSize() uint {
 	if t.blockSize == nil {
-		blockSize := uint(big.NewInt(0).SetBytes(t.header.BlockSize[:]).Uint64())
+		blockSize := uint(big.NewInt(0).SetBytes(t.footer.BlockSize[:]).Uint64())
 		t.blockSize = &blockSize
 	}
 
@@ -319,8 +318,6 @@ func NewReftable(content []byte) (*reftable, error) {
 	if err := parseHeader(bytes.NewReader(content), &h); err != nil {
 		return nil, fmt.Errorf("parse header: %w", err)
 	}
-
-	t.header = &h
 
 	t.footerSize = uint(68)
 	t.headerSize = uint(24)
