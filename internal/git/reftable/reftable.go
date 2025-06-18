@@ -297,15 +297,11 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 		return nil, fmt.Errorf("table not instantiated")
 	}
 
+	headerOffset := uint(t.footer.Version.HeaderSize())
 	offset := uint(0)
 	var allRefs []git.Reference
 
 	for offset < t.size {
-		headerOffset := uint(0)
-		if offset == 0 {
-			headerOffset = uint(t.footer.Version.HeaderSize())
-		}
-
 		blockStart, blockEnd := t.getBlockRange(offset, t.blockSize)
 		if blockStart == 0 && blockEnd == 0 {
 			break
