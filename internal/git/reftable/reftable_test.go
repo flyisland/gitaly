@@ -2,6 +2,8 @@ package reftable
 
 import (
 	"fmt"
+	"hash/crc32"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -262,6 +264,40 @@ func TestParseReftable(t *testing.T) {
 			require.Equal(t, setup.references, references)
 		})
 	}
+}
+
+func TestParseReftable_checksumMismatch(t *testing.T) {
+	if !testhelper.IsReftableEnabled() {
+		t.Skip("This test is reftable specific.")
+	}
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+
+	tables, err := ReadTablesList(repoPath)
+	require.NoError(t, err)
+
+	file, err := os.OpenFile(filepath.Join(repoPath, "reftable", tables[0].String()), os.O_RDWR, 0)
+	require.NoError(t, err)
+
+	// The checksum is at the end of the file. Modify the preceding byte without updating the
+	// checksum to trigger a checksumming failure.
+	_, err = file.Seek(-crc32.Size-1, io.SeekEnd)
+	require.NoError(t, err)
+
+	_, err = file.Write([]byte{255})
+	require.NoError(t, err)
+
+	_, err = file.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
+	table, err := NewReftable(file)
+	require.EqualError(t, err, "parse footer: checksum mismatch")
+	require.Nil(t, table)
 }
 
 func TestParseName(t *testing.T) {

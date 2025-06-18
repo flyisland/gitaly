@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"math/big"
 	"os"
@@ -107,12 +109,22 @@ type footer struct {
 // parseFooter parses the footer of a reftable. reader should be at the beginning
 // of the footer.
 func parseFooter(reader io.Reader, f *footer) error {
-	if err := parseHeader(reader, &f.header); err != nil {
+	footerBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("read all: %w", err)
+	}
+
+	footerReader := bytes.NewReader(footerBytes)
+	if err := parseHeader(footerReader, &f.header); err != nil {
 		return fmt.Errorf("parse header: %w", err)
 	}
 
-	if err := binary.Read(reader, binary.BigEndian, &f.footerEnd); err != nil {
+	if err := binary.Read(footerReader, binary.BigEndian, &f.footerEnd); err != nil {
 		return fmt.Errorf("parse remainder: %w", err)
+	}
+
+	if crc32.ChecksumIEEE(footerBytes[:len(footerBytes)-binary.Size(f.CRC32)]) != f.CRC32 {
+		return errors.New("checksum mismatch")
 	}
 
 	return nil
@@ -359,9 +371,6 @@ func NewReftable(src io.ReadSeeker) (*reftable, error) {
 	}
 
 	t.blockSize = parseUint24(t.footer.BlockSize)
-
-	// TODO: CRC32 validation of the data
-	// https://gitlab.com/gitlab-org/git/-/blob/master/reftable/reader.c#L143
 
 	return t, nil
 }
