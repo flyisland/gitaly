@@ -161,30 +161,30 @@ func (t *reftable) getBlockRange(offset, size uint) (uint, uint) {
 }
 
 // extractBlockLen extracts the block length from a given location.
-func (t *reftable) extractBlockLen(blockStart uint) uint {
-	return uint(big.NewInt(0).SetBytes(t.src[blockStart+1 : blockStart+4]).Uint64())
+func (t *reftable) extractBlockLen(src []byte, blockStart uint) uint {
+	return uint(big.NewInt(0).SetBytes(src[blockStart+1 : blockStart+4]).Uint64())
 }
 
 // getVarInt parses a variable int and increases the index.
-func (t *reftable) getVarInt(start uint, blockEnd uint) (uint, uint, error) {
+func (t *reftable) getVarInt(src []byte, start uint, blockEnd uint) (uint, uint, error) {
 	var val uint
 
-	val = uint(t.src[start]) & 0x7f
+	val = uint(src[start]) & 0x7f
 
-	for (uint(t.src[start]) & 0x80) > 0 {
+	for (uint(src[start]) & 0x80) > 0 {
 		start++
 		if start > blockEnd {
 			return 0, 0, fmt.Errorf("exceeded block length")
 		}
 
-		val = ((val + 1) << 7) | (uint(t.src[start]) & 0x7f)
+		val = ((val + 1) << 7) | (uint(src[start]) & 0x7f)
 	}
 
 	return start + 1, val, nil
 }
 
 // getRefsFromBlock provides the ref udpates from a reference block.
-func (t *reftable) getRefsFromBlock(b *block) ([]git.Reference, error) {
+func (t *reftable) getRefsFromBlock(src []byte, b *block) ([]git.Reference, error) {
 	var references []git.Reference
 
 	prefix := ""
@@ -196,12 +196,12 @@ func (t *reftable) getRefsFromBlock(b *block) ([]git.Reference, error) {
 		var prefixLength, suffixLength, updateIndexDelta uint
 		var err error
 
-		idx, prefixLength, err = t.getVarInt(idx, b.RestartStart)
+		idx, prefixLength, err = t.getVarInt(src, idx, b.RestartStart)
 		if err != nil {
 			return nil, fmt.Errorf("getting prefix length: %w", err)
 		}
 
-		idx, suffixLength, err = t.getVarInt(idx, b.RestartStart)
+		idx, suffixLength, err = t.getVarInt(src, idx, b.RestartStart)
 		if err != nil {
 			return nil, fmt.Errorf("getting suffix length: %w", err)
 		}
@@ -209,10 +209,10 @@ func (t *reftable) getRefsFromBlock(b *block) ([]git.Reference, error) {
 		extra := (suffixLength & 0x7)
 		suffixLength >>= 3
 
-		refname := prefix[:prefixLength] + string(t.src[idx:idx+suffixLength])
+		refname := prefix[:prefixLength] + string(src[idx:idx+suffixLength])
 		idx = idx + suffixLength
 
-		idx, updateIndexDelta, err = t.getVarInt(idx, b.FullBlockSize)
+		idx, updateIndexDelta, err = t.getVarInt(src, idx, b.FullBlockSize)
 		if err != nil {
 			return nil, fmt.Errorf("getting update index delta: %w", err)
 		}
@@ -230,13 +230,13 @@ func (t *reftable) getRefsFromBlock(b *block) ([]git.Reference, error) {
 		case 1:
 			// Regular reference
 			hashSize := t.shaFormat().Hash().Size()
-			reference.Target = git.ObjectID(hex.EncodeToString(t.src[idx : idx+uint(hashSize)])).String()
+			reference.Target = git.ObjectID(hex.EncodeToString(src[idx : idx+uint(hashSize)])).String()
 
 			idx += uint(hashSize)
 		case 2:
 			// Peeled Tag
 			hashSize := t.shaFormat().Hash().Size()
-			reference.Target = git.ObjectID(hex.EncodeToString(t.src[idx : idx+uint(hashSize)])).String()
+			reference.Target = git.ObjectID(hex.EncodeToString(src[idx : idx+uint(hashSize)])).String()
 
 			idx += uint(hashSize)
 
@@ -247,12 +247,12 @@ func (t *reftable) getRefsFromBlock(b *block) ([]git.Reference, error) {
 		case 3:
 			// Symref
 			var size uint
-			idx, size, err = t.getVarInt(idx, b.FullBlockSize)
+			idx, size, err = t.getVarInt(src, idx, b.FullBlockSize)
 			if err != nil {
 				return nil, fmt.Errorf("getting symref size: %w", err)
 			}
 
-			reference.Target = git.ReferenceName(t.src[idx : idx+size]).String()
+			reference.Target = git.ReferenceName(src[idx : idx+size]).String()
 			reference.IsSymbolic = true
 			idx = idx + size
 		}
@@ -267,13 +267,13 @@ func (t *reftable) getRefsFromBlock(b *block) ([]git.Reference, error) {
 
 // parseRefBlock parses a block and if it is a ref block, provides
 // all the reference updates.
-func (t *reftable) parseRefBlock(headerOffset, blockStart, blockEnd uint) ([]git.Reference, error) {
-	currentBS := t.extractBlockLen(blockStart + headerOffset)
+func (t *reftable) parseRefBlock(src []byte, headerOffset, blockStart, blockEnd uint) ([]git.Reference, error) {
+	currentBS := t.extractBlockLen(src, blockStart+headerOffset)
 
 	fullBlockSize := t.blockSize
 	if fullBlockSize == 0 {
 		fullBlockSize = currentBS
-	} else if currentBS < fullBlockSize && currentBS < (blockEnd-blockStart) && t.src[blockStart+currentBS] != 0 {
+	} else if currentBS < fullBlockSize && currentBS < (blockEnd-blockStart) && src[blockStart+currentBS] != 0 {
 		fullBlockSize = currentBS
 	}
 
@@ -282,13 +282,13 @@ func (t *reftable) parseRefBlock(headerOffset, blockStart, blockEnd uint) ([]git
 		FullBlockSize: fullBlockSize,
 	}
 
-	if err := binary.Read(bytes.NewBuffer(t.src[blockStart+currentBS-2:]), binary.BigEndian, &b.RestartCount); err != nil {
+	if err := binary.Read(bytes.NewBuffer(src[blockStart+currentBS-2:]), binary.BigEndian, &b.RestartCount); err != nil {
 		return nil, fmt.Errorf("reading restart count: %w", err)
 	}
 
 	b.RestartStart = blockStart + currentBS - 2 - 3*uint(b.RestartCount)
 
-	return t.getRefsFromBlock(b)
+	return t.getRefsFromBlock(src, b)
 }
 
 // IterateRefs provides all the refs present in a table.
@@ -301,6 +301,8 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 	offset := uint(0)
 	var allRefs []git.Reference
 
+	src := t.src
+
 	for offset < t.footerOffset {
 		blockStart, blockEnd := t.getBlockRange(offset, t.blockSize)
 		if blockStart == 0 && blockEnd == 0 {
@@ -308,11 +310,11 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 		}
 
 		// If we run out of ref blocks, we can stop the iteration.
-		if t.src[blockStart+headerOffset] != 'r' {
+		if src[blockStart+headerOffset] != 'r' {
 			return allRefs, nil
 		}
 
-		references, err := t.parseRefBlock(headerOffset, blockStart, blockEnd)
+		references, err := t.parseRefBlock(src, headerOffset, blockStart, blockEnd)
 		if err != nil {
 			return nil, fmt.Errorf("parsing block: %w", err)
 		}
