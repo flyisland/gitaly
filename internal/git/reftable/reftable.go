@@ -138,7 +138,8 @@ type block struct {
 	RestartStart  uint
 }
 
-type reftable struct {
+// Table represents .ref table file.
+type Table struct {
 	blockSize    uint
 	footerOffset uint
 	src          io.ReadSeeker
@@ -146,7 +147,7 @@ type reftable struct {
 }
 
 // shaFormat maps reftable sha format to Gitaly's hash object.
-func (t *reftable) shaFormat() git.ObjectHash {
+func (t *Table) shaFormat() git.ObjectHash {
 	if t.footer.Version == 2 && bytes.Equal(t.footer.HashID[:], []byte("s256")) {
 		return git.ObjectHashSHA256
 	}
@@ -160,7 +161,7 @@ func parseUint24(data [3]byte) uint {
 
 // getBlockRange provides the abs block range if the block is smaller
 // than the table.
-func (t *reftable) getBlockRange(offset, size uint) (uint, uint) {
+func (t *Table) getBlockRange(offset, size uint) (uint, uint) {
 	if offset >= t.footerOffset {
 		return 0, 0
 	}
@@ -173,12 +174,12 @@ func (t *reftable) getBlockRange(offset, size uint) (uint, uint) {
 }
 
 // extractBlockLen extracts the block length from a given location.
-func (t *reftable) extractBlockLen(src []byte, blockStart uint) uint {
+func (t *Table) extractBlockLen(src []byte, blockStart uint) uint {
 	return uint(big.NewInt(0).SetBytes(src[blockStart+1 : blockStart+4]).Uint64())
 }
 
 // getVarInt parses a variable int and increases the index.
-func (t *reftable) getVarInt(src []byte, start uint, blockEnd uint) (uint, uint, error) {
+func (t *Table) getVarInt(src []byte, start uint, blockEnd uint) (uint, uint, error) {
 	var val uint
 
 	val = uint(src[start]) & 0x7f
@@ -196,7 +197,7 @@ func (t *reftable) getVarInt(src []byte, start uint, blockEnd uint) (uint, uint,
 }
 
 // getRefsFromBlock provides the ref udpates from a reference block.
-func (t *reftable) getRefsFromBlock(src []byte, b *block) ([]git.Reference, error) {
+func (t *Table) getRefsFromBlock(src []byte, b *block) ([]git.Reference, error) {
 	var references []git.Reference
 
 	prefix := ""
@@ -279,7 +280,7 @@ func (t *reftable) getRefsFromBlock(src []byte, b *block) ([]git.Reference, erro
 
 // parseRefBlock parses a block and if it is a ref block, provides
 // all the reference updates.
-func (t *reftable) parseRefBlock(src []byte, headerOffset, blockStart, blockEnd uint) ([]git.Reference, error) {
+func (t *Table) parseRefBlock(src []byte, headerOffset, blockStart, blockEnd uint) ([]git.Reference, error) {
 	currentBS := t.extractBlockLen(src, blockStart+headerOffset)
 
 	fullBlockSize := t.blockSize
@@ -304,7 +305,7 @@ func (t *reftable) parseRefBlock(src []byte, headerOffset, blockStart, blockEnd 
 }
 
 // IterateRefs provides all the refs present in a table.
-func (t *reftable) IterateRefs() ([]git.Reference, error) {
+func (t *Table) IterateRefs() ([]git.Reference, error) {
 	headerOffset := uint(t.footer.Version.HeaderSize())
 	offset := uint(0)
 	var allRefs []git.Reference
@@ -346,9 +347,9 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 	return allRefs, nil
 }
 
-// NewReftable instantiates a new reftable from the given reftable content.
-func NewReftable(src io.ReadSeeker) (*reftable, error) {
-	t := &reftable{src: src}
+// ParseTable instantiates a new reftable from the given reftable content.
+func ParseTable(src io.ReadSeeker) (*Table, error) {
+	t := &Table{src: src}
 
 	var h header
 	if err := parseHeader(src, &h); err != nil {

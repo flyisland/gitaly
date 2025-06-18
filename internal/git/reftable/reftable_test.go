@@ -38,7 +38,7 @@ func getReftables(repoPath string) []string {
 	return tables
 }
 
-func TestParseReftable(t *testing.T) {
+func TestParseTable(t *testing.T) {
 	t.Parallel()
 
 	if !testhelper.IsReftableEnabled() {
@@ -255,7 +255,7 @@ func TestParseReftable(t *testing.T) {
 			require.NoError(t, err)
 			defer file.Close()
 
-			table, err := NewReftable(file)
+			table, err := ParseTable(file)
 			require.NoError(t, err)
 
 			references, err := table.IterateRefs()
@@ -266,7 +266,7 @@ func TestParseReftable(t *testing.T) {
 	}
 }
 
-func TestParseReftable_checksumMismatch(t *testing.T) {
+func TestParseTable_checksumMismatch(t *testing.T) {
 	if !testhelper.IsReftableEnabled() {
 		t.Skip("This test is reftable specific.")
 	}
@@ -295,7 +295,7 @@ func TestParseReftable_checksumMismatch(t *testing.T) {
 	_, err = file.Seek(0, io.SeekStart)
 	require.NoError(t, err)
 
-	table, err := NewReftable(file)
+	table, err := ParseTable(file)
 	require.EqualError(t, err, "parse footer: checksum mismatch")
 	require.Nil(t, table)
 }
