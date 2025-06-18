@@ -96,7 +96,7 @@ type footerEnd struct {
 	ObjectIndexOffset  uint64
 	LogOffset          uint64
 	LogIndexPosition   uint64
-	CR32               uint32
+	CRC32              uint32
 }
 
 type footer struct {
