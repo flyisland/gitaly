@@ -60,14 +60,6 @@ func parseHeader(reader io.Reader, hdr *header) error {
 	return nil
 }
 
-type footerBase struct {
-	Name           [4]byte
-	Version        uint8
-	BlockSize      [3]byte
-	MinUpdateIndex uint64
-	MaxUpdateIndex uint64
-}
-
 type footerEnd struct {
 	RefIndexOffset     uint64
 	ObjectOffsetAndLen uint64
@@ -78,9 +70,22 @@ type footerEnd struct {
 }
 
 type footer struct {
-	footerBase
-	HashID [4]byte
+	header
 	footerEnd
+}
+
+// parseFooter parses the footer of a reftable. reader should be at the beginning
+// of the footer.
+func parseFooter(reader io.Reader, f *footer) error {
+	if err := parseHeader(reader, &f.header); err != nil {
+		return fmt.Errorf("parse header: %w", err)
+	}
+
+	if err := binary.Read(reader, binary.BigEndian, &f.footerEnd); err != nil {
+		return fmt.Errorf("parse remainder: %w", err)
+	}
+
+	return nil
 }
 
 type block struct {
@@ -325,37 +330,13 @@ func NewReftable(content []byte) (*reftable, error) {
 	}
 	t.size = uint(len(t.src)) - t.footerSize
 
-	block := t.src[t.size:len(t.src)]
-
 	var f footer
-	if err := binary.Read(bytes.NewBuffer(block), binary.BigEndian, &f.footerBase); err != nil {
-		return nil, fmt.Errorf("reading footer: %w", err)
+	if err := parseFooter(bytes.NewReader(t.src[t.size:]), &f); err != nil {
+		return nil, fmt.Errorf("parse footer: %w", err)
 	}
 
-	if f.Name != h.Magic ||
-		f.Version != h.Version ||
-		!bytes.Equal(f.BlockSize[:], h.BlockSize[:]) ||
-		f.MinUpdateIndex != h.MinUpdateIndex ||
-		f.MaxUpdateIndex != h.MaxUpdateIndex {
+	if h != f.header {
 		return nil, fmt.Errorf("footer doesn't match header")
-	}
-
-	if h.Version == 2 {
-		if err := binary.Read(bytes.NewBuffer(block[t.headerSize-4:]), binary.BigEndian, &f.HashID); err != nil {
-			return nil, fmt.Errorf("reading hash ID: %w", err)
-		}
-
-		if f.HashID != h.HashID {
-			return nil, fmt.Errorf("footer doesn't match header")
-		}
-
-		if err := binary.Read(bytes.NewBuffer(block[t.headerSize:]), binary.BigEndian, &f.footerEnd); err != nil {
-			return nil, fmt.Errorf("reading footer: %w", err)
-		}
-	} else {
-		if err := binary.Read(bytes.NewBuffer(block[t.headerSize:]), binary.BigEndian, &f.footerEnd); err != nil {
-			return nil, fmt.Errorf("reading footer: %w", err)
-		}
 	}
 
 	// TODO: CRC32 validation of the data
