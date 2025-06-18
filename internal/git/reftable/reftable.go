@@ -15,7 +15,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 )
 
-// NameRegex is a regex for matching reftable names
+// nameRegex is a regex for matching reftable names
 // e.g. 0x000000000001-0x00000000000a-b54f3b59.ref would result in the following submatches:
 //   - 000000000001 (UpdateIndexMin)
 //   - 00000000000a (UpdateIndexMax)
@@ -23,7 +23,7 @@ import (
 //
 // See the reftable documentation at https://www.git-scm.com/docs/reftable#_layout for more
 // information.
-var NameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-([0-9a-zA-Z]{8}).ref")
+var nameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-([0-9a-zA-Z]{8}).ref")
 
 type header struct {
 	Name           [4]byte
@@ -361,8 +361,8 @@ func ReadTablesList(repoPath string) ([]string, error) {
 
 	list := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	for _, line := range list {
-		if !NameRegex.MatchString(line) {
-			return list, fmt.Errorf("unrecognized reftable name: %s", line)
+		if _, err := ParseName(line); err != nil {
+			return nil, fmt.Errorf("parse name: %w", err)
 		}
 	}
 
@@ -386,7 +386,7 @@ func (n Name) String() string {
 
 // ParseName parses the name of a reftable file.
 func ParseName(reftableName string) (Name, error) {
-	matches := NameRegex.FindAllStringSubmatch(reftableName, -1)
+	matches := nameRegex.FindAllStringSubmatch(reftableName, -1)
 	if len(matches) != 1 || len(matches[0]) != 4 {
 		return Name{}, fmt.Errorf("reftable name %q malformed", reftableName)
 	}

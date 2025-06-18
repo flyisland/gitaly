@@ -106,7 +106,9 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 				for i := uint(0); i < numTables; i++ {
 					create := logEntry.GetOperations()[i].GetCreateHardLink()
 					require.NotNil(tb, create)
-					require.True(tb, reftable.NameRegex.Match(create.GetDestinationPath()))
+
+					_, err := reftable.ParseName(string(create.GetDestinationPath()))
+					require.NoError(tb, err)
 				}
 
 				// The tables.list should be deleted and create (updated).
@@ -165,7 +167,8 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 							break
 						}
 
-						require.True(tb, reftable.NameRegex.Match([]byte(file)))
+						_, err := reftable.ParseName(file)
+						require.NoError(tb, err)
 					}
 					return true
 				},
@@ -1740,7 +1743,8 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 
 							// We can't predict the table names, but we can verify
 							// the regex.
-							require.True(t, reftable.NameRegex.Match(actualCHL.GetDestinationPath()))
+							_, err := reftable.ParseName(string(actualCHL.GetDestinationPath()))
+							require.NoError(t, err)
 							chl.DestinationPath = actualCHL.GetDestinationPath()
 						}
 					}
