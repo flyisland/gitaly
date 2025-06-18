@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -15,14 +16,48 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 )
 
-type header struct {
-	Name           [4]byte
+// headerV1 represents the header in reftable version 1.
+type headerV1 struct {
+	Magic          [4]byte
 	Version        uint8
 	BlockSize      [3]byte
 	MinUpdateIndex uint64
 	MaxUpdateIndex uint64
+}
+
+// header represents the header of a reftable.
+type header struct {
+	headerV1
 	// HashID is only present if version is 2
 	HashID [4]byte
+}
+
+// parseHeader parses the header of a reftable. reader should be at the beginning
+// of the header.
+func parseHeader(reader io.Reader, hdr *header) error {
+	if err := binary.Read(reader, binary.BigEndian, &hdr.headerV1); err != nil {
+		return fmt.Errorf("reading header: %w", err)
+	}
+
+	if hdr.Magic != [...]byte{'R', 'E', 'F', 'T'} {
+		return fmt.Errorf("unexpected magic bytes: %q", hdr.Magic)
+	}
+
+	if !(hdr.Version == 1 || hdr.Version == 2) {
+		return fmt.Errorf("unsupported version: %d", hdr.Version)
+	}
+
+	if hdr.Version == 2 {
+		if err := binary.Read(reader, binary.BigEndian, &hdr.HashID); err != nil {
+			return fmt.Errorf("read hash id: %w", err)
+		}
+
+		if !(hdr.HashID == [...]byte{'s', 'h', 'a', '1'} || hdr.HashID == [...]byte{'s', '2', '5', '6'}) {
+			return fmt.Errorf("unsupported hash id: %q", hdr.HashID)
+		}
+	}
+
+	return nil
 }
 
 type footerBase struct {
@@ -274,19 +309,10 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 // NewReftable instantiates a new reftable from the given reftable content.
 func NewReftable(content []byte) (*reftable, error) {
 	t := &reftable{src: content}
-	block := t.src[0:28]
 
 	var h header
-	if err := binary.Read(bytes.NewBuffer(block), binary.BigEndian, &h); err != nil {
-		return nil, fmt.Errorf("reading header: %w", err)
-	}
-
-	if !bytes.Equal(h.Name[:], []byte("REFT")) {
-		return nil, fmt.Errorf("unexpected header name: %s", h.Name)
-	}
-
-	if h.Version != 1 && h.Version != 2 {
-		return nil, fmt.Errorf("unexpected reftable version: %d", h.Version)
+	if err := parseHeader(bytes.NewReader(content), &h); err != nil {
+		return nil, fmt.Errorf("parse header: %w", err)
 	}
 
 	t.header = &h
@@ -299,14 +325,14 @@ func NewReftable(content []byte) (*reftable, error) {
 	}
 	t.size = uint(len(t.src)) - t.footerSize
 
-	block = t.src[t.size:len(t.src)]
+	block := t.src[t.size:len(t.src)]
 
 	var f footer
 	if err := binary.Read(bytes.NewBuffer(block), binary.BigEndian, &f.footerBase); err != nil {
 		return nil, fmt.Errorf("reading footer: %w", err)
 	}
 
-	if f.Name != h.Name ||
+	if f.Name != h.Magic ||
 		f.Version != h.Version ||
 		!bytes.Equal(f.BlockSize[:], h.BlockSize[:]) ||
 		f.MinUpdateIndex != h.MinUpdateIndex ||
