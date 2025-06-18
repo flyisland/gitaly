@@ -107,7 +107,7 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 					create := logEntry.GetOperations()[i].GetCreateHardLink()
 					require.NotNil(tb, create)
 
-					_, err := reftable.ParseName(string(create.GetDestinationPath()))
+					_, err := reftable.ParseName(filepath.Base(string(create.GetDestinationPath())))
 					require.NoError(tb, err)
 				}
 
@@ -1743,7 +1743,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 
 							// We can't predict the table names, but we can verify
 							// the regex.
-							_, err := reftable.ParseName(string(actualCHL.GetDestinationPath()))
+							_, err := reftable.ParseName(filepath.Base(string(actualCHL.GetDestinationPath())))
 							require.NoError(t, err)
 							chl.DestinationPath = actualCHL.GetDestinationPath()
 						}

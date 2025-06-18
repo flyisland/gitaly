@@ -382,21 +382,21 @@ func (n Name) String() string {
 //
 // See the reftable documentation at https://www.git-scm.com/docs/reftable#_layout for more
 // information.
-var nameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-([0-9a-zA-Z]{8}).ref")
+var nameRegex = regexp.MustCompile("^0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-([0-9a-zA-Z]{8}).ref$")
 
 // ParseName parses the name of a reftable file.
 func ParseName(reftableName string) (Name, error) {
-	matches := nameRegex.FindAllStringSubmatch(reftableName, -1)
-	if len(matches) != 1 || len(matches[0]) != 4 {
+	matches := nameRegex.FindStringSubmatch(reftableName)
+	if len(matches) == 0 {
 		return Name{}, fmt.Errorf("reftable name %q malformed", reftableName)
 	}
 
-	minIndex, err := strconv.ParseUint(matches[0][1], 16, 64)
+	minIndex, err := strconv.ParseUint(matches[1], 16, 64)
 	if err != nil {
 		return Name{}, fmt.Errorf("parsing min index: %w", err)
 	}
 
-	maxIndex, err := strconv.ParseUint(matches[0][2], 16, 64)
+	maxIndex, err := strconv.ParseUint(matches[2], 16, 64)
 	if err != nil {
 		return Name{}, fmt.Errorf("parsing max index: %w", err)
 	}
@@ -404,6 +404,6 @@ func ParseName(reftableName string) (Name, error) {
 	return Name{
 		MinUpdateIndex: minIndex,
 		MaxUpdateIndex: maxIndex,
-		Suffix:         matches[0][3],
+		Suffix:         matches[3],
 	}, nil
 }
