@@ -19,10 +19,11 @@ import (
 // e.g. 0x000000000001-0x00000000000a-b54f3b59.ref would result in the following submatches:
 //   - 000000000001 (UpdateIndexMin)
 //   - 00000000000a (UpdateIndexMax)
+//   - b54f3b59     (Suffix)
 //
 // See the reftable documentation at https://www.git-scm.com/docs/reftable#_layout for more
 // information.
-var NameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-[0-9a-zA-Z]{8}.ref")
+var NameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-([0-9a-zA-Z]{8}).ref")
 
 type header struct {
 	Name           [4]byte
@@ -374,12 +375,14 @@ type Name struct {
 	MinUpdateIndex uint64
 	// MinUpdateIndex is the maximum update index contained in the file.
 	MaxUpdateIndex uint64
+	// Suffix is the random suffix in the table's name.
+	Suffix string
 }
 
 // ParseName parses the name of a reftable file.
 func ParseName(reftableName string) (Name, error) {
 	matches := NameRegex.FindAllStringSubmatch(reftableName, -1)
-	if len(matches) != 1 || len(matches[0]) != 3 {
+	if len(matches) != 1 || len(matches[0]) != 4 {
 		return Name{}, fmt.Errorf("reftable name %q malformed", reftableName)
 	}
 
@@ -396,5 +399,6 @@ func ParseName(reftableName string) (Name, error) {
 	return Name{
 		MinUpdateIndex: minIndex,
 		MaxUpdateIndex: maxIndex,
+		Suffix:         matches[0][3],
 	}, nil
 }

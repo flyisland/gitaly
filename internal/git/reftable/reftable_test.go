@@ -298,30 +298,34 @@ func TestParseName(t *testing.T) {
 			expectedName: Name{
 				MinUpdateIndex: 1,
 				MaxUpdateIndex: 5,
+				Suffix:         "b54f3b59",
 			},
 		},
 		{
 			desc:         "medium values in table name",
-			reftableName: "0x0000000000af-0x0000000000ee-b54f3b59.ref",
+			reftableName: "0x0000000000af-0x0000000000ee-ab413b60.ref",
 			expectedName: Name{
 				MinUpdateIndex: 175,
 				MaxUpdateIndex: 238,
+				Suffix:         "ab413b60",
 			},
 		},
 		{
 			desc:         "upper case hex in table name",
-			reftableName: "0x0000000000DE-0x0000000000AD-b54f3b59.ref",
+			reftableName: "0x0000000000DE-0x0000000000AD-c23a3459.ref",
 			expectedName: Name{
 				MinUpdateIndex: 222,
 				MaxUpdateIndex: 173,
+				Suffix:         "c23a3459",
 			},
 		},
 		{
 			desc:         "max values in table name",
-			reftableName: "0xeeeeeeeeeeee-0xeeeeeeeeeeee-b54f3b59.ref",
+			reftableName: "0xeeeeeeeeeeee-0xeeeeeeeeeeee-ddff2b19.ref",
 			expectedName: Name{
 				MinUpdateIndex: 262709978263278,
 				MaxUpdateIndex: 262709978263278,
+				Suffix:         "ddff2b19",
 			},
 		},
 	} {
