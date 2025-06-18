@@ -368,23 +368,33 @@ func ReadTablesList(repoPath string) ([]string, error) {
 	return list, nil
 }
 
-// ParseName validates the reftable name and returns the
-// min and max index from the table name.
-func ParseName(reftableName string) (uint64, uint64, error) {
+// Name contains the structured information in the name of a .ref file.
+type Name struct {
+	// MinUpdateIndex is the minimum update index contained in the file.
+	MinUpdateIndex uint64
+	// MinUpdateIndex is the maximum update index contained in the file.
+	MaxUpdateIndex uint64
+}
+
+// ParseName parses the name of a reftable file.
+func ParseName(reftableName string) (Name, error) {
 	matches := NameRegex.FindAllStringSubmatch(reftableName, -1)
 	if len(matches) != 1 || len(matches[0]) != 3 {
-		return 0, 0, fmt.Errorf("reftable name %q malformed", reftableName)
+		return Name{}, fmt.Errorf("reftable name %q malformed", reftableName)
 	}
 
 	minIndex, err := strconv.ParseUint(matches[0][1], 16, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("parsing min index: %w", err)
+		return Name{}, fmt.Errorf("parsing min index: %w", err)
 	}
 
 	maxIndex, err := strconv.ParseUint(matches[0][2], 16, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("parsing max index: %w", err)
+		return Name{}, fmt.Errorf("parsing max index: %w", err)
 	}
 
-	return minIndex, maxIndex, nil
+	return Name{
+		MinUpdateIndex: minIndex,
+		MaxUpdateIndex: maxIndex,
+	}, nil
 }

@@ -418,8 +418,9 @@ func collectReftableReferencesState(
 		data, err := os.ReadFile(tablePath)
 		require.NoError(tb, err)
 
-		table.MinIndex, table.MaxIndex, err = reftable.ParseName(tableName)
+		name, err := reftable.ParseName(tableName)
 		require.NoError(tb, err)
+		table.MinIndex, table.MaxIndex = name.MinUpdateIndex, name.MaxUpdateIndex
 
 		reftable, err := reftable.NewReftable(data)
 		require.NoError(tb, err)

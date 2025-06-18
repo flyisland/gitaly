@@ -274,8 +274,7 @@ func TestParseName(t *testing.T) {
 	for _, tc := range []struct {
 		desc             string
 		reftableName     string
-		expectedMinIndex uint64
-		expectedMaxIndex uint64
+		expectedName     Name
 		expectedErrorStr string
 	}{
 		{
@@ -294,41 +293,48 @@ func TestParseName(t *testing.T) {
 			expectedErrorStr: "reftable name \"0x000000000001-0x0000000000za-b54f3b59.ref\" malformed",
 		},
 		{
-			desc:             "small values in table name",
-			reftableName:     "0x000000000001-0x000000000005-b54f3b59.ref",
-			expectedMinIndex: 1,
-			expectedMaxIndex: 5,
+			desc:         "small values in table name",
+			reftableName: "0x000000000001-0x000000000005-b54f3b59.ref",
+			expectedName: Name{
+				MinUpdateIndex: 1,
+				MaxUpdateIndex: 5,
+			},
 		},
 		{
-			desc:             "medium values in table name",
-			reftableName:     "0x0000000000af-0x0000000000ee-b54f3b59.ref",
-			expectedMinIndex: 175,
-			expectedMaxIndex: 238,
+			desc:         "medium values in table name",
+			reftableName: "0x0000000000af-0x0000000000ee-b54f3b59.ref",
+			expectedName: Name{
+				MinUpdateIndex: 175,
+				MaxUpdateIndex: 238,
+			},
 		},
 		{
-			desc:             "upper case hex in table name",
-			reftableName:     "0x0000000000DE-0x0000000000AD-b54f3b59.ref",
-			expectedMinIndex: 222,
-			expectedMaxIndex: 173,
+			desc:         "upper case hex in table name",
+			reftableName: "0x0000000000DE-0x0000000000AD-b54f3b59.ref",
+			expectedName: Name{
+				MinUpdateIndex: 222,
+				MaxUpdateIndex: 173,
+			},
 		},
 		{
-			desc:             "max values in table name",
-			reftableName:     "0xeeeeeeeeeeee-0xeeeeeeeeeeee-b54f3b59.ref",
-			expectedMinIndex: 262709978263278,
-			expectedMaxIndex: 262709978263278,
+			desc:         "max values in table name",
+			reftableName: "0xeeeeeeeeeeee-0xeeeeeeeeeeee-b54f3b59.ref",
+			expectedName: Name{
+				MinUpdateIndex: 262709978263278,
+				MaxUpdateIndex: 262709978263278,
+			},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			min, max, err := ParseName(tc.reftableName)
+			actualName, err := ParseName(tc.reftableName)
 			if tc.expectedErrorStr != "" {
 				require.EqualError(t, err, tc.expectedErrorStr)
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedMinIndex, min)
-			require.Equal(t, tc.expectedMaxIndex, max)
+			require.Equal(t, tc.expectedName, actualName)
 		})
 	}
 }

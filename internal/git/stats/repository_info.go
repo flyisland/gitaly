@@ -287,16 +287,16 @@ func ReferencesInfoForRepository(ctx context.Context, repo *localrepo.Repo) (Ref
 				return ReferencesInfo{}, fmt.Errorf("stat reftable table file: %w", err)
 			}
 
-			rt := ReftableTable{
-				Size: uint64(reftableStat.Size()),
-			}
-
-			rt.UpdateIndexMin, rt.UpdateIndexMax, err = reftable.ParseName(reftableName)
+			name, err := reftable.ParseName(reftableName)
 			if err != nil {
 				return ReferencesInfo{}, fmt.Errorf("parse reftable name: %w", err)
 			}
 
-			info.ReftableTables = append(info.ReftableTables, rt)
+			info.ReftableTables = append(info.ReftableTables, ReftableTable{
+				Size:           uint64(reftableStat.Size()),
+				UpdateIndexMin: name.MinUpdateIndex,
+				UpdateIndexMax: name.MaxUpdateIndex,
+			})
 		}
 
 		reftableDir, err := os.ReadDir(refsPath)
