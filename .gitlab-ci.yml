@@ -347,7 +347,7 @@ test:sha256:
   parallel:
     matrix:
       - TEST_TARGET:
-          [test, test-with-praefect, test-wal, test-raft, test-with-praefect-wal]
+          [test, test-with-praefect, test-with-reftable, test-wal, test-raft, test-with-praefect-wal]
         TEST_WITH_SHA256: "YesPlease"
 
 test:fips:

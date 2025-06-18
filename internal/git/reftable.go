@@ -312,7 +312,7 @@ func NewReftable(content []byte) (*reftable, error) {
 	}
 
 	if h.Version == 2 {
-		if err := binary.Read(bytes.NewBuffer(block[t.headerSize:]), binary.BigEndian, &f.HashID); err != nil {
+		if err := binary.Read(bytes.NewBuffer(block[t.headerSize-4:]), binary.BigEndian, &f.HashID); err != nil {
 			return nil, fmt.Errorf("reading hash ID: %w", err)
 		}
 
@@ -320,7 +320,7 @@ func NewReftable(content []byte) (*reftable, error) {
 			return nil, fmt.Errorf("footer doesn't match header")
 		}
 
-		if err := binary.Read(bytes.NewBuffer(block[t.headerSize+4:]), binary.BigEndian, &f.reftableFooterEnd); err != nil {
+		if err := binary.Read(bytes.NewBuffer(block[t.headerSize:]), binary.BigEndian, &f.reftableFooterEnd); err != nil {
 			return nil, fmt.Errorf("reading footer: %w", err)
 		}
 	} else {

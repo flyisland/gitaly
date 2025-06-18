@@ -303,7 +303,7 @@ func TestObjectPool_logStats(t *testing.T) {
 									nil,
 									[]stats.ReftableTable{
 										{
-											Size:           124,
+											Size:           hashDependentSize(t, 124, 132),
 											UpdateIndexMin: 1,
 											UpdateIndexMax: 1,
 										},
@@ -341,7 +341,7 @@ func TestObjectPool_logStats(t *testing.T) {
 									nil,
 									[]stats.ReftableTable{
 										{
-											Size:           165,
+											Size:           hashDependentSize(t, 165, 185),
 											UpdateIndexMin: 1,
 											UpdateIndexMax: 2,
 										},
@@ -379,7 +379,7 @@ func TestObjectPool_logStats(t *testing.T) {
 									nil,
 									[]stats.ReftableTable{
 										{
-											Size:           171,
+											Size:           hashDependentSize(t, 171, 191),
 											UpdateIndexMin: 1,
 											UpdateIndexMax: 2,
 										},

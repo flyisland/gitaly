@@ -133,7 +133,7 @@ func TestLogObjectInfo(t *testing.T) {
 					nil,
 					[]ReftableTable{
 						{
-							Size:           165,
+							Size:           hashDependentSize(t, 165, 185),
 							UpdateIndexMin: 1,
 							UpdateIndexMax: 2,
 						},
@@ -188,7 +188,7 @@ func TestLogObjectInfo(t *testing.T) {
 					nil,
 					[]ReftableTable{
 						{
-							Size:           165,
+							Size:           hashDependentSize(t, 165, 185),
 							UpdateIndexMin: 1,
 							UpdateIndexMax: 2,
 						},
@@ -230,7 +230,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           124,
+										Size:           hashDependentSize(t, 124, 132),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 1,
 									},
@@ -256,7 +256,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           124,
+										Size:           hashDependentSize(t, 124, 132),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 1,
 									},
@@ -293,7 +293,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           164,
+										Size:           hashDependentSize(t, 164, 184),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 2,
 									},
@@ -335,7 +335,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           164,
+										Size:           hashDependentSize(t, 164, 184),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 2,
 									},
@@ -362,7 +362,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           124,
+										Size:           hashDependentSize(t, 124, 132),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 1,
 									},
@@ -389,7 +389,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           124,
+										Size:           hashDependentSize(t, 124, 132),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 1,
 									},
@@ -424,7 +424,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           124,
+										Size:           hashDependentSize(t, 124, 132),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 1,
 									},
@@ -456,7 +456,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           165,
+										Size:           hashDependentSize(t, 165, 185),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 2,
 									},
@@ -491,7 +491,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           165,
+										Size:           hashDependentSize(t, 165, 185),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 2,
 									},
@@ -531,7 +531,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           165,
+										Size:           hashDependentSize(t, 165, 185),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 2,
 									},
@@ -562,7 +562,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           124,
+										Size:           hashDependentSize(t, 124, 132),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 1,
 									},
@@ -622,7 +622,7 @@ func TestRepositoryInfoForRepository(t *testing.T) {
 							ReferencesInfo{
 								ReftableTables: []ReftableTable{
 									{
-										Size:           164,
+										Size:           hashDependentSize(t, 164, 184),
 										UpdateIndexMin: 1,
 										UpdateIndexMax: 2,
 									},
