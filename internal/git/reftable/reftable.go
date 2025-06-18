@@ -341,22 +341,23 @@ func NewReftable(content []byte) (*reftable, error) {
 
 // ReadTablesList returns a list of tables in the "tables.list" for the
 // reftable backend.
-func ReadTablesList(repoPath string) ([]string, error) {
+func ReadTablesList(repoPath string) ([]Name, error) {
 	tablesListPath := filepath.Join(repoPath, "reftable", "tables.list")
 
 	data, err := os.ReadFile(tablesListPath)
 	if err != nil {
-		return []string{}, fmt.Errorf("reading tables.list: %w", err)
+		return nil, fmt.Errorf("reading tables.list: %w", err)
 	}
 
-	list := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	for _, line := range list {
-		if _, err := ParseName(line); err != nil {
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	names := make([]Name, len(lines))
+	for i, line := range lines {
+		if names[i], err = ParseName(line); err != nil {
 			return nil, fmt.Errorf("parse name: %w", err)
 		}
 	}
 
-	return list, nil
+	return names, nil
 }
 
 // Name contains the structured information in the name of a .ref file.

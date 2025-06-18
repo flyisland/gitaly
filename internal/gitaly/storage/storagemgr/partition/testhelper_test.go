@@ -385,7 +385,7 @@ func collectReftableReferencesState(
 
 	expectedFiles := map[string]struct{}{"tables.list": {}}
 	for _, tableName := range tableNames {
-		expectedFiles[tableName] = struct{}{}
+		expectedFiles[tableName.String()] = struct{}{}
 	}
 
 	actualFiles := map[string]struct{}{}
@@ -413,14 +413,12 @@ func collectReftableReferencesState(
 	for _, tableName := range tableNames {
 		table := ReftableTable{}
 
-		tablePath := filepath.Join(repoPath, "reftable", tableName)
+		tablePath := filepath.Join(repoPath, "reftable", tableName.String())
 
 		data, err := os.ReadFile(tablePath)
 		require.NoError(tb, err)
 
-		name, err := reftable.ParseName(tableName)
-		require.NoError(tb, err)
-		table.MinIndex, table.MaxIndex = name.MinUpdateIndex, name.MaxUpdateIndex
+		table.MinIndex, table.MaxIndex = tableName.MinUpdateIndex, tableName.MaxUpdateIndex
 
 		reftable, err := reftable.NewReftable(data)
 		require.NoError(tb, err)

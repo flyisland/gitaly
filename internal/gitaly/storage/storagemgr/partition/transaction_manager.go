@@ -1519,7 +1519,7 @@ func (mgr *TransactionManager) preparePackRefsReftable(ctx context.Context, tran
 		return nil
 	}
 
-	tablesPostMap := make(map[string]struct{})
+	tablesPostMap := make(map[reftable.Name]struct{})
 	for _, table := range tablesListPost {
 		tablesPostMap[table] = struct{}{}
 	}
@@ -1528,7 +1528,7 @@ func (mgr *TransactionManager) preparePackRefsReftable(ctx context.Context, tran
 		if _, ok := tablesPostMap[table]; !ok {
 			// If the table no longer exists, we remove it.
 			transaction.walEntry.RemoveDirectoryEntry(
-				filepath.Join(transaction.relativePath, "reftable", table),
+				filepath.Join(transaction.relativePath, "reftable", table.String()),
 			)
 		} else {
 			// If the table exists post compaction too, remove it from the
@@ -1541,8 +1541,8 @@ func (mgr *TransactionManager) preparePackRefsReftable(ctx context.Context, tran
 		// The remaining tables in tableListPost are new tables
 		// which need to be recorded.
 		if err := transaction.walEntry.CreateFile(
-			filepath.Join(repoPath, "reftable", file),
-			filepath.Join(transaction.relativePath, "reftable", file),
+			filepath.Join(repoPath, "reftable", file.String()),
+			filepath.Join(transaction.relativePath, "reftable", file.String()),
 		); err != nil {
 			return fmt.Errorf("creating new table: %w", err)
 		}
