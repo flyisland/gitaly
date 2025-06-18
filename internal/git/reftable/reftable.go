@@ -129,7 +129,7 @@ type block struct {
 type reftable struct {
 	blockSize    uint
 	footerOffset uint
-	src          []byte
+	src          io.ReadSeeker
 	footer       *footer
 }
 
@@ -301,7 +301,14 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 	offset := uint(0)
 	var allRefs []git.Reference
 
-	src := t.src
+	if _, err := t.src.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seek start: %w", err)
+	}
+
+	src, err := io.ReadAll(t.src)
+	if err != nil {
+		return nil, fmt.Errorf("read all: %w", err)
+	}
 
 	for offset < t.footerOffset {
 		blockStart, blockEnd := t.getBlockRange(offset, t.blockSize)
@@ -332,18 +339,23 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 }
 
 // NewReftable instantiates a new reftable from the given reftable content.
-func NewReftable(content []byte) (*reftable, error) {
-	t := &reftable{src: content}
+func NewReftable(src io.ReadSeeker) (*reftable, error) {
+	t := &reftable{src: src}
 
 	var h header
-	if err := parseHeader(bytes.NewReader(content), &h); err != nil {
+	if err := parseHeader(src, &h); err != nil {
 		return nil, fmt.Errorf("parse header: %w", err)
 	}
 
-	t.footerOffset = uint(len(t.src) - h.Version.FooterSize())
+	footerOffset, err := src.Seek(int64(-h.Version.FooterSize()), io.SeekEnd)
+	if err != nil {
+		return nil, fmt.Errorf("seek footer: %w", err)
+	}
+
+	t.footerOffset = uint(footerOffset)
 
 	var f footer
-	if err := parseFooter(bytes.NewReader(t.src[t.footerOffset:]), &f); err != nil {
+	if err := parseFooter(src, &f); err != nil {
 		return nil, fmt.Errorf("parse footer: %w", err)
 	}
 

@@ -2,7 +2,6 @@ package reftable
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -254,10 +253,7 @@ func TestParseReftable(t *testing.T) {
 			require.NoError(t, err)
 			defer file.Close()
 
-			buf, err := io.ReadAll(file)
-			require.NoError(t, err)
-
-			table, err := NewReftable(buf)
+			table, err := NewReftable(file)
 			require.NoError(t, err)
 
 			references, err := table.IterateRefs()

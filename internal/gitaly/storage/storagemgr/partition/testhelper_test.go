@@ -420,7 +420,7 @@ func collectReftableReferencesState(
 
 		table.MinIndex, table.MaxIndex = tableName.MinUpdateIndex, tableName.MaxUpdateIndex
 
-		reftable, err := reftable.NewReftable(data)
+		reftable, err := reftable.NewReftable(bytes.NewReader(data))
 		require.NoError(tb, err)
 
 		table.References, err = reftable.IterateRefs()
