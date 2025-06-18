@@ -22,11 +22,11 @@ func (d dirEntryFileInfo) Type() fs.FileMode {
 	return d.FileInfo.Mode().Type()
 }
 
-// walkDirectory recursively walks a directory at a given and invokes callback for each directory
+// WalkDirectory recursively walks a directory at a given and invokes callback for each directory
 // entry encountered. beforeChildren is invoked on directories before descending into their children. afterChildren
 // is invoked on directories after having walked all their children. onFile is invoked immediately on encountering a
 // file.
-func walkDirectory(storageRoot, relativePath string, beforeChildren, onFile, afterChildren walkCallbackFunc) error {
+func WalkDirectory(storageRoot, relativePath string, beforeChildren, onFile, afterChildren walkCallbackFunc) error {
 	info, err := os.Stat(filepath.Join(storageRoot, relativePath))
 	if err != nil {
 		return fmt.Errorf("stat start point: %w", err)
@@ -48,7 +48,7 @@ func walkDirectoryRecursive(storageRoot, relativePath string, dirEntry fs.DirEnt
 	for _, childEntry := range dirEntries {
 		childRelativePath := filepath.Join(relativePath, childEntry.Name())
 		if childEntry.IsDir() {
-			if err := walkDirectory(storageRoot, childRelativePath, beforeChildren, onFile, afterChildren); err != nil {
+			if err := WalkDirectory(storageRoot, childRelativePath, beforeChildren, onFile, afterChildren); err != nil {
 				return fmt.Errorf("walk directory: %w", err)
 			}
 
