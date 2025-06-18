@@ -27,7 +27,7 @@ func (s *server) RepositoryInfo(
 		return nil, err
 	}
 
-	filter := snapshot.NewDefaultFilter()
+	filter := snapshot.NewDefaultFilter(ctx)
 	repoSize, err := dirSizeInBytes(repoPath, filter)
 	if err != nil {
 		return nil, fmt.Errorf("calculating repository size: %w", err)

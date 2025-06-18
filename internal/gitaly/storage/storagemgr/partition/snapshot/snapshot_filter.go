@@ -1,8 +1,10 @@
 package snapshot
 
 import (
+	"context"
 	"regexp"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 )
 
@@ -71,10 +73,14 @@ func (f FilterFunc) Matches(path string) bool {
 	return f(path)
 }
 
-// NewDefaultFilter creates a default filter that retains the old logic of excluding
-// worktrees from the snapshot.
-func NewDefaultFilter() FilterFunc {
+// NewDefaultFilter include everything.
+func NewDefaultFilter(ctx context.Context) FilterFunc {
 	return func(path string) bool {
+		// When running leftover migration, we want to include all files to fully migrate the repository.
+		if featureflag.LeftoverMigration.IsEnabled(ctx) {
+			return true
+		}
+
 		// Don't include worktrees in the snapshot. All the worktrees in the repository should be leftover
 		// state from before transaction management was introduced as the transactions would create their
 		// worktrees in the snapshot.

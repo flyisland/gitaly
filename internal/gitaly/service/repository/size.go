@@ -27,7 +27,7 @@ func (s *server) RepositorySize(ctx context.Context, in *gitalypb.RepositorySize
 		return nil, err
 	}
 
-	filter := snapshot.NewDefaultFilter()
+	filter := snapshot.NewDefaultFilter(ctx)
 	sizeInBytes, err := dirSizeInBytes(path, filter)
 	if err != nil {
 		return nil, fmt.Errorf("calculating directory size: %w", err)
@@ -48,7 +48,7 @@ func (s *server) GetObjectDirectorySize(ctx context.Context, in *gitalypb.GetObj
 		return nil, err
 	}
 	// path is the objects directory path, not repo's path
-	sizeInBytes, err := dirSizeInBytes(path, snapshot.NewDefaultFilter())
+	sizeInBytes, err := dirSizeInBytes(path, snapshot.NewDefaultFilter(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("calculating directory size: %w", err)
 	}

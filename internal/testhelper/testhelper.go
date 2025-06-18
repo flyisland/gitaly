@@ -327,6 +327,9 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Enable snapshot filter
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.SnapshotFilter, true)
 
+	// Disable leftover migration, it should be enabled explicitly for each test if needed.
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LeftoverMigration, false)
+
 	for _, opt := range opts {
 		ctx = opt(ctx)
 	}

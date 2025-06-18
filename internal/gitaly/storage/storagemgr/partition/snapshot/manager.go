@@ -333,7 +333,7 @@ func (mgr *Manager) logSnapshotCreation(ctx context.Context, exclusive bool, sta
 }
 
 func (mgr *Manager) newSnapshot(ctx context.Context, relativePaths []string, readOnly bool) (*snapshot, error) {
-	snapshotFilter := NewDefaultFilter()
+	snapshotFilter := NewDefaultFilter(ctx)
 	if readOnly && featureflag.SnapshotFilter.IsEnabled(ctx) {
 		snapshotFilter = NewRegexSnapshotFilter()
 	}

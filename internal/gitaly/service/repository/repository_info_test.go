@@ -37,7 +37,7 @@ func TestRepositoryInfo(t *testing.T) {
 		return path
 	}
 
-	filter := snapshot.NewDefaultFilter()
+	filter := snapshot.NewDefaultFilter(ctx)
 	if testhelper.IsWALEnabled() {
 		filter = snapshot.NewRegexSnapshotFilter()
 	}
