@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 )
 
@@ -41,7 +41,7 @@ func getLatestReftableName(reftableDir string) (string, error) {
 	latestTable := string(bytes.TrimSuffix(data, []byte("\n")))
 
 	// This is purely for sanity checking that we're not reading garbage from the file.
-	if !git.ReftableTableNameRegex.MatchString(latestTable) {
+	if !reftable.ReftableTableNameRegex.MatchString(latestTable) {
 		return "", fmt.Errorf("invalid reftable name: %q", latestTable)
 	}
 

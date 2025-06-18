@@ -24,6 +24,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
@@ -105,7 +106,7 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 				for i := uint(0); i < numTables; i++ {
 					create := logEntry.GetOperations()[i].GetCreateHardLink()
 					require.NotNil(tb, create)
-					require.True(tb, git.ReftableTableNameRegex.Match(create.GetDestinationPath()))
+					require.True(tb, reftable.ReftableTableNameRegex.Match(create.GetDestinationPath()))
 				}
 
 				// The tables.list should be deleted and create (updated).
@@ -127,7 +128,7 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 				Mode:    mode.File,
 				Content: updates[i-1],
 				ParseContent: func(tb testing.TB, path string, content []byte) any {
-					table, err := git.NewReftable(content)
+					table, err := reftable.NewReftable(content)
 					require.NoError(tb, err)
 
 					references, err := table.IterateRefs()
@@ -164,7 +165,7 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 							break
 						}
 
-						require.True(tb, git.ReftableTableNameRegex.Match([]byte(file)))
+						require.True(tb, reftable.ReftableTableNameRegex.Match([]byte(file)))
 					}
 					return true
 				},
@@ -1739,7 +1740,7 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 
 							// We can't predict the table names, but we can verify
 							// the regex.
-							require.True(t, git.ReftableTableNameRegex.Match(actualCHL.GetDestinationPath()))
+							require.True(t, reftable.ReftableTableNameRegex.Match(actualCHL.GetDestinationPath()))
 							chl.DestinationPath = actualCHL.GetDestinationPath()
 						}
 					}

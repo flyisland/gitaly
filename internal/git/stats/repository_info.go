@@ -16,6 +16,7 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
@@ -290,7 +291,7 @@ func ReferencesInfoForRepository(ctx context.Context, repo *localrepo.Repo) (Ref
 				Size: uint64(reftableStat.Size()),
 			}
 
-			rt.UpdateIndexMin, rt.UpdateIndexMax, err = git.ParseReftableName(reftableName)
+			rt.UpdateIndexMin, rt.UpdateIndexMax, err = reftable.ParseReftableName(reftableName)
 			if err != nil {
 				return ReferencesInfo{}, fmt.Errorf("parse reftable name: %w", err)
 			}

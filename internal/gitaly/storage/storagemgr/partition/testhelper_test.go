@@ -32,6 +32,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/objectpool"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/packfile"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
@@ -379,7 +380,7 @@ func collectReftableReferencesState(
 		},
 	}
 
-	tableNames, err := git.ReadReftablesList(repoPath)
+	tableNames, err := reftable.ReadReftablesList(repoPath)
 	require.NoError(tb, err)
 
 	expectedFiles := map[string]struct{}{"tables.list": {}}
@@ -417,10 +418,10 @@ func collectReftableReferencesState(
 		data, err := os.ReadFile(tablePath)
 		require.NoError(tb, err)
 
-		table.MinIndex, table.MaxIndex, err = git.ParseReftableName(tableName)
+		table.MinIndex, table.MaxIndex, err = reftable.ParseReftableName(tableName)
 		require.NoError(tb, err)
 
-		reftable, err := git.NewReftable(data)
+		reftable, err := reftable.NewReftable(data)
 		require.NoError(tb, err)
 
 		table.References, err = reftable.IterateRefs()

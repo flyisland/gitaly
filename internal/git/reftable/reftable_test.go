@@ -1,4 +1,4 @@
-package git_test
+package reftable
 
 import (
 	"fmt"
@@ -257,7 +257,7 @@ func TestParseReftable(t *testing.T) {
 			buf, err := io.ReadAll(file)
 			require.NoError(t, err)
 
-			table, err := git.NewReftable(buf)
+			table, err := NewReftable(buf)
 			require.NoError(t, err)
 
 			references, err := table.IterateRefs()
@@ -321,7 +321,7 @@ func TestParseReftableName(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			min, max, err := git.ParseReftableName(tc.reftableName)
+			min, max, err := ParseReftableName(tc.reftableName)
 			if tc.expectedErrorStr != "" {
 				require.EqualError(t, err, tc.expectedErrorStr)
 				return

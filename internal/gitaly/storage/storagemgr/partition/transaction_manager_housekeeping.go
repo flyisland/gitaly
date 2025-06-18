@@ -21,6 +21,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	housekeepingcfg "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
@@ -654,7 +655,7 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) 
 	// wrote new tables to the target repository. We shouldn't loose that data. So we merge
 	// the compacted tables.list with the newer tables from the target repository's tables.list.
 	repoPath := mgr.getAbsolutePath(transaction.relativePath)
-	newTableList, err := git.ReadReftablesList(repoPath)
+	newTableList, err := reftable.ReadReftablesList(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading tables.list: %w", err)
 	}

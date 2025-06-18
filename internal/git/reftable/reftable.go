@@ -1,4 +1,4 @@
-package git
+package reftable
 
 import (
 	"bytes"
@@ -8,9 +8,21 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 )
+
+// ReftableTableNameRegex is a regex for matching reftable names
+// e.g. 0x000000000001-0x00000000000a-b54f3b59.ref would result in the following submatches:
+//   - 000000000001 (UpdateIndexMin)
+//   - 00000000000a (UpdateIndexMax)
+//
+// See the reftable documentation at https://www.git-scm.com/docs/reftable#_layout for more
+// information.
+var ReftableTableNameRegex = regexp.MustCompile("0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-[0-9a-zA-Z]{8}.ref")
 
 type reftableHeader struct {
 	Name           [4]byte
@@ -64,11 +76,11 @@ type reftable struct {
 }
 
 // shaFormat maps reftable sha format to Gitaly's hash object.
-func (t *reftable) shaFormat() ObjectHash {
+func (t *reftable) shaFormat() git.ObjectHash {
 	if t.footer.Version == 2 && bytes.Equal(t.footer.HashID[:], []byte("s256")) {
-		return ObjectHashSHA256
+		return git.ObjectHashSHA256
 	}
-	return ObjectHashSHA1
+	return git.ObjectHashSHA1
 }
 
 // parseBlockSize parses the table's header for the block size.
@@ -119,8 +131,8 @@ func (t *reftable) getVarInt(start uint, blockEnd uint) (uint, uint, error) {
 }
 
 // getRefsFromBlock provides the ref udpates from a reference block.
-func (t *reftable) getRefsFromBlock(b *reftableBlock) ([]Reference, error) {
-	var references []Reference
+func (t *reftable) getRefsFromBlock(b *reftableBlock) ([]git.Reference, error) {
+	var references []git.Reference
 
 	prefix := ""
 
@@ -154,8 +166,8 @@ func (t *reftable) getRefsFromBlock(b *reftableBlock) ([]Reference, error) {
 		// we don't use this for now
 		_ = updateIndexDelta
 
-		reference := Reference{
-			Name: ReferenceName(refname),
+		reference := git.Reference{
+			Name: git.ReferenceName(refname),
 		}
 
 		switch extra {
@@ -165,13 +177,13 @@ func (t *reftable) getRefsFromBlock(b *reftableBlock) ([]Reference, error) {
 		case 1:
 			// Regular reference
 			hashSize := t.shaFormat().Hash().Size()
-			reference.Target = ObjectID(hex.EncodeToString(t.src[idx : idx+uint(hashSize)])).String()
+			reference.Target = git.ObjectID(hex.EncodeToString(t.src[idx : idx+uint(hashSize)])).String()
 
 			idx += uint(hashSize)
 		case 2:
 			// Peeled Tag
 			hashSize := t.shaFormat().Hash().Size()
-			reference.Target = ObjectID(hex.EncodeToString(t.src[idx : idx+uint(hashSize)])).String()
+			reference.Target = git.ObjectID(hex.EncodeToString(t.src[idx : idx+uint(hashSize)])).String()
 
 			idx += uint(hashSize)
 
@@ -187,7 +199,7 @@ func (t *reftable) getRefsFromBlock(b *reftableBlock) ([]Reference, error) {
 				return nil, fmt.Errorf("getting symref size: %w", err)
 			}
 
-			reference.Target = ReferenceName(t.src[idx : idx+size]).String()
+			reference.Target = git.ReferenceName(t.src[idx : idx+size]).String()
 			reference.IsSymbolic = true
 			idx = idx + size
 		}
@@ -202,7 +214,7 @@ func (t *reftable) getRefsFromBlock(b *reftableBlock) ([]Reference, error) {
 
 // parseRefBlock parses a block and if it is a ref block, provides
 // all the reference updates.
-func (t *reftable) parseRefBlock(headerOffset, blockStart, blockEnd uint) ([]Reference, error) {
+func (t *reftable) parseRefBlock(headerOffset, blockStart, blockEnd uint) ([]git.Reference, error) {
 	currentBS := t.extractBlockLen(blockStart + headerOffset)
 
 	fullBlockSize := t.parseBlockSize()
@@ -227,13 +239,13 @@ func (t *reftable) parseRefBlock(headerOffset, blockStart, blockEnd uint) ([]Ref
 }
 
 // IterateRefs provides all the refs present in a table.
-func (t *reftable) IterateRefs() ([]Reference, error) {
+func (t *reftable) IterateRefs() ([]git.Reference, error) {
 	if t.footer == nil {
 		return nil, fmt.Errorf("table not instantiated")
 	}
 
 	offset := uint(0)
-	var allRefs []Reference
+	var allRefs []git.Reference
 
 	for offset < t.size {
 		headerOffset := uint(0)
