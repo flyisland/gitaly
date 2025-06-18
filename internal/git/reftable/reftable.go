@@ -379,6 +379,11 @@ type Name struct {
 	Suffix string
 }
 
+// String returns the string representation of the reftable name.
+func (n Name) String() string {
+	return fmt.Sprintf("0x%012x-0x%012x-%s.ref", n.MinUpdateIndex, n.MaxUpdateIndex, n.Suffix)
+}
+
 // ParseName parses the name of a reftable file.
 func ParseName(reftableName string) (Name, error) {
 	matches := NameRegex.FindAllStringSubmatch(reftableName, -1)

@@ -342,3 +342,14 @@ func TestParseName(t *testing.T) {
 		})
 	}
 }
+
+func TestName_string(t *testing.T) {
+	require.Equal(t,
+		"0x000000000001-0x0000000005f6-b54f3b59.ref",
+		Name{
+			MinUpdateIndex: 1,
+			MaxUpdateIndex: 1526,
+			Suffix:         "b54f3b59",
+		}.String(),
+	)
+}
