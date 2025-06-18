@@ -130,7 +130,7 @@ type reftable struct {
 	blockSize    uint
 	footerOffset uint
 	src          io.ReadSeeker
-	footer       *footer
+	footer       footer
 }
 
 // shaFormat maps reftable sha format to Gitaly's hash object.
@@ -293,10 +293,6 @@ func (t *reftable) parseRefBlock(src []byte, headerOffset, blockStart, blockEnd 
 
 // IterateRefs provides all the refs present in a table.
 func (t *reftable) IterateRefs() ([]git.Reference, error) {
-	if t.footer == nil {
-		return nil, fmt.Errorf("table not instantiated")
-	}
-
 	headerOffset := uint(t.footer.Version.HeaderSize())
 	offset := uint(0)
 	var allRefs []git.Reference
@@ -354,20 +350,18 @@ func NewReftable(src io.ReadSeeker) (*reftable, error) {
 
 	t.footerOffset = uint(footerOffset)
 
-	var f footer
-	if err := parseFooter(src, &f); err != nil {
+	if err := parseFooter(src, &t.footer); err != nil {
 		return nil, fmt.Errorf("parse footer: %w", err)
 	}
 
-	if h != f.header {
+	if h != t.footer.header {
 		return nil, fmt.Errorf("footer doesn't match header")
 	}
 
-	t.blockSize = parseUint24(f.BlockSize)
+	t.blockSize = parseUint24(t.footer.BlockSize)
 
 	// TODO: CRC32 validation of the data
 	// https://gitlab.com/gitlab-org/git/-/blob/master/reftable/reader.c#L143
-	t.footer = &f
 
 	return t, nil
 }
