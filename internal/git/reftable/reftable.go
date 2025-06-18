@@ -127,10 +127,10 @@ type block struct {
 }
 
 type reftable struct {
-	blockSize uint
-	size      uint
-	src       []byte
-	footer    *footer
+	blockSize    uint
+	footerOffset uint
+	src          []byte
+	footer       *footer
 }
 
 // shaFormat maps reftable sha format to Gitaly's hash object.
@@ -149,12 +149,12 @@ func parseUint24(data [3]byte) uint {
 // getBlockRange provides the abs block range if the block is smaller
 // than the table.
 func (t *reftable) getBlockRange(offset, size uint) (uint, uint) {
-	if offset >= t.size {
+	if offset >= t.footerOffset {
 		return 0, 0
 	}
 
-	if offset+size > t.size {
-		size = t.size - offset
+	if offset+size > t.footerOffset {
+		size = t.footerOffset - offset
 	}
 
 	return offset, offset + size
@@ -301,7 +301,7 @@ func (t *reftable) IterateRefs() ([]git.Reference, error) {
 	offset := uint(0)
 	var allRefs []git.Reference
 
-	for offset < t.size {
+	for offset < t.footerOffset {
 		blockStart, blockEnd := t.getBlockRange(offset, t.blockSize)
 		if blockStart == 0 && blockEnd == 0 {
 			break
@@ -338,10 +338,10 @@ func NewReftable(content []byte) (*reftable, error) {
 		return nil, fmt.Errorf("parse header: %w", err)
 	}
 
-	t.size = uint(len(t.src) - h.Version.FooterSize())
+	t.footerOffset = uint(len(t.src) - h.Version.FooterSize())
 
 	var f footer
-	if err := parseFooter(bytes.NewReader(t.src[t.size:]), &f); err != nil {
+	if err := parseFooter(bytes.NewReader(t.src[t.footerOffset:]), &f); err != nil {
 		return nil, fmt.Errorf("parse footer: %w", err)
 	}
 
