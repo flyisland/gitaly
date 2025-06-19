@@ -668,8 +668,8 @@ github.com/yusufpapurcu/wmi v1.2.2 h1:KBNDSne4vP5mbSWnJbO+51IMOXJB67QiYCSBrubbPR
 github.com/yusufpapurcu/wmi v1.2.2/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 gitlab.com/gitlab-org/go/reopen v1.0.0 h1:6BujZ0lkkjGIejTUJdNO1w56mN1SI10qcVQyQlOPM+8=
 gitlab.com/gitlab-org/go/reopen v1.0.0/go.mod h1:D6OID8YJDzEVZNYW02R/Pkj0v8gYFSIhXFTArAsBQw8=
-gitlab.com/gitlab-org/labkit v1.24.0 h1:UmyFvO0Q2wuvvH0SP+F8wsOEVorNYdzbDNjldje5qcA=
-gitlab.com/gitlab-org/labkit v1.24.0/go.mod h1:vnGUmGdIjTs1PLDbLPduQMHgky77l26MESy2jGR1aw8=
+gitlab.com/gitlab-org/labkit v1.24.1 h1:/Rw5ZyTyORNPHTgKSUmykhI4lSWjQdGZcm+r4ASFVkU=
+gitlab.com/gitlab-org/labkit v1.24.1/go.mod h1:vnGUmGdIjTs1PLDbLPduQMHgky77l26MESy2jGR1aw8=
 go.etcd.io/raft/v3 v3.6.0 h1:5NtvbDVYpnfZWcIHgGRk9DyzkBIXOi8j+DDp1IcnUWQ=
 go.etcd.io/raft/v3 v3.6.0/go.mod h1:nLvLevg6+xrVtHUmVaTcTz603gQPHfh7kUAwV6YpfGo=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
