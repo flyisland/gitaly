@@ -95,6 +95,8 @@ type Locator interface {
 	TempDir(storageName string) (string, error)
 	// StateDir returns the path to the state dir for a storage.
 	StateDir(storageName string) (string, error)
+	// PartitionsDir returns the path to the partitions dir for a storage.
+	PartitionsDir(storageName string) (string, error)
 }
 
 // ValidateRepositoryConfig is used to configure ValidateRepository.
