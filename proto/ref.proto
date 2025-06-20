@@ -570,6 +570,10 @@ message ListRefsResponse{
 
   // references is the set of references returned by the RPC.
   repeated Reference references = 1;
+
+  // pagination_cursor contains the page token to fetch the next page of results. Refer to PaginationCursor
+  // documentation for further info.
+  PaginationCursor pagination_cursor = 2;
 }
 
 // FindRefsByOIDRequest is a request for the FindRefsByOID RPC.

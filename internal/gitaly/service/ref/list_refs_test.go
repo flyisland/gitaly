@@ -1,6 +1,7 @@
 package ref
 
 import (
+	"context"
 	"errors"
 	"io"
 	"testing"
@@ -252,7 +253,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/tags/*")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: "refs/tags/annotated-tag",
+					PageToken: encodeTestToken(t, "refs/tags/annotated-tag"),
 				},
 			},
 			expectedGrpcError: codes.InvalidArgument,
@@ -264,7 +265,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/tags/*")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: "refs/tags/annotated-tag",
+					PageToken: encodeTestToken(t, "refs/tags/annotated-tag"),
 					Limit:     2,
 				},
 			},
@@ -274,12 +275,24 @@ func TestServer_ListRefs(t *testing.T) {
 			},
 		},
 		{
+			desc: "pagination for the last page",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/tags/*")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					PageToken: encodeTestToken(t, "refs/tags/old-commit-tag"),
+					Limit:     2,
+				},
+			},
+			expected: nil,
+		},
+		{
 			desc: "pagination with page token and reversed sorting",
 			request: &gitalypb.ListRefsRequest{
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/tags/*")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: "refs/tags/old-commit-tag",
+					PageToken: encodeTestToken(t, "refs/tags/old-commit-tag"),
 					Limit:     2,
 				},
 				SortBy: &gitalypb.ListRefsRequest_SortBy{
@@ -298,7 +311,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: "refs/tags/missing_tag",
+					PageToken: encodeTestToken(t, "refs/tags/missing_tag"),
 				},
 			},
 			expectedGrpcError: codes.InvalidArgument,
@@ -331,12 +344,73 @@ func TestServer_ListRefs(t *testing.T) {
 					return
 				}
 
+				require.NotNil(t, r.GetPaginationCursor())
 				refs = append(refs, r.GetReferences()...)
 			}
 
 			testhelper.ProtoEqual(t, tc.expected, refs)
 		})
 	}
+}
+
+func TestListRefs_pagination(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg, client := setupRefService(t)
+
+	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+	oldCommitID := gittest.WriteCommit(t, cfg, repoPath)
+	newCommitID := gittest.WriteCommit(t, cfg, repoPath,
+		gittest.WithParents(oldCommitID),
+		gittest.WithAuthorDate(time.Date(2011, 2, 16, 14, 1, 0, 0, time.FixedZone("UTC+1", +1*60*60))),
+	)
+
+	for _, cmd := range [][]string{
+		{"update-ref", "refs/heads/main", newCommitID.String()},
+		{"tag", "lightweight-tag", newCommitID.String()},
+		{"tag", "old-commit-tag", oldCommitID.String()},
+		{"tag", "-m", "tag message", "annotated-tag", "refs/heads/main"},
+		{"symbolic-ref", "refs/heads/symbolic", "refs/heads/main"},
+		{"update-ref", "refs/remote/remote-name/remote-branch", newCommitID.String()},
+		{"symbolic-ref", "HEAD", "refs/heads/main"},
+		{"update-ref", "refs/heads/old", oldCommitID.String()},
+	} {
+		gittest.Exec(t, cfg, append([]string{"-C", repoPath}, cmd...)...)
+	}
+
+	annotatedTagOID := text.ChompBytes(gittest.Exec(t, cfg, "-C", repoPath, "rev-parse", "annotated-tag"))
+
+	t.Run("paginate with limit 2", func(t *testing.T) {
+		allRefs := collectAllRefs(t, ctx, client, repo, 2)
+
+		expectedRefs := []*gitalypb.ListRefsResponse_Reference{
+			{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
+			{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+			{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
+		}
+
+		require.Equal(t, len(expectedRefs), len(allRefs))
+		testhelper.ProtoEqual(t, expectedRefs, allRefs)
+	})
+
+	t.Run("different page sizes yield same results", func(t *testing.T) {
+		refs1 := collectAllRefs(t, ctx, client, repo, 1)
+		refs2 := collectAllRefs(t, ctx, client, repo, 2)
+		refs3 := collectAllRefs(t, ctx, client, repo, 3)
+
+		require.Equal(t, len(refs1), len(refs2))
+		require.Equal(t, len(refs1), len(refs3))
+		testhelper.ProtoEqual(t, refs1, refs2)
+		testhelper.ProtoEqual(t, refs1, refs3)
+	})
+
+	t.Run("empty page token starts from beginning", func(t *testing.T) {
+		page1, _ := getPage(t, ctx, client, repo, "", 2)
+		page2, _ := getPage(t, ctx, client, repo, "", 2)
+		testhelper.ProtoEqual(t, page1, page2)
+	})
 }
 
 func TestListRefs_validate(t *testing.T) {
@@ -390,4 +464,60 @@ func TestListRefs_validate(t *testing.T) {
 			testhelper.RequireGrpcError(t, tc.expectedErr, err)
 		})
 	}
+}
+
+// Helper function to collect all refs across all pages
+func collectAllRefs(t *testing.T, ctx context.Context, client gitalypb.RefServiceClient, repo *gitalypb.Repository, pageSize int32) []*gitalypb.ListRefsResponse_Reference {
+	var allRefs []*gitalypb.ListRefsResponse_Reference
+	cursor := ""
+
+	for {
+		page, nextCursor := getPage(t, ctx, client, repo, cursor, pageSize)
+		if len(page) == 0 {
+			break
+		}
+
+		allRefs = append(allRefs, page...)
+		cursor = nextCursor
+	}
+
+	return allRefs
+}
+
+// Helper function to get a single page
+func getPage(t *testing.T, ctx context.Context, client gitalypb.RefServiceClient, repo *gitalypb.Repository, cursor string, limit int32) ([]*gitalypb.ListRefsResponse_Reference, string) {
+	c, err := client.ListRefs(ctx, &gitalypb.ListRefsRequest{
+		Repository: repo,
+		Patterns:   [][]byte{[]byte("refs/tags/*")},
+		PaginationParams: &gitalypb.PaginationParameter{
+			PageToken: cursor,
+			Limit:     limit,
+		},
+	})
+	require.NoError(t, err)
+
+	var refs []*gitalypb.ListRefsResponse_Reference
+	var nextCursor string
+
+	for {
+		r, err := c.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+
+		if r.GetPaginationCursor() != nil {
+			nextCursor = r.GetPaginationCursor().GetNextCursor()
+		}
+		refs = append(refs, r.GetReferences()...)
+	}
+
+	return refs, nextCursor
+}
+
+func encodeTestToken(t *testing.T, s string) string {
+	token, err := encodePageToken([]byte(s))
+	require.NoError(t, err)
+
+	return token
 }

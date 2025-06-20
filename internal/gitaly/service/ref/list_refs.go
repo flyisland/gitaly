@@ -119,7 +119,17 @@ func newListRefsWriter(stream gitalypb.RefService_ListRefsServer, headOID git.Ob
 			}
 		}
 
-		return stream.Send(&gitalypb.ListRefsResponse{References: refNames})
+		if len(refNames) == 0 {
+			return stream.Send(&gitalypb.ListRefsResponse{References: refNames})
+		}
+
+		lastName := refNames[len(refNames)-1].GetName()
+		nextCursor, err := encodePageToken(lastName)
+		if err != nil {
+			return structerr.NewInternal("creating page token: %w", err)
+		}
+
+		return stream.Send(&gitalypb.ListRefsResponse{References: refNames, PaginationCursor: &gitalypb.PaginationCursor{NextCursor: nextCursor}})
 	}
 }
 
