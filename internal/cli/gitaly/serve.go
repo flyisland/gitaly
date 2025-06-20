@@ -480,6 +480,29 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			if err := storagemgr.AssignmentWorker(ctx, cfg, node, dbMgr, locator); err != nil {
 				return fmt.Errorf("partition assignment worker: %w", err)
 			}
+
+			for _, storageCfg := range cfg.Storages {
+				partitionsDir, err := locator.PartitionsDir(storageCfg.Name)
+				if err != nil {
+					panic(fmt.Errorf("retrieving partitions dir for storage %s: %w", storageCfg.Name, err))
+				}
+				migrator, err := partition.NewReplicaPartitionMigrator(partitionsDir, storageCfg.Name, dbMgr)
+				if err != nil {
+					panic(fmt.Errorf("creating replica partition migrator: %w", err))
+				}
+				// Log start of migration
+				logger.Info(fmt.Sprintf("starting partition migration for storage: %s", storageCfg.Name))
+				startTime := time.Now()
+				if err = migrator.Forward(); err != nil {
+					panic(fmt.Errorf("migrating replica partitions: %w", err))
+				}
+				logger.Info(fmt.Sprintf("completed partition migration for storage %s in %v", storageCfg.Name, time.Since(startTime)))
+
+				// always close migrator after use to release connection to db
+				if err := migrator.Close(); err != nil {
+					panic(fmt.Errorf("closing replica partition migrator: %w", err))
+				}
+			}
 		} else {
 			node = nodeMgr
 		}

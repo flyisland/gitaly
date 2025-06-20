@@ -64,14 +64,6 @@ func (f Factory) New(
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
 
-		migrator, err := NewReplicaPartitionMigrator(absoluteStateDir, storageName)
-		if err != nil {
-			panic(fmt.Errorf("creating replica partition migrator: %w", err))
-		}
-		if err = migrator.Forward(); err != nil {
-			panic(fmt.Errorf("migrating replica partitions: %w", err))
-		}
-
 		absoluteStateDir = getRaftPartitionPath(storageName, partitionID, absoluteStateDir)
 
 		replicaLogStore, err := raftmgr.NewReplicaLogStore(
