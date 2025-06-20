@@ -3,6 +3,7 @@ package partition
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/dgraph-io/badger/v4"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
@@ -64,6 +66,10 @@ func (m *RaftPartitionMigrator) Forward() error {
 
 	if err := cleanupOldPartitionStructure(m.partitionsDir); err != nil {
 		return fmt.Errorf("cleanup old partition structure: %w", err)
+	}
+
+	if err := m.updateMigrationInDB(); err != nil {
+		return fmt.Errorf("update migration status: %w", err)
 	}
 
 	return nil
