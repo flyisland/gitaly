@@ -12,6 +12,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
+	migrationid "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration/id"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
 
@@ -80,7 +81,7 @@ func NewMigrator(logger log.Logger, metrics Metrics, node storage.Node, localRep
 		node:      node,
 		state:     sync.Map{},
 		migrationHandler: &refBackendMigrator{
-			migration.NewReferenceBackendMigration(1, git.ReferenceBackendReftables, localRepoFactory, nil),
+			migration.NewReferenceBackendMigration(migrationid.Reftable, git.ReferenceBackendReftables, localRepoFactory, nil),
 		},
 		ctx:       ctx,
 		ctxCancel: cancel,
