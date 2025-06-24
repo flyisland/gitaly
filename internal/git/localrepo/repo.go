@@ -246,3 +246,25 @@ func (repo *Repo) ReferenceBackend(ctx context.Context) (git.ReferenceBackend, e
 	defer trace.StartRegion(ctx, "ReferenceBackend").End()
 	return repo.detectRefBackend(ctx)
 }
+
+// IsOffloaded determines whether a repository is offloaded.
+// Currently, this is indicated by the presence of exactly one value under the
+// "remote.offload.url" configuration key.
+//
+// A repository is considered offloaded if and only if this key is defined and
+// contains exactly one remote URL. If the key is missing, undefined, or has
+// multiple values, the repository is considered not offloaded or invalidly offloaded.
+func (repo *Repo) IsOffloaded(ctx context.Context) (bool, string, error) {
+	defer trace.StartRegion(ctx, "OffloadState").End()
+	offloadURL, err := repo.GetConfigValues(ctx, "remote.offload.url")
+	if err != nil {
+		if errors.Is(err, git.ErrNotFound) {
+			return false, "", nil
+		}
+		return false, "", fmt.Errorf("detect offloading: %w", err)
+	}
+	if len(offloadURL) == 1 && offloadURL[0] != "" {
+		return true, offloadURL[0], nil
+	}
+	return false, "", fmt.Errorf("offload URL must be a single non-empty string")
+}

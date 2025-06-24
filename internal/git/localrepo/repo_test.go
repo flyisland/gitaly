@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -298,4 +299,82 @@ func TestRepo_ObjectHash(t *testing.T) {
 	objectHash, err = repo.ObjectHash(ctx)
 	require.NoError(t, err)
 	require.Equal(t, gittest.DefaultObjectHash.EmptyTreeOID, objectHash.EmptyTreeOID)
+}
+
+func TestRepo_IsOffloaded(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	catfileCache := catfile.NewCache(cfg)
+	t.Cleanup(catfileCache.Stop)
+	locator := config.NewLocator(cfg)
+	for _, tc := range []struct {
+		desc                string
+		configValues        map[string][]string
+		expectedIsOffloaded bool
+		expectedOffloadURL  string
+		expectedError       error
+	}{
+		{
+			desc: "remote.offload.url has a value",
+			configValues: map[string][]string{
+				"remote.offload.url": {"s3://server/bucket"},
+			},
+			expectedIsOffloaded: true,
+			expectedOffloadURL:  "s3://server/bucket",
+			expectedError:       nil,
+		},
+		{
+			desc:                "no remote.offload.url",
+			expectedIsOffloaded: false,
+			expectedError:       nil,
+		},
+		{
+			desc: "remote.offload.url has multiple values",
+			configValues: map[string][]string{
+				"remote.offload.url": {"s3://server/bucket1", "s3://server/bucket2"},
+			},
+			expectedIsOffloaded: false,
+			expectedOffloadURL:  "",
+			expectedError:       fmt.Errorf("offload URL must be a single non-empty string"),
+		},
+		{
+			desc: "remote.offload.url is empty",
+			configValues: map[string][]string{
+				"remote.offload.url": {""},
+			},
+			expectedIsOffloaded: false,
+			expectedOffloadURL:  "",
+			expectedError:       fmt.Errorf("offload URL must be a single non-empty string"),
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipCreationViaService: true,
+			})
+
+			// Add config values if provided. Setting "remote.offload.url" simulates an offloaded repository.
+			// Full test coverage for real offloaded repositories is handled in the housekeeping manager tests.
+			for k, v := range tc.configValues {
+				for _, vv := range v {
+					gittest.Exec(t, cfg, "-C", repoPath, "config", "--add", k, vv)
+				}
+			}
+
+			repo := New(testhelper.NewLogger(t), locator, gittest.NewCommandFactory(t, cfg), catfileCache, repoProto)
+			isOffloaded, offloadRemoteURL, err := repo.IsOffloaded(ctx)
+			if tc.expectedError == nil {
+				require.Equal(t, tc.expectedIsOffloaded, isOffloaded)
+				require.Equal(t, tc.expectedOffloadURL, offloadRemoteURL)
+				return
+			}
+			require.False(t, isOffloaded)
+			require.Empty(t, tc.expectedOffloadURL)
+			require.Contains(t, err.Error(), tc.expectedError.Error())
+		})
+	}
 }
