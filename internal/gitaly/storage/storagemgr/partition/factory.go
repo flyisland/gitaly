@@ -90,6 +90,7 @@ func (f Factory) New(
 			panic(fmt.Errorf("creating raft log store: %w", err))
 		}
 		raftReplica, err := factory(
+			1,
 			storageName,
 			partitionID,
 			replicaLogStore,

@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"sync"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
+
+var errNoReplicaFound = structerr.NewNotFound("no replica found")
 
 func partitionKeyToString(pk *gitalypb.PartitionKey) string {
 	return fmt.Sprintf("%d:%s", pk.GetPartitionId(), pk.GetAuthorityName())
@@ -36,7 +39,7 @@ func (r *raftRegistry) GetReplica(key *gitalypb.PartitionKey) (RaftReplica, erro
 	if mgr, ok := r.replicas.Load(partitionKeyToString(key)); ok {
 		return mgr.(RaftReplica), nil
 	}
-	return nil, fmt.Errorf("no replica found for partition key %+v", key)
+	return nil, errNoReplicaFound.WithMetadata("partition_key", key)
 }
 
 // RegisterReplica registers a replica for a given partitionKey.

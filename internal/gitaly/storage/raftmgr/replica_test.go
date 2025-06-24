@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -25,6 +24,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3/raftpb"
+	"golang.org/x/exp/slices"
+	"google.golang.org/grpc"
+)
+
+const (
+	waitTimeout = 5 * time.Second
 )
 
 func raftConfigsForTest(t *testing.T) config.Raft {
@@ -81,7 +86,6 @@ func dbSetup(t *testing.T, ctx context.Context, cfg config.Cfg, dbPath string, s
 
 func TestReplica_Initialize(t *testing.T) {
 	t.Parallel()
-
 	t.Run("succeeds when raft is enabled", func(t *testing.T) {
 		t.Parallel()
 
@@ -89,7 +93,7 @@ func TestReplica_Initialize(t *testing.T) {
 		recorder := NewReplicaEntryRecorder()
 		metrics := NewMetrics()
 		raftCfg := raftConfigsForTest(t)
-		mgr, err := createRaftReplica(t, ctx, raftCfg, storage.PartitionID(1), metrics, WithEntryRecorder(recorder))
+		mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, storage.PartitionID(1), metrics, WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		// Initialize the replica
@@ -103,7 +107,7 @@ func TestReplica_Initialize(t *testing.T) {
 		// Verify that the first config change is recorded
 		require.Eventually(t, func() bool {
 			return recorder.Len() > 0
-		}, 5*time.Second, 10*time.Millisecond, "expected at least one entry to be recorded")
+		}, waitTimeout, 10*time.Millisecond, "expected at least one entry to be recorded")
 
 		// Verify at least one entry from Raft was recorded (typically a config change)
 		raftEntries := recorder.FromRaft()
@@ -130,7 +134,7 @@ func TestReplica_Initialize(t *testing.T) {
 		raftCfg := raftConfigsForTest(t)
 		raftCfg.Enabled = false
 
-		mgr, err := createRaftReplica(t, ctx, raftCfg, storage.PartitionID(1), NewMetrics())
+		mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, storage.PartitionID(1), NewMetrics())
 		require.Nil(t, mgr)
 		require.ErrorContains(t, err, "raft is not enabled")
 	})
@@ -142,7 +146,7 @@ func TestReplica_Initialize(t *testing.T) {
 		raftCfg := raftConfigsForTest(t)
 		partitionID := storage.PartitionID(1)
 
-		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics())
+		mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, NewMetrics())
 		require.NoError(t, err)
 
 		// First initialization should succeed
@@ -164,7 +168,7 @@ func TestReplica_Initialize(t *testing.T) {
 		partitionID := storage.PartitionID(1)
 		recorder := NewReplicaEntryRecorder()
 
-		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
+		mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		releaseReady := make(chan struct{})
@@ -177,6 +181,7 @@ func TestReplica_Initialize(t *testing.T) {
 		require.ErrorIs(t, err, ErrReadyTimeout)
 
 		close(releaseReady)
+
 		require.NoError(t, mgr.Close())
 	})
 
@@ -233,7 +238,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr, err := raftFactory(storageName, partitionID, logStore, logger, metrics)
+		mgr, err := raftFactory(1, storageName, partitionID, logStore, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
@@ -311,7 +316,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr, err := raftFactory(storageName, partitionID, logStore, logger, metrics)
+		mgr, err := raftFactory(1, storageName, partitionID, logStore, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
@@ -356,7 +361,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr1, err := raftFactory(storageName, partitionID, logStore1, logger, metrics)
+		mgr1, err := raftFactory(1, storageName, partitionID, logStore1, logger, metrics)
 		require.NoError(t, err)
 
 		// Initialize the raft replica
@@ -418,7 +423,7 @@ func TestReplica_Initialize(t *testing.T) {
 		logStore2, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr2, err := raftFactory(storageName, partitionID, logStore2, logger, metrics)
+		mgr2, err := raftFactory(1, storageName, partitionID, logStore2, logger, metrics)
 		require.NoError(t, err)
 
 		// Re-initialize Raft with the highest LSN
@@ -455,7 +460,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 		partitionID := storage.PartitionID(1)
 		recorder := NewReplicaEntryRecorder()
 		metrics := NewMetrics()
-		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics, WithEntryRecorder(recorder))
+		mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, metrics, WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		err = mgr.Initialize(ctx, 0)
@@ -484,7 +489,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 		require.Eventually(t, func() bool {
 			// The entry might be recorded with an offset due to Raft internal entries
 			return recorder.Len() >= 3
-		}, 5*time.Second, 10*time.Millisecond, "expected log entry to be recorded")
+		}, waitTimeout, 10*time.Millisecond, "expected log entry to be recorded")
 
 		// Check that our entry is not marked as coming from Raft
 		require.False(t, recorder.IsFromRaft(lsn), "expected user-submitted entry not to be from Raft")
@@ -539,7 +544,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 		// Verify that all log entries were recorded
 		require.Eventually(t, func() bool {
 			return recorder.Len() >= 3
-		}, 5*time.Second, 10*time.Millisecond, "expected all log entries to be recorded")
+		}, waitTimeout, 10*time.Millisecond, "expected all log entries to be recorded")
 
 		// Verify entries are in order
 		require.IsIncreasing(t, lsns, "expected increasing LSNs")
@@ -703,6 +708,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 
 		// Create replica with very short operation timeout
 		mgr, err := raftFactory(
+			1,
 			storageName,
 			partitionID,
 			logStore,
@@ -822,7 +828,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
 		// Configure replica
-		mgr, err := raftFactory(storageName, partitionID, logStore, logger, metrics)
+		mgr, err := raftFactory(1, storageName, partitionID, logStore, logger, metrics)
 		require.NoError(t, err)
 
 		for _, f := range setupFuncs {
@@ -875,7 +881,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(env.recorder))
 
-		recoveryMgr, err := raftFactory(env.storageName, env.partitionID, logStore, logger, env.metrics)
+		recoveryMgr, err := raftFactory(1, env.storageName, env.partitionID, logStore, logger, env.metrics)
 		require.NoError(t, err)
 
 		// Initialize with the last known LSN
@@ -1092,7 +1098,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		require.Eventually(t, func() bool {
 			finalErr = <-env.mgr.GetNotificationQueue()
 			return finalErr != nil
-		}, 5*time.Second, 10*time.Millisecond)
+		}, waitTimeout, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during commit entries")
 
 		// Create recovery replica
@@ -1160,7 +1166,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		require.Eventually(t, func() bool {
 			finalErr = <-env.mgr.GetNotificationQueue()
 			return finalErr != nil
-		}, 5*time.Second, 10*time.Millisecond)
+		}, waitTimeout, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during node advance")
 
 		// Create recovery replica
@@ -1214,7 +1220,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		require.Eventually(t, func() bool {
 			finalErr = <-env.mgr.GetNotificationQueue()
 			return finalErr != nil
-		}, 5*time.Second, 10*time.Millisecond)
+		}, waitTimeout, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during handle ready")
 
 		// Create recovery replica
@@ -1272,7 +1278,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		require.Eventually(t, func() bool {
 			finalErr = <-env.mgr.GetNotificationQueue()
 			return finalErr != nil
-		}, 5*time.Second, 10*time.Millisecond)
+		}, waitTimeout, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during insert log entry")
 
 		// Create recovery replica
@@ -1333,7 +1339,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		require.Eventually(t, func() bool {
 			finalErr = <-env.mgr.GetNotificationQueue()
 			return finalErr != nil
-		}, 5*time.Second, 10*time.Millisecond)
+		}, waitTimeout, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during save hard state")
 
 		// Create recovery replica
@@ -1436,7 +1442,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		require.Eventually(t, func() bool {
 			finalErr = <-secondRecoveryMgr.GetNotificationQueue()
 			return finalErr != nil
-		}, 5*time.Second, 10*time.Millisecond)
+		}, waitTimeout, 10*time.Millisecond)
 		require.ErrorContains(t, finalErr, "simulated crash during second recovery")
 
 		// Close the replica only, keep the DB manager
@@ -1502,7 +1508,7 @@ func TestReplica_Close(t *testing.T) {
 			SnapshotDir:     testhelper.TempDir(t),
 		}
 
-		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics())
+		mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, NewMetrics())
 		require.NoError(t, err)
 
 		// Initialize the replica
@@ -1531,7 +1537,7 @@ func TestReplica_Close(t *testing.T) {
 		}
 		partitionID := storage.PartitionID(1)
 
-		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics())
+		mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, NewMetrics())
 		require.NoError(t, err)
 
 		// Close without initializing
@@ -1548,7 +1554,7 @@ func TestReplica_Close(t *testing.T) {
 		partitionID := storage.PartitionID(1)
 		recorder := NewReplicaEntryRecorder()
 
-		mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
+		mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, NewMetrics(), WithEntryRecorder(recorder))
 		require.NoError(t, err)
 
 		// Initialize the replica
@@ -1594,7 +1600,7 @@ func TestReplica_NotImplementedLogMethods(t *testing.T) {
 	}
 
 	partitionID := storage.PartitionID(1)
-	mgr, err := createRaftReplica(t, ctx, raftCfg, partitionID, NewMetrics())
+	mgr, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, NewMetrics())
 	require.NoError(t, err)
 
 	// Initialize the replica
@@ -1656,7 +1662,7 @@ func TestReplica_StorageConnection(t *testing.T) {
 	// Create factory that connects replicas to storage
 	raftFactory := DefaultFactoryWithNode(cfg.Raft, raftNode)
 
-	replica, err := raftFactory(storageName, partitionID, logStore, logger, NewMetrics())
+	replica, err := raftFactory(1, storageName, partitionID, logStore, logger, NewMetrics())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, replica.Close()) })
 
@@ -1690,14 +1696,14 @@ func TestReplica_StorageConnection(t *testing.T) {
 	})
 
 	t.Run("multiple replicas for same partition key", func(t *testing.T) {
-		duplicateReplica, err := raftFactory(storageName, partitionID, logStore, logger, NewMetrics())
+		duplicateReplica, err := raftFactory(1, storageName, partitionID, logStore, logger, NewMetrics())
 		require.NoError(t, err)
 		require.NotNil(t, duplicateReplica)
 	})
 
 	t.Run("Register different replicas for different partition keys", func(t *testing.T) {
 		partitionID := storage.PartitionID(2)
-		replicaTwo, err := raftFactory(storageName, partitionID, logStore, logger, NewMetrics())
+		replicaTwo, err := raftFactory(1, storageName, partitionID, logStore, logger, NewMetrics())
 		require.NoError(t, err)
 		require.NotNil(t, replicaTwo)
 	})
@@ -1706,69 +1712,116 @@ func TestReplica_StorageConnection(t *testing.T) {
 func TestReplica_AddNode(t *testing.T) {
 	t.Parallel()
 
-	setupTest := func(t *testing.T) (*Replica, *Metrics, string, storage.PartitionID, *ReplicaEntryRecorder) {
-		ctx := testhelper.Context(t)
+	createTestNode := func(t *testing.T, ctx context.Context, memberID uint64, partitionID storage.PartitionID, raftCfg config.Raft, metrics *Metrics, opts ...OptionFunc) (*Replica, string, *grpc.Server) {
 		cfg := testcfg.Build(t)
-		raftCfg := raftConfigsForTest(t)
-		metrics := NewMetrics()
-		partitionID := storage.PartitionID(1)
-		recorder := NewReplicaEntryRecorder()
+		logger := testhelper.NewLogger(t)
+		registry := NewReplicaRegistry()
+		db, _ := dbSetup(t, ctx, cfg, testhelper.TempDir(t), cfg.Storages[0].Name, logger)
+		routingTable := NewKVRoutingTable(db)
 
-		replica, err := createRaftReplica(t, ctx, raftCfg, partitionID, metrics, WithEntryRecorder(recorder))
+		transport := NewGrpcTransport(logger, cfg, routingTable, registry, nil)
+		socketPath, srv := createTempServer(t, transport)
+
+		replica, err := createRaftReplica(t, ctx, memberID, socketPath, raftCfg, partitionID, metrics, opts...)
 		require.NoError(t, err)
 
 		err = replica.Initialize(ctx, 0)
 		require.NoError(t, err)
 
-		return replica, metrics, cfg.Storages[0].Name, partitionID, recorder
+		return replica, socketPath, srv
+	}
+
+	// waitForLeadership waits for the replica to become leader
+	waitForLeadership := func(t *testing.T, replica *Replica, timeout time.Duration) {
+		require.Eventually(t, func() bool {
+			return replica.AppendedLSN() > 1 && replica.leadership.IsLeader()
+		}, timeout, 5*time.Millisecond, "replica should become leader")
+	}
+
+	// waitForVoters waits for both replicas to have the expected number of voters
+	waitForVoters := func(t *testing.T, replicaOne, replicaTwo *Replica, expectedVoters int, timeout time.Duration) {
+		require.Eventually(t, func() bool {
+			return len(replicaOne.node.Status().Config.Voters) == expectedVoters &&
+				len(replicaTwo.node.Status().Config.Voters) == expectedVoters
+		}, timeout, 5*time.Millisecond, "configuration should stabilize with %d voters", expectedVoters)
+	}
+
+	drainNotificationQueues := func(t *testing.T, replicas ...*Replica) {
+		for _, replica := range replicas {
+			require.Eventually(t, func() bool {
+				select {
+				case err := <-replica.GetNotificationQueue():
+					if err != nil {
+						require.NoError(t, err)
+						return false
+					}
+					return true
+				default:
+					return false
+				}
+			}, waitTimeout, 10*time.Millisecond)
+		}
 	}
 
 	t.Run("successful when node is leader", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		replica, metrics, storageName, partitionID, _ := setupTest(t)
-		t.Cleanup(func() { require.NoError(t, replica.Close()) })
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+
+		replica, _, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		defer func() {
+			srv.Stop()
+			require.NoError(t, replica.Close())
+		}()
 
 		// Wait for the replica to elect itself as leader
-		require.Eventually(t, func() bool {
-			return replica.AppendedLSN() > 1 && replica.leadership.IsLeader()
-		}, 5*time.Second, 5*time.Millisecond, "replica should become leader")
+		waitForLeadership(t, replica, waitTimeout)
 
 		raftEnabledStorage := replica.raftEnabledStorage
 		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 		routingTable := raftEnabledStorage.GetRoutingTable()
 		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: storageName,
+			AuthorityName: replica.authorityName,
 			PartitionId:   uint64(partitionID),
 		}
 
-		addNodeAddress := "gitaly-node-2:8075"
-		err := replica.AddNode(ctx, addNodeAddress)
+		// Create second node
+		replicaTwo, socketPathTwo, srvTwo := createTestNode(t, ctx, 3, partitionID, raftCfg, metrics)
+		replicaTwoAddress := "unix://" + socketPathTwo
+		defer func() {
+			srvTwo.Stop()
+			require.NoError(t, replicaTwo.Close())
+		}()
+
+		registryTwo := replicaTwo.raftEnabledStorage.GetReplicaRegistry()
+		registryTwo.RegisterReplica(partitionKey, replicaTwo)
+
+		err := replica.AddNode(ctx, replicaTwoAddress)
 		require.NoError(t, err, "adding node should succeed when leader")
 
-		// Verify routing table is updated
 		require.Eventually(t, func() bool {
 			entry, err := routingTable.GetEntry(partitionKey)
 			if err != nil {
 				return false
 			}
 			return slices.ContainsFunc(entry.Replicas, func(r *gitalypb.ReplicaID) bool {
-				return r.GetMetadata().GetAddress() == addNodeAddress && r.GetType() == gitalypb.ReplicaID_REPLICA_TYPE_VOTER
+				return r.GetMetadata().GetAddress() == replicaTwoAddress && r.GetType() == gitalypb.ReplicaID_REPLICA_TYPE_VOTER
 			})
-		}, 5*time.Second, 5*time.Millisecond, "routing table should be updated")
+		}, waitTimeout, 5*time.Millisecond, "routing table should be updated")
 
-		// Verify configuration state
-		_, confState, err := replica.logStore.InitialState()
-		require.NoError(t, err)
-		require.Len(t, confState.Voters, 2, "should have 2 nodes (bootstrap + added)")
+		drainNotificationQueues(t, replica, replicaTwo)
+
+		waitForVoters(t, replica, replicaTwo, 2, waitTimeout)
 
 		testhelper.RequirePromMetrics(t, metrics, `
 			# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
 			# TYPE gitaly_raft_log_entries_processed counter
-			gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 2
-			gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 2
+			gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 3
+			gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 3
 			gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 1
 			gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 1
 			# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
@@ -1779,76 +1832,107 @@ func TestReplica_AddNode(t *testing.T) {
 			gitaly_raft_membership_changes_total{change_type="add_voter"} 1
 		`)
 	})
+
 	t.Run("concurrent add node proposals", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		replica, metrics, storageName, partitionID, recorder := setupTest(t)
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
 
-		t.Cleanup(func() {
+		replica, _, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		defer func() {
+			srv.Stop()
 			require.NoError(t, replica.Close())
-		})
+		}()
+
+		waitForLeadership(t, replica, waitTimeout)
 
 		raftEnabledStorage := replica.raftEnabledStorage
 		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 		routingTable := raftEnabledStorage.GetRoutingTable()
 		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: storageName,
+			AuthorityName: replica.authorityName,
 			PartitionId:   uint64(partitionID),
 		}
 
-		// Wait for the replica to elect itself as leader
-		require.Eventually(t, func() bool {
-			return replica.AppendedLSN() > 1 && replica.leadership.IsLeader()
-		}, 5*time.Second, 5*time.Millisecond, "replica should become leader")
+		var destinationAddresses []string
+		var servers []*grpc.Server
+		addressesToReplicas := make(map[string]*Replica)
 
+		// Cleanup
+		defer func() {
+			for _, srv := range servers {
+				srv.Stop()
+			}
+			for _, replica := range addressesToReplicas {
+				require.NoError(t, replica.Close())
+			}
+		}()
+
+		lastMemberID := uint64(3)
+
+		for i := uint64(2); i <= lastMemberID; i++ {
+			replica, socketPath, srv := createTestNode(t, ctx, i, partitionID, raftCfg, metrics)
+
+			servers = append(servers, srv)
+			address := "unix://" + socketPath
+			destinationAddresses = append(destinationAddresses, address)
+			addressesToReplicas[address] = replica
+		}
+
+		// Propose concurrent membership changes. Same member ID but different address.
 		for i := 0; i < 2; i++ {
-			err := replica.proposeMembershipChange(ctx, string(addVoter), uint64(3), ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
-				Address: fmt.Sprintf("node-%d:8075", i),
+			err := replica.proposeMembershipChange(ctx, string(addVoter), lastMemberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
+				Address: destinationAddresses[i],
 			})
 			require.NoError(t, err)
 		}
 
+		// Verify routing table is updated
+		var addedAddress string
 		require.Eventually(t, func() bool {
 			entry, err := routingTable.GetEntry(partitionKey)
 			if err != nil {
 				return false
 			}
-			return slices.ContainsFunc(entry.Replicas, func(r *gitalypb.ReplicaID) bool {
-				return (r.GetMetadata().GetAddress() == "node-0:8075" || r.GetMetadata().GetAddress() == "node-1:8075") && r.GetType() == gitalypb.ReplicaID_REPLICA_TYPE_VOTER
-			})
-		}, 5*time.Second, 5*time.Millisecond, "routing table should be updated")
 
-		raftEntries := recorder.FromRaft()
-		foundConfigChange := 0
-		for _, entry := range raftEntries {
-			if entry.GetOperations() != nil {
-				for _, op := range entry.GetOperations() {
-					if op.GetSetKey() != nil && string(op.GetSetKey().GetKey()) == string(KeyLastConfigChange) {
-						foundConfigChange++
-					}
-				}
+			// We should have exactly 2 replicas: the original (memberID=1) and the newly added one
+			if len(entry.Replicas) != 2 {
+				return false
 			}
-		}
-		require.Equal(t, foundConfigChange, 2, "expected 2 config change entries, (bootstrap + added)")
+
+			idx := slices.IndexFunc(entry.Replicas, func(r *gitalypb.ReplicaID) bool {
+				return r.GetType() == gitalypb.ReplicaID_REPLICA_TYPE_VOTER && r.GetMemberId() != 1
+			})
+
+			if idx == -1 {
+				return false
+			}
+			addedAddress = entry.Replicas[idx].GetMetadata().GetAddress()
+
+			return true
+		}, waitTimeout, 5*time.Millisecond, "routing table should be updated")
+
+		addedReplica := addressesToReplicas[addedAddress]
 
 		status := replica.node.Status()
 		require.Len(t, status.Config.Voters, 2, "expected two voters in the final configuration")
 
-		entry, err := routingTable.GetEntry(partitionKey)
-		require.NoError(t, err)
-		require.Len(t, entry.Replicas, 2, "expected two replicas in the routing table")
-		require.Equal(t, entry.Replicas[0].GetMemberId(), uint64(1))
-		require.Equal(t, entry.Replicas[1].GetMemberId(), uint64(3))
+		// Wait for voters count to stabilize between both replicas
+		waitForVoters(t, replica, addedReplica, 2, waitTimeout)
 
-		// We ignore the metric with "verify" tag because it's not deterministic. With each run the number of times empty entries
-		// processed are different.
+		drainNotificationQueues(t, replica, addedReplica)
+
 		testhelper.RequirePromMetrics(t, metrics, `
 			# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
 			# TYPE gitaly_raft_log_entries_processed counter
 			gitaly_raft_log_entries_processed{entry_type="config_change",operation="append",storage="default"} 3
 			gitaly_raft_log_entries_processed{entry_type="config_change",operation="commit",storage="default"} 3
+			gitaly_raft_log_entries_processed{entry_type="verify",operation="append",storage="default"} 1
+			gitaly_raft_log_entries_processed{entry_type="verify",operation="commit",storage="default"} 1
 			# HELP gitaly_raft_proposal_queue_depth Depth of proposal queue.
 			# TYPE gitaly_raft_proposal_queue_depth gauge
 			gitaly_raft_proposal_queue_depth{storage="default"} 0
@@ -1867,13 +1951,19 @@ func TestReplica_AddNode(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		replica, _, _, _, _ := setupTest(t)
-		t.Cleanup(func() { require.NoError(t, replica.Close()) })
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+
+		// Create first node
+		replica, _, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		defer func() {
+			srv.Stop()
+			require.NoError(t, replica.Close())
+		}()
 
 		// Wait for the replica to elect itself as leader
-		require.Eventually(t, func() bool {
-			return replica.AppendedLSN() > 1 && replica.leadership.IsLeader()
-		}, 5*time.Second, 5*time.Millisecond, "replica should become leader")
+		waitForLeadership(t, replica, waitTimeout)
 
 		err := replica.RemoveNode(ctx, 999)
 		require.EqualError(t, err, "checking member ID: translating member ID: no address found for memberID 999")
@@ -1883,8 +1973,16 @@ func TestReplica_AddNode(t *testing.T) {
 		t.Parallel()
 
 		ctx := testhelper.Context(t)
-		replica, metrics, _, _, _ := setupTest(t)
-		t.Cleanup(func() { require.NoError(t, replica.Close()) })
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+
+		// Create first node
+		replica, _, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		defer func() {
+			srv.Stop()
+			require.NoError(t, replica.Close())
+		}()
 
 		// Set a random leader ID to simulate a non-leader
 		replica.leadership.SetLeader(999, false)
