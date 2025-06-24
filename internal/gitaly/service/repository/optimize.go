@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
@@ -47,6 +48,43 @@ func (s *server) OptimizeRepository(ctx context.Context, in *gitalypb.OptimizeRe
 			SinkBaseURL: fmt.Sprintf("%s://%s", storageURL.Scheme, storageURL.Host),
 		}
 		if err := s.housekeepingManager.OffloadRepository(ctx, repo, offloadingCfg); err != nil {
+			return nil, structerr.NewInternal("%w", err)
+		}
+	case gitalypb.OptimizeRepositoryRequest_STRATEGY_REHYDRATION:
+		if s.cfg.Offloading.GoCloudURL == "" {
+			return nil, structerr.NewInvalidArgument("offloading configuration missing sink URL")
+		}
+
+		// offloadRemoteURL is the url stored in git config remote.offload.url
+		isOffloaded, offloadRemoteURL, err := repo.IsOffloaded(ctx)
+		if !isOffloaded {
+			if err == nil {
+				return nil, structerr.NewFailedPrecondition("repository is not offloaded")
+			}
+			return nil, structerr.NewFailedPrecondition("invalid offloaded repository state: %w", err)
+		}
+
+		parsedRemoteURL, err := url.Parse(offloadRemoteURL)
+		if err != nil {
+			return nil, structerr.NewInvalidArgument("invalid URL: %w", err)
+		}
+
+		storageURL, err := url.Parse(s.cfg.Offloading.GoCloudURL)
+		if err != nil {
+			return nil, structerr.NewInvalidArgument("invalid URL: %w", err)
+		}
+
+		// Prefix is derived by removing the storage URL path prefix from the remote URL path.
+		// For example:
+		// - In the Git config: remote.offload.url = "gcp://my_bucket/@hash/11/22/112233abc.git/my_uuid"
+		// - In the Gitaly config: GoCloudURL = "gcp://my_bucket"
+		// The resulting prefix will be: "@hash/11/22/112233abc.git/my_uuid"
+		prefix := strings.TrimSpace(strings.TrimPrefix(parsedRemoteURL.Path, storageURL.Path+"/"))
+		if prefix == "" || prefix == parsedRemoteURL.Path {
+			return nil, structerr.NewInvalidArgument("extract object prefix from URLs")
+		}
+
+		if err := s.housekeepingManager.RehydrateRepository(ctx, repo, prefix); err != nil {
 			return nil, structerr.NewInternal("%w", err)
 		}
 	default:

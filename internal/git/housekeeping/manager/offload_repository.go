@@ -16,11 +16,7 @@ func (m *RepositoryManager) OffloadRepository(ctx context.Context, repo *localre
 	}
 
 	return m.runInTransaction(ctx, "housekeeping/offload", false, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
-		if tx != nil {
-			tx.SetOffloadingConfig(cfg)
-			return nil
-		}
-
-		return fmt.Errorf("missing transaction")
+		tx.SetOffloadingConfig(cfg)
+		return nil
 	})
 }

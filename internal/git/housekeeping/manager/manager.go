@@ -24,6 +24,10 @@ type Manager interface {
 	OptimizeRepository(context.Context, *localrepo.Repo, ...OptimizeRepositoryOption) error
 	// OffloadRepository offloads the repository objects onto a second storage
 	OffloadRepository(context.Context, *localrepo.Repo, config.OffloadingConfig) error
+	// RehydrateRepository restores an offloaded repository by downloading objects from remote storage
+	// back to local storage. The prefix parameter specifies the object prefix in the remote storage
+	// where the repository objects are stored.
+	RehydrateRepository(context.Context, *localrepo.Repo, string) error
 }
 
 // repositoryState holds the housekeeping state for individual repositories. This structure can be

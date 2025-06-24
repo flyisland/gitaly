@@ -403,3 +403,154 @@ func TestOffloadingRepository_validation(t *testing.T) {
 		})
 	}
 }
+
+func TestRehydratingRepository_validation(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	for _, tc := range []struct {
+		desc             string
+		request          *gitalypb.OptimizeRepositoryRequest
+		offloadingConfig config.Offloading
+		expectedErr      error
+
+		// offloadRepo, when set to true, configures the repository with remote.offload.url,
+		// simulating a state where the repository has already been offloaded.
+		offloadRepo bool
+		// offloadURL is the value assigned to remote.offload.url when offloadRepo is true.
+		offloadURL string
+
+		// shouldSkip check if we should skip this test. If shouldSkip is nil, it means never skip this test.
+		shouldSkip func() bool
+	}{
+		{
+			// This test cases fails on the "repository is not offloaded" check.
+			// It is meant to verify that rehydration is still callable when offloading is disabled
+			// in the config.
+			desc: "rehydrate is still callable when offloading config is empty",
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_REHYDRATION,
+			},
+			expectedErr: structerr.NewInvalidArgument("offloading configuration missing sink URL"),
+		},
+		{
+			// This test cases fails on the "repository is not offloaded" check.
+			// It is meant to verify that rehydration is still callable when offloading is disabled
+			// in the config.
+			desc: "rehydrate is still callable when offloading feature is not enabled in config",
+			offloadingConfig: config.Offloading{
+				Enabled: false,
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_REHYDRATION,
+			},
+			expectedErr: structerr.NewInvalidArgument("offloading configuration missing sink URL"),
+		},
+		{
+			desc:        "rehydrate when missing sink URL",
+			offloadRepo: true,
+			offloadURL:  "fake:/s3/my_server/bucket/some/prefix",
+			offloadingConfig: config.Offloading{
+				Enabled:   true,
+				CacheRoot: "/whatever_dir/",
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_REHYDRATION,
+			},
+			expectedErr: structerr.NewInvalidArgument("offloading configuration missing sink URL"),
+		},
+		{
+			desc: "rehydrate when repository is not offloaded",
+			offloadingConfig: config.Offloading{
+				Enabled:    true,
+				CacheRoot:  "/whatever_dir/",
+				GoCloudURL: "file:://tmp",
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_REHYDRATION,
+			},
+			expectedErr: structerr.NewFailedPrecondition("repository is not offloaded"),
+		},
+		{
+			desc:        "rehydrate when sink URL is invalid",
+			offloadRepo: true,
+			offloadURL:  "fake:/my_bucket/some/prefix",
+			offloadingConfig: config.Offloading{
+				Enabled:    true,
+				CacheRoot:  "/whatever_dir/",
+				GoCloudURL: "fake:/my_bucket",
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_REHYDRATION,
+			},
+
+			// Invalid GoCloudURL prevents transaction manager from creating a bucket,
+			// resulting in an internal error.
+			expectedErr: structerr.NewInternal("offloading sink is not configured"),
+			shouldSkip: func() bool {
+				// Skip this only when WAL is disabled.
+				return !testhelper.IsWALEnabled()
+			},
+		},
+		{
+			desc:        "rehydrate when object prefix is white spaces",
+			offloadRepo: true,
+			offloadURL:  "  ", // put some whitespaces just in case it's trimmed incorrectly
+			offloadingConfig: config.Offloading{
+				Enabled:    true,
+				CacheRoot:  "/whatever_dir/",
+				GoCloudURL: "s3://my_bucket",
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_REHYDRATION,
+			},
+			expectedErr: structerr.NewFailedPrecondition("invalid offloaded repository state"),
+			shouldSkip: func() bool {
+				// Skip this only when WAL is disabled.
+				return !testhelper.IsWALEnabled()
+			},
+		},
+		{
+			desc:        "offloading when WAL is disabled",
+			offloadRepo: true,
+			offloadURL:  "s3://my_bucket/repo/prefix",
+			offloadingConfig: config.Offloading{
+				Enabled:    true,
+				CacheRoot:  "/whatever_dir/",
+				GoCloudURL: "s3://my_bucket",
+			},
+			request: &gitalypb.OptimizeRepositoryRequest{
+				Strategy: gitalypb.OptimizeRepositoryRequest_STRATEGY_REHYDRATION,
+			},
+			expectedErr: structerr.NewInternal("unable to retrieve storage node"),
+			shouldSkip: func() bool {
+				// Skip this only when WAL is enabled
+				return testhelper.IsWALEnabled()
+			},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			if tc.shouldSkip != nil && tc.shouldSkip() {
+				t.Skip("Skipping test as per 'shouldSkip' condition")
+			}
+
+			t.Parallel()
+
+			cfg := testcfg.Build(t)
+			testcfg.BuildGitalyHooks(t, cfg)
+			testcfg.BuildGitalySSH(t, cfg)
+			cfg.Offloading = tc.offloadingConfig
+			client, serverSocketPath := runRepositoryService(t, cfg)
+			cfg.SocketPath = serverSocketPath
+			repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+			if tc.offloadRepo {
+				gittest.Exec(t, cfg, "-C", repoPath, "config", "remote.offload.url", tc.offloadURL)
+			}
+
+			tc.request.Repository = repo
+			_, err := client.OptimizeRepository(ctx, tc.request)
+			testhelper.RequireGrpcErrorContains(t, tc.expectedErr, err)
+		})
+	}
+}
