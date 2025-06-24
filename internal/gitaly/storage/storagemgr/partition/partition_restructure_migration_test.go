@@ -192,7 +192,7 @@ func TestDirectoryStructureMatches(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.partitionID, func(t *testing.T) {
 			storageName := "storage"
-			raftPartitionPath := storage.CreateRaftPartitionPath(storageName, tc.partitionID)
+			raftPartitionPath := storage.GetRaftPartitionName(storageName, tc.partitionID)
 
 			// Calculate hash
 			hasher := sha256.New()

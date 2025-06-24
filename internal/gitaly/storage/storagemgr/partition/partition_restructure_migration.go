@@ -515,7 +515,7 @@ func cleanupNewPartitionStructure(partitionsDir string) error {
 }
 
 func pathForMigratedDir(storageName, partitionsBase, partitionID string) (relativePath string, absolutePath string) {
-	targetPartitionName := storage.CreateRaftPartitionPath(storageName, partitionID)
+	targetPartitionName := storage.GetRaftPartitionName(storageName, partitionID)
 	// Generate hash for new path
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(targetPartitionName)))
 	hashedPath := fmt.Sprintf("%s/%s/%s", hash[:2], hash[2:4], targetPartitionName)

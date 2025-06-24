@@ -117,7 +117,7 @@ func (f Factory) New(
 // getRaftPartitionPath returns the path where a Raft replica should be stored for a partition.
 func getRaftPartitionPath(storageName string, partitionID storage.PartitionID, absoluteStateDir string) string {
 	hasher := sha256.New()
-	raftPartitionPath := storage.CreateRaftPartitionPath(storageName, partitionID.String())
+	raftPartitionPath := storage.GetRaftPartitionName(storageName, partitionID.String())
 	hasher.Write([]byte(raftPartitionPath))
 
 	partitionsDir, err := getPartitionsDir(absoluteStateDir)

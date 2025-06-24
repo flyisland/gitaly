@@ -1938,7 +1938,7 @@ func convertToReplicaState(state testhelper.DirectoryState, storageName, partiti
 		}
 	}
 
-	raftPartitionPath := storage.CreateRaftPartitionPath(storageName, partitionID)
+	raftPartitionPath := storage.GetRaftPartitionName(storageName, partitionID)
 	hasher := sha256.New()
 	hasher.Write([]byte(raftPartitionPath))
 	hash := fmt.Sprintf("%x", hasher.Sum(nil))
