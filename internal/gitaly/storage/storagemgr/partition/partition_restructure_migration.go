@@ -14,7 +14,6 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
 )
 
@@ -37,15 +36,10 @@ type RaftPartitionMigrator struct {
 }
 
 // NewReplicaPartitionMigrator creates a new raft replica migrator instance
-func NewReplicaPartitionMigrator(absoluteStateDir, storageName string, dbMgr *databasemgr.DBManager) (*RaftPartitionMigrator, error) {
+func NewReplicaPartitionMigrator(absoluteStateDir, storageName string, db keyvalue.Store) (*RaftPartitionMigrator, error) {
 	partitionsDir, err := getPartitionsDir(absoluteStateDir)
 	if err != nil {
 		return nil, fmt.Errorf("determining partitions directory: %w", err)
-	}
-
-	db, err := dbMgr.GetDB(storageName)
-	if err != nil {
-		return nil, fmt.Errorf("getting db: %w", err)
 	}
 
 	return &RaftPartitionMigrator{

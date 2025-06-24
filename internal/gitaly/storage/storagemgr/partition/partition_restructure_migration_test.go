@@ -13,9 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 )
@@ -67,11 +65,8 @@ func TestPartitionRestructureMigration(t *testing.T) {
 				})
 			}
 
-			dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-			require.NoError(t, err)
-			defer dbMgr.Close()
-
-			migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, dbMgr)
+			_, db := getTestDBManager(t, ctx, cfg, logger)
+			migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 			require.NoError(t, err)
 			// Run the migration
 			require.NoError(t, migrator.partitionRestructureMigration())
@@ -149,15 +144,10 @@ func TestPartitionRestructureMigration_Errors(t *testing.T) {
 		setupDirectory(t, partitionsDir, map[string]bool{
 			"/xx/yy/invalidPartition/wal/0000000000000001/MANIFEST": false,
 		})
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+		require.NoError(t, err)
 		// Run the migration, should skip the directory and not cause an error
-
-		dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-		require.NoError(t, err)
-		defer dbMgr.Close()
-
-		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, dbMgr)
-		require.NoError(t, err)
-		// Run the migration
 		require.NoError(t, migrator.partitionRestructureMigration())
 
 		// Verify invalid structure remains unchanged
@@ -226,11 +216,8 @@ func TestCleanupOldPartitionStructure(t *testing.T) {
 		"/59/94/12345/wal/0000000000000001/RAFT": false,
 	})
 
-	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-	require.NoError(t, err)
-	defer dbMgr.Close()
-
-	migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, dbMgr)
+	_, db := getTestDBManager(t, ctx, cfg, logger)
+	migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 	require.NoError(t, err)
 	// Run the migration
 	require.NoError(t, migrator.partitionRestructureMigration())
@@ -284,11 +271,8 @@ func TestUndoPartitionRestructureMigration(t *testing.T) {
 	seqDir := fmt.Sprintf("%016d", 1)
 	newSeqPath := filepath.Join(newWalPath, seqDir)
 
-	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-	require.NoError(t, err)
-	defer dbMgr.Close()
-
-	migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, dbMgr)
+	_, db := getTestDBManager(t, ctx, cfg, logger)
+	migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 	require.NoError(t, err)
 
 	setupDirectory(t, partitionsDir, map[string]bool{
@@ -363,11 +347,8 @@ func TestUndoPartitionRestructureMigration_Errors(t *testing.T) {
 		// Create an empty state directory with no matching structure
 		require.NoError(t, os.MkdirAll(partitionsDir, mode.Directory))
 
-		dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-		require.NoError(t, err)
-		defer dbMgr.Close()
-
-		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, dbMgr)
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 		require.NoError(t, err)
 
 		// Run the undo migration - should complete without error but do nothing
@@ -389,11 +370,8 @@ func TestUndoPartitionRestructureMigration_Errors(t *testing.T) {
 			"/ab/cd/invalid_format/wal": true,
 		})
 
-		dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-		require.NoError(t, err)
-		defer dbMgr.Close()
-
-		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, dbMgr)
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 		require.NoError(t, err)
 
 		// Run the undo migration - should skip the invalid directory and complete
@@ -451,12 +429,8 @@ func TestNewReplicaPartitionMigrator(t *testing.T) {
 	err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
 	require.NoError(t, err, "Failed to create partitions directory")
 
-	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-	require.NoError(t, err)
-	defer dbMgr.Close()
-
-	// Create and validate migrator
-	migrator, err := NewReplicaPartitionMigrator(tempDir, cfg.Storages[0].Name, dbMgr)
+	_, db := getTestDBManager(t, ctx, cfg, logger)
+	migrator, err := NewReplicaPartitionMigrator(tempDir, cfg.Storages[0].Name, db)
 	// Run the migration
 	require.NoError(t, migrator.partitionRestructureMigration())
 
@@ -485,12 +459,8 @@ func TestPartitionMigrator_Forward(t *testing.T) {
 		err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
 		require.NoError(t, err, "Failed to create partitions directory")
 
-		dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-		require.NoError(t, err)
-		defer dbMgr.Close()
-
-		// Run the migration
-		migrator, err := NewReplicaPartitionMigrator(tempDir, cfg.Storages[0].Name, dbMgr)
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 		require.NoError(t, err)
 		require.NoError(t, migrator.partitionRestructureMigration())
 		// Setup old partition structure using the helper
@@ -545,12 +515,8 @@ func TestPartitionMigrator_Forward(t *testing.T) {
 		err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
 		require.NoError(t, err, "Failed to create partitions directory")
 
-		dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-		require.NoError(t, err)
-		defer dbMgr.Close()
-
-		// Create a migrator for this test
-		migrator, err := NewReplicaPartitionMigrator(tempDir, cfg.Storages[0].Name, dbMgr)
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 		require.NoError(t, err)
 		// Run the migration
 		require.NoError(t, migrator.partitionRestructureMigration())
@@ -623,12 +589,8 @@ func TestPartitionMigrator_Backward(t *testing.T) {
 		err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
 		require.NoError(t, err, "Failed to create partitions directory")
 
-		dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-		require.NoError(t, err)
-		defer dbMgr.Close()
-
-		// Create a migrator for this test
-		migrator, err := NewReplicaPartitionMigrator(tempDir, cfg.Storages[0].Name, dbMgr)
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 		require.NoError(t, err)
 		// Setup new partition structure using the helper
 		setupDirectory(t, partitionsDir, map[string]bool{
@@ -676,12 +638,8 @@ func TestPartitionMigrator_Backward(t *testing.T) {
 		err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
 		require.NoError(t, err, "Failed to create partitions directory")
 
-		dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
-		require.NoError(t, err)
-		defer dbMgr.Close()
-
-		// Create a migrator for this test
-		migrator, err := NewReplicaPartitionMigrator(tempDir, cfg.Storages[0].Name, dbMgr)
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
 		require.NoError(t, err)
 		// Setup structure with read-only directory to cause cleanup error
 		structure := map[string]bool{

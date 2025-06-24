@@ -785,7 +785,12 @@ func replicaPartitionMigration(storages []config.Storage, locator storage.Locato
 			return fmt.Errorf("retrieving partitions dir for storage %s: %w", storageCfg.Name, err)
 		}
 
-		migrator, err := partition.NewReplicaPartitionMigrator(partitionsDir, storageCfg.Name, dbMgr)
+		db, err := dbMgr.GetDB(storageCfg.Name)
+		if err != nil {
+			return fmt.Errorf("getting db: %w", err)
+		}
+
+		migrator, err := partition.NewReplicaPartitionMigrator(partitionsDir, storageCfg.Name, db)
 		if err != nil {
 			return fmt.Errorf("creating replica partition migrator: %w", err)
 		}
