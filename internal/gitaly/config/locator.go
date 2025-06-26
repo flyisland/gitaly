@@ -22,6 +22,9 @@ const (
 	// statePrefix is the directory where all state data is stored on a
 	// storage location.
 	statePrefix = GitalyDataPrefix + "/state"
+
+	// partitionsPrefix is the directory where all partitions data live
+	partitionsPrefix = GitalyDataPrefix + "/partitions"
 )
 
 // NewLocator returns locator based on the provided configuration struct.
@@ -173,6 +176,11 @@ func (l *configLocator) StateDir(storageName string) (string, error) {
 // TempDir returns the path to the temp dir for a storage.
 func (l *configLocator) TempDir(storageName string) (string, error) {
 	return l.getPath(storageName, tmpRootPrefix)
+}
+
+// PartitionsDir returns the path to the partitions dir for a storage.
+func (l *configLocator) PartitionsDir(storageName string) (string, error) {
+	return l.getPath(storageName, partitionsPrefix)
 }
 
 func (l *configLocator) getPath(storageName, prefix string) (string, error) {

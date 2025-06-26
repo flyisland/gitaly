@@ -64,14 +64,6 @@ func (f Factory) New(
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
 
-		migrator, err := NewReplicaPartitionMigrator(absoluteStateDir, storageName)
-		if err != nil {
-			panic(fmt.Errorf("creating replica partition migrator: %w", err))
-		}
-		if err = migrator.Forward(); err != nil {
-			panic(fmt.Errorf("migrating replica partitions: %w", err))
-		}
-
 		absoluteStateDir = getRaftPartitionPath(storageName, partitionID, absoluteStateDir)
 
 		replicaLogStore, err := raftmgr.NewReplicaLogStore(
@@ -126,7 +118,7 @@ func (f Factory) New(
 // getRaftPartitionPath returns the path where a Raft replica should be stored for a partition.
 func getRaftPartitionPath(storageName string, partitionID storage.PartitionID, absoluteStateDir string) string {
 	hasher := sha256.New()
-	raftPartitionPath := storage.CreateRaftPartitionPath(storageName, partitionID.String())
+	raftPartitionPath := storage.GetRaftPartitionName(storageName, partitionID.String())
 	hasher.Write([]byte(raftPartitionPath))
 
 	partitionsDir, err := getPartitionsDir(absoluteStateDir)

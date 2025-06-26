@@ -3,6 +3,7 @@ package partition
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,7 +11,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/dgraph-io/badger/v4"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
 )
 
@@ -21,32 +24,34 @@ var (
 	partitionIDPattern = regexp.MustCompile(`^([a-z0-9]{2})/([a-z0-9]{2})/(\d+)`)
 	// matches xx/yy/storageName_partitionID (new path)
 	replicaPartitionPattern = regexp.MustCompile(`^([a-z0-9]{2})/([a-z0-9]{2})/(\w+)_(\d+)$`)
+	// db key to track list of migrated replica partitions
+	migratedReplicaPartitionsKey = []byte("replica_partitions_migration_status")
 )
 
 // RaftPartitionMigrator handles migrations between partition structures
 type RaftPartitionMigrator struct {
-	stateDir      string
 	storageName   string
 	partitionsDir string
+	db            keyvalue.Store
 }
 
 // NewReplicaPartitionMigrator creates a new raft replica migrator instance
-func NewReplicaPartitionMigrator(absoluteStateDir, storageName string) (*RaftPartitionMigrator, error) {
+func NewReplicaPartitionMigrator(absoluteStateDir, storageName string, db keyvalue.Store) (*RaftPartitionMigrator, error) {
 	partitionsDir, err := getPartitionsDir(absoluteStateDir)
 	if err != nil {
 		return nil, fmt.Errorf("determining partitions directory: %w", err)
 	}
 
 	return &RaftPartitionMigrator{
-		stateDir:      absoluteStateDir,
 		storageName:   storageName,
 		partitionsDir: partitionsDir,
+		db:            db,
 	}, nil
 }
 
 // Forward migrates from the old to new partition structure for Raft replica model
 func (m *RaftPartitionMigrator) Forward() error {
-	if err := partitionRestructureMigration(m.partitionsDir, m.storageName); err != nil {
+	if err := m.partitionRestructureMigration(); err != nil {
 		if backwardErr := m.Backward(); backwardErr != nil {
 			return fmt.Errorf("partition restructure migration failed: %w, and reversion also failed: %w", err, backwardErr)
 		}
@@ -57,6 +62,10 @@ func (m *RaftPartitionMigrator) Forward() error {
 		return fmt.Errorf("cleanup old partition structure: %w", err)
 	}
 
+	if err := m.updateMigrationInDB(); err != nil {
+		return fmt.Errorf("update migration status: %w", err)
+	}
+
 	return nil
 }
 
@@ -64,15 +73,16 @@ func (m *RaftPartitionMigrator) Forward() error {
 // from the new one.
 // Note: This assumes that the new structure is correctly set up and working.
 func (m *RaftPartitionMigrator) Backward() error {
-	if err := undoPartitionRestructureMigration(m.partitionsDir); err != nil {
-		if forwardErr := m.Forward(); forwardErr != nil {
-			return fmt.Errorf("undoing partition restructure migration failed: %w, and reversion also failed: %w", err, forwardErr)
-		}
+	if err := m.undoPartitionRestructureMigration(); err != nil {
 		return fmt.Errorf("undoing partition restructure: %w", err)
 	}
 
 	if err := cleanupNewPartitionStructure(m.partitionsDir); err != nil {
 		return fmt.Errorf("cleanup new partition structure: %w", err)
+	}
+
+	if err := m.deleteMigrationInDB(); err != nil {
+		return fmt.Errorf("delete migration status: %w", err)
 	}
 
 	return nil
@@ -118,11 +128,11 @@ func (m *RaftPartitionMigrator) Backward() error {
 //
 // partitionRestructureMigration restructures partitions from the old directory structure
 // to a new structure that will support raft's replica model.
-func partitionRestructureMigration(partitionsDir, storageName string) error {
+func (m *RaftPartitionMigrator) partitionRestructureMigration() error {
 	// Track all directories that need to be synced
 	dirsToSync := make(map[string]struct{})
 
-	err := filepath.Walk(partitionsDir, func(path string, info fs.FileInfo, err error) error {
+	err := filepath.Walk(m.partitionsDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -131,12 +141,12 @@ func partitionRestructureMigration(partitionsDir, storageName string) error {
 		}
 
 		// Skip the base path itself
-		if path == partitionsDir {
+		if path == m.partitionsDir {
 			return nil
 		}
 
 		// Get relative path from state directory
-		relPath, err := filepath.Rel(partitionsDir, path)
+		relPath, err := filepath.Rel(m.partitionsDir, path)
 		if err != nil {
 			return err
 		}
@@ -148,8 +158,7 @@ func partitionRestructureMigration(partitionsDir, storageName string) error {
 		}
 		// It matched, third capture group will be partitionID
 		partitionID := matches[3]
-		raftPartitionPath := storage.CreateRaftPartitionPath(storageName, partitionID)
-		newWalDir := pathForMigratedDir(partitionsDir, raftPartitionPath)
+		_, newWalDir := pathForMigratedDir(m.storageName, m.partitionsDir, partitionID)
 
 		// Add dir to be synced
 		dirsToSync[newWalDir] = struct{}{}
@@ -273,7 +282,7 @@ func cleanupOldPartitionStructure(partitionsDir string) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("walking partition directory: %w", err)
 	}
 
 	// Now remove all identified directories
@@ -321,11 +330,11 @@ func cleanupOldPartitionStructure(partitionsDir string) error {
 //
 // undoPartitionRestructureMigration reverses the partition migration by creating hardlinks
 // from the new structure back to the old structure. This is the opposite of PartitionRestructureMigration.
-func undoPartitionRestructureMigration(partitionsDir string) error {
+func (m *RaftPartitionMigrator) undoPartitionRestructureMigration() error {
 	// Track directories that need to be synced
 	dirsToSync := make(map[string]struct{})
 
-	err := filepath.Walk(partitionsDir, func(path string, info fs.FileInfo, err error) error {
+	err := filepath.Walk(m.partitionsDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return os.MkdirAll(path, info.Mode().Perm())
@@ -334,12 +343,12 @@ func undoPartitionRestructureMigration(partitionsDir string) error {
 		}
 
 		// Skip the base path itself
-		if path == partitionsDir {
+		if path == m.partitionsDir {
 			return nil
 		}
 
 		// Get relative path from partitionsDir
-		relPath, err := filepath.Rel(partitionsDir, path)
+		relPath, err := filepath.Rel(m.partitionsDir, path)
 		if err != nil {
 			return err
 		}
@@ -352,7 +361,8 @@ func undoPartitionRestructureMigration(partitionsDir string) error {
 
 		// Extract components from the matches
 		partitionID := matches[4]
-		oldWalPath := filepath.Join(partitionsDir, storage.ComputePartition(partitionID))
+		oldPartition := storage.ComputePartition(partitionID)
+		oldWalPath := filepath.Join(m.partitionsDir, oldPartition)
 
 		// Add the old WAL path to directories to sync
 		dirsToSync[oldWalPath] = struct{}{}
@@ -388,6 +398,7 @@ func undoPartitionRestructureMigration(partitionsDir string) error {
 					return fmt.Errorf("failed to create hardlink from %s to %s: %w", subPath, oldSubPath, err)
 				}
 			}
+
 			return nil
 		})
 	})
@@ -497,18 +508,57 @@ func cleanupNewPartitionStructure(partitionsDir string) error {
 	return nil
 }
 
-func pathForMigratedDir(partitionsBase, partitionPath string) string {
+func pathForMigratedDir(storageName, partitionsBase, partitionID string) (relativePath string, absolutePath string) {
+	targetPartitionName := storage.GetRaftPartitionName(storageName, partitionID)
 	// Generate hash for new path
-	hasher := sha256.New()
-	hasher.Write([]byte(partitionPath))
-	hash := fmt.Sprintf("%x", hasher.Sum(nil))
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(targetPartitionName)))
+	hashedPath := fmt.Sprintf("%s/%s/%s", hash[:2], hash[2:4], targetPartitionName)
 
 	// Determine the base of the new path
-	return filepath.Join(
-		partitionsBase,
-		hash[:2],
-		hash[2:4],
-		partitionPath,
-		"wal",
-	)
+	return hashedPath,
+		filepath.Join(
+			partitionsBase,
+			hashedPath,
+			"wal",
+		)
+}
+
+func (m *RaftPartitionMigrator) updateMigrationInDB() error {
+	return m.db.Update(func(txn keyvalue.ReadWriter) error {
+		// just set any value as the presence of a key is sufficient
+		if err := txn.Set(migratedReplicaPartitionsKey, []byte(nil)); err != nil {
+			return fmt.Errorf("set entry: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// CheckMigrationStatus is used to validate whether the entire migration was complete
+func (m *RaftPartitionMigrator) CheckMigrationStatus() (bool, error) {
+	var migrated bool
+	err := m.db.View(func(txn keyvalue.ReadWriter) error {
+		_, err := txn.Get(migratedReplicaPartitionsKey)
+		if err != nil {
+			if errors.Is(err, badger.ErrKeyNotFound) {
+				migrated = false
+				return nil
+			}
+			return fmt.Errorf("get: %w", err)
+		}
+		migrated = true
+		return nil
+	})
+
+	return migrated, err
+}
+
+func (m *RaftPartitionMigrator) deleteMigrationInDB() error {
+	return m.db.Update(func(txn keyvalue.ReadWriter) error {
+		if err := txn.Delete(migratedReplicaPartitionsKey); err != nil {
+			return fmt.Errorf("set entry: %w", err)
+		}
+
+		return nil
+	})
 }

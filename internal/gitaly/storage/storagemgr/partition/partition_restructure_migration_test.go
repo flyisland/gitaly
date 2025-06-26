@@ -8,9 +8,11 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -19,8 +21,9 @@ import (
 var content = []byte("test content")
 
 func TestPartitionRestructureMigration(t *testing.T) {
-	storageName := "testStorage"
-
+	logger := testhelper.SharedLogger(t)
+	cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
+	ctx := testhelper.Context(t)
 	// Setup test cases
 	testCases := []struct {
 		name          string
@@ -61,10 +64,14 @@ func TestPartitionRestructureMigration(t *testing.T) {
 					"/59/94/12345/wal/0000000000000002/MANIFEST": false,
 				})
 			}
-			// Run the migration
-			require.NoError(t, partitionRestructureMigration(partitionsDir, storageName))
 
-			expectedNewWalPath := pathForMigratedDir(partitionsDir, storage.CreateRaftPartitionPath(storageName, tc.partitionID))
+			_, db := getTestDBManager(t, ctx, cfg, logger)
+			migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+			require.NoError(t, err)
+			// Run the migration
+			require.NoError(t, migrator.partitionRestructureMigration())
+
+			_, expectedNewWalPath := pathForMigratedDir("testStorage", partitionsDir, tc.partitionID)
 			// Verify the directory structure exists if it should
 			if tc.numberOfFiles > 0 {
 				// Loop through each sequence directory based on numberOfFiles
@@ -125,7 +132,9 @@ func TestPartitionRestructureMigration(t *testing.T) {
 }
 
 func TestPartitionRestructureMigration_Errors(t *testing.T) {
-	storageName := "testStorage"
+	logger := testhelper.SharedLogger(t)
+	cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
+	ctx := testhelper.Context(t)
 
 	t.Run("invalid partition ID", func(t *testing.T) {
 		// Create a temporary directory for testing
@@ -135,8 +144,11 @@ func TestPartitionRestructureMigration_Errors(t *testing.T) {
 		setupDirectory(t, partitionsDir, map[string]bool{
 			"/xx/yy/invalidPartition/wal/0000000000000001/MANIFEST": false,
 		})
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+		require.NoError(t, err)
 		// Run the migration, should skip the directory and not cause an error
-		assert.NoError(t, partitionRestructureMigration(partitionsDir, storageName))
+		require.NoError(t, migrator.partitionRestructureMigration())
 
 		// Verify invalid structure remains unchanged
 		testhelper.RequireDirectoryState(t, baseDir, "", testhelper.DirectoryState{
@@ -170,7 +182,7 @@ func TestDirectoryStructureMatches(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.partitionID, func(t *testing.T) {
 			storageName := "storage"
-			raftPartitionPath := storage.CreateRaftPartitionPath(storageName, tc.partitionID)
+			raftPartitionPath := storage.GetRaftPartitionName(storageName, tc.partitionID)
 
 			// Calculate hash
 			hasher := sha256.New()
@@ -195,14 +207,21 @@ func TestCleanupOldPartitionStructure(t *testing.T) {
 	// Create a temporary directory for testing
 	baseDir := testhelper.TempDir(t)
 	partitionsDir := filepath.Join(baseDir, "partitions")
-	storageName := "testStorage"
+
+	logger := testhelper.SharedLogger(t)
+	cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
+	ctx := testhelper.Context(t)
 
 	setupDirectory(t, partitionsDir, map[string]bool{
 		"/59/94/12345/wal/0000000000000001/RAFT": false,
 	})
 
+	_, db := getTestDBManager(t, ctx, cfg, logger)
+	migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+	require.NoError(t, err)
 	// Run the migration
-	require.NoError(t, partitionRestructureMigration(partitionsDir, storageName))
+	require.NoError(t, migrator.partitionRestructureMigration())
+
 	// Verify both old and new structures exist
 	testhelper.RequireDirectoryState(t, partitionsDir, "", testhelper.DirectoryState{
 		"/":                                      {Mode: mode.Directory},
@@ -240,17 +259,21 @@ func TestCleanupOldPartitionStructure(t *testing.T) {
 func TestUndoPartitionRestructureMigration(t *testing.T) {
 	// Create a temporary directory for testing
 	baseDir := testhelper.TempDir(t)
-	storageName := "testStorage"
-	testcfg.Build(t, testcfg.WithStorages(storageName))
-
+	cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
+	logger := testhelper.SharedLogger(t)
+	ctx := testhelper.Context(t)
 	partitionsDir := filepath.Join(baseDir, "partitions")
 	partitionID := storage.PartitionID(12345)
 
 	// Create the new structure
-	newBasePath := getRaftPartitionPath(storageName, partitionID, partitionsDir)
+	newBasePath := getRaftPartitionPath(cfg.Storages[0].Name, partitionID, partitionsDir)
 	newWalPath := filepath.Join(newBasePath, "wal")
 	seqDir := fmt.Sprintf("%016d", 1)
 	newSeqPath := filepath.Join(newWalPath, seqDir)
+
+	_, db := getTestDBManager(t, ctx, cfg, logger)
+	migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+	require.NoError(t, err)
 
 	setupDirectory(t, partitionsDir, map[string]bool{
 		"/a8/42/testStorage_12345/wal/0000000000000001/RAFT":     false,
@@ -258,7 +281,7 @@ func TestUndoPartitionRestructureMigration(t *testing.T) {
 	})
 
 	// Run the undo migration
-	require.NoError(t, undoPartitionRestructureMigration(partitionsDir))
+	require.NoError(t, migrator.undoPartitionRestructureMigration())
 
 	oldWalPath := filepath.Join(partitionsDir, storage.ComputePartition(partitionID.String()), "wal")
 	oldSeqPath := filepath.Join(oldWalPath, seqDir)
@@ -313,8 +336,9 @@ func TestUndoPartitionRestructureMigration(t *testing.T) {
 
 func TestUndoPartitionRestructureMigration_Errors(t *testing.T) {
 	storageName := "testStorage"
-	testcfg.Build(t, testcfg.WithStorages(storageName))
-
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageName))
+	logger := testhelper.SharedLogger(t)
+	ctx := testhelper.Context(t)
 	t.Run("no matching directories", func(t *testing.T) {
 		// Create a temporary directory for testing
 		baseDir := testhelper.TempDir(t)
@@ -323,8 +347,12 @@ func TestUndoPartitionRestructureMigration_Errors(t *testing.T) {
 		// Create an empty state directory with no matching structure
 		require.NoError(t, os.MkdirAll(partitionsDir, mode.Directory))
 
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+		require.NoError(t, err)
+
 		// Run the undo migration - should complete without error but do nothing
-		assert.NoError(t, undoPartitionRestructureMigration(partitionsDir), "Should not error when no matching directories are found")
+		assert.NoError(t, migrator.undoPartitionRestructureMigration(), "Should not error when no matching directories are found")
 
 		// Verify the directory is still empty
 		entries, err := os.ReadDir(partitionsDir)
@@ -342,8 +370,12 @@ func TestUndoPartitionRestructureMigration_Errors(t *testing.T) {
 			"/ab/cd/invalid_format/wal": true,
 		})
 
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+		require.NoError(t, err)
+
 		// Run the undo migration - should skip the invalid directory and complete
-		err := undoPartitionRestructureMigration(partitionsDir)
+		err = migrator.undoPartitionRestructureMigration()
 		assert.NoError(t, err, "Should skip invalid directories and complete")
 
 		// Verify no old structure was created
@@ -390,18 +422,22 @@ func TestNewReplicaPartitionMigrator(t *testing.T) {
 	// Create test directory and configuration
 	tempDir := testhelper.TempDir(t)
 	cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
+	logger := testhelper.SharedLogger(t)
+	ctx := testhelper.Context(t)
 
 	// Create partitions directory
 	err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
 	require.NoError(t, err, "Failed to create partitions directory")
 
-	// Create and validate migrator
-	migrator, err := NewReplicaPartitionMigrator(tempDir, cfg.Storages[0].Name)
+	_, db := getTestDBManager(t, ctx, cfg, logger)
+	migrator, err := NewReplicaPartitionMigrator(tempDir, cfg.Storages[0].Name, db)
+	// Run the migration
+	require.NoError(t, migrator.partitionRestructureMigration())
+
 	require.NoError(t, err, "Failed to create migrator")
 	require.NotNil(t, migrator, "Migrator should not be nil")
 
 	// Validate migrator properties
-	assert.Equal(t, tempDir, migrator.stateDir, "Incorrect state directory")
 	assert.Equal(t, cfg.Storages[0].Name, migrator.storageName, "Incorrect storage name")
 	assert.Equal(t, filepath.Join(tempDir, "partitions"), migrator.partitionsDir, "Incorrect partitions directory")
 }
@@ -409,21 +445,24 @@ func TestNewReplicaPartitionMigrator(t *testing.T) {
 func TestPartitionMigrator_Forward(t *testing.T) {
 	t.Parallel()
 
-	storageName := "testStorage"
-
 	t.Run("successful migration", func(t *testing.T) {
 		t.Parallel()
 		// Create a new temp directory for this test
 		tempDir := testhelper.TempDir(t)
 		partitionsDir := filepath.Join(tempDir, "partitions")
-		testcfg.Build(t, testcfg.WithStorages(storageName))
+		cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
 
-		// Create a migrator for this test
-		migrator := &RaftPartitionMigrator{
-			stateDir:      tempDir,
-			partitionsDir: partitionsDir,
-			storageName:   storageName,
-		}
+		logger := testhelper.SharedLogger(t)
+		ctx := testhelper.Context(t)
+
+		// Create partitions directory
+		err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
+		require.NoError(t, err, "Failed to create partitions directory")
+
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+		require.NoError(t, err)
+		require.NoError(t, migrator.partitionRestructureMigration())
 		// Setup old partition structure using the helper
 		setupDirectory(t, partitionsDir, map[string]bool{
 			"xx/yy/123/wal/0000000000000001/RAFT": false,
@@ -453,6 +492,11 @@ func TestPartitionMigrator_Forward(t *testing.T) {
 			"/7e/8d/testStorage_123/wal/0000000000000001":      {Mode: mode.Directory},
 			"/7e/8d/testStorage_123/wal/0000000000000001/RAFT": {Mode: mode.File, Content: content},
 		})
+
+		assertKeyExists(t, migrator.db)
+		migrated, err := migrator.CheckMigrationStatus()
+		require.NoError(t, err)
+		require.True(t, migrated)
 	})
 
 	t.Run("can be run multiple times", func(t *testing.T) {
@@ -462,12 +506,20 @@ func TestPartitionMigrator_Forward(t *testing.T) {
 		tempDir := testhelper.TempDir(t)
 		partitionsDir := filepath.Join(tempDir, "partitions")
 
-		// Create a migrator for this test
-		testMigrator := &RaftPartitionMigrator{
-			stateDir:      tempDir,
-			partitionsDir: partitionsDir,
-			storageName:   storageName,
-		}
+		cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
+
+		logger := testhelper.SharedLogger(t)
+		ctx := testhelper.Context(t)
+
+		// Create partitions directory
+		err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
+		require.NoError(t, err, "Failed to create partitions directory")
+
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+		require.NoError(t, err)
+		// Run the migration
+		require.NoError(t, migrator.partitionRestructureMigration())
 
 		// Setup structure with read-only directory to cause cleanup error
 		setupDirectory(t, partitionsDir, map[string]bool{
@@ -476,11 +528,11 @@ func TestPartitionMigrator_Forward(t *testing.T) {
 
 		// Make the directory read-only on the parent to cause error during cleanup
 		oldPartitionPath := filepath.Join(partitionsDir, "xx/yy")
-		err := os.Chmod(oldPartitionPath, 0o500) // read-only
+		err = os.Chmod(oldPartitionPath, 0o500) // read-only
 		require.NoError(t, err)
 
 		// Run the migration - should complete the migration but fail during cleanup
-		require.Error(t, testMigrator.Forward())
+		require.Error(t, migrator.Forward())
 
 		// Restore permissions for cleanup
 		assert.NoError(t, os.Chmod(oldPartitionPath, mode.Directory))
@@ -497,8 +549,11 @@ func TestPartitionMigrator_Forward(t *testing.T) {
 			"/7e/8d/testStorage_123/wal": {Mode: mode.Directory},
 			"/7e/8d/testStorage_123/wal/0000000000000001": {Mode: mode.Directory},
 		})
-
-		require.NoError(t, testMigrator.Forward())
+		assertKeyAbsent(t, migrator.db)
+		migrated, err := migrator.CheckMigrationStatus()
+		require.NoError(t, err)
+		require.False(t, migrated)
+		require.NoError(t, migrator.Forward())
 
 		// /xx/yy/123 got cleaned up
 		testhelper.RequireDirectoryState(t, partitionsDir, "", testhelper.DirectoryState{
@@ -511,27 +566,32 @@ func TestPartitionMigrator_Forward(t *testing.T) {
 			"/7e/8d/testStorage_123/wal": {Mode: mode.Directory},
 			"/7e/8d/testStorage_123/wal/0000000000000001": {Mode: mode.Directory},
 		})
+		assertKeyExists(t, migrator.db)
+		migrated, err = migrator.CheckMigrationStatus()
+		require.NoError(t, err)
+		require.True(t, migrated)
 	})
 }
 
 func TestPartitionMigrator_Backward(t *testing.T) {
 	t.Parallel()
 
-	storageName := "testStorage"
-
 	t.Run("successful migration", func(t *testing.T) {
 		t.Parallel()
 		// Create a new temp directory for this test
 		tempDir := testhelper.TempDir(t)
 		partitionsDir := filepath.Join(tempDir, "partitions")
-		testcfg.Build(t, testcfg.WithStorages(storageName))
+		cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
+		logger := testhelper.SharedLogger(t)
+		ctx := testhelper.Context(t)
 
-		// Create a migrator for this test
-		migrator := &RaftPartitionMigrator{
-			stateDir:      tempDir,
-			partitionsDir: partitionsDir,
-			storageName:   storageName,
-		}
+		// Create partitions directory
+		err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
+		require.NoError(t, err, "Failed to create partitions directory")
+
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+		require.NoError(t, err)
 		// Setup new partition structure using the helper
 		setupDirectory(t, partitionsDir, map[string]bool{
 			"xx/yy/testStorage_123/wal/0000000000000001/RAFT": false,
@@ -539,7 +599,7 @@ func TestPartitionMigrator_Backward(t *testing.T) {
 		})
 
 		// Run the migration
-		err := migrator.Backward()
+		err = migrator.Backward()
 		require.NoError(t, err)
 
 		testhelper.RequireDirectoryState(t, partitionsDir, "", testhelper.DirectoryState{
@@ -561,6 +621,7 @@ func TestPartitionMigrator_Backward(t *testing.T) {
 			"/a6/65/123/wal/0000000000000001":      {Mode: mode.Directory},
 			"/a6/65/123/wal/0000000000000001/RAFT": {Mode: mode.File, Content: content},
 		})
+		assertKeyAbsent(t, migrator.db)
 	})
 
 	t.Run("can be run multiple times", func(t *testing.T) {
@@ -569,15 +630,17 @@ func TestPartitionMigrator_Backward(t *testing.T) {
 		// Create a new temp directory for this test
 		tempDir := testhelper.TempDir(t)
 		partitionsDir := filepath.Join(tempDir, "partitions")
-		testcfg.Build(t, testcfg.WithStorages(storageName))
+		cfg := testcfg.Build(t, testcfg.WithStorages("testStorage"))
+		logger := testhelper.SharedLogger(t)
+		ctx := testhelper.Context(t)
 
-		// Create a migrator for this test
-		testMigrator := &RaftPartitionMigrator{
-			stateDir:      tempDir,
-			partitionsDir: partitionsDir,
-			storageName:   storageName,
-		}
+		// Create partitions directory
+		err := os.MkdirAll(filepath.Join(tempDir, "partitions"), mode.Directory)
+		require.NoError(t, err, "Failed to create partitions directory")
 
+		_, db := getTestDBManager(t, ctx, cfg, logger)
+		migrator, err := NewReplicaPartitionMigrator(partitionsDir, cfg.Storages[0].Name, db)
+		require.NoError(t, err)
 		// Setup structure with read-only directory to cause cleanup error
 		structure := map[string]bool{
 			"qq/yy/testStorage_123/wal/0000000000000001/RAFT": false, // partition directory
@@ -591,14 +654,14 @@ func TestPartitionMigrator_Backward(t *testing.T) {
 		require.NoError(t, os.Chmod(newPartitionPath, 0o500)) // read-only
 
 		// Run the migration - should complete the migration but fail during cleanup
-		require.Error(t, testMigrator.Backward())
+		require.Error(t, migrator.Backward())
 
-		_, err := os.Stat(filepath.Join(partitionsDir, "qq/yy/testStorage_123"))
+		_, err = os.Stat(filepath.Join(partitionsDir, "qq/yy/testStorage_123"))
 		assert.NoError(t, err, "Dir should exist as it didn't get cleaned up")
 
 		// Restore permissions for cleanup
 		assert.NoError(t, os.Chmod(newPartitionPath, mode.Directory))
-		require.NoError(t, testMigrator.Backward())
+		require.NoError(t, migrator.Backward())
 
 		testhelper.RequireDirectoryState(t, partitionsDir, "", testhelper.DirectoryState{
 			"/":                                    {Mode: mode.Directory},
@@ -611,6 +674,7 @@ func TestPartitionMigrator_Backward(t *testing.T) {
 			"/a6/65/123/wal/0000000000000001":      {Mode: mode.Directory},
 			"/a6/65/123/wal/0000000000000001/RAFT": {Mode: mode.File, Content: content},
 		})
+		assertKeyAbsent(t, migrator.db)
 	})
 }
 
@@ -667,4 +731,21 @@ func verifyHardlinks(t *testing.T, files []struct {
 			assert.Equal(t, oldInfo.Size(), newInfo.Size(), "Files should have identical sizes")
 		})
 	}
+}
+
+func assertKeyExists(t *testing.T, db keyvalue.Store) {
+	require.NoError(t, db.View(func(txn keyvalue.ReadWriter) error {
+		item, err := txn.Get(migratedReplicaPartitionsKey)
+		require.NoError(t, err)
+		require.NotNil(t, item) // Ensure we got a valid item
+		return nil
+	}))
+}
+
+func assertKeyAbsent(t *testing.T, db keyvalue.Store) {
+	require.NoError(t, db.View(func(txn keyvalue.ReadWriter) error {
+		_, getErr := txn.Get(migratedReplicaPartitionsKey)
+		require.ErrorIs(t, getErr, badger.ErrKeyNotFound)
+		return nil
+	}))
 }

@@ -480,7 +480,14 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			if err := storagemgr.AssignmentWorker(ctx, cfg, node, dbMgr, locator); err != nil {
 				return fmt.Errorf("partition assignment worker: %w", err)
 			}
+
+			if err := replicaPartitionMigration(cfg.Storages, locator, dbMgr, logger, true); err != nil {
+				return err
+			}
 		} else {
+			if err := replicaPartitionMigration(cfg.Storages, locator, dbMgr, logger, false); err != nil {
+				return err
+			}
 			node = nodeMgr
 		}
 
@@ -768,4 +775,62 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	defer gracefulStopTicker.Stop()
 
 	return b.Wait(gracefulStopTicker, gitalyServerFactory.GracefulStop)
+}
+
+// replicaPartitionMigration performs replica partition migrations for all storages.
+func replicaPartitionMigration(storages []config.Storage, locator storage.Locator, dbMgr *databasemgr.DBManager, logger log.Logger, raftEnabled bool) error {
+	for _, storageCfg := range storages {
+		partitionsDir, err := locator.PartitionsDir(storageCfg.Name)
+		if err != nil {
+			return fmt.Errorf("retrieving partitions dir for storage %s: %w", storageCfg.Name, err)
+		}
+
+		db, err := dbMgr.GetDB(storageCfg.Name)
+		if err != nil {
+			return fmt.Errorf("getting db: %w", err)
+		}
+
+		migrator, err := partition.NewReplicaPartitionMigrator(partitionsDir, storageCfg.Name, db)
+		if err != nil {
+			return fmt.Errorf("creating replica partition migrator: %w", err)
+		}
+
+		migrated, err := migrator.CheckMigrationStatus()
+		if err != nil {
+			return fmt.Errorf("replica partition migrator status check: %w", err)
+		}
+
+		var shouldMigrate bool
+		var migrate func() error
+		var actionDesc, completionDesc string
+
+		if raftEnabled {
+			// migrate partitions to be raft replica compatible
+			shouldMigrate = !migrated
+			migrate = migrator.Forward
+			actionDesc = "starting partition migration"
+			completionDesc = "completed partition migration"
+		} else {
+			// rollback if already migrated
+			shouldMigrate = migrated
+			migrate = migrator.Backward
+			actionDesc = "starting partition migration rollback"
+			completionDesc = "completed rollback partition migration"
+		}
+
+		if shouldMigrate {
+			logger.Info(fmt.Sprintf("%s for storage: %s", actionDesc, storageCfg.Name))
+			startTime := time.Now()
+
+			if err := migrate(); err != nil {
+				if raftEnabled {
+					return fmt.Errorf("migrating replica partitions: %w", err)
+				}
+				return fmt.Errorf("undoing replica partitions migration: %w", err)
+			}
+
+			logger.Info(fmt.Sprintf("%s for storage %s in %v", completionDesc, storageCfg.Name, time.Since(startTime)))
+		}
+	}
+	return nil
 }

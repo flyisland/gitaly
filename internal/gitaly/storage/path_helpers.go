@@ -33,7 +33,7 @@ func HashRaftPartitionPath(hasher hash.Hash, basePath, raftPartitionPath string)
 	)
 }
 
-// CreateRaftPartitionPath constructs the path to a raft managed partition and returns it as string.
-func CreateRaftPartitionPath(storageName, partitionID string) string {
+// GetRaftPartitionName formats the storage name and partition ID into a raft partition name
+func GetRaftPartitionName(storageName, partitionID string) string {
 	return storageName + "_" + partitionID
 }
