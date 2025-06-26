@@ -325,7 +325,7 @@ func (rr *remoteRepository) Remove(ctx context.Context) error {
 
 // ResetRefs attempts to reset the list of refs in the repository to match the
 // specified refs slice. Do not include the symbolic HEAD reference in the list.
-func (rr *remoteRepository) ResetRefs(ctx context.Context, refs []git.Reference) error {
+func (rr *remoteRepository) ResetRefs(ctx context.Context, refs []git.Reference, optimistic bool) error {
 	if len(refs) == 0 {
 		return errors.New("empty refs list")
 	}
@@ -373,6 +373,30 @@ func (rr *remoteRepository) ResetRefs(ctx context.Context, refs []git.Reference)
 				NewObjectId: []byte(newRef.Target),
 			})
 		}
+	}
+
+	if optimistic {
+		// Separate delete and update operations to handle edge cases in incremental backups:
+		// 1. Lightweight tags may exist in .refs but not in bundles (they reference existing objects)
+		// 2. .refs and .bundle creation is not atomic - refs file is created first, so an object
+		//    might be deleted between .refs creation and bundle generation
+		// 3. By deleting refs first, we ensure repository state matches the backup even if some
+		//    refs can't be updated due to missing objects in the bundle
+		//
+		// This approach replaces recreateRepo() while avoiding reftable transaction conflicts.
+		// Regular update operations are allowed to fail to maintain backward compatibility -
+		// previously we only fetched bundles without updating refs afterward, so failed updates
+		// don't create a regression. Delete operations must succeed to ensure refs not in the
+		// backup are removed (matching recreateRepo's behavior).
+		//
+		// TODO: Once our minimum Git version supports the --batch-update flag for git-update-ref,
+		// we can combine these operations and let Git handle partial failures appropriately.
+		if err := rr.sendRefUpdates(ctx, refClient, removeUpdates); err != nil {
+			return fmt.Errorf("remove refs: %w", err)
+		}
+		_ = rr.sendRefUpdates(ctx, refClient, updates)
+
+		return nil
 	}
 
 	allUpdates := make([]*gitalypb.UpdateReferencesRequest_Update, 0, len(removeUpdates)+len(updates))
@@ -802,7 +826,7 @@ func (r *localRepository) HeadReference(ctx context.Context) (git.ReferenceName,
 
 // ResetRefs attempts to reset the list of refs in the repository to match the
 // specified refs slice. Do not include the symbolic HEAD reference in the list.
-func (r *localRepository) ResetRefs(ctx context.Context, refs []git.Reference) (returnedErr error) {
+func (r *localRepository) ResetRefs(ctx context.Context, refs []git.Reference, optimistic bool) (returnedErr error) {
 	existingRefs, err := r.repo.GetReferences(ctx)
 	if err != nil {
 		return fmt.Errorf("get existing refs: %w", err)
@@ -830,6 +854,30 @@ func (r *localRepository) ResetRefs(ctx context.Context, refs []git.Reference) (
 		if shouldUpdateRef(existingRefs, newRef) {
 			updates = append(updates, newRef)
 		}
+	}
+
+	if optimistic {
+		// Separate delete and update operations to handle edge cases in incremental backups:
+		// 1. Lightweight tags may exist in .refs but not in bundles (they reference existing objects)
+		// 2. .refs and .bundle creation is not atomic - refs file is created first, so an object
+		//    might be deleted between .refs creation and bundle generation
+		// 3. By deleting refs first, we ensure repository state matches the backup even if some
+		//    refs can't be updated due to missing objects in the bundle
+		//
+		// This approach replaces recreateRepo() while avoiding reftable transaction conflicts.
+		// Regular update operations are allowed to fail to maintain backward compatibility -
+		// previously we only fetched bundles without updating refs afterward, so failed updates
+		// don't create a regression. Delete operations must succeed to ensure refs not in the
+		// backup are removed (matching recreateRepo's behavior).
+		//
+		// TODO: Once our minimum Git version supports the --batch-update flag for git-update-ref,
+		// we can combine these operations and let Git handle partial failures appropriately.
+		if err := r.updateRefs(ctx, removeUpdates); err != nil {
+			return fmt.Errorf("remove refs: %w", err)
+		}
+		_ = r.updateRefs(ctx, updates)
+
+		return nil
 	}
 
 	allUpdates := make([]git.Reference, 0, len(removeUpdates)+len(updates))

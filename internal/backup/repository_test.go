@@ -64,68 +64,160 @@ func TestRemoteRepository_ResetRefs(t *testing.T) {
 	cfg.SocketPath = testserver.RunGitalyServer(t, cfg, setup.RegisterAll)
 	ctx := testhelper.Context(t)
 
-	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+	t.Parallel()
 
-	// Create some commits
-	c0 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
-	c1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c0), gittest.WithBranch("main"))
-	c2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c1), gittest.WithBranch("branch-1"))
+	for _, tc := range []struct {
+		desc       string
+		optimistic bool
+		setup      func(tb testing.TB, repo backup.Repository, updates map[string]string) (backupRefState []git.Reference, expectedRefState []git.Reference)
 
-	// Create some more commits
-	updatedCommit1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c1))
-	updatedCommit2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c2))
-	updatedCommit3 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c2))
+		expectedErr string
+	}{
+		{
+			desc: "success",
+			setup: func(tb testing.TB, repo backup.Repository, _ map[string]string) ([]git.Reference, []git.Reference) {
+				// "Snapshot" the refs to pretend this is our backup.
+				backupRefState, err := getRefs(ctx, repo)
+				require.NoError(t, err)
+				backupRefState = removeHeadReference(backupRefState)
+				expectedRefState := backupRefState
 
-	pool := client.NewPool()
-	defer testhelper.MustClose(t, pool)
-
-	conn, err := pool.Dial(ctx, cfg.SocketPath, "")
-	require.NoError(t, err)
-
-	rr := backup.NewRemoteRepository(repo, conn)
-
-	// "Snapshot" the refs to pretend this is our backup.
-	backupRefState, err := getRefs(ctx, rr)
-	require.NoError(t, err)
-	backupRefState = removeHeadReference(backupRefState)
-
-	stream, err := gitalypb.NewRefServiceClient(conn).UpdateReferences(ctx)
-	require.NoError(t, err)
-
-	require.NoError(t, stream.Send(&gitalypb.UpdateReferencesRequest{
-		Repository: repo,
-		Updates: []*gitalypb.UpdateReferencesRequest_Update{
-			{
-				Reference:   []byte("refs/heads/main"),
-				NewObjectId: []byte(updatedCommit1),
-			},
-			{
-				Reference:   []byte("refs/heads/branch-1"),
-				NewObjectId: []byte(updatedCommit2),
-			},
-			{
-				Reference:   []byte("refs/heads/branch-2"),
-				NewObjectId: []byte(updatedCommit3),
+				return backupRefState, expectedRefState
 			},
 		},
-	}))
+		{
+			desc: "success with optimistic",
+			setup: func(tb testing.TB, repo backup.Repository, _ map[string]string) ([]git.Reference, []git.Reference) {
+				// "Snapshot" the refs to pretend this is our backup.
+				backupRefState, err := getRefs(ctx, repo)
+				require.NoError(t, err)
+				backupRefState = removeHeadReference(backupRefState)
+				expectedRefState := backupRefState
 
-	resp, err := stream.CloseAndRecv()
-	require.NoError(t, err)
-	testhelper.ProtoEqual(t, &gitalypb.UpdateReferencesResponse{}, resp)
+				return backupRefState, expectedRefState
+			},
+			optimistic: true,
+		},
+		{
+			desc: "failure",
+			setup: func(tb testing.TB, repo backup.Repository, _ map[string]string) ([]git.Reference, []git.Reference) {
+				// "Snapshot" the refs to pretend this is our backup.
+				backupRefState, err := getRefs(ctx, repo)
+				require.NoError(t, err)
+				backupRefState = removeHeadReference(backupRefState)
+				expectedRefState := backupRefState
 
-	intermediateRefState, err := getRefs(ctx, rr)
-	require.NoError(t, err)
-	require.Equal(t, 4, len(intermediateRefState)) // 3 branches + HEAD
+				for i := range backupRefState {
+					// Set references to an invalid ObjectID to trigger error
+					backupRefState[i] = git.NewReference("refs/heads/main", "invalid-object-id")
+				}
+				backupRefState = removeHeadReference(backupRefState)
 
-	// Reset the state of the refs to the backup.
-	require.NoError(t, rr.ResetRefs(ctx, backupRefState))
+				return backupRefState, expectedRefState
+			},
+			expectedErr: "invalid object ID: \"invalid-object-id\"",
+		},
+		{
+			desc: "failure with optimistic doesn't return error",
+			setup: func(tb testing.TB, repo backup.Repository, updates map[string]string) ([]git.Reference, []git.Reference) {
+				// "Snapshot" the refs to pretend this is our backup.
+				backupRefState, err := getRefs(ctx, repo)
+				require.NoError(t, err)
+				backupRefState = removeHeadReference(backupRefState)
 
-	actualRefState, err := getRefs(ctx, rr)
-	require.NoError(t, err)
+				expectedRefState := make([]git.Reference, len(backupRefState))
+				for i, ref := range backupRefState {
+					expectedRefState[i] = ref
+					// Setting the target to the updated value, which means reset refs failed to update them.
+					// Therefore, they still point to the updated ones before the ResetRef was called.
+					if val, ok := updates[ref.Name.String()]; ok {
+						expectedRefState[i].Target = val
+					}
 
-	actualRefState = removeHeadReference(actualRefState)
-	require.Equal(t, backupRefState, actualRefState)
+					// Set references to an invalid ObjectID to trigger error
+					backupRefState[i].Target = "invalid-object-id"
+				}
+
+				return backupRefState, expectedRefState
+			},
+			optimistic: true,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+			// Create some commits
+			c0 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
+			c1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c0), gittest.WithBranch("main"))
+			c2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c1), gittest.WithBranch("branch-1"))
+
+			// Create some more commits
+			updatedCommit1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c1))
+			updatedCommit2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c2))
+			updatedCommit3 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c2))
+
+			expectedUpdates := map[string]string{
+				"refs/heads/main":     updatedCommit1.String(),
+				"refs/heads/branch-1": updatedCommit2.String(),
+				"refs/heads/branch-2": updatedCommit3.String(),
+			}
+
+			pool := client.NewPool()
+			defer testhelper.MustClose(t, pool)
+
+			conn, err := pool.Dial(ctx, cfg.SocketPath, "")
+			require.NoError(t, err)
+
+			rr := backup.NewRemoteRepository(repo, conn)
+
+			backupRefState, expectedRefState := tc.setup(t, rr, expectedUpdates)
+
+			stream, err := gitalypb.NewRefServiceClient(conn).UpdateReferences(ctx)
+			require.NoError(t, err)
+
+			require.NoError(t, stream.Send(&gitalypb.UpdateReferencesRequest{
+				Repository: repo,
+				Updates: []*gitalypb.UpdateReferencesRequest_Update{
+					{
+						Reference:   []byte("refs/heads/main"),
+						NewObjectId: []byte(updatedCommit1),
+					},
+					{
+						Reference:   []byte("refs/heads/branch-1"),
+						NewObjectId: []byte(updatedCommit2),
+					},
+					{
+						Reference:   []byte("refs/heads/branch-2"),
+						NewObjectId: []byte(updatedCommit3),
+					},
+				},
+			}))
+
+			resp, err := stream.CloseAndRecv()
+			require.NoError(t, err)
+			testhelper.ProtoEqual(t, &gitalypb.UpdateReferencesResponse{}, resp)
+
+			intermediateRefState, err := getRefs(ctx, rr)
+			require.NoError(t, err)
+			require.Equal(t, 4, len(intermediateRefState)) // 3 branches + HEAD
+
+			// Reset the state of the refs to the backup.
+			err = rr.ResetRefs(ctx, backupRefState, tc.optimistic)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+
+			actualRefState, err := getRefs(ctx, rr)
+			require.NoError(t, err)
+
+			actualRefState = removeHeadReference(actualRefState)
+			require.Equal(t, expectedRefState, actualRefState)
+		})
+	}
 }
 
 func TestLocalRepository_ResetRefs(t *testing.T) {
@@ -136,10 +228,6 @@ func TestLocalRepository_ResetRefs(t *testing.T) {
 	cfg := testcfg.Build(t)
 	ctx := testhelper.Context(t)
 
-	repo, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
-		SkipCreationViaService: true,
-	})
-
 	gitCmdFactory := gittest.NewCommandFactory(t, cfg)
 	txManager := transaction.NewTrackingManager()
 	repoCounter := counter.NewRepositoryCounter(cfg.Storages)
@@ -148,42 +236,120 @@ func TestLocalRepository_ResetRefs(t *testing.T) {
 	t.Cleanup(catfileCache.Stop)
 	migrationStateManager := migration.NewStateManager(&[]migration.Migration{})
 
-	lr := localrepo.New(testhelper.SharedLogger(t), locator, gitCmdFactory, catfileCache, repo)
-	localRepo := backup.NewLocalRepository(
-		testhelper.SharedLogger(t),
-		locator,
-		gitCmdFactory,
-		txManager,
-		repoCounter,
-		catfileCache,
-		lr,
-		migrationStateManager,
-	)
+	for _, tc := range []struct {
+		desc       string
+		optimistic bool
+		setup      func(tb testing.TB, backupRefState []git.Reference, updates map[string]string) ([]git.Reference, []git.Reference)
 
-	// Create some commits
-	c0 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
-	c1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c0), gittest.WithBranch("main"))
-	c2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c1), gittest.WithBranch("branch-1"))
+		expectedErr string
+	}{
+		{
+			desc: "success",
+			setup: func(tb testing.TB, backupRefState []git.Reference, _ map[string]string) ([]git.Reference, []git.Reference) {
+				return backupRefState, backupRefState
+			},
+		},
+		{
+			desc: "success with optimistic",
+			setup: func(tb testing.TB, backupRefState []git.Reference, _ map[string]string) ([]git.Reference, []git.Reference) {
+				return backupRefState, backupRefState
+			},
+			optimistic: true,
+		},
+		{
+			desc: "failure",
+			setup: func(tb testing.TB, backupRefState []git.Reference, _ map[string]string) ([]git.Reference, []git.Reference) {
+				expectedRefState := backupRefState
 
-	// "Snapshot" the refs to pretend this is our backup.
-	backupRefState, err := lr.GetReferences(ctx)
-	require.NoError(t, err)
+				for i := range backupRefState {
+					// Set references to an invalid ObjectID to trigger error
+					backupRefState[i] = git.NewReference("refs/heads/main", "invalid-object-id")
+				}
 
-	// Create some more commits
-	gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c1), gittest.WithBranch("main"))
-	gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c2), gittest.WithBranch("branch-1"))
-	gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c2), gittest.WithBranch("branch-2"))
+				return backupRefState, expectedRefState
+			},
+			expectedErr: "update refs: commit reset refs: exit status 128",
+		},
+		{
+			desc: "failure with optimistic doesn't return error",
+			setup: func(tb testing.TB, backupRefState []git.Reference, updates map[string]string) ([]git.Reference, []git.Reference) {
+				expectedRefState := make([]git.Reference, len(backupRefState))
+				for i, ref := range backupRefState {
+					expectedRefState[i] = ref
+					// Setting the target to the updated value, which means reset refs failed to update them.
+					// Therefore, they still point to the updated ones before the ResetRef was called.
+					if val, ok := updates[ref.Name.String()]; ok {
+						expectedRefState[i].Target = val
+					}
 
-	intermediateRefState, err := lr.GetReferences(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 3, len(intermediateRefState)) // 3 branches
+					// Set references to an invalid ObjectID to trigger error
+					backupRefState[i].Target = "invalid-object-id"
+				}
 
-	// Reset the state of the refs to the backup.
-	require.NoError(t, localRepo.ResetRefs(ctx, backupRefState))
-	actualRefState, err := lr.GetReferences(ctx)
-	require.NoError(t, err)
+				return backupRefState, expectedRefState
+			},
+			optimistic: true,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
 
-	require.Equal(t, backupRefState, actualRefState)
+			repo, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipCreationViaService: true,
+			})
+
+			lr := localrepo.New(testhelper.SharedLogger(t), locator, gitCmdFactory, catfileCache, repo)
+			localRepo := backup.NewLocalRepository(
+				testhelper.SharedLogger(t),
+				locator,
+				gitCmdFactory,
+				txManager,
+				repoCounter,
+				catfileCache,
+				lr,
+				migrationStateManager,
+			)
+
+			// Create some commits
+			c0 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
+			c1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c0), gittest.WithBranch("main"))
+			c2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c1), gittest.WithBranch("branch-1"))
+
+			// "Snapshot" the refs to pretend this is our backup.
+			backupRefState, err := lr.GetReferences(ctx)
+			require.NoError(t, err)
+
+			// backupRefState, expectedRefState := tc.setup(t, localRepo, nil)
+
+			// Create some more commits
+			update1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c1), gittest.WithBranch("main"))
+			update2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c2), gittest.WithBranch("branch-1"))
+			update3 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(c2), gittest.WithBranch("branch-2"))
+			expectedUpdates := map[string]string{
+				"refs/heads/main":     update1.String(),
+				"refs/heads/branch-1": update2.String(),
+				"refs/heads/branch-2": update3.String(),
+			}
+			backupRefState, expectedRefState := tc.setup(t, backupRefState, expectedUpdates)
+
+			intermediateRefState, err := lr.GetReferences(ctx)
+			require.NoError(t, err)
+			require.Equal(t, 3, len(intermediateRefState)) // 3 branches
+
+			// Reset the state of the refs to the backup.
+			err = localRepo.ResetRefs(ctx, backupRefState, tc.optimistic)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+
+			actualRefState, err := lr.GetReferences(ctx)
+			require.NoError(t, err)
+
+			require.Equal(t, expectedRefState, actualRefState)
+		})
+	}
 }
 
 func TestRemoteRepository_SetHeadReference(t *testing.T) {
@@ -325,5 +491,5 @@ func TestRemoteRepository_ResetRefs_HandleEOF(t *testing.T) {
 		refs[i] = git.NewReference("refs/heads/main", "invalid-object-id")
 	}
 
-	require.ErrorContains(t, rr.ResetRefs(ctx, refs), "invalid object ID")
+	require.ErrorContains(t, rr.ResetRefs(ctx, refs, false), "invalid object ID")
 }

@@ -127,7 +127,9 @@ type Repository interface {
 	// specified refs slice. This can fail if objects pointed to by a ref no longer
 	// exists in the repository. The list of refs should not include the symbolic
 	// HEAD reference.
-	ResetRefs(ctx context.Context, refs []git.Reference) error
+	// If optimistic, update ref failures are ignored for regular updates but not
+	// for removal updates.
+	ResetRefs(ctx context.Context, refs []git.Reference, optimistic bool) error
 	// SetHeadReference sets the symbolic HEAD reference of the repository to the
 	// given target, for example a branch name.
 	SetHeadReference(ctx context.Context, target git.ReferenceName) error
@@ -365,10 +367,9 @@ func (mgr *Manager) Restore(ctx context.Context, req *RestoreRequest) error {
 	case backup.NonExistent:
 		return nil // Nothing to restore for non-existent repositories
 	case backup.Empty:
-		if _, err := recreateRepo(ctx, repo, backup); err != nil {
+		if err := recreateRepo(ctx, repo, backup); err != nil {
 			return fmt.Errorf("manager: recreate empty repo: %w", err)
 		}
-
 	}
 
 	// Git bundles can not be created for empty repositories.
@@ -406,7 +407,7 @@ func (mgr *Manager) restoreFromRefs(ctx context.Context, repo Repository, backup
 	}
 
 	// Reset all refs except for HEAD.
-	if err := repo.ResetRefs(ctx, refs); err != nil {
+	if err := repo.ResetRefs(ctx, refs, false); err != nil {
 		return fmt.Errorf("reset refs: %w", err)
 	}
 
@@ -421,9 +422,9 @@ func (mgr *Manager) restoreFromRefs(ctx context.Context, repo Repository, backup
 }
 
 func (mgr *Manager) restoreFromBundle(ctx context.Context, repo Repository, backup *Backup) error {
-	defaultBranchKnown, err := recreateRepo(ctx, repo, backup)
+	defaultBranchKnown, err := createEmptyRepoIfNeeded(ctx, repo, backup)
 	if err != nil {
-		return fmt.Errorf("recreate repo: %w", err)
+		return fmt.Errorf("create empty repo: %w", err)
 	}
 
 	for _, step := range backup.Steps {
@@ -440,6 +441,39 @@ func (mgr *Manager) restoreFromBundle(ctx context.Context, repo Repository, back
 				return fmt.Errorf("restore bundle: %w", err)
 			}
 		}
+	}
+
+	// After all objects are fetched, update refs optimistically based on the latest refs
+	// We need this because fetch bundle would not remove refs that are not in the bundle.
+	// This ignores failures on ref updates and proceeds optimistically.
+	if err := mgr.restoreRefsOptimistically(ctx, repo, backup); err != nil {
+		return fmt.Errorf("restore refs optimistically: %w", err)
+	}
+
+	// Explicitly reset HEAD to the default branch tracked by the manifest if available.
+	if defaultBranchKnown {
+		if err := repo.SetHeadReference(ctx, git.ReferenceName(backup.HeadReference)); err != nil {
+			return fmt.Errorf("set head reference: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// restoreRefsOptimistically updates refs from the backup, ignoring failures for missing objects.
+func (mgr *Manager) restoreRefsOptimistically(ctx context.Context, repo Repository, backup *Backup) error {
+	latestStep := backup.Steps[len(backup.Steps)-1]
+	refs, err := mgr.readRefs(ctx, latestStep.RefPath)
+	if err != nil {
+		return fmt.Errorf("read refs from backup: %w", err)
+	}
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	if err := repo.ResetRefs(ctx, refs, true); err != nil {
+		return fmt.Errorf("update refs optimistically: %w", err)
 	}
 
 	return nil
@@ -579,12 +613,12 @@ func (mgr *Manager) readRefs(ctx context.Context, path string) ([]git.Reference,
 func (mgr *Manager) restoreBundle(ctx context.Context, repo Repository, path string, updateHead bool) error {
 	reader, err := mgr.sink.GetReader(ctx, path)
 	if err != nil {
-		return fmt.Errorf("restore bundle: %q: %w", path, err)
+		return fmt.Errorf("get reader: %q: %w", path, err)
 	}
 	defer reader.Close()
 
 	if err := repo.FetchBundle(ctx, reader, updateHead); err != nil {
-		return fmt.Errorf("restore bundle: %q: %w", path, err)
+		return fmt.Errorf("fetch bundle: %q: %w", path, err)
 	}
 	return nil
 }
@@ -623,20 +657,37 @@ func (mgr *Manager) restoreCustomHooks(ctx context.Context, repo Repository, pat
 	return nil
 }
 
-func recreateRepo(ctx context.Context, repo Repository, backup *Backup) (bool, error) {
-	hash, err := git.ObjectHashByFormat(backup.ObjectFormat)
-	if err != nil {
-		return false, err
-	}
-
+// createEmptyRepoIfNeeded creates empty repository if it does not exists yet
+func createEmptyRepoIfNeeded(ctx context.Context, repo Repository, backup *Backup) (bool, error) {
 	defaultBranch, defaultBranchKnown := git.ReferenceName(backup.HeadReference).Branch()
+	if _, err := repo.ObjectHash(ctx); err != nil {
+		if status.Code(err) == codes.NotFound {
+			// Repository doesn't exist, create it
+			hash, err := git.ObjectHashByFormat(backup.ObjectFormat)
+			if err != nil {
+				return defaultBranchKnown, fmt.Errorf("get object hash: %w", err)
+			}
 
-	if err := repo.Remove(ctx); err != nil {
-		return defaultBranchKnown, err
-	}
-	if err := repo.Create(ctx, hash, defaultBranch); err != nil {
-		return defaultBranchKnown, err
+			if err := repo.Create(ctx, hash, defaultBranch); err != nil {
+				return defaultBranchKnown, fmt.Errorf("create repository: %w", err)
+			}
+		} else {
+			return defaultBranchKnown, fmt.Errorf("check repository existence: %w", err)
+		}
 	}
 
 	return defaultBranchKnown, nil
+}
+
+// recreateRepo removes the existing repository and creates a new empty one.
+func recreateRepo(ctx context.Context, repo Repository, backup *Backup) error {
+	if err := repo.Remove(ctx); err != nil {
+		return err
+	}
+
+	if _, err := createEmptyRepoIfNeeded(ctx, repo, backup); err != nil {
+		return fmt.Errorf("create empty repo: %w", err)
+	}
+
+	return nil
 }
