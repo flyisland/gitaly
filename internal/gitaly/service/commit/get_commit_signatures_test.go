@@ -160,6 +160,9 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 							Author: &gitalypb.CommitAuthor{
 								Email: []byte("bugfixer@email.com"),
 							},
+							Committer: &gitalypb.CommitAuthor{
+								Email: []byte("bugfixer@email.com"),
+							},
 						},
 					},
 				}
@@ -184,6 +187,9 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 							SignedText: []byte(commitData),
 							Signer:     gitalypb.GetCommitSignaturesResponse_SIGNER_USER,
 							Author: &gitalypb.CommitAuthor{
+								Email: []byte("bugfixer@email.com"),
+							},
+							Committer: &gitalypb.CommitAuthor{
 								Email: []byte("bugfixer@email.com"),
 							},
 						},
@@ -212,6 +218,9 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 							Author: &gitalypb.CommitAuthor{
 								Email: []byte("bugfixer@email.com"),
 							},
+							Committer: &gitalypb.CommitAuthor{
+								Email: []byte("bugfixer@email.com"),
+							},
 						},
 					},
 				}
@@ -236,6 +245,9 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 							SignedText: []byte(commitData),
 							Signer:     gitalypb.GetCommitSignaturesResponse_SIGNER_USER,
 							Author: &gitalypb.CommitAuthor{
+								Email: []byte("bugfixer@email.com"),
+							},
+							Committer: &gitalypb.CommitAuthor{
 								Email: []byte("bugfixer@email.com"),
 							},
 						},
@@ -278,6 +290,76 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 							Signer:     gitalypb.GetCommitSignaturesResponse_SIGNER_USER,
 							Author: &gitalypb.CommitAuthor{
 								Email: []byte("bugfixer@email.com"),
+							},
+							Committer: &gitalypb.CommitAuthor{
+								Email: []byte("bugfixer@email.com"),
+							},
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "commit with different author and committer",
+			setup: func(t *testing.T, data TestData) setupData {
+				commitID, commitData := createCommitWithDifferentAuthorCommitter(
+					t, data.cfg, data.repoPath,
+					"gpgsig", pgpSignature,
+					"Different author/committer commit",
+				)
+
+				return setupData{
+					request: &gitalypb.GetCommitSignaturesRequest{
+						Repository: data.repoProto,
+						CommitIds:  []string{commitID.String()},
+					},
+					expectedResponses: []*gitalypb.GetCommitSignaturesResponse{
+						{
+							CommitId:   commitID.String(),
+							Signature:  []byte(pgpSignature),
+							SignedText: []byte(commitData),
+							Signer:     gitalypb.GetCommitSignaturesResponse_SIGNER_USER,
+							Author: &gitalypb.CommitAuthor{
+								Email: []byte("author@example.com"),
+							},
+							Committer: &gitalypb.CommitAuthor{
+								Email: []byte("committer@example.com"),
+							},
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "commit mailmapped committer",
+			setup: func(t *testing.T, data TestData) setupData {
+				commitID, commitData := createCommitWithDifferentAuthorCommitter(
+					t, data.cfg, data.repoPath,
+					"gpgsig", pgpSignature,
+					"Commit with original committer",
+				)
+
+				mailmapContents := "Mapped Committer <mapped-committer@example.com> Different Committer <committer@example.com>"
+				gittest.WriteCommit(t, data.cfg, data.repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: ".mailmap", Mode: "100644", Content: mailmapContents},
+				), gittest.WithBranch("main"))
+
+				return setupData{
+					request: &gitalypb.GetCommitSignaturesRequest{
+						Repository: data.repoProto,
+						CommitIds:  []string{commitID.String()},
+					},
+					expectedResponses: []*gitalypb.GetCommitSignaturesResponse{
+						{
+							CommitId:   commitID.String(),
+							Signature:  []byte(pgpSignature),
+							SignedText: []byte(commitData),
+							Signer:     gitalypb.GetCommitSignaturesResponse_SIGNER_USER,
+							Author: &gitalypb.CommitAuthor{
+								Email: []byte("author@example.com"),
+							},
+							Committer: &gitalypb.CommitAuthor{
+								Email: []byte("committer@example.com"), // Original committer (unmailmapped)
 							},
 						},
 					},
@@ -361,6 +443,9 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 								Author: &gitalypb.CommitAuthor{
 									Email: []byte("scrooge@mcduck.com"),
 								},
+								Committer: &gitalypb.CommitAuthor{
+									Email: []byte("scrooge@mcduck.com"),
+								},
 							},
 							{
 								CommitId: rotatedKeyCommitID.String(),
@@ -376,6 +461,9 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 								)),
 								Signer: gitalypb.GetCommitSignaturesResponse_SIGNER_SYSTEM,
 								Author: &gitalypb.CommitAuthor{
+									Email: []byte("scrooge@mcduck.com"),
+								},
+								Committer: &gitalypb.CommitAuthor{
 									Email: []byte("scrooge@mcduck.com"),
 								},
 							},
@@ -409,6 +497,9 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 							SignedText: []byte(commitData),
 							Signer:     gitalypb.GetCommitSignaturesResponse_SIGNER_USER,
 							Author: &gitalypb.CommitAuthor{
+								Email: []byte("bugfixer@email.com"),
+							},
+							Committer: &gitalypb.CommitAuthor{
 								Email: []byte("bugfixer@email.com"),
 							},
 						},
@@ -477,6 +568,9 @@ func testGetCommitSignatures(t *testing.T, ctx context.Context) {
 								)),
 								Signer: gitalypb.GetCommitSignaturesResponse_SIGNER_SYSTEM,
 								Author: &gitalypb.CommitAuthor{
+									Email: []byte("scrooge@mcduck.com"),
+								},
+								Committer: &gitalypb.CommitAuthor{
 									Email: []byte("scrooge@mcduck.com"),
 								},
 							},
@@ -557,6 +651,31 @@ func createCommitWithSignature(t *testing.T, cfg config.Cfg, repoPath, signature
 	commitData := fmt.Sprintf(`tree %s
 author Bug Fixer <bugfixer@email.com> 1584564725 +0100
 committer Bug Fixer <bugfixer@email.com> 1584564725 +0100
+
+%s
+`, gittest.DefaultObjectHash.EmptyTreeOID, commitMessage)
+
+	signedCommitData := strings.Replace(commitData, "\n\n", fmt.Sprintf("\n%s%s\n\n", signatureField, strings.Join(signatureLines, "\n")), 1)
+
+	stdout := gittest.ExecOpts(t, cfg, gittest.ExecConfig{
+		Stdin: strings.NewReader(signedCommitData),
+	}, "-C", repoPath, "hash-object", "-w", "-t", "commit", "--stdin", "--literally")
+
+	commitID, err := gittest.DefaultObjectHash.FromHex(text.ChompBytes(stdout))
+	require.NoError(t, err)
+
+	return commitID, commitData
+}
+
+func createCommitWithDifferentAuthorCommitter(t *testing.T, cfg config.Cfg, repoPath, signatureField, signature, commitMessage string) (git.ObjectID, string) {
+	signatureLines := strings.Split(signature, "\n")
+	for i, signatureLine := range signatureLines {
+		signatureLines[i] = " " + signatureLine
+	}
+
+	commitData := fmt.Sprintf(`tree %s
+author Original Author <author@example.com> 1584564725 +0100
+committer Different Committer <committer@example.com> 1584564725 +0100
 
 %s
 `, gittest.DefaultObjectHash.EmptyTreeOID, commitMessage)

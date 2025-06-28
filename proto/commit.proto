@@ -942,6 +942,9 @@ message GetCommitSignaturesResponse {
   Signer signer = 4;
   // author provides the original commit author information without 'mailmap'.
   CommitAuthor author = 5;
+  // committer provides the original commit committer information without 'mailmap'.
+  // Uses CommitAuthor type as committer has the same structure.
+  CommitAuthor committer = 6;
 }
 
 // GetCommitMessagesRequest is the request for the GetCommitMessages RPC.

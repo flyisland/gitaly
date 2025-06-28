@@ -98,6 +98,7 @@ func sendResponse(
 		Signature: signature,
 		Signer:    signer,
 		Author:    commit.Author,
+		Committer: commit.Committer,
 	})
 	if err != nil {
 		return err
