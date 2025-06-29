@@ -1,11 +1,11 @@
 package raftmgr
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3/raftpb"
-	"google.golang.org/protobuf/proto"
 )
 
 // ConfChangeType represents the type of configuration change.
@@ -34,6 +34,13 @@ type ReplicaConfChanges struct {
 	term     uint64
 	index    uint64
 	leaderID uint64
+	eventID  EventID
+}
+
+// ConfChangeContext wraps both event ID and metadata for config changes
+type ConfChangeContext struct {
+	EventID  EventID                      `json:"event_id,omitempty"`
+	Metadata *gitalypb.ReplicaID_Metadata `json:"metadata,omitempty"`
 }
 
 // NewReplicaConfChanges creates a new ReplicaConfChanges instance.
@@ -41,6 +48,7 @@ func NewReplicaConfChanges(
 	term uint64,
 	index uint64,
 	leaderID uint64,
+	eventID EventID,
 	metadata *gitalypb.ReplicaID_Metadata,
 ) *ReplicaConfChanges {
 	return &ReplicaConfChanges{
@@ -49,6 +57,7 @@ func NewReplicaConfChanges(
 		term:     term,
 		index:    index,
 		leaderID: leaderID,
+		eventID:  eventID,
 	}
 }
 
@@ -85,6 +94,11 @@ func (r *ReplicaConfChanges) LeaderID() uint64 {
 	return r.leaderID
 }
 
+// EventID returns the event ID associated with the configuration changes.
+func (r *ReplicaConfChanges) EventID() EventID {
+	return r.eventID
+}
+
 // ToConfChangeV2 converts ReplicaConfChanges to a raftpb.ConfChangeV2.
 func (r *ReplicaConfChanges) ToConfChangeV2() (raftpb.ConfChangeV2, error) {
 	if len(r.changes) == 0 {
@@ -115,10 +129,10 @@ func (r *ReplicaConfChanges) ToConfChangeV2() (raftpb.ConfChangeV2, error) {
 
 	var context []byte
 	var err error
-	if r.metadata != nil {
-		context, err = proto.Marshal(r.metadata)
+	if r.eventID != 0 || r.metadata != nil {
+		context, err = r.encodeContext()
 		if err != nil {
-			return raftpb.ConfChangeV2{}, fmt.Errorf("marshal metadata: %w", err)
+			return raftpb.ConfChangeV2{}, fmt.Errorf("encode context: %w", err)
 		}
 	}
 
@@ -126,6 +140,15 @@ func (r *ReplicaConfChanges) ToConfChangeV2() (raftpb.ConfChangeV2, error) {
 		Context: context,
 		Changes: changes,
 	}, nil
+}
+
+func (r *ReplicaConfChanges) encodeContext() ([]byte, error) {
+	context := &ConfChangeContext{
+		EventID:  r.eventID,
+		Metadata: r.metadata,
+	}
+
+	return json.Marshal(context)
 }
 
 // parseChangeType converts a raftpb.ConfChangeType to a ConfChangeType
@@ -144,20 +167,18 @@ func parseChangeType(ccType raftpb.ConfChangeType) (ConfChangeType, error) {
 	}
 }
 
-// parseMetadata extracts metadata from the context byte slice
-func parseMetadata(context []byte) (*gitalypb.ReplicaID_Metadata, error) {
+func parseContext(context []byte) (EventID, *gitalypb.ReplicaID_Metadata, error) {
 	if len(context) == 0 {
-		return nil, nil
+		return 0, nil, nil
 	}
 
-	metadata := &gitalypb.ReplicaID_Metadata{}
-	if err := proto.Unmarshal(context, metadata); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	var confChangeContext ConfChangeContext
+	if err := json.Unmarshal(context, &confChangeContext); err != nil {
+		return 0, nil, fmt.Errorf("unmarshal context: %w", err)
 	}
-	return metadata, nil
+
+	return confChangeContext.EventID, confChangeContext.Metadata, nil
 }
-
-// The Convert function has been merged into ParseConfChange to reduce steps
 
 // ParseConfChange parses a raftpb.Entry containing a configuration change directly into a ReplicaConfChanges.
 // This handles unmarshalling for both EntryConfChange and EntryConfChangeV2 types and converts them
@@ -169,7 +190,7 @@ func ParseConfChange(entry raftpb.Entry, leaderID uint64) (*ReplicaConfChanges, 
 			return nil, fmt.Errorf("unmarshalling EntryConfChange: %w", err)
 		}
 
-		metadata, err := parseMetadata(cc.Context)
+		eventID, metadata, err := parseContext(cc.Context)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +200,7 @@ func ParseConfChange(entry raftpb.Entry, leaderID uint64) (*ReplicaConfChanges, 
 			return nil, err
 		}
 
-		result := NewReplicaConfChanges(entry.Term, entry.Index, leaderID, metadata)
+		result := NewReplicaConfChanges(entry.Term, entry.Index, leaderID, eventID, metadata)
 		result.AddChange(cc.NodeID, nodeType)
 		return result, nil
 	} else if entry.Type == raftpb.EntryConfChangeV2 {
@@ -192,12 +213,12 @@ func ParseConfChange(entry raftpb.Entry, leaderID uint64) (*ReplicaConfChanges, 
 			return nil, fmt.Errorf("no changes in ConfChangeV2")
 		}
 
-		metadata, err := parseMetadata(cc.Context)
+		eventID, metadata, err := parseContext(cc.Context)
 		if err != nil {
 			return nil, err
 		}
 
-		result := NewReplicaConfChanges(entry.Term, entry.Index, leaderID, metadata)
+		result := NewReplicaConfChanges(entry.Term, entry.Index, leaderID, eventID, metadata)
 
 		for _, change := range cc.Changes {
 			nodeType, err := parseChangeType(change.Type)

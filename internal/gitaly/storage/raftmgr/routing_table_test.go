@@ -121,7 +121,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 			PartitionId:   1,
 		}
 
-		changes := NewReplicaConfChanges(1, 1, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
@@ -178,7 +178,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		changes := NewReplicaConfChanges(2, 2, 1, nil)
+		changes := NewReplicaConfChanges(2, 2, 1, 1, nil)
 		changes.AddChange(2, ConfChangeRemoveNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
@@ -211,7 +211,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 			PartitionId:   1,
 		}
 
-		changes := NewReplicaConfChanges(1, 1, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddLearnerNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
@@ -241,7 +241,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 			PartitionId:   1,
 		}
 
-		changes := NewReplicaConfChanges(1, 1, 0, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 0, 1, createMetadata("localhost:1234"))
 		changes.AddChange(0, ConfChangeAddNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
@@ -267,14 +267,14 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		}
 
 		// First add a node
-		changes := NewReplicaConfChanges(1, 1, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		// Try to add the same node ID again
-		changes = NewReplicaConfChanges(2, 2, 1, createMetadata("localhost:5678"))
+		changes = NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
 		changes.AddChange(1, ConfChangeAddNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
@@ -300,14 +300,14 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		}
 
 		// Add a node with ID 1
-		changes := NewReplicaConfChanges(1, 1, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		// Try to update a non-existent node with ID 2
-		changes = NewReplicaConfChanges(2, 2, 1, createMetadata("localhost:5678"))
+		changes = NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
 		changes.AddChange(2, ConfChangeUpdateNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
@@ -348,7 +348,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		err = rt.UpsertEntry(*entry)
 		require.NoError(t, err)
 
-		changes := NewReplicaConfChanges(entry.Term, entry.Index, 1, nil)
+		changes := NewReplicaConfChanges(entry.Term, entry.Index, 1, 1, nil)
 		changes.AddChange(1, ConfChangeRemoveNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
@@ -390,7 +390,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		changes := NewReplicaConfChanges(2, 2, 1, createMetadata("localhost:5678"))
+		changes := NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
 		changes.AddChange(1, ConfChangeUpdateNode)
 
 		err = rt.ApplyReplicaConfChange(partitionKey, changes)
@@ -438,7 +438,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		changes := NewReplicaConfChanges(2, 2, 1, createMetadata("localhost:8888"))
+		changes := NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:8888"))
 		changes.AddChange(1, ConfChangeRemoveNode)
 		changes.AddChange(2, ConfChangeAddNode)
 

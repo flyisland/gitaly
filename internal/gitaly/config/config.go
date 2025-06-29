@@ -1331,6 +1331,9 @@ type Raft struct {
 	ElectionTicks uint64 `json:"election_rtt" toml:"election_rtt"`
 	// HeartbeatTicks is the number of message RTT between heartbeats
 	HeartbeatTicks uint64 `json:"heartbeat_rtt" toml:"heartbeat_rtt"`
+	// ProposalConfChangeTimeout is the maximum duration in milliseconds to wait for a proposal to be committed.
+	// Default value is 5000 milliseconds.
+	ProposalConfChangeTimeout uint64 `json:"proposal_conf_change_timeout" toml:"proposal_conf_change_timeout"`
 	// SnapshotDir is the directory where raft snapshots are stored.
 	SnapshotDir string `json:"snapshot_dir" toml:"snapshot_dir"` // Default: <FIRST STORAGE PATH>/+gitaly/raft/snapshots
 }
@@ -1345,6 +1348,9 @@ const (
 	// RaftDefaultHeartbeatTicks is the default heartbeat RTT for the Raft cluster. The estimated election
 	// timeout is DefaultRTT * DefaultHeartbeatTicks.
 	RaftDefaultHeartbeatTicks = 2
+	// RaftDefaultProposalConfChangeTimeout is the default proposal conf change timeout in milliseconds.
+	// Considering the default RTT is 200 milliseconds, and election timeout is 20 ticks.
+	RaftDefaultProposalConfChangeTimeout = 5000
 )
 
 // DefaultRaftConfig returns a Raft configuration filled with default values.
@@ -1362,6 +1368,9 @@ func (r Raft) fulfillDefaults() Raft {
 	}
 	if r.HeartbeatTicks == 0 {
 		r.HeartbeatTicks = RaftDefaultHeartbeatTicks
+	}
+	if r.ProposalConfChangeTimeout == 0 {
+		r.ProposalConfChangeTimeout = RaftDefaultProposalConfChangeTimeout
 	}
 	return r
 }
