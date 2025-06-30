@@ -36,8 +36,7 @@ func (s *RaftEnabledStorage) GetReplicaRegistry() ReplicaRegistry {
 // RegisterReplica registers a replica with this RaftEnabledStorage
 // This should be called after both the replica and RaftEnabledStorage are created
 func (s *RaftEnabledStorage) RegisterReplica(partitionID storage.PartitionID, replica *Replica) error {
-	partitionKey := NewPartitionKey(replica.authorityName, partitionID)
-	s.replicaRegistry.RegisterReplica(partitionKey, replica)
+	s.replicaRegistry.RegisterReplica(replica.partitionKey, replica)
 
 	return nil
 }
@@ -45,8 +44,7 @@ func (s *RaftEnabledStorage) RegisterReplica(partitionID storage.PartitionID, re
 // DeregisterReplica removes a replica from this RaftEnabledStorage.
 // This should be called when the replica is closing.
 func (s *RaftEnabledStorage) DeregisterReplica(replica *Replica) {
-	partitionKey := NewPartitionKey(replica.authorityName, replica.ptnID)
-	s.replicaRegistry.DeregisterReplica(partitionKey)
+	s.replicaRegistry.DeregisterReplica(replica.partitionKey)
 }
 
 // Node adds Raft functionality to each storage

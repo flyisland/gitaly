@@ -150,21 +150,20 @@ type Replica struct {
 	ctx    context.Context // Context for controlling replica's lifecycle
 	cancel context.CancelFunc
 
-	memberID      uint64                // Member ID of the replica
-	authorityName string                // Name of the storage this partition belongs to
-	ptnID         storage.PartitionID   // Unique identifier for the managed partition
-	node          raft.Node             // etcd/raft node representation
-	raftCfg       config.Raft           // etcd/raft configurations
-	options       ReplicaOptions        // Additional replica configuration
-	logger        logging.Logger        // Internal logging
-	logStore      *ReplicaLogStore      // Persistent storage for Raft logs and state
-	registry      *ReplicaEventRegistry // Event tracking
-	leadership    *ReplicaLeadership    // Current leadership information
-	syncer        safe.Syncer           // Synchronization operations
-	wg            sync.WaitGroup        // Goroutine lifecycle management
-	ready         *ready                // Initialization state tracking
-	started       bool                  // Indicates if replica has been started
-	metrics       RaftMetrics           // Scoped metrics for this replica
+	memberID     uint64 // Member ID of the replica
+	partitionKey *gitalypb.PartitionKey
+	node         raft.Node             // etcd/raft node representation
+	raftCfg      config.Raft           // etcd/raft configurations
+	options      ReplicaOptions        // Additional replica configuration
+	logger       logging.Logger        // Internal logging
+	logStore     *ReplicaLogStore      // Persistent storage for Raft logs and state
+	registry     *ReplicaEventRegistry // Event tracking
+	leadership   *ReplicaLeadership    // Current leadership information
+	syncer       safe.Syncer           // Synchronization operations
+	wg           sync.WaitGroup        // Goroutine lifecycle management
+	ready        *ready                // Initialization state tracking
+	started      bool                  // Indicates if replica has been started
+	metrics      RaftMetrics           // Scoped metrics for this replica
 
 	// Reference to the RaftEnabledStorage that contains this replica
 	raftEnabledStorage *RaftEnabledStorage
@@ -286,8 +285,7 @@ func NewReplica(
 
 	return &Replica{
 		memberID:           memberID,
-		authorityName:      authorityName,
-		ptnID:              partitionID,
+		partitionKey:       NewPartitionKey(authorityName, partitionID),
 		raftCfg:            raftCfg,
 		options:            options,
 		logStore:           logStore,
@@ -323,7 +321,7 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 	defer replica.mutex.Unlock()
 
 	if replica.started {
-		return fmt.Errorf("raft replica for partition %q already started", replica.ptnID)
+		return fmt.Errorf("raft replica %q already started", replica.partitionKey.String())
 	}
 	replica.started = true
 
@@ -861,15 +859,13 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 		return fmt.Errorf("saving config state: %w", err)
 	}
 
-	partitionKey := NewPartitionKey(replica.authorityName, replica.ptnID)
-
 	routingTable := replica.raftEnabledStorage.GetRoutingTable()
 	if routingTable == nil {
 		return fmt.Errorf("routing table not found")
 	}
 
 	// Apply the changes to the routing table
-	if err := routingTable.ApplyReplicaConfChange(partitionKey, replicaChanges); err != nil {
+	if err := routingTable.ApplyReplicaConfChange(replica.partitionKey, replicaChanges); err != nil {
 		return fmt.Errorf("applying conf changes: %w", err)
 	}
 
@@ -891,12 +887,11 @@ func (replica *Replica) sendMessages(rd *raft.Ready) error {
 		// techniques such as batching health checks and quiescing inactive groups.
 		//
 		// See https://gitlab.com/gitlab-org/gitaly/-/issues/6304
-		partitionKey := NewPartitionKey(replica.authorityName, replica.ptnID)
 		transport := replica.raftEnabledStorage.GetTransport()
 		if transport == nil {
 			return fmt.Errorf("transport not found")
 		}
-		err := transport.Send(replica.ctx, replica, partitionKey, rd.Messages)
+		err := transport.Send(replica.ctx, replica, replica.partitionKey, rd.Messages)
 		if err != nil {
 			return err
 		}
@@ -1063,9 +1058,7 @@ func (replica *Replica) proposeMembershipChange(
 }
 
 func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {
-	partitionKey := NewPartitionKey(replica.authorityName, replica.ptnID)
-
-	_, err := routingTable.Translate(partitionKey, memberID)
+	_, err := routingTable.Translate(replica.partitionKey, memberID)
 	if err != nil {
 		return fmt.Errorf("translating member ID: %w", err)
 	}

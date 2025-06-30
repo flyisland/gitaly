@@ -156,7 +156,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		// Second initialization should fail
 		err = mgr.Initialize(ctx, 0)
-		require.EqualError(t, err, fmt.Sprintf("raft replica for partition %q already started", partitionID))
+		require.EqualError(t, err, fmt.Sprintf("raft replica %q already started", mgr.partitionKey.String()))
 
 		require.NoError(t, mgr.Close())
 	})
@@ -1787,7 +1787,7 @@ func TestReplica_AddNode(t *testing.T) {
 		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 		routingTable := raftEnabledStorage.GetRoutingTable()
-		partitionKey := NewPartitionKey(replica.authorityName, partitionID)
+		partitionKey := replica.partitionKey
 
 		// Create second node
 		replicaTwo, socketPathTwo, srvTwo := createTestNode(t, ctx, 3, partitionID, raftCfg, metrics)
@@ -1871,7 +1871,7 @@ func TestReplica_AddNode(t *testing.T) {
 		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 		routingTable := raftEnabledStorage.GetRoutingTable()
-		partitionKey := NewPartitionKey(replica.authorityName, partitionID)
+		partitionKey := replica.partitionKey
 
 		var destinationAddresses []string
 		var servers []*grpc.Server
