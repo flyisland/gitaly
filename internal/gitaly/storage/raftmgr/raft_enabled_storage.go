@@ -8,7 +8,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
 // RaftEnabledStorage wraps a storage.Storage instance with Raft functionality
@@ -37,10 +36,7 @@ func (s *RaftEnabledStorage) GetReplicaRegistry() ReplicaRegistry {
 // RegisterReplica registers a replica with this RaftEnabledStorage
 // This should be called after both the replica and RaftEnabledStorage are created
 func (s *RaftEnabledStorage) RegisterReplica(partitionID storage.PartitionID, replica *Replica) error {
-	partitionKey := &gitalypb.PartitionKey{
-		PartitionId:   uint64(partitionID),
-		AuthorityName: replica.authorityName,
-	}
+	partitionKey := NewPartitionKey(replica.authorityName, partitionID)
 	s.replicaRegistry.RegisterReplica(partitionKey, replica)
 
 	return nil
@@ -49,10 +45,7 @@ func (s *RaftEnabledStorage) RegisterReplica(partitionID storage.PartitionID, re
 // DeregisterReplica removes a replica from this RaftEnabledStorage.
 // This should be called when the replica is closing.
 func (s *RaftEnabledStorage) DeregisterReplica(replica *Replica) {
-	partitionKey := &gitalypb.PartitionKey{
-		PartitionId:   uint64(replica.ptnID),
-		AuthorityName: replica.authorityName,
-	}
+	partitionKey := NewPartitionKey(replica.authorityName, replica.ptnID)
 	s.replicaRegistry.DeregisterReplica(partitionKey)
 }
 

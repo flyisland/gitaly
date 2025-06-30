@@ -24,10 +24,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 	t.Run("add and translate member", func(t *testing.T) {
 		memberID := 1
 		address := "localhost:1234"
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		entry := RoutingTableEntry{
 			Replicas: []*gitalypb.ReplicaID{
@@ -54,10 +51,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 	})
 
 	t.Run("stale entry rejected", func(t *testing.T) {
-		key := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   2,
-		}
+		key := NewPartitionKey("test-authority", 2)
 
 		entry1 := RoutingTableEntry{
 			Replicas: []*gitalypb.ReplicaID{
@@ -83,10 +77,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 	})
 
 	t.Run("node not found", func(t *testing.T) {
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   3,
-		}
+		partitionKey := NewPartitionKey("test-authority", 3)
 
 		memberID := 999 // Non-existent node
 
@@ -116,10 +107,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
@@ -148,10 +136,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		initialEntry := &RoutingTableEntry{
 			Replicas: []*gitalypb.ReplicaID{
@@ -206,10 +191,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddLearnerNode)
@@ -236,10 +218,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		changes := NewReplicaConfChanges(1, 1, 0, 1, createMetadata("localhost:1234"))
 		changes.AddChange(0, ConfChangeAddNode)
@@ -261,10 +240,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		// First add a node
 		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
@@ -294,10 +270,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		// Add a node with ID 1
 		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
@@ -327,10 +300,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		entry := &RoutingTableEntry{
 			Replicas: []*gitalypb.ReplicaID{
@@ -368,10 +338,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		initialEntry := &RoutingTableEntry{
 			Replicas: []*gitalypb.ReplicaID{
@@ -416,10 +383,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		rt := NewKVRoutingTable(kvStore)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: "test-authority",
-			PartitionId:   1,
-		}
+		partitionKey := NewPartitionKey("test-authority", 1)
 
 		initialEntry := &RoutingTableEntry{
 			Replicas: []*gitalypb.ReplicaID{

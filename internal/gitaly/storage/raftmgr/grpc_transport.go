@@ -325,11 +325,8 @@ func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.Partition
 			RaftMsg: &gitalypb.RaftMessageRequest{
 				ClusterId: t.cfg.Raft.ClusterID,
 				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: replica.GetStorageName(),
-					PartitionKey: &gitalypb.PartitionKey{
-						AuthorityName: pk.GetAuthorityName(),
-						PartitionId:   pk.GetPartitionId(),
-					},
+					StorageName:  replica.GetStorageName(),
+					PartitionKey: pk,
 				},
 				Message: &message,
 			},

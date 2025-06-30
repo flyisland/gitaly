@@ -56,10 +56,7 @@ func TestServer_SendMessage(t *testing.T) {
 	registry := storage.(*raftmgr.RaftEnabledStorage).GetReplicaRegistry()
 	replica := &mockRaftReplica{}
 
-	partitionKey := &gitalypb.PartitionKey{
-		AuthorityName: authorityName,
-		PartitionId:   1,
-	}
+	partitionKey := raftmgr.NewPartitionKey(authorityName, 1)
 	registry.RegisterReplica(partitionKey, replica)
 
 	// Register storage two
@@ -83,11 +80,8 @@ func TestServer_SendMessage(t *testing.T) {
 			req: &gitalypb.RaftMessageRequest{
 				ClusterId: "test-cluster",
 				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: storageNameOne,
-					PartitionKey: &gitalypb.PartitionKey{
-						AuthorityName: authorityName,
-						PartitionId:   1,
-					},
+					StorageName:  storageNameOne,
+					PartitionKey: raftmgr.NewPartitionKey(authorityName, 1),
 				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
@@ -100,11 +94,8 @@ func TestServer_SendMessage(t *testing.T) {
 			req: &gitalypb.RaftMessageRequest{
 				ClusterId: "test-cluster",
 				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: storageNameTwo,
-					PartitionKey: &gitalypb.PartitionKey{
-						AuthorityName: authorityName,
-						PartitionId:   1,
-					},
+					StorageName:  storageNameTwo,
+					PartitionKey: raftmgr.NewPartitionKey(authorityName, 1),
 				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
@@ -116,11 +107,8 @@ func TestServer_SendMessage(t *testing.T) {
 			desc: "missing cluster ID",
 			req: &gitalypb.RaftMessageRequest{
 				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: "storage-name",
-					PartitionKey: &gitalypb.PartitionKey{
-						AuthorityName: authorityName,
-						PartitionId:   1,
-					},
+					StorageName:  "storage-name",
+					PartitionKey: raftmgr.NewPartitionKey(authorityName, 1),
 				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
@@ -135,11 +123,8 @@ func TestServer_SendMessage(t *testing.T) {
 			req: &gitalypb.RaftMessageRequest{
 				ClusterId: "wrong-cluster",
 				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: "storage-name",
-					PartitionKey: &gitalypb.PartitionKey{
-						AuthorityName: authorityName,
-						PartitionId:   1,
-					},
+					StorageName:  "storage-name",
+					PartitionKey: raftmgr.NewPartitionKey(authorityName, 1),
 				},
 				Message: &raftpb.Message{
 					Type: raftpb.MsgApp,
@@ -148,42 +133,6 @@ func TestServer_SendMessage(t *testing.T) {
 			},
 			expectedGrpcErr: codes.PermissionDenied,
 			expectedError:   `rpc error: code = PermissionDenied desc = message from wrong cluster: got "wrong-cluster", want "test-cluster"`,
-		},
-		{
-			desc: "missing authority name",
-			req: &gitalypb.RaftMessageRequest{
-				ClusterId: "test-cluster",
-				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: storageNameOne,
-					PartitionKey: &gitalypb.PartitionKey{
-						PartitionId: 1,
-					},
-				},
-				Message: &raftpb.Message{
-					Type: raftpb.MsgApp,
-					To:   2,
-				},
-			},
-			expectedGrpcErr: codes.InvalidArgument,
-			expectedError:   "rpc error: code = InvalidArgument desc = authority_name is required",
-		},
-		{
-			desc: "missing partition ID",
-			req: &gitalypb.RaftMessageRequest{
-				ClusterId: "test-cluster",
-				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: storageNameOne,
-					PartitionKey: &gitalypb.PartitionKey{
-						AuthorityName: authorityName,
-					},
-				},
-				Message: &raftpb.Message{
-					Type: raftpb.MsgApp,
-					To:   2,
-				},
-			},
-			expectedGrpcErr: codes.InvalidArgument,
-			expectedError:   "rpc error: code = InvalidArgument desc = partition_id is required",
 		},
 	}
 

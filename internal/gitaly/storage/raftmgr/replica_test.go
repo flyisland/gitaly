@@ -1683,10 +1683,7 @@ func TestReplica_StorageConnection(t *testing.T) {
 		registry := raftNodeStorage.GetReplicaRegistry()
 		require.NotNil(t, registry)
 
-		partitionKey := &gitalypb.PartitionKey{
-			PartitionId:   uint64(partitionID),
-			AuthorityName: storageName,
-		}
+		partitionKey := NewPartitionKey(storageName, partitionID)
 
 		registeredReplica, err := registry.GetReplica(partitionKey)
 		require.NoError(t, err)
@@ -1726,10 +1723,7 @@ func TestReplica_AddNode(t *testing.T) {
 		replica, err := createRaftReplica(t, ctx, memberID, socketPath, raftCfg, partitionID, metrics, opts...)
 		require.NoError(t, err)
 
-		partitionKey := &gitalypb.PartitionKey{
-			PartitionId:   uint64(partitionID),
-			AuthorityName: cfg.Storages[0].Name,
-		}
+		partitionKey := NewPartitionKey(cfg.Storages[0].Name, partitionID)
 
 		registry.RegisterReplica(partitionKey, replica)
 		transport.registry = registry
@@ -1793,10 +1787,7 @@ func TestReplica_AddNode(t *testing.T) {
 		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 		routingTable := raftEnabledStorage.GetRoutingTable()
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: replica.authorityName,
-			PartitionId:   uint64(partitionID),
-		}
+		partitionKey := NewPartitionKey(replica.authorityName, partitionID)
 
 		// Create second node
 		replicaTwo, socketPathTwo, srvTwo := createTestNode(t, ctx, 3, partitionID, raftCfg, metrics)
@@ -1880,10 +1871,7 @@ func TestReplica_AddNode(t *testing.T) {
 		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 		routingTable := raftEnabledStorage.GetRoutingTable()
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: replica.authorityName,
-			PartitionId:   uint64(partitionID),
-		}
+		partitionKey := NewPartitionKey(replica.authorityName, partitionID)
 
 		var destinationAddresses []string
 		var servers []*grpc.Server

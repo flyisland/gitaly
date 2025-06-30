@@ -861,10 +861,7 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 		return fmt.Errorf("saving config state: %w", err)
 	}
 
-	partitionKey := &gitalypb.PartitionKey{
-		AuthorityName: replica.authorityName,
-		PartitionId:   uint64(replica.ptnID),
-	}
+	partitionKey := NewPartitionKey(replica.authorityName, replica.ptnID)
 
 	routingTable := replica.raftEnabledStorage.GetRoutingTable()
 	if routingTable == nil {
@@ -894,10 +891,7 @@ func (replica *Replica) sendMessages(rd *raft.Ready) error {
 		// techniques such as batching health checks and quiescing inactive groups.
 		//
 		// See https://gitlab.com/gitlab-org/gitaly/-/issues/6304
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: replica.authorityName,
-			PartitionId:   uint64(replica.ptnID),
-		}
+		partitionKey := NewPartitionKey(replica.authorityName, replica.ptnID)
 		transport := replica.raftEnabledStorage.GetTransport()
 		if transport == nil {
 			return fmt.Errorf("transport not found")
@@ -1069,16 +1063,22 @@ func (replica *Replica) proposeMembershipChange(
 }
 
 func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {
-	partitionKey := &gitalypb.PartitionKey{
-		AuthorityName: replica.authorityName,
-		PartitionId:   uint64(replica.ptnID),
-	}
+	partitionKey := NewPartitionKey(replica.authorityName, replica.ptnID)
 
 	_, err := routingTable.Translate(partitionKey, memberID)
 	if err != nil {
 		return fmt.Errorf("translating member ID: %w", err)
 	}
 	return nil
+}
+
+// NewPartitionKey creates a partition key for a newly-minted partition. A partition should only
+// ever have a single PartitionKey, computed by the replica which first created the partition.
+func NewPartitionKey(storageName string, partitionID storage.PartitionID) *gitalypb.PartitionKey {
+	return &gitalypb.PartitionKey{
+		AuthorityName: storageName,
+		PartitionId:   uint64(partitionID),
+	}
 }
 
 var _ = (storage.LogManager)(&Replica{}) // Ensure Replica implements LogManager interface
