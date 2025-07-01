@@ -35,10 +35,6 @@ bin_dir = "{{.BinDir}}"
 name = "default"
 path = "{{.Dir}}"
 
-[git]
-use_bundled_binaries = {{.UseBundledGit}}
-bin_path = "{{.GitPath}}"
-
 [gitlab]
 url = 'http://gitlab_url'
 secret = "{{.GitlabSecret}}"

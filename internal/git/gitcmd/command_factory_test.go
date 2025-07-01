@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -429,26 +428,9 @@ func TestCommandFactory_ExecutionEnvironment(t *testing.T) {
 		// We need to compare the execution environments manually because they also have
 		// some private variables which we cannot easily check here.
 		actualExecEnv := gitCmdFactory.GetExecutionEnvironment(ctx)
-		require.Equal(t, expectedExecEnv.BinaryPath, actualExecEnv.BinaryPath)
+
 		require.Equal(t, expectedExecEnv.EnvironmentVariables, actualExecEnv.EnvironmentVariables)
 	}
-
-	t.Run("set in config", func(t *testing.T) {
-		assertExecEnv(t, config.Cfg{
-			Git: config.Git{
-				BinPath: "/path/to/myGit",
-			},
-		}, gitcmd.ExecutionEnvironment{
-			BinaryPath: "/path/to/myGit",
-			EnvironmentVariables: []string{
-				"LANG=en_US.UTF-8",
-				"GIT_TERMINAL_PROMPT=0",
-				"GIT_CONFIG_GLOBAL=/dev/null",
-				"GIT_CONFIG_SYSTEM=/dev/null",
-				"XDG_CONFIG_HOME=/dev/null",
-			},
-		})
-	})
 
 	t.Run("set using GITALY_TESTING_GIT_BINARY", func(t *testing.T) {
 		t.Setenv("GITALY_TESTING_GIT_BINARY", "/path/to/env_git")
@@ -496,27 +478,11 @@ func TestCommandFactory_ExecutionEnvironment(t *testing.T) {
 		}
 	})
 
-	t.Run("not set, get from system", func(t *testing.T) {
-		resolvedPath, err := exec.LookPath("git")
-		require.NoError(t, err)
-
-		assertExecEnv(t, config.Cfg{}, gitcmd.ExecutionEnvironment{
-			BinaryPath: resolvedPath,
-			EnvironmentVariables: []string{
-				"LANG=en_US.UTF-8",
-				"GIT_TERMINAL_PROMPT=0",
-				"GIT_CONFIG_GLOBAL=/dev/null",
-				"GIT_CONFIG_SYSTEM=/dev/null",
-				"XDG_CONFIG_HOME=/dev/null",
-			},
-		})
-	})
-
 	t.Run("doesn't exist in the system", func(t *testing.T) {
 		testhelper.Unsetenv(t, "PATH")
 
 		_, _, err := gitcmd.NewExecCommandFactory(config.Cfg{}, testhelper.SharedLogger(t), gitcmd.WithSkipHooks())
-		require.EqualError(t, err, "setting up Git execution environment: could not set up any Git execution environments")
+		require.ErrorContains(t, err, "setting up Git execution environment: constructing Git environment: checking bundled Git binary")
 	})
 }
 
@@ -524,9 +490,8 @@ func TestExecCommandFactoryHooksPath(t *testing.T) {
 	ctx := testhelper.Context(t)
 
 	t.Run("temporary hooks", func(t *testing.T) {
-		cfg := config.Cfg{
-			BinDir: testhelper.TempDir(t),
-		}
+		cfg := testcfg.Build(t)
+		cfg.BinDir = testhelper.TempDir(t)
 
 		t.Run("no overrides", func(t *testing.T) {
 			gitCmdFactory := gittest.NewCommandFactory(t, cfg)
@@ -550,9 +515,10 @@ func TestExecCommandFactoryHooksPath(t *testing.T) {
 	})
 
 	t.Run("hooks path", func(t *testing.T) {
-		gitCmdFactory := gittest.NewCommandFactory(t, config.Cfg{
-			BinDir: testhelper.TempDir(t),
-		}, gitcmd.WithHooksPath("/hooks/path"))
+		cfg := testcfg.Build(t)
+		cfg.BinDir = testhelper.TempDir(t)
+
+		gitCmdFactory := gittest.NewCommandFactory(t, cfg, gitcmd.WithHooksPath("/hooks/path"))
 
 		// The environment variable shouldn't override an explicitly set hooks path.
 		require.Equal(t, "/hooks/path", gitCmdFactory.HooksPath(ctx))

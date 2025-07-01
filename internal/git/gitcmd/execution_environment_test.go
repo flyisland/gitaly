@@ -24,19 +24,6 @@ func TestDistributedGitEnvironmentConstructor(t *testing.T) {
 		require.Equal(t, gitcmd.ErrNotConfigured, err)
 	})
 
-	t.Run("configuration with Git binary path succeeds", func(t *testing.T) {
-		execEnv, err := constructor.Construct(config.Cfg{
-			Git: config.Git{
-				BinPath: "/foo/bar",
-			},
-		})
-		require.NoError(t, err)
-		defer func() { require.NoError(t, execEnv.Cleanup()) }()
-
-		require.Equal(t, "/foo/bar", execEnv.BinaryPath)
-		require.Equal(t, []string(nil), execEnv.EnvironmentVariables)
-	})
-
 	t.Run("empty configuration with environment override", func(t *testing.T) {
 		t.Setenv("GITALY_TESTING_GIT_BINARY", "/foo/bar")
 
@@ -49,32 +36,12 @@ func TestDistributedGitEnvironmentConstructor(t *testing.T) {
 			"NO_SET_GIT_TEMPLATE_DIR=YesPlease",
 		}, execEnv.EnvironmentVariables)
 	})
-
-	t.Run("configuration overrides environment variable", func(t *testing.T) {
-		t.Setenv("GITALY_TESTING_GIT_BINARY", "envvar")
-
-		execEnv, err := constructor.Construct(config.Cfg{
-			Git: config.Git{
-				BinPath: "config",
-			},
-		})
-		require.NoError(t, err)
-		defer func() { require.NoError(t, execEnv.Cleanup()) }()
-
-		require.Equal(t, "config", execEnv.BinaryPath)
-		require.Equal(t, []string(nil), execEnv.EnvironmentVariables)
-	})
 }
 
 func TestBundledGitEnvironmentConstructor(t *testing.T) {
 	testhelper.Unsetenv(t, "GITALY_TESTING_GIT_BINARY")
 
 	constructor := gitcmd.BundledGitConstructors[0]
-
-	t.Run("disabled bundled Git fails", func(t *testing.T) {
-		_, err := constructor.Construct(config.Cfg{})
-		require.Equal(t, gitcmd.ErrNotConfigured, err)
-	})
 
 	t.Run("complete binary directory succeeds", func(t *testing.T) {
 		cfg := testcfg.Build(t)

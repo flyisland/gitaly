@@ -2,7 +2,6 @@ package gitaly
 
 import (
 	"bytes"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -16,8 +15,6 @@ import (
 func TestGitalyGitCommand(t *testing.T) {
 	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
-
-	cfg.Git.BinPath = os.Getenv("GITALY_TESTING_GIT_BINARY")
 
 	testcfg.BuildGitaly(t, cfg)
 	_, repo := gittest.CreateRepository(t, ctx, cfg,

@@ -372,10 +372,8 @@ func (ss HTTPSettings) Validate() error {
 
 // Git contains the settings for the Git executable
 type Git struct {
-	UseBundledBinaries bool        `json:"use_bundled_binaries" toml:"use_bundled_binaries,omitempty"`
-	BinPath            string      `json:"bin_path"             toml:"bin_path,omitempty"`
-	CatfileCacheSize   int         `json:"catfile_cache_size"   toml:"catfile_cache_size,omitempty"`
-	Config             []GitConfig `json:"config"               toml:"config,omitempty"`
+	CatfileCacheSize int         `json:"catfile_cache_size" toml:"catfile_cache_size,omitempty"`
+	Config           []GitConfig `json:"config"             toml:"config,omitempty"`
 	// SigningKey is the private key used for signing commits created by Gitaly
 	SigningKey string `json:"signing_key" toml:"signing_key,omitempty"`
 	// RotatedSigningKeys are the private keys that have used for commit signing before.

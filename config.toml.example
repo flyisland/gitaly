@@ -43,8 +43,6 @@ bin_dir = "/home/git/gitaly/_build/bin"
 
 # # Git settings
 # [git]
-# # Path to Git binary. If not set, is resolved using PATH.
-# bin_path = "/usr/bin/git"
 # # Maximum number of cached 'cat-file' processes, which constitute a pair of 'git cat-file --batch' and
 # # 'git cat-file --batch-check' processes. Defaults to '100'.
 # catfile_cache_size = 100
