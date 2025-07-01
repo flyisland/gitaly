@@ -123,12 +123,8 @@ func newListRefsWriter(stream gitalypb.RefService_ListRefsServer, headOID git.Ob
 
 		if len(refNames) > 0 {
 			lastName := refNames[len(refNames)-1].GetName()
-			nextCursor, err := encodePageToken(lastName)
-			if err != nil {
-				return fmt.Errorf("encode page token: %w", err)
-			}
 
-			response.PaginationCursor = &gitalypb.PaginationCursor{NextCursor: nextCursor}
+			response.PaginationCursor = &gitalypb.PaginationCursor{NextCursor: string(lastName)}
 		}
 
 		return stream.Send(response)

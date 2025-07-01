@@ -253,7 +253,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/tags/*")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: encodeTestToken(t, "refs/tags/annotated-tag"),
+					PageToken: "refs/tags/annotated-tag",
 				},
 			},
 			expectedGrpcError: codes.InvalidArgument,
@@ -265,7 +265,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/tags/*")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: encodeTestToken(t, "refs/tags/annotated-tag"),
+					PageToken: "refs/tags/annotated-tag",
 					Limit:     2,
 				},
 			},
@@ -280,7 +280,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/tags/*")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: encodeTestToken(t, "refs/tags/old-commit-tag"),
+					PageToken: "refs/tags/old-commit-tag",
 					Limit:     2,
 				},
 			},
@@ -292,7 +292,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/tags/*")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: encodeTestToken(t, "refs/tags/old-commit-tag"),
+					PageToken: "refs/tags/old-commit-tag",
 					Limit:     2,
 				},
 				SortBy: &gitalypb.ListRefsRequest_SortBy{
@@ -311,7 +311,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Repository: repo,
 				Patterns:   [][]byte{[]byte("refs/")},
 				PaginationParams: &gitalypb.PaginationParameter{
-					PageToken: encodeTestToken(t, "refs/tags/missing_tag"),
+					PageToken: "refs/tags/missing_tag",
 				},
 			},
 			expectedGrpcError: codes.InvalidArgument,
@@ -514,11 +514,4 @@ func getPage(t *testing.T, ctx context.Context, client gitalypb.RefServiceClient
 	}
 
 	return refs, nextCursor
-}
-
-func encodeTestToken(t *testing.T, s string) string {
-	token, err := encodePageToken([]byte(s))
-	require.NoError(t, err)
-
-	return token
 }

@@ -3,8 +3,6 @@ package ref
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -208,55 +206,18 @@ func buildPaginationOpts(ctx context.Context, p *gitalypb.PaginationParameter) *
 	}
 
 	if p.GetPageToken() != "" {
-		pageToken, err := decodePageToken(p.GetPageToken())
-		if err != nil {
-			// Fallback for unencoded tokens
-			pageToken = p.GetPageToken()
-		}
-
 		opts.IsPageToken = func(line []byte) bool {
 			// Only use the first part of the line before \x00 separator
 			if nullByteIndex := bytes.IndexByte(line, 0); nullByteIndex != -1 {
 				line = line[:nullByteIndex]
 			}
 
-			return bytes.Equal(line, []byte(pageToken))
+			return bytes.Equal(line, []byte(p.GetPageToken()))
 		}
 		opts.PageTokenError = true
 	}
 
 	return opts
-}
-
-type pageToken struct {
-	// Ref is the starting position of the pagination
-	Ref string `json:"ref"`
-}
-
-func decodePageToken(providedToken string) (string, error) {
-	var pageToken pageToken
-
-	decodedString, err := base64.StdEncoding.DecodeString(providedToken)
-	if err != nil {
-		return "", err
-	}
-
-	if err := json.Unmarshal(decodedString, &pageToken); err != nil {
-		return "", err
-	}
-
-	return pageToken.Ref, nil
-}
-
-func encodePageToken(name []byte) (string, error) {
-	jsonEncoded, err := json.Marshal(pageToken{Ref: string(name)})
-	if err != nil {
-		return "", err
-	}
-
-	encoded := base64.StdEncoding.EncodeToString(jsonEncoded)
-
-	return encoded, nil
 }
 
 func buildFindRefsOpts(ctx context.Context, p *gitalypb.PaginationParameter) *findRefsOpts {
