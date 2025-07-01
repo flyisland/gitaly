@@ -280,7 +280,7 @@ func NewReplica(
 		"raft.partitionKey": partitionKey.GetValue(),
 	})
 
-	scopedMetrics := metrics.Scope(logStore.authorityName)
+	scopedMetrics := metrics.Scope(logStore.storageName)
 
 	return &Replica{
 		memberID:           memberID,
@@ -864,7 +864,7 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 	}
 
 	// Apply the changes to the routing table
-	if err := routingTable.ApplyReplicaConfChange(replica.logStore.authorityName, replica.partitionKey, replicaChanges); err != nil {
+	if err := routingTable.ApplyReplicaConfChange(replica.logStore.storageName, replica.partitionKey, replicaChanges); err != nil {
 		return fmt.Errorf("applying conf changes: %w", err)
 	}
 

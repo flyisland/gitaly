@@ -206,7 +206,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		// Notify for the first time.
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(4),
 				highWaterMark: storage.LSN(3),
@@ -249,7 +249,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		// Notify from low-water mark to the committedLSN for the first time.
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(3),
 				highWaterMark: storage.LSN(3),
@@ -1304,7 +1304,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 		// Receive notification from low water mark -> 1
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
@@ -1318,13 +1318,13 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 		// Receive notification from low water mark -> 2
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(2),
@@ -1338,19 +1338,19 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 		// Receive notification from low water mark -> 3
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(2),
 			},
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(3),
@@ -1386,7 +1386,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 		// Receive notification from 1 -> 1
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
@@ -1404,13 +1404,13 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 		// Receive notification from 2 -> 2
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(2),
 				highWaterMark: storage.LSN(2),
@@ -1424,19 +1424,19 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 		// Receive notification from 2 -> 3
 		require.Equal(t, []mockNotification{
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(2),
 				highWaterMark: storage.LSN(2),
 			},
 			{
-				storageName:   logStore.authorityName,
+				storageName:   logStore.storageName,
 				partitionID:   logStore.partitionID,
 				lowWaterMark:  storage.LSN(2),
 				highWaterMark: storage.LSN(3),
