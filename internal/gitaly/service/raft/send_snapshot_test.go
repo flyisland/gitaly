@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -104,7 +105,7 @@ func TestServer_SendSnapshot_Success(t *testing.T) {
 
 	testhelper.RequireDirectoryState(t, cfg.Raft.SnapshotDir, "", testhelper.DirectoryState{
 		"/": {Mode: mode.Directory},
-		"/0000000000000001-0000000000000002-0000000000000003.snap": {Mode: os.FileMode(0o644), Content: data},
+		fmt.Sprintf("/%s-0000000000000002-0000000000000003.snap", partitionKey.GetValue()): {Mode: os.FileMode(0o644), Content: data},
 	})
 }
 

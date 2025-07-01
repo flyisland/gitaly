@@ -1,7 +1,6 @@
 package raftmgr
 
 import (
-	"fmt"
 	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -9,10 +8,6 @@ import (
 )
 
 var errNoReplicaFound = structerr.NewNotFound("no replica found")
-
-func partitionKeyToString(pk *gitalypb.PartitionKey) string {
-	return fmt.Sprintf("%d:%s", pk.GetPartitionId(), pk.GetAuthorityName())
-}
 
 // ReplicaRegistry is an interface that defines the methods to register and retrieve replicas.
 type ReplicaRegistry interface {
@@ -36,7 +31,7 @@ func NewReplicaRegistry() *raftRegistry {
 
 // GetReplica returns the replica for a given partitionKey.
 func (r *raftRegistry) GetReplica(key *gitalypb.PartitionKey) (RaftReplica, error) {
-	if mgr, ok := r.replicas.Load(partitionKeyToString(key)); ok {
+	if mgr, ok := r.replicas.Load(key.GetValue()); ok {
 		return mgr.(RaftReplica), nil
 	}
 	return nil, errNoReplicaFound.WithMetadata("partition_key", key)
@@ -44,10 +39,10 @@ func (r *raftRegistry) GetReplica(key *gitalypb.PartitionKey) (RaftReplica, erro
 
 // RegisterReplica registers a replica for a given partitionKey.
 func (r *raftRegistry) RegisterReplica(key *gitalypb.PartitionKey, replica RaftReplica) {
-	r.replicas.LoadOrStore(partitionKeyToString(key), replica)
+	r.replicas.LoadOrStore(key.GetValue(), replica)
 }
 
 // DeregisterReplica removes the replica with the given key from the registry.
 func (r *raftRegistry) DeregisterReplica(key *gitalypb.PartitionKey) {
-	r.replicas.Delete(partitionKeyToString(key))
+	r.replicas.Delete(key.GetValue())
 }

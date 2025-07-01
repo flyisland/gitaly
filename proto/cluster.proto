@@ -36,18 +36,15 @@ message RaftEntry {
   LogData data = 2;
 }
 
-
-// PartitionKey identifies which partition this replica belongs to.
+// PartitionKey is a globally-unique identifier for a replicated partition.
+// The replica which minted the partition is responsible for computing the PartitionKey,
+// which is a hash of the storage name and partition ID. The key is then consumed
+// as-is by other replicas wishing to store the partition.
 message PartitionKey {
-  // authority_name represents the storage that created the partition.
-  string authority_name = 1 [(gitaly.storage) = true];
-  // partition_id is the local incrementing ID of a specific partition within a
-  // storage. Together with `authority_name`, this forms a unique identifier for
-  // a partition across the cluster. A partition belongs to a Raft group.
-  uint64 partition_id = 2;
+  // value is the SHA256 digest of the storage name and partition ID of the
+  // newly-minted partition.
+  string value = 1;
 }
-
-
 
 // ReplicaID uniquely identifies a replica in the Raft cluster.
 // It combines partition information with node-specific details.

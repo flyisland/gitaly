@@ -14,7 +14,7 @@ import (
 )
 
 func routingKey(partitionKey *gitalypb.PartitionKey) []byte {
-	return []byte(fmt.Sprintf("raft/%s/%d", partitionKey.GetAuthorityName(), partitionKey.GetPartitionId()))
+	return []byte(fmt.Sprintf("raft/%s", partitionKey.GetValue()))
 }
 
 // RoutingTableEntry represents a Raft cluster's routing state for a partition.
@@ -38,7 +38,7 @@ type RoutingTable interface {
 	Translate(partitionKey *gitalypb.PartitionKey, memberID uint64) (*gitalypb.ReplicaID, error)
 	GetEntry(partitionKey *gitalypb.PartitionKey) (*RoutingTableEntry, error)
 	UpsertEntry(entry RoutingTableEntry) error
-	ApplyReplicaConfChange(partitionKey *gitalypb.PartitionKey, changes *ReplicaConfChanges) error
+	ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.PartitionKey, changes *ReplicaConfChanges) error
 }
 
 // PersistentRoutingTable implements the RoutingTable interface with KV storage
@@ -144,7 +144,7 @@ func (r *kvRoutingTable) Translate(partitionKey *gitalypb.PartitionKey, memberID
 	return nil, fmt.Errorf("no address found for memberID %d", memberID)
 }
 
-func (r *kvRoutingTable) ApplyReplicaConfChange(partitionKey *gitalypb.PartitionKey, changes *ReplicaConfChanges) error {
+func (r *kvRoutingTable) ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.PartitionKey, changes *ReplicaConfChanges) error {
 	routingTableEntry, err := r.GetEntry(partitionKey)
 	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 		return fmt.Errorf("getting routing table entry: %w", err)
@@ -160,7 +160,6 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(partitionKey *gitalypb.Partition
 	routingTableEntry.Term = changes.Term()
 	routingTableEntry.Index = changes.Index()
 
-	authorityName := partitionKey.GetAuthorityName()
 	metadata := changes.Metadata()
 
 	for _, confChange := range changes.Changes() {
@@ -179,7 +178,7 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(partitionKey *gitalypb.Partition
 			replica := &gitalypb.ReplicaID{
 				PartitionKey: partitionKey,
 				MemberId:     confChange.memberID,
-				StorageName:  authorityName,
+				StorageName:  storageName,
 				Metadata:     metadata,
 				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 			}
@@ -199,7 +198,7 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(partitionKey *gitalypb.Partition
 			learner := &gitalypb.ReplicaID{
 				PartitionKey: partitionKey,
 				MemberId:     confChange.memberID,
-				StorageName:  authorityName,
+				StorageName:  storageName,
 				Metadata:     metadata,
 				Type:         gitalypb.ReplicaID_REPLICA_TYPE_LEARNER,
 			}

@@ -2,6 +2,7 @@ package raftmgr
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"runtime"
@@ -240,7 +241,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 
 		if err := raftEnabledStorage.RegisterReplica(replica); err != nil {
 			return nil, fmt.Errorf("register replica %q in storage %q: %w",
-				partitionKey.String(), storageName, err)
+				partitionKey.GetValue(), storageName, err)
 		}
 
 		return replica, nil
@@ -276,10 +277,10 @@ func NewReplica(
 
 	logger = logger.WithFields(logging.Fields{
 		"component":         "raft",
-		"raft.partitionKey": partitionKey.String(),
+		"raft.partitionKey": partitionKey.GetValue(),
 	})
 
-	scopedMetrics := metrics.Scope(partitionKey.AuthorityName)
+	scopedMetrics := metrics.Scope(logStore.authorityName)
 
 	return &Replica{
 		memberID:           memberID,
@@ -319,7 +320,7 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 	defer replica.mutex.Unlock()
 
 	if replica.started {
-		return fmt.Errorf("raft replica %q already started", replica.partitionKey.String())
+		return fmt.Errorf("raft replica %q already started", replica.partitionKey.GetValue())
 	}
 	replica.started = true
 
@@ -863,7 +864,7 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 	}
 
 	// Apply the changes to the routing table
-	if err := routingTable.ApplyReplicaConfChange(replica.partitionKey, replicaChanges); err != nil {
+	if err := routingTable.ApplyReplicaConfChange(replica.logStore.authorityName, replica.partitionKey, replicaChanges); err != nil {
 		return fmt.Errorf("applying conf changes: %w", err)
 	}
 
@@ -1067,8 +1068,7 @@ func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable)
 // ever have a single PartitionKey, computed by the replica which first created the partition.
 func NewPartitionKey(storageName string, partitionID storage.PartitionID) *gitalypb.PartitionKey {
 	return &gitalypb.PartitionKey{
-		AuthorityName: storageName,
-		PartitionId:   uint64(partitionID),
+		Value: fmt.Sprintf("%x", sha256.Sum256([]byte(storageName+partitionID.String()))),
 	}
 }
 

@@ -1735,7 +1735,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			tc.expectedState.Database[string(key)] = &anypb.Any{}
 		}
 		partitionPrefix := storagemgr.KeyPrefixPartition(storagemgr.MetadataPartitionID)
-		peerKey := fmt.Sprintf("%sraft/%s/%s", partitionPrefix, storageName, setup.PartitionID)
+		peerKey := fmt.Sprintf("%sraft/%s", partitionPrefix, raftmgr.NewPartitionKey(storageName, setup.PartitionID).GetValue())
 		if _, ok := tc.expectedState.Database[peerKey]; !ok {
 			tc.expectedState.Database[peerKey] = &anypb.Any{}
 		}

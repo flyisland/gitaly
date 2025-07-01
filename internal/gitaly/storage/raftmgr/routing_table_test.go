@@ -112,7 +112,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -166,7 +166,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes := NewReplicaConfChanges(2, 2, 1, 1, nil)
 		changes.AddChange(2, ConfChangeRemoveNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -196,7 +196,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddLearnerNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -223,7 +223,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes := NewReplicaConfChanges(1, 1, 0, 1, createMetadata("localhost:1234"))
 		changes.AddChange(0, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "member ID should be non-zero")
 	})
@@ -246,14 +246,14 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.NoError(t, err)
 
 		// Try to add the same node ID again
 		changes = NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
 		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "member ID 1 already exists")
 	})
@@ -276,14 +276,14 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.NoError(t, err)
 
 		// Try to update a non-existent node with ID 2
 		changes = NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
 		changes.AddChange(2, ConfChangeUpdateNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "member ID 2 not found for update")
 	})
@@ -321,7 +321,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes := NewReplicaConfChanges(entry.Term, entry.Index, 1, 1, nil)
 		changes.AddChange(1, ConfChangeRemoveNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no replicas to upsert")
 	})
@@ -360,7 +360,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes := NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
 		changes.AddChange(1, ConfChangeUpdateNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -406,7 +406,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		changes.AddChange(1, ConfChangeRemoveNode)
 		changes.AddChange(2, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)

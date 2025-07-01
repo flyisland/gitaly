@@ -156,7 +156,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		// Second initialization should fail
 		err = mgr.Initialize(ctx, 0)
-		require.EqualError(t, err, fmt.Sprintf("raft replica %q already started", mgr.partitionKey.String()))
+		require.EqualError(t, err, fmt.Sprintf("raft replica %q already started", mgr.partitionKey.GetValue()))
 
 		require.NoError(t, mgr.Close())
 	})
