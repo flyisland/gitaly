@@ -362,10 +362,7 @@ func TestListRefs_pagination(t *testing.T) {
 	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
 	oldCommitID := gittest.WriteCommit(t, cfg, repoPath)
-	newCommitID := gittest.WriteCommit(t, cfg, repoPath,
-		gittest.WithParents(oldCommitID),
-		gittest.WithAuthorDate(time.Date(2011, 2, 16, 14, 1, 0, 0, time.FixedZone("UTC+1", +1*60*60))),
-	)
+	newCommitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithParents(oldCommitID))
 
 	for _, cmd := range [][]string{
 		{"update-ref", "refs/heads/main", newCommitID.String()},
@@ -391,7 +388,6 @@ func TestListRefs_pagination(t *testing.T) {
 			{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
 		}
 
-		require.Equal(t, len(expectedRefs), len(allRefs))
 		testhelper.ProtoEqual(t, expectedRefs, allRefs)
 	})
 
@@ -400,8 +396,6 @@ func TestListRefs_pagination(t *testing.T) {
 		refs2 := collectAllRefs(t, ctx, client, repo, 2)
 		refs3 := collectAllRefs(t, ctx, client, repo, 3)
 
-		require.Equal(t, len(refs1), len(refs2))
-		require.Equal(t, len(refs1), len(refs3))
 		testhelper.ProtoEqual(t, refs1, refs2)
 		testhelper.ProtoEqual(t, refs1, refs3)
 	})
@@ -409,7 +403,14 @@ func TestListRefs_pagination(t *testing.T) {
 	t.Run("empty page token starts from beginning", func(t *testing.T) {
 		page1, _ := getPage(t, ctx, client, repo, "", 2)
 		page2, _ := getPage(t, ctx, client, repo, "", 2)
-		testhelper.ProtoEqual(t, page1, page2)
+
+		expectedRefs := []*gitalypb.ListRefsResponse_Reference{
+			{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
+			{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+		}
+
+		testhelper.ProtoEqual(t, page1, expectedRefs)
+		testhelper.ProtoEqual(t, page2, expectedRefs)
 	})
 }
 
