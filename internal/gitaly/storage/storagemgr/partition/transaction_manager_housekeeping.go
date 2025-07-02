@@ -57,8 +57,10 @@ var (
 	// from an alternate
 	errConcurrentAlternateUnlink = errors.New("concurrent alternate unlinking with repack")
 
-	errOffloadingObjectUpload = errors.New("upload to offloading storage")
-	errOffloadingOnRepacking  = errors.New("repack for offloading")
+	errOffloadingObjectUpload      = errors.New("upload to offloading storage")
+	errOffloadingOnRepacking       = errors.New("repack for offloading")
+	errOffloadingObjectDownload    = errors.New("download from offloading storage")
+	errRehydratingNonOffloadedRepo = errors.New("repository is not offloaded")
 )
 
 // runHousekeeping models housekeeping tasks. It is supposed to handle housekeeping tasks for repositories
@@ -68,6 +70,7 @@ type runHousekeeping struct {
 	repack            *runRepack
 	writeCommitGraphs *writeCommitGraphs
 	runOffloading     *runOffloading
+	runRehydrating    *runRehydrating
 }
 
 // runPackRefs models refs packing housekeeping task. It packs heads and tags for efficient repository access.
@@ -106,6 +109,10 @@ type runOffloading struct {
 	config housekeepingcfg.OffloadingConfig
 }
 
+type runRehydrating struct {
+	prefix string
+}
+
 // prepareHousekeeping composes and prepares necessary steps on the staging repository before the changes are staged and
 // applied. All commands run in the scope of the staging repository. Thus, we can avoid any impact on other concurrent
 // transactions.
@@ -131,6 +138,9 @@ func (mgr *TransactionManager) prepareHousekeeping(ctx context.Context, transact
 	}
 	if err := mgr.prepareOffloading(ctx, transaction); err != nil {
 		return fmt.Errorf("preparing offloading: %w", err)
+	}
+	if err := mgr.prepareRehydrating(ctx, transaction); err != nil {
+		return fmt.Errorf("preparing rehydrating: %w", err)
 	}
 	return nil
 }
@@ -819,7 +829,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		return nil
 	}
 	if mgr.offloadingSink == nil {
-		return fmt.Errorf("absent offloading sink")
+		return fmt.Errorf("offloading sink is not configured")
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareOffloading", nil)
@@ -914,7 +924,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 		return fmt.Errorf("constructing promisor remote URL: %w", err)
 	}
 	if err := housekeeping.SetOffloadingGitConfig(ctx, workingRepository, promisorRemoteURL, repackingFilter, nil); err != nil {
-		return fmt.Errorf("setting offloading git config: %w", err)
+		return fmt.Errorf("set offloading git config: %w", err)
 	}
 
 	// Record WAL entry
@@ -941,4 +951,85 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 	}
 
 	return nil
+}
+
+// prepareRehydrating restores an offloaded repository to a fully local state
+// within the transaction manager. It must be called inside a snapshot repository
+// and performs the following steps:
+//
+//   - Downloads packfiles from the offloading storage using the provided prefix.
+//   - Updates configuration files (e.g., removes the offloading remote from Git config).
+//   - Records all file changes in the write-ahead log (WAL).
+func (mgr *TransactionManager) prepareRehydrating(ctx context.Context, transaction *Transaction) (returnedErr error) {
+	if transaction.runHousekeeping.runRehydrating == nil {
+		return nil
+	}
+	if mgr.offloadingSink == nil {
+		return fmt.Errorf("offloading sink is not configured")
+	}
+
+	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareRehydrating", nil)
+	defer span.Finish()
+
+	workingRepository := mgr.repositoryFactory.Build(transaction.snapshot.RelativePath(transaction.relativePath))
+	// workingRepoPath is the current repository path which we are performing operations on.
+	// In the context of transaction, workingRepoPath is a snapshot repository.
+	workingRepoPath := mgr.getAbsolutePath(workingRepository.GetRelativePath())
+
+	// Detect if a repository is offloaded by reading if it has the remote.offload.url configured.
+	var stdout bytes.Buffer
+	if err := workingRepository.ExecAndWait(ctx, gitcmd.Command{
+		Name: "config",
+		Flags: []gitcmd.Option{
+			gitcmd.Flag{Name: "--get-all"},
+			gitcmd.ValueFlag{Name: "-f", Value: filepath.Join(workingRepoPath, configFile)},
+		},
+		Args: []string{"remote.offload.url"},
+	}, gitcmd.WithStdout(&stdout)); err != nil {
+		return errRehydratingNonOffloadedRepo
+	}
+
+	prefix := transaction.runHousekeeping.runRehydrating.prefix
+	packFilesToDownload, err := mgr.offloadingSink.List(ctx, prefix)
+	if err != nil {
+		return fmt.Errorf("list pack files to download: %w", err)
+	}
+
+	// Download packfiles.
+	// Note: We intentionally do not use a defer function to clean up files on the bucket.
+	// Even if the download succeeds, the commit may still fail or be aborted later (e.g., due to conflicts).
+	// Cleanup should only occur after the WAL has been successfully applied.
+	downloadedPackFiles := make([]string, 0, len(packFilesToDownload))
+	for _, file := range packFilesToDownload {
+		if err := mgr.offloadingSink.Download(ctx, filepath.Join(prefix, file), filepath.Join(workingRepoPath, objectsDir, packFileDir, file)); err != nil {
+			return errors.Join(errOffloadingObjectDownload, err)
+		}
+		downloadedPackFiles = append(downloadedPackFiles, file)
+	}
+
+	// Reset config
+	if err := housekeeping.ResetOffloadingGitConfig(ctx, workingRepository, nil); err != nil {
+		return fmt.Errorf("reset offloading git config: %w", err)
+	}
+
+	// Apply config file and packfiles to WAL
+	for _, file := range downloadedPackFiles {
+		fileRelativePath := filepath.Join(transaction.relativePath, objectsDir, packFileDir, file)
+		if err := transaction.walEntry.CreateFile(
+			filepath.Join(transaction.snapshot.Root(), fileRelativePath),
+			fileRelativePath,
+		); err != nil {
+			return fmt.Errorf("record pack-file creation: %w", err)
+		}
+	}
+
+	transaction.walEntry.RemoveDirectoryEntry(filepath.Join(transaction.relativePath, configFile))
+	if err := transaction.walEntry.CreateFile(
+		filepath.Join(workingRepoPath, configFile),
+		filepath.Join(transaction.relativePath, configFile),
+	); err != nil {
+		return fmt.Errorf("record config file replacement: %w", err)
+	}
+
+	return returnedErr
 }

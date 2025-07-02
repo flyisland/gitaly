@@ -936,6 +936,12 @@ type RunOffloading struct {
 	Config        housekeepingcfg.OffloadingConfig
 }
 
+// RunRehydrating calls prepare rehydrating task on a transaction
+type RunRehydrating struct {
+	TransactionID int
+	Prefix        string
+}
+
 type ChangeGitConfig struct {
 	TransactionID int
 }
@@ -1683,6 +1689,11 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 
 			transaction := openTransactions[step.TransactionID]
 			transaction.SetOffloadingConfig(step.Config)
+		case RunRehydrating:
+			require.Contains(t, openTransactions, step.TransactionID, "test error: rehydrating task aborted on committed before beginning it")
+
+			transaction := openTransactions[step.TransactionID]
+			transaction.SetRehydratingConfig(step.Prefix)
 		default:
 			t.Fatalf("unhandled step type: %T", step)
 		}
