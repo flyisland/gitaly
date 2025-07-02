@@ -35,12 +35,13 @@ const (
 func raftConfigsForTest(t *testing.T) config.Raft {
 	// Speed up initial election overhead in the test setup
 	return config.Raft{
-		Enabled:         true,
-		ClusterID:       "test-cluster",
-		ElectionTicks:   5,
-		HeartbeatTicks:  2,
-		RTTMilliseconds: 100,
-		SnapshotDir:     testhelper.TempDir(t),
+		Enabled:                   true,
+		ClusterID:                 "test-cluster",
+		ElectionTicks:             5,
+		HeartbeatTicks:            2,
+		RTTMilliseconds:           100,
+		ProposalConfChangeTimeout: 1500,
+		SnapshotDir:               testhelper.TempDir(t),
 	}
 }
 
@@ -1884,14 +1885,26 @@ func TestReplica_AddNode(t *testing.T) {
 		}
 
 		// Propose concurrent membership changes. Same member ID but different address.
+		var errs []error
 		for i := 0; i < 2; i++ {
 			err := replica.proposeMembershipChange(ctx, string(addVoter), lastMemberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
 				Address: destinationAddresses[i],
 			})
-			require.NoError(t, err)
+			errs = append(errs, err)
 		}
 
-		// Verify routing table is updated
+		// only one of the proposals should succeed
+		successfulProposals := 0
+		for _, err := range errs {
+			if err == nil {
+				successfulProposals++
+				continue
+			}
+			require.ErrorContains(t, err, "configuration change timed out after")
+		}
+
+		require.Equal(t, successfulProposals, 1, "only one of the proposals should succeed")
+
 		var addedAddress string
 		require.Eventually(t, func() bool {
 			entry, err := routingTable.GetEntry(partitionKey)
@@ -1942,7 +1955,6 @@ func TestReplica_AddNode(t *testing.T) {
 		`,
 			"gitaly_raft_log_entries_processed{entry_type=\"config_change\"}",
 			"gitaly_raft_log_entries_processed{entry_type=\"config_change\"}",
-			"gitaly_raft_proposal_queue_depth",
 			"gitaly_raft_membership_changes_total",
 		)
 	})

@@ -876,6 +876,9 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 		return fmt.Errorf("applying conf changes: %w", err)
 	}
 
+	eventID := replicaChanges.EventID()
+	defer replica.registry.Untrack(eventID)
+
 	// Signal readiness after first config change. Applies only to new clusters that have not been bootstrapped. Not
 	// needed for subsequent restarts
 	replica.signalReady()
@@ -1000,7 +1003,10 @@ func (replica *Replica) proposeMembershipChange(
 	memberID uint64,
 	confChangeType ConfChangeType,
 	metadata *gitalypb.ReplicaID_Metadata,
-) error {
+) (returnedErr error) {
+	replica.wg.Add(1)
+	defer replica.wg.Done()
+
 	if !replica.leadership.IsLeader() {
 		replica.metrics.IncMembershipError(changeType, "not_leader")
 		return fmt.Errorf("replica is not the leader")
@@ -1016,12 +1022,23 @@ func (replica *Replica) proposeMembershipChange(
 		}
 	}
 
+	w := replica.registry.Register()
+
+	defer func() {
+		if returnedErr != nil {
+			replica.registry.Untrack(w.ID)
+			replica.metrics.IncMembershipError(changeType, "propose_failed")
+		}
+	}()
+
 	changes := NewReplicaConfChanges(
 		replica.node.Status().Term,
 		uint64(replica.AppendedLSN()),
 		replica.leadership.GetLeaderID(),
+		w.ID,
 		metadata,
 	)
+
 	changes.AddChange(memberID, confChangeType)
 
 	cc, err := changes.ToConfChangeV2()
@@ -1030,12 +1047,25 @@ func (replica *Replica) proposeMembershipChange(
 	}
 
 	if err := replica.node.ProposeConfChange(ctx, cc); err != nil {
-		replica.metrics.IncMembershipError(changeType, "propose_failed")
 		return fmt.Errorf("propose conf change: %w", err)
 	}
 
 	replica.metrics.IncMembershipChange(changeType)
-	return nil
+
+	// Wait for the configuration change to be committed with a timeout
+	// If Raft silently drops the proposal (e.g., duplicate member ID), we need to timeout
+	timeout := time.Duration(replica.raftCfg.ProposalConfChangeTimeout) * time.Millisecond
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return fmt.Errorf("configuration change timed out after %v - proposal may have been rejected by Raft", timeout)
+	case err := <-w.C:
+		return err
+	}
 }
 
 func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {
