@@ -84,7 +84,7 @@ func validateListRefsRequest(ctx context.Context, locator storage.Locator, in *g
 }
 
 func newListRefsWriter(stream gitalypb.RefService_ListRefsServer, headOID git.ObjectID, peelTags bool) lines.Sender {
-	return func(refs [][]byte) error {
+	return func(refs [][]byte, hasNextPage bool) error {
 		var refNames []*gitalypb.ListRefsResponse_Reference
 
 		if headOID != "" {
