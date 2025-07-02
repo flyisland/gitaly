@@ -14,7 +14,7 @@ import (
 )
 
 func routingKey(partitionKey *gitalypb.PartitionKey) []byte {
-	return []byte(fmt.Sprintf("/raft/%s/%d", partitionKey.GetAuthorityName(), partitionKey.GetPartitionId()))
+	return []byte(fmt.Sprintf("raft/%s/%d", partitionKey.GetAuthorityName(), partitionKey.GetPartitionId()))
 }
 
 // RoutingTableEntry represents a Raft cluster's routing state for a partition.
@@ -50,7 +50,7 @@ type kvRoutingTable struct {
 // NewKVRoutingTable creates a new key-value based routing table implementation
 // that persists routing information using badgerDB.
 func NewKVRoutingTable(kvStore keyvalue.Store) *kvRoutingTable {
-	prefix := []byte(fmt.Sprintf("p/%d", storagemgr.MetadataPartitionID))
+	prefix := storagemgr.KeyPrefixPartition(storagemgr.MetadataPartitionID)
 	prefixedStore := keyvalue.NewPrefixedTransactioner(kvStore, prefix)
 	return &kvRoutingTable{
 		kvStore: prefixedStore,

@@ -1513,8 +1513,8 @@ func TestStorageManager_ListPartitions(t *testing.T) {
 	// Creating multiple partition keys with duplicates
 	require.NoError(t, storageMgr.database.Update(func(tx keyvalue.ReadWriter) error {
 		for i := initialPartitionID; i < 4; i++ {
-			require.NoError(t, tx.Set(append(keyPrefixPartition(storage.PartitionID(i)), []byte("key1")...), nil))
-			require.NoError(t, tx.Set(append(keyPrefixPartition(storage.PartitionID(i)), []byte("key2")...), nil))
+			require.NoError(t, tx.Set(append(KeyPrefixPartition(storage.PartitionID(i)), []byte("key1")...), nil))
+			require.NoError(t, tx.Set(append(KeyPrefixPartition(storage.PartitionID(i)), []byte("key2")...), nil))
 		}
 		return nil
 	}))
