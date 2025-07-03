@@ -53,6 +53,7 @@ func TestServer_ListRefs(t *testing.T) {
 		expectedGrpcError codes.Code
 		expectedError     string
 		expected          []*gitalypb.ListRefsResponse_Reference
+		expectedCursor    string
 	}{
 		{
 			desc: "no repo",
@@ -246,6 +247,7 @@ func TestServer_ListRefs(t *testing.T) {
 				{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
 				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
 			},
+			expectedCursor: "refs/tags/lightweight-tag",
 		},
 		{
 			desc: "pagination with page token and no limit",
@@ -344,7 +346,12 @@ func TestServer_ListRefs(t *testing.T) {
 					return
 				}
 
-				require.NotNil(t, r.GetPaginationCursor())
+				if len(tc.expectedCursor) != 0 {
+					require.Equal(t, tc.expectedCursor, r.GetPaginationCursor().GetNextCursor())
+				} else {
+					require.Nil(t, r.GetPaginationCursor())
+				}
+
 				refs = append(refs, r.GetReferences()...)
 			}
 
@@ -401,16 +408,28 @@ func TestListRefs_pagination(t *testing.T) {
 	})
 
 	t.Run("empty page token starts from beginning", func(t *testing.T) {
-		page1, _ := getPage(t, ctx, client, repo, "", 2)
-		page2, _ := getPage(t, ctx, client, repo, "", 2)
+		page, nextPage := getPage(t, ctx, client, repo, "", 2)
 
 		expectedRefs := []*gitalypb.ListRefsResponse_Reference{
 			{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
 			{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
 		}
 
-		testhelper.ProtoEqual(t, page1, expectedRefs)
-		testhelper.ProtoEqual(t, page2, expectedRefs)
+		testhelper.ProtoEqual(t, page, expectedRefs)
+		require.NotEmpty(t, nextPage)
+	})
+
+	t.Run("first page includes all results", func(t *testing.T) {
+		page, nextPage := getPage(t, ctx, client, repo, "", 3)
+
+		expectedRefs := []*gitalypb.ListRefsResponse_Reference{
+			{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
+			{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+			{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
+		}
+
+		testhelper.ProtoEqual(t, page, expectedRefs)
+		require.Empty(t, nextPage)
 	})
 }
 
@@ -474,11 +493,11 @@ func collectAllRefs(t *testing.T, ctx context.Context, client gitalypb.RefServic
 
 	for {
 		page, nextCursor := getPage(t, ctx, client, repo, cursor, pageSize)
-		if len(page) == 0 {
+		allRefs = append(allRefs, page...)
+
+		if len(nextCursor) == 0 {
 			break
 		}
-
-		allRefs = append(allRefs, page...)
 		cursor = nextCursor
 	}
 

@@ -121,7 +121,7 @@ func newListRefsWriter(stream gitalypb.RefService_ListRefsServer, headOID git.Ob
 
 		response := &gitalypb.ListRefsResponse{References: refNames}
 
-		if len(refNames) > 0 {
+		if len(refNames) > 0 && hasNextPage {
 			lastName := refNames[len(refNames)-1].GetName()
 
 			response.PaginationCursor = &gitalypb.PaginationCursor{NextCursor: string(lastName)}
