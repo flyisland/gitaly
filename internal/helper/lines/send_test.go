@@ -25,10 +25,9 @@ func TestLinesSend(t *testing.T) {
 		output         [][]byte
 	}{
 		{
-			desc:       "high limit",
-			limit:      100,
-			output:     expected,
-			isNextPage: false,
+			desc:   "high limit",
+			limit:  100,
+			output: expected,
 		},
 		{
 			desc:   "limit is 0",
@@ -48,10 +47,9 @@ func TestLinesSend(t *testing.T) {
 			isNextPage: true,
 		},
 		{
-			desc:       "limit 3",
-			limit:      3,
-			output:     expected,
-			isNextPage: false,
+			desc:   "limit 3",
+			limit:  3,
+			output: expected,
 		},
 		{
 			desc:   "filter and limit",
@@ -101,8 +99,7 @@ func TestLinesSend(t *testing.T) {
 				// Skip "mepmep", start from "foo"
 				return string(line) == "mepmep"
 			},
-			output:     expected[1:3],
-			isNextPage: false, // Should be false since no more lines after "bar"
+			output: expected[1:3],
 		},
 		{
 			desc:  "page token skips all remaining lines",
@@ -111,8 +108,7 @@ func TestLinesSend(t *testing.T) {
 				// Skip everything including "bar" (last line)
 				return string(line) == "bar"
 			},
-			output:     [][]byte(nil),
-			isNextPage: false,
+			output: [][]byte(nil),
 		},
 		{
 			desc:        "skip no lines",

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"math"
 	"regexp"
 )
 
@@ -103,8 +102,6 @@ func (w *writer) consume(r io.Reader) error {
 	// True if more data exists beyond the requested limit
 	hasNextPage := false
 
-	hasLimit := w.options.Limit != math.MaxInt32
-
 	// As `IsPageToken` will instruct us to send the _next_ line only, we
 	// need to call it before the first iteration to allow for the case
 	// where we want to send right from the beginning.
@@ -137,7 +134,7 @@ func (w *writer) consume(r io.Reader) error {
 		}
 
 		// There is at least one element over the limit
-		if hasLimit && processedLines == w.options.Limit {
+		if processedLines == w.options.Limit {
 			hasNextPage = true
 			break
 		}
