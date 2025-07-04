@@ -9,12 +9,14 @@ import (
 	"google.golang.org/protobuf/encoding/protodelim"
 )
 
-// RepositoryKeyPrefix is the prefix used for storing keys recording repository
-// existence in a partition.
-const RepositoryKeyPrefix = "r/"
+const (
+	// RepositoryKeyPrefix is the prefix used for storing keys recording repository
+	// existence in a partition.
+	RepositoryKeyPrefix = "r/"
 
-// kvStateFileName is the filename the kv state is written to
-var kvStateFileName = "kv-state"
+	// KVStateFileName is the filename the kv state is written to
+	KVStateFileName = "kv-state"
+)
 
 // RepositoryKey generates the database key for recording repository existence in a partition.
 func RepositoryKey(relativePath string) []byte {
@@ -23,7 +25,7 @@ func RepositoryKey(relativePath string) []byte {
 
 // CreateKvFile creates a file storing the transaction snapshot's raw kv state
 func CreateKvFile(tx Transaction) (kvFile *os.File, returnErr error) {
-	kvFile, err := os.CreateTemp("", kvStateFileName)
+	kvFile, err := os.CreateTemp("", KVStateFileName)
 	if err != nil {
 		return nil, fmt.Errorf("create temp file for KV entries: %w", err)
 	}
