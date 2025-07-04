@@ -43,7 +43,7 @@ var (
 )
 
 // Sender handles a buffer of lines from a Git command
-type Sender func([][]byte) error
+type Sender func([][]byte, bool) error
 
 type writer struct {
 	sender  Sender
@@ -61,12 +61,12 @@ func CopyAndAppend(s [][]byte, e []byte) [][]byte {
 
 // flush calls the `sender` handler function with the accumulated lines and
 // clears the lines buffer.
-func (w *writer) flush() error {
+func (w *writer) flush(hasNextPage bool) error {
 	if len(w.lines) == 0 { // No message to send, just return
 		return nil
 	}
 
-	if err := w.sender(w.lines); err != nil {
+	if err := w.sender(w.lines, hasNextPage); err != nil {
 		return err
 	}
 
@@ -82,7 +82,7 @@ func (w *writer) addLine(p []byte) error {
 	w.lines = CopyAndAppend(w.lines, p)
 
 	if len(w.lines) >= ItemsPerMessage {
-		return w.flush()
+		return w.flush(false)
 	}
 
 	return nil
@@ -93,30 +93,28 @@ func (w *writer) addLine(p []byte) error {
 func (w *writer) consume(r io.Reader) error {
 	buf := bufio.NewReader(r)
 
+	// Controls main loop; false when EOF reached
+	continueConsume := true
+
+	// Count of lines added to output (excludes skipped lines)
+	processedLines := 0
+
+	// True if more data exists beyond the requested limit
+	hasNextPage := false
+
 	// As `IsPageToken` will instruct us to send the _next_ line only, we
 	// need to call it before the first iteration to allow for the case
 	// where we want to send right from the beginning.
 	pastPageToken := w.options.IsPageToken([]byte{})
-	for i := 0; i < w.options.Limit; {
-		var line []byte
 
-		for {
-			// delim can be multiple bytes, so we read till the end byte of it ...
-			chunk, err := buf.ReadBytes(w.delimiter())
-			if err != nil && !errors.Is(err, io.EOF) {
-				return err
-			}
+	for continueConsume {
+		line, err := w.readChunks(buf)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
 
-			line = append(line, chunk...)
-			// ... then we check if the last bytes of line are the same as delim
-			if bytes.HasSuffix(line, []byte{w.delimiter()}) {
-				break
-			}
-
-			if errors.Is(err, io.EOF) {
-				i = w.options.Limit // Implicit exit clause for the loop
-				break
-			}
+		if errors.Is(err, io.EOF) {
+			continueConsume = false
 		}
 
 		line = bytes.TrimSuffix(line, []byte{w.delimiter()})
@@ -134,7 +132,14 @@ func (w *writer) consume(r io.Reader) error {
 		if w.filter() != nil && !w.filter().Match(line) {
 			continue
 		}
-		i++ // Only increment the counter if the result wasn't skipped
+
+		// There is at least one element over the limit
+		if processedLines == w.options.Limit {
+			hasNextPage = true
+			break
+		}
+
+		processedLines++ // Only increment the counter if the result wasn't skipped
 
 		if err := w.addLine(line); err != nil {
 			return err
@@ -145,7 +150,29 @@ func (w *writer) consume(r io.Reader) error {
 		return ErrInvalidPageToken
 	}
 
-	return w.flush()
+	return w.flush(hasNextPage)
+}
+
+func (w *writer) readChunks(r *bufio.Reader) ([]byte, error) {
+	var line []byte
+
+	for {
+		// delim can be multiple bytes, so we read till the end byte of it ...
+		chunk, err := r.ReadBytes(w.delimiter())
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+
+		line = append(line, chunk...)
+		// ... then we check if the last bytes of line are the same as delim
+		if bytes.HasSuffix(line, []byte{w.delimiter()}) {
+			return line, nil
+		}
+
+		if errors.Is(err, io.EOF) {
+			return line, err
+		}
+	}
 }
 
 func (w *writer) delimiter() byte        { return w.options.Delimiter }

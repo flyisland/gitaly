@@ -53,7 +53,7 @@ func buildBranch(ctx context.Context, objectReader catfile.ObjectContentReader, 
 }
 
 func newFindLocalBranchesWriter(stream gitalypb.RefService_FindLocalBranchesServer, objectReader catfile.ObjectContentReader) lines.Sender {
-	return func(refs [][]byte) error {
+	return func(refs [][]byte, hasNextPage bool) error {
 		ctx := stream.Context()
 		var response *gitalypb.FindLocalBranchesResponse
 
@@ -80,7 +80,7 @@ func newFindLocalBranchesWriter(stream gitalypb.RefService_FindLocalBranchesServ
 }
 
 func newFindAllBranchesWriter(stream gitalypb.RefService_FindAllBranchesServer, objectReader catfile.ObjectContentReader) lines.Sender {
-	return func(refs [][]byte) error {
+	return func(refs [][]byte, hasNextPage bool) error {
 		var branches []*gitalypb.FindAllBranchesResponse_Branch
 		ctx := stream.Context()
 
@@ -100,7 +100,7 @@ func newFindAllBranchesWriter(stream gitalypb.RefService_FindAllBranchesServer, 
 }
 
 func newFindAllRemoteBranchesWriter(stream gitalypb.RefService_FindAllRemoteBranchesServer, objectReader catfile.ObjectContentReader) lines.Sender {
-	return func(refs [][]byte) error {
+	return func(refs [][]byte, hasNextPage bool) error {
 		var branches []*gitalypb.Branch
 		ctx := stream.Context()
 

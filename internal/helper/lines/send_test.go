@@ -20,6 +20,7 @@ func TestLinesSend(t *testing.T) {
 		filter         *regexp.Regexp
 		limit          int
 		isPageToken    func([]byte) bool
+		isNextPage     bool
 		PageTokenError bool
 		output         [][]byte
 	}{
@@ -34,15 +35,34 @@ func TestLinesSend(t *testing.T) {
 			output: [][]byte(nil),
 		},
 		{
-			desc:   "limit 2",
-			limit:  2,
-			output: expected[0:2],
+			desc:       "limit 1",
+			limit:      1,
+			output:     expected[0:1],
+			isNextPage: true,
+		},
+		{
+			desc:       "limit 2",
+			limit:      2,
+			output:     expected[0:2],
+			isNextPage: true,
+		},
+		{
+			desc:   "limit 3",
+			limit:  3,
+			output: expected,
 		},
 		{
 			desc:   "filter and limit",
 			limit:  1,
 			filter: regexp.MustCompile("foo"),
 			output: expected[1:2],
+		},
+		{
+			desc:       "filter with limit and next page",
+			filter:     regexp.MustCompile("foo|bar"),
+			limit:      1,
+			output:     expected[1:2],
+			isNextPage: true,
 		},
 		{
 			desc:        "skip lines",
@@ -63,6 +83,34 @@ func TestLinesSend(t *testing.T) {
 			PageTokenError: true,
 		},
 		{
+			desc:  "page token with limit and next page",
+			limit: 1,
+			isPageToken: func(line []byte) bool {
+				// Skip "mepmep", start from "foo"
+				return string(line) == "mepmep"
+			},
+			output:     expected[1:2],
+			isNextPage: true, // Should be true since "bar" exists after the limit
+		},
+		{
+			desc:  "page token with limit at end - no next page",
+			limit: 2,
+			isPageToken: func(line []byte) bool {
+				// Skip "mepmep", start from "foo"
+				return string(line) == "mepmep"
+			},
+			output: expected[1:3],
+		},
+		{
+			desc:  "page token skips all remaining lines",
+			limit: 1,
+			isPageToken: func(line []byte) bool {
+				// Skip everything including "bar" (last line)
+				return string(line) == "bar"
+			},
+			output: [][]byte(nil),
+		},
+		{
 			desc:        "skip no lines",
 			limit:       100,
 			isPageToken: func(_ []byte) bool { return true },
@@ -74,7 +122,13 @@ func TestLinesSend(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			reader := bytes.NewBufferString("mepmep\nfoo\nbar")
 			var out [][]byte
-			sender := func(in [][]byte) error { out = in; return nil }
+			var nextPage bool
+
+			sender := func(in [][]byte, hasNextPage bool) error {
+				out = in
+				nextPage = hasNextPage
+				return nil
+			}
 
 			err := Send(reader, sender, SenderOpts{
 				Limit:          tc.limit,
@@ -89,6 +143,7 @@ func TestLinesSend(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tc.output, out)
+				require.Equal(t, tc.isNextPage, nextPage)
 			}
 		})
 	}
