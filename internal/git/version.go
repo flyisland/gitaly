@@ -93,6 +93,12 @@ func (v Version) IsCatfileObjectTypeFilterSupported() bool {
 	return v.GreaterOrEqual(NewVersion(2, 49, 0, 2))
 }
 
+// UsesBatchedUpdates checks whether the current Git version uses batched updates in 'git-fetch(1)' and
+// 'git-receive-pack(1)'.
+func (v Version) UsesBatchedUpdates() bool {
+	return v.GreaterOrEqual(NewVersion(2, 52, 0, 0))
+}
+
 // LessThan determines whether the version is older than another version.
 func (v Version) LessThan(other Version) bool {
 	switch {
