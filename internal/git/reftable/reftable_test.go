@@ -252,7 +252,7 @@ func TestParseTable(t *testing.T) {
 			table, err := ParseTable(file)
 			require.NoError(t, err)
 
-			references, err := table.IterateRefs()
+			references, err := table.GetReferences()
 			require.NoError(t, err)
 
 			require.Equal(t, setup.references, references)

@@ -423,7 +423,7 @@ func collectReftableReferencesState(
 		reftable, err := reftable.ParseTable(bytes.NewReader(data))
 		require.NoError(tb, err)
 
-		table.References, err = reftable.IterateRefs()
+		table.References, err = reftable.GetReferences()
 		require.NoError(tb, err)
 
 		for _, reference := range table.References {

@@ -304,8 +304,8 @@ func (t *Table) parseRefBlock(src []byte, headerOffset, blockStart, blockEnd uin
 	return t.getRefsFromBlock(src, b)
 }
 
-// IterateRefs provides all the refs present in a table.
-func (t *Table) IterateRefs() ([]git.Reference, error) {
+// GetReferences returns all references from the table.
+func (t *Table) GetReferences() ([]git.Reference, error) {
 	headerOffset := uint(t.footer.Version.HeaderSize())
 	offset := uint(0)
 	var allRefs []git.Reference
