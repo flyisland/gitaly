@@ -66,7 +66,7 @@ func generateRehydratingTests(t *testing.T, ctx context.Context, testPartitionID
 
 	return []transactionTestCase{
 		{
-			desc:        "rehydrate a offloaded repository",
+			desc:        "rehydrate an offloaded repository",
 			customSetup: customSetup,
 			steps: steps{
 				StartManager{
@@ -110,80 +110,6 @@ func generateRehydratingTests(t *testing.T, ctx context.Context, testPartitionID
 				Database: DatabaseState{
 					string(keyAppliedLSN): storage.LSN(2).ToProto(),
 				},
-				Repositories: RepositoryStates{
-					relativePath: {
-						Alternate:     alternatesFileContent,
-						DefaultBranch: "refs/heads/main",
-						References: gittest.FilesOrReftables(&ReferencesState{
-							FilesBackend: &FilesBackendState{
-								PackedReferences: refs,
-								LooseReferences:  map[git.ReferenceName]git.ObjectID{},
-							},
-						}, &ReferencesState{
-							ReftableBackend: &ReftableBackendState{
-								Tables: []ReftableTable{
-									{
-										MinIndex: 1,
-										MaxIndex: 4,
-										References: []git.Reference{
-											{
-												Name:       "HEAD",
-												Target:     "refs/heads/main",
-												IsSymbolic: true,
-											},
-											{
-												Name:       "refs/heads/first",
-												Target:     refs["refs/heads/first"].String(),
-												IsSymbolic: false,
-											},
-											{
-												Name:       "refs/heads/main",
-												Target:     refs["refs/heads/main"].String(),
-												IsSymbolic: false,
-											},
-											{
-												Name:       "refs/heads/second",
-												Target:     refs["refs/heads/second"].String(),
-												IsSymbolic: false,
-											},
-										},
-									},
-								},
-							},
-						}),
-						Objects: allObjects,
-					},
-				},
-			},
-		},
-		{
-			desc:        "rehydrate a repository which is not offloaded",
-			customSetup: customSetup,
-			steps: steps{
-				StartManager{
-					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
-						repoPath := filepath.Join(storagePath, relativePath)
-
-						// Do a git gc to clean loose objects. git repack with filter may be
-						// ineffective when there is loose objects.
-						gittest.Exec(tb, cfg, "-C", repoPath, "gc")
-					},
-				},
-				Begin{
-					TransactionID: 1,
-					RelativePaths: []string{relativePath},
-				},
-				RunRehydrating{
-					TransactionID: 1,
-					Prefix:        filepath.Join(relativePath, pathPrefixUUID),
-				},
-				Commit{
-					TransactionID: 1,
-					ExpectedError: errRehydratingNonOffloadedRepo,
-				},
-			},
-			expectedState: StateAssertion{
-				Database: DatabaseState{},
 				Repositories: RepositoryStates{
 					relativePath: {
 						Alternate:     alternatesFileContent,

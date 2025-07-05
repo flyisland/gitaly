@@ -158,3 +158,42 @@ func (repo *Repo) UnsetMatchingConfig(
 
 	return nil
 }
+
+// GetConfigValues gets the values for the given configuration key. If the
+// key is not found, an ErrNotFound will be returned.
+func (repo *Repo) GetConfigValues(ctx context.Context, key string) (values []string, returnedErr error) {
+	repoPath, err := repo.Path(ctx)
+	if err != nil {
+		return values, fmt.Errorf("getting repo path: %w", err)
+	}
+	configPath := filepath.Join(repoPath, "config")
+
+	var stdout bytes.Buffer
+	if err := repo.ExecAndWait(ctx, gitcmd.Command{
+		Name: "config",
+		Flags: []gitcmd.Option{
+			gitcmd.Flag{Name: "--get-all"},
+			gitcmd.ValueFlag{Name: "-f", Value: configPath},
+		},
+		Args: []string{key},
+	}, gitcmd.WithStdout(&stdout)); err != nil {
+		switch {
+		case isExitWithCode(err, 1):
+			return values, fmt.Errorf("no matching value for key %s: %w",
+				key, git.ErrNotFound)
+		}
+		return values, fmt.Errorf("getting value for key %s: %w", key, err)
+	}
+
+	values = strings.Split(text.ChompBytes(stdout.Bytes()), "\n")
+	if len(values) == 0 {
+		return values, fmt.Errorf("no matching value for key %s: %w", key, git.ErrNotFound)
+	}
+
+	// Trim whitespace from each value
+	for i := range values {
+		values[i] = strings.TrimSpace(values[i])
+	}
+
+	return values, nil
+}

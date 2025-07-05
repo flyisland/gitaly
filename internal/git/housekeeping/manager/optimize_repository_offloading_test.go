@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -80,6 +81,72 @@ func TestOffloadRepository_HappyPath(t *testing.T) {
 	cachePathPackDir := filepath.Join(cachePathObjectsDir, "pack")
 	downloadFilesToCache(t, ctx, repoPath, cachePathPackDir, sink, repo, cfg)
 	assertOffloadedRepoObjects(t, true, cachePathObjectsDir, blobs, trees, commits, repoPath, cfg)
+}
+
+func TestRehydrateRepository_HappyPath(t *testing.T) {
+	t.Parallel()
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+	localBucketDir := testhelper.TempDir(t)
+	cacheRoot := testhelper.TempDir(t)
+	sinkURL := fmt.Sprintf("file://%s", localBucketDir)
+	sink, bucket := getOffloadingStorageSink(t, ctx, sinkURL)
+	t.Cleanup(func() { _ = bucket.Close() })
+
+	cfg.Offloading = gitalycfg.Offloading{
+		Enabled:    true,
+		CacheRoot:  cacheRoot,
+		GoCloudURL: sinkURL,
+	}
+
+	// Setup repo, node and housekeeping manager.
+	repoSetup := setupRepoForOffloading(t, ctx, cfg)
+	repo := repoSetup.repo
+	blobs := repoSetup.blobs
+	commits := repoSetup.commits
+	trees := repoSetup.trees
+	repoPath := repoSetup.repoPath
+	node := setupNodeForTransaction(t, ctx, cfg, sink)
+	defer node.Close()
+	housekeepingManager := New(cfg.Prometheus, testhelper.SharedLogger(t), nil, node)
+
+	// Execute offloading in repository.
+	offloadingCfg := housekeepingcfg.OffloadingConfig{
+		CacheRoot:   cacheRoot,
+		SinkBaseURL: cfg.Offloading.GoCloudURL,
+	}
+
+	require.NoError(t, housekeepingManager.OffloadRepository(ctx, repo, offloadingCfg))
+	applyWAL(t, ctx, repo, node)
+
+	// First, verify blobs are properly offloaded and no longer present in the repository
+	assertOffloadedRepoObjects(t, false, "", blobs, trees, commits, repoPath, cfg)
+
+	isOffloaded, offloadURL, err := repo.IsOffloaded(ctx)
+	require.True(t, isOffloaded, "Repository should be offloaded")
+	require.NoError(t, err)
+
+	// Extract the prefix by removing the storage URL path from the offload URL path
+	parsedURL, _ := url.Parse(offloadURL)
+	storageURL, _ := url.Parse(cfg.Offloading.GoCloudURL)
+	prefix := strings.TrimPrefix(parsedURL.Path, storageURL.Path+"/")
+
+	require.NoError(t, housekeepingManager.RehydrateRepository(ctx, repo, prefix))
+	applyWAL(t, ctx, repo, node)
+
+	expectedObjects := make([]git.ObjectID, 0, len(blobs)+len(trees)+len(commits))
+	expectedObjects = append(expectedObjects, commits...)
+	expectedObjects = append(expectedObjects, trees...)
+	expectedObjects = append(expectedObjects, blobs...)
+	expectedObjectHashes := make([]string, 0, len(blobs)+len(trees)+len(commits))
+	for _, obj := range expectedObjects {
+		expectedObjectHashes = append(expectedObjectHashes, string(obj))
+	}
+
+	actualObjectHashes := make([]string, 0, len(trees)+len(commits)+len(blobs))
+	output := gittest.Exec(t, cfg, "-C", repoPath, "rev-list", "--objects", "--all", "--missing=print", "--no-object-names")
+	actualObjectHashes = append(actualObjectHashes, strings.Split(text.ChompBytes(output), "\n")...)
+	require.ElementsMatch(t, expectedObjectHashes, actualObjectHashes)
 }
 
 type offloadingRepoSetup struct {

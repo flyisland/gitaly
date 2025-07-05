@@ -130,6 +130,10 @@ func (m *mockHousekeepingManager) OffloadRepository(context.Context, *localrepo.
 	return nil
 }
 
+func (m *mockHousekeepingManager) RehydrateRepository(ctx context.Context, repo *localrepo.Repo, s string) error {
+	return nil
+}
+
 func TestInterceptors(t *testing.T) {
 	testhelper.NewFeatureSets(
 		featureflag.HousekeepingMiddleware,

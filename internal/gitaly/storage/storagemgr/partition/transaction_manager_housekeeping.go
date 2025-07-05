@@ -57,10 +57,9 @@ var (
 	// from an alternate
 	errConcurrentAlternateUnlink = errors.New("concurrent alternate unlinking with repack")
 
-	errOffloadingObjectUpload      = errors.New("upload to offloading storage")
-	errOffloadingOnRepacking       = errors.New("repack for offloading")
-	errOffloadingObjectDownload    = errors.New("download from offloading storage")
-	errRehydratingNonOffloadedRepo = errors.New("repository is not offloaded")
+	errOffloadingObjectUpload   = errors.New("upload to offloading storage")
+	errOffloadingOnRepacking    = errors.New("repack for offloading")
+	errOffloadingObjectDownload = errors.New("download from offloading storage")
 )
 
 // runHousekeeping models housekeeping tasks. It is supposed to handle housekeeping tasks for repositories
@@ -954,12 +953,15 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 }
 
 // prepareRehydrating restores an offloaded repository to a fully local state
-// within the transaction manager. It must be called inside a snapshot repository
-// and performs the following steps:
+// within the transaction manager. It must be called from within a snapshot repository.
 //
-//   - Downloads packfiles from the offloading storage using the provided prefix.
-//   - Updates configuration files (e.g., removes the offloading remote from Git config).
+// This function performs the following steps:
+//   - Downloads packfiles from offloading storage using the provided prefix.
+//   - Updates Git configuration (e.g., removes the offloading remote).
 //   - Records all file changes in the write-ahead log (WAL).
+//
+// The caller is responsible for checking whether the repository is offloaded
+// and requires rehydration before invoking this function.
 func (mgr *TransactionManager) prepareRehydrating(ctx context.Context, transaction *Transaction) (returnedErr error) {
 	if transaction.runHousekeeping.runRehydrating == nil {
 		return nil
@@ -975,19 +977,6 @@ func (mgr *TransactionManager) prepareRehydrating(ctx context.Context, transacti
 	// workingRepoPath is the current repository path which we are performing operations on.
 	// In the context of transaction, workingRepoPath is a snapshot repository.
 	workingRepoPath := mgr.getAbsolutePath(workingRepository.GetRelativePath())
-
-	// Detect if a repository is offloaded by reading if it has the remote.offload.url configured.
-	var stdout bytes.Buffer
-	if err := workingRepository.ExecAndWait(ctx, gitcmd.Command{
-		Name: "config",
-		Flags: []gitcmd.Option{
-			gitcmd.Flag{Name: "--get-all"},
-			gitcmd.ValueFlag{Name: "-f", Value: filepath.Join(workingRepoPath, configFile)},
-		},
-		Args: []string{"remote.offload.url"},
-	}, gitcmd.WithStdout(&stdout)); err != nil {
-		return errRehydratingNonOffloadedRepo
-	}
 
 	prefix := transaction.runHousekeeping.runRehydrating.prefix
 	packFilesToDownload, err := mgr.offloadingSink.List(ctx, prefix)

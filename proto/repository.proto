@@ -1323,6 +1323,9 @@ message OptimizeRepositoryRequest {
 
     // STRATEGY_OFFLOADING selectively moves repository objects to secondary storage.
     STRATEGY_OFFLOADING = 3;
+
+    // STRATEGY_REHYDRATION selectively revert a repository from offloading state to all local state.
+    STRATEGY_REHYDRATION = 4;
   }
 
   // repository is the repository that should be optimized.

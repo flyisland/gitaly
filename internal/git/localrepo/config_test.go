@@ -299,3 +299,69 @@ func TestRepo_UnsetMatchingConfig(t *testing.T) {
 		require.Equal(t, 2, len(txManager.Votes()))
 	})
 }
+
+func TestRepo_GetConfigValues(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	cfg := testcfg.Build(t)
+
+	for _, tc := range []struct {
+		desc         string
+		configKey    string
+		configValues []string
+		expectedErr  error
+	}{
+		{
+			desc:         "a value for a key",
+			configKey:    "remote.test.url",
+			configValues: []string{"git@gitlab.com:gitlab-org/gitaly.git"},
+			expectedErr:  nil,
+		},
+		{
+			desc:      "multiple values for a key",
+			configKey: "remote.origin.fetch",
+			configValues: []string{
+				"+refs/heads/*:refs/remotes/origin/*",
+				"+refs/tags/*:refs/tags/*",
+			},
+			expectedErr: nil,
+		},
+		{
+			desc:         "no values",
+			configKey:    "remote.i_dont_exist.url",
+			configValues: []string{},
+			expectedErr:  git.ErrNotFound,
+		},
+		{
+			desc:         "whitespace key",
+			configKey:    "  ",
+			configValues: []string{},
+			expectedErr:  git.ErrNotFound,
+		},
+		{
+			desc:         "empty key",
+			configKey:    "",
+			configValues: []string{},
+			expectedErr:  git.ErrNotFound,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipCreationViaService: true,
+			})
+			repo := NewTestRepo(t, cfg, repoProto)
+			if strings.TrimSpace(tc.configKey) != "" {
+				for _, v := range tc.configValues {
+					gittest.Exec(t, cfg, "-C", repoPath, "config", "--add", tc.configKey, v)
+				}
+			}
+			values, err := repo.GetConfigValues(ctx, tc.configKey)
+			require.ElementsMatch(t, tc.configValues, values)
+			require.ErrorIs(t, err, tc.expectedErr)
+		})
+	}
+}
