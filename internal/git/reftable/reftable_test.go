@@ -1,6 +1,8 @@
 package reftable
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -260,38 +262,110 @@ func TestParseTable(t *testing.T) {
 	}
 }
 
-func TestParseTable_checksumMismatch(t *testing.T) {
+func TestParseTable_validation(t *testing.T) {
 	if !testhelper.IsReftableEnabled() {
 		t.Skip("This test is reftable specific.")
 	}
 
+	t.Parallel()
+
 	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
 
-	_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
-		SkipCreationViaService: true,
-	})
+	patchHeader := func(t *testing.T, f *os.File, hdr header) {
+		buf := bytes.NewBuffer(nil)
+		require.NoError(t, binary.Write(buf, binary.BigEndian, hdr.headerV1))
 
-	tables, err := ReadTablesList(repoPath)
-	require.NoError(t, err)
+		if hdr.headerV1.Version >= 2 {
+			require.NoError(t, binary.Write(buf, binary.BigEndian, hdr.HashID))
+		}
 
-	file, err := os.OpenFile(filepath.Join(repoPath, "reftable", tables[0].String()), os.O_RDWR, 0)
-	require.NoError(t, err)
+		_, err := f.WriteAt(buf.Bytes(), 0)
+		require.NoError(t, err)
+	}
 
-	// The checksum is at the end of the file. Modify the preceding byte without updating the
-	// checksum to trigger a checksumming failure.
-	_, err = file.Seek(-crc32.Size-1, io.SeekEnd)
-	require.NoError(t, err)
+	for _, tc := range []struct {
+		desc                 string
+		patchTable           func(*testing.T, *os.File, footer)
+		expectedErrorMessage string
+	}{
+		{
+			desc: "unexpected magic",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				f.header.Magic = [...]byte{'I', 'V', 'A', 'L'}
+				patchHeader(t, file, f.header)
+			},
+			expectedErrorMessage: `parse header: unexpected magic bytes: "IVAL"`,
+		},
+		{
+			desc: "unsupported version",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				f.header.Version = 3
+				patchHeader(t, file, f.header)
+			},
+			expectedErrorMessage: `parse header: unsupported version: 3`,
+		},
+		{
+			desc: "unsupported hash",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				if f.Version < 2 {
+					t.Skip("Hash ID is only present on reftable version 2.")
+				}
 
-	_, err = file.Write([]byte{255})
-	require.NoError(t, err)
+				f.header.HashID = [...]byte{'I', 'V', 'A', 'L'}
+				patchHeader(t, file, f.header)
+			},
+			expectedErrorMessage: `parse header: unsupported hash id: "IVAL"`,
+		},
+		{
+			desc: "mismatching header and footer",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				f.header.MaxUpdateIndex++
+				patchHeader(t, file, f.header)
+			},
+			expectedErrorMessage: `footer doesn't match header`,
+		},
+		{
+			desc: "invalid checksum",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				// The checksum is at the end of the file. Modify the preceding byte without updating the
+				// checksum to trigger a checksumming failure.
+				info, err := file.Stat()
+				require.NoError(t, err)
 
-	_, err = file.Seek(0, io.SeekStart)
-	require.NoError(t, err)
+				_, err = file.WriteAt([]byte{255}, info.Size()-crc32.Size-1)
+				require.NoError(t, err)
+			},
+			expectedErrorMessage: "parse footer: checksum mismatch",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
 
-	table, err := ParseTable(file)
-	require.EqualError(t, err, "parse footer: checksum mismatch")
-	require.Nil(t, table)
+			_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipCreationViaService: true,
+			})
+
+			tables, err := ReadTablesList(repoPath)
+			require.NoError(t, err)
+
+			file, err := os.OpenFile(filepath.Join(repoPath, "reftable", tables[0].String()), os.O_RDWR, 0)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, file)
+
+			table, err := ParseTable(file)
+			require.NoError(t, err)
+
+			tc.patchTable(t, file, table.footer)
+
+			_, err = file.Seek(0, io.SeekStart)
+			require.NoError(t, err)
+
+			table, err = ParseTable(file)
+			require.EqualError(t, err, tc.expectedErrorMessage)
+			require.Nil(t, table)
+		})
+	}
 }
 
 func TestParseName(t *testing.T) {
