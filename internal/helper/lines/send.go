@@ -108,6 +108,12 @@ func (w *writer) consume(r io.Reader) error {
 	pastPageToken := w.options.IsPageToken([]byte{})
 
 	for continueConsume {
+		// The previous version of this code was skipping the execution for empty limit
+		// Keeping this line for compatibility
+		if w.options.Limit < 1 {
+			break
+		}
+
 		line, err := w.readChunks(buf)
 		if err != nil && !errors.Is(err, io.EOF) {
 			return err

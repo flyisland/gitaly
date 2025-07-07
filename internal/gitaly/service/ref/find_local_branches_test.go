@@ -288,6 +288,24 @@ func TestFindLocalBranches(t *testing.T) {
 			},
 		},
 		{
+			desc: "with valid page token but without limit",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository: repo,
+						PaginationParams: &gitalypb.PaginationParameter{
+							PageToken: "refs/heads/branch-a",
+						},
+					},
+					expectedErr: structerr.NewInvalidArgument("invalid page token: sending lines: could not find page token"),
+				}
+			},
+		},
+		{
 			desc: "sort by ascending name",
 			setup: func(t *testing.T) setupData {
 				repo, _ := gittest.CreateRepository(t, ctx, cfg)
