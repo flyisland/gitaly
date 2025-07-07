@@ -48,7 +48,7 @@ func (v version) FooterSize() int {
 	}
 }
 
-// headerV1 represents the header in reftable version 1.
+// headerV1 is the exact byte layout of a header in reftable version 1.
 type headerV1 struct {
 	Magic          [4]byte
 	Version        version
@@ -57,7 +57,7 @@ type headerV1 struct {
 	MaxUpdateIndex uint64
 }
 
-// header represents the header of a reftable.
+// header is exact byte layout of a header in reftable version 2.
 type header struct {
 	headerV1
 	// HashID is only present if version is 2
@@ -92,6 +92,7 @@ func parseHeader(reader io.Reader, hdr *header) error {
 	return nil
 }
 
+// footerEnd is the exact byte layout of the unique fields in the footer after the duplicated header.
 type footerEnd struct {
 	RefIndexOffset     uint64
 	ObjectOffsetAndLen uint64
@@ -101,6 +102,7 @@ type footerEnd struct {
 	CRC32              uint32
 }
 
+// footer is the exact byte layout of a footer in a reftable.
 type footer struct {
 	header
 	footerEnd
