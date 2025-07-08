@@ -30,6 +30,11 @@ func TestLinesSend(t *testing.T) {
 			output: expected,
 		},
 		{
+			desc:   "limit is -1",
+			limit:  -1,
+			output: [][]byte(nil),
+		},
+		{
 			desc:   "limit is 0",
 			limit:  0,
 			output: [][]byte(nil),
@@ -109,6 +114,15 @@ func TestLinesSend(t *testing.T) {
 				return string(line) == "bar"
 			},
 			output: [][]byte(nil),
+		},
+		{
+			desc:  "page token with zero limit",
+			limit: 0,
+			isPageToken: func(line []byte) bool {
+				// Skip "mepmep", start from "foo"
+				return string(line) == "mepmep"
+			},
+			PageTokenError: true,
 		},
 		{
 			desc:        "skip no lines",

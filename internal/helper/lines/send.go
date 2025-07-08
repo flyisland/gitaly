@@ -91,6 +91,16 @@ func (w *writer) addLine(p []byte) error {
 // consume reads from an `io.Reader` and writes each line to the buffer. It
 // flushes after being done reading.
 func (w *writer) consume(r io.Reader) error {
+	// The previous version of this code was skipping the execution for empty limit
+	// Keeping this line for compatibility
+	if w.options.Limit < 1 {
+		if w.options.PageTokenError {
+			return ErrInvalidPageToken
+		}
+
+		return nil
+	}
+
 	buf := bufio.NewReader(r)
 
 	// Controls main loop; false when EOF reached
