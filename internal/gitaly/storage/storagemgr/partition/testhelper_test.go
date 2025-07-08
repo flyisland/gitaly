@@ -32,6 +32,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/objectpool"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/packfile"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
@@ -379,12 +380,12 @@ func collectReftableReferencesState(
 		},
 	}
 
-	tableNames, err := git.ReadReftablesList(repoPath)
+	tableNames, err := reftable.ReadTablesList(repoPath)
 	require.NoError(tb, err)
 
 	expectedFiles := map[string]struct{}{"tables.list": {}}
 	for _, tableName := range tableNames {
-		expectedFiles[tableName] = struct{}{}
+		expectedFiles[tableName.String()] = struct{}{}
 	}
 
 	actualFiles := map[string]struct{}{}
@@ -412,18 +413,17 @@ func collectReftableReferencesState(
 	for _, tableName := range tableNames {
 		table := ReftableTable{}
 
-		tablePath := filepath.Join(repoPath, "reftable", tableName)
+		tablePath := filepath.Join(repoPath, "reftable", tableName.String())
 
 		data, err := os.ReadFile(tablePath)
 		require.NoError(tb, err)
 
-		table.MinIndex, table.MaxIndex, err = git.ParseReftableName(tableName)
+		table.MinIndex, table.MaxIndex = tableName.MinUpdateIndex, tableName.MaxUpdateIndex
+
+		reftable, err := reftable.ParseTable(bytes.NewReader(data))
 		require.NoError(tb, err)
 
-		reftable, err := git.NewReftable(data)
-		require.NoError(tb, err)
-
-		table.References, err = reftable.IterateRefs()
+		table.References, err = reftable.GetReferences()
 		require.NoError(tb, err)
 
 		for _, reference := range table.References {

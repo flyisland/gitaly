@@ -21,6 +21,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	housekeepingcfg "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
@@ -82,10 +83,10 @@ type runPackRefs struct {
 	emptyDirectories map[string]struct{}
 	// reftablesBefore contains the data in 'tables.list' before the compaction. This is used to
 	// compare with the destination repositories 'tables.list'.
-	reftablesBefore []string
+	reftablesBefore []reftable.Name
 	// reftablesAfter contains the data in 'tables.list' after the compaction. This is used for
 	// generating the combined 'tables.list' during verification.
-	reftablesAfter []string
+	reftablesAfter []reftable.Name
 }
 
 // runRepack models repack housekeeping task. We support multiple repacking strategies. At this stage, the outside
@@ -653,7 +654,7 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) 
 	// wrote new tables to the target repository. We shouldn't loose that data. So we merge
 	// the compacted tables.list with the newer tables from the target repository's tables.list.
 	repoPath := mgr.getAbsolutePath(transaction.relativePath)
-	newTableList, err := git.ReadReftablesList(repoPath)
+	newTableList, err := reftable.ReadTablesList(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading tables.list: %w", err)
 	}
@@ -671,11 +672,16 @@ func (mgr *TransactionManager) verifyPackRefsReftable(transaction *Transaction) 
 	tablesBefore := transaction.runHousekeeping.packRefs.reftablesBefore
 	finalTableList := append(tables, newTableList[len(tablesBefore):]...)
 
+	finalTableListString := make([]string, len(finalTableList))
+	for i, table := range finalTableList {
+		finalTableListString[i] = table.String()
+	}
+
 	// Write the updated tables.list so we can add the required operations.
 	finalTableListPath := filepath.Join(snapshotRepoPath, "reftable", "tables.list")
 	if err := os.WriteFile(
 		finalTableListPath,
-		[]byte(strings.Join(finalTableList, "\n")+"\n"),
+		[]byte(strings.Join(finalTableListString, "\n")+"\n"),
 		mode.File,
 	); err != nil {
 		return nil, fmt.Errorf("writing tables.list: %w", err)

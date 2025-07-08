@@ -24,6 +24,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
@@ -105,7 +106,9 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 				for i := uint(0); i < numTables; i++ {
 					create := logEntry.GetOperations()[i].GetCreateHardLink()
 					require.NotNil(tb, create)
-					require.True(tb, git.ReftableTableNameRegex.Match(create.GetDestinationPath()))
+
+					_, err := reftable.ParseName(filepath.Base(string(create.GetDestinationPath())))
+					require.NoError(tb, err)
 				}
 
 				// The tables.list should be deleted and create (updated).
@@ -127,10 +130,10 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 				Mode:    mode.File,
 				Content: updates[i-1],
 				ParseContent: func(tb testing.TB, path string, content []byte) any {
-					table, err := git.NewReftable(content)
+					table, err := reftable.ParseTable(bytes.NewReader(content))
 					require.NoError(tb, err)
 
-					references, err := table.IterateRefs()
+					references, err := table.GetReferences()
 					require.NoError(tb, err)
 
 					refUpdates := make(git.ReferenceUpdates)
@@ -164,7 +167,8 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 							break
 						}
 
-						require.True(tb, git.ReftableTableNameRegex.Match([]byte(file)))
+						_, err := reftable.ParseName(file)
+						require.NoError(tb, err)
 					}
 					return true
 				},
@@ -1739,7 +1743,8 @@ func generateCommittedEntriesTests(t *testing.T, setup testTransactionSetup) []t
 
 							// We can't predict the table names, but we can verify
 							// the regex.
-							require.True(t, git.ReftableTableNameRegex.Match(actualCHL.GetDestinationPath()))
+							_, err := reftable.ParseName(filepath.Base(string(actualCHL.GetDestinationPath())))
+							require.NoError(t, err)
 							chl.DestinationPath = actualCHL.GetDestinationPath()
 						}
 					}

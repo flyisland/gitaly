@@ -1,12 +1,14 @@
-package git_test
+package reftable
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,7 +39,7 @@ func getReftables(repoPath string) []string {
 	return tables
 }
 
-func TestParseReftable(t *testing.T) {
+func TestParseTable(t *testing.T) {
 	t.Parallel()
 
 	if !testhelper.IsReftableEnabled() {
@@ -46,11 +48,6 @@ func TestParseReftable(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
-
-	tableName := [4]byte{}
-	n, err := strings.NewReader("REFT").Read(tableName[:])
-	require.NoError(t, err)
-	require.Equal(t, 4, n)
 
 	type setupData struct {
 		repoPath   string
@@ -254,13 +251,10 @@ func TestParseReftable(t *testing.T) {
 			require.NoError(t, err)
 			defer file.Close()
 
-			buf, err := io.ReadAll(file)
+			table, err := ParseTable(file)
 			require.NoError(t, err)
 
-			table, err := git.NewReftable(buf)
-			require.NoError(t, err)
-
-			references, err := table.IterateRefs()
+			references, err := table.GetReferences()
 			require.NoError(t, err)
 
 			require.Equal(t, setup.references, references)
@@ -268,14 +262,119 @@ func TestParseReftable(t *testing.T) {
 	}
 }
 
-func TestParseReftableName(t *testing.T) {
+func TestParseTable_validation(t *testing.T) {
+	if !testhelper.IsReftableEnabled() {
+		t.Skip("This test is reftable specific.")
+	}
+
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	patchHeader := func(t *testing.T, f *os.File, hdr header) {
+		buf := bytes.NewBuffer(nil)
+		require.NoError(t, binary.Write(buf, binary.BigEndian, hdr.headerV1))
+
+		if hdr.headerV1.Version >= 2 {
+			require.NoError(t, binary.Write(buf, binary.BigEndian, hdr.HashID))
+		}
+
+		_, err := f.WriteAt(buf.Bytes(), 0)
+		require.NoError(t, err)
+	}
+
+	for _, tc := range []struct {
+		desc                 string
+		patchTable           func(*testing.T, *os.File, footer)
+		expectedErrorMessage string
+	}{
+		{
+			desc: "unexpected magic",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				f.header.Magic = [...]byte{'I', 'V', 'A', 'L'}
+				patchHeader(t, file, f.header)
+			},
+			expectedErrorMessage: `parse header: unexpected magic bytes: "IVAL"`,
+		},
+		{
+			desc: "unsupported version",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				f.header.Version = 3
+				patchHeader(t, file, f.header)
+			},
+			expectedErrorMessage: `parse header: unsupported version: 3`,
+		},
+		{
+			desc: "unsupported hash",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				if f.Version < 2 {
+					t.Skip("Hash ID is only present on reftable version 2.")
+				}
+
+				f.header.HashID = [...]byte{'I', 'V', 'A', 'L'}
+				patchHeader(t, file, f.header)
+			},
+			expectedErrorMessage: `parse header: unsupported hash id: "IVAL"`,
+		},
+		{
+			desc: "mismatching header and footer",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				f.header.MaxUpdateIndex++
+				patchHeader(t, file, f.header)
+			},
+			expectedErrorMessage: `footer doesn't match header`,
+		},
+		{
+			desc: "invalid checksum",
+			patchTable: func(t *testing.T, file *os.File, f footer) {
+				// The checksum is at the end of the file. Modify the preceding byte without updating the
+				// checksum to trigger a checksumming failure.
+				info, err := file.Stat()
+				require.NoError(t, err)
+
+				_, err = file.WriteAt([]byte{255}, info.Size()-crc32.Size-1)
+				require.NoError(t, err)
+			},
+			expectedErrorMessage: "parse footer: checksum mismatch",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipCreationViaService: true,
+			})
+
+			tables, err := ReadTablesList(repoPath)
+			require.NoError(t, err)
+
+			file, err := os.OpenFile(filepath.Join(repoPath, "reftable", tables[0].String()), os.O_RDWR, 0)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, file)
+
+			table, err := ParseTable(file)
+			require.NoError(t, err)
+
+			tc.patchTable(t, file, table.footer)
+
+			_, err = file.Seek(0, io.SeekStart)
+			require.NoError(t, err)
+
+			table, err = ParseTable(file)
+			require.EqualError(t, err, tc.expectedErrorMessage)
+			require.Nil(t, table)
+		})
+	}
+}
+
+func TestParseName(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		desc             string
 		reftableName     string
-		expectedMinIndex uint64
-		expectedMaxIndex uint64
+		expectedName     Name
 		expectedErrorStr string
 	}{
 		{
@@ -294,41 +393,63 @@ func TestParseReftableName(t *testing.T) {
 			expectedErrorStr: "reftable name \"0x000000000001-0x0000000000za-b54f3b59.ref\" malformed",
 		},
 		{
-			desc:             "small values in table name",
-			reftableName:     "0x000000000001-0x000000000005-b54f3b59.ref",
-			expectedMinIndex: 1,
-			expectedMaxIndex: 5,
+			desc:         "small values in table name",
+			reftableName: "0x000000000001-0x000000000005-b54f3b59.ref",
+			expectedName: Name{
+				MinUpdateIndex: 1,
+				MaxUpdateIndex: 5,
+				Suffix:         "b54f3b59",
+			},
 		},
 		{
-			desc:             "medium values in table name",
-			reftableName:     "0x0000000000af-0x0000000000ee-b54f3b59.ref",
-			expectedMinIndex: 175,
-			expectedMaxIndex: 238,
+			desc:         "medium values in table name",
+			reftableName: "0x0000000000af-0x0000000000ee-ab413b60.ref",
+			expectedName: Name{
+				MinUpdateIndex: 175,
+				MaxUpdateIndex: 238,
+				Suffix:         "ab413b60",
+			},
 		},
 		{
-			desc:             "upper case hex in table name",
-			reftableName:     "0x0000000000DE-0x0000000000AD-b54f3b59.ref",
-			expectedMinIndex: 222,
-			expectedMaxIndex: 173,
+			desc:         "upper case hex in table name",
+			reftableName: "0x0000000000DE-0x0000000000AD-c23a3459.ref",
+			expectedName: Name{
+				MinUpdateIndex: 222,
+				MaxUpdateIndex: 173,
+				Suffix:         "c23a3459",
+			},
 		},
 		{
-			desc:             "max values in table name",
-			reftableName:     "0xeeeeeeeeeeee-0xeeeeeeeeeeee-b54f3b59.ref",
-			expectedMinIndex: 262709978263278,
-			expectedMaxIndex: 262709978263278,
+			desc:         "max values in table name",
+			reftableName: "0xeeeeeeeeeeee-0xeeeeeeeeeeee-ddff2b19.ref",
+			expectedName: Name{
+				MinUpdateIndex: 262709978263278,
+				MaxUpdateIndex: 262709978263278,
+				Suffix:         "ddff2b19",
+			},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			min, max, err := git.ParseReftableName(tc.reftableName)
+			actualName, err := ParseName(tc.reftableName)
 			if tc.expectedErrorStr != "" {
 				require.EqualError(t, err, tc.expectedErrorStr)
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedMinIndex, min)
-			require.Equal(t, tc.expectedMaxIndex, max)
+			require.Equal(t, tc.expectedName, actualName)
 		})
 	}
+}
+
+func TestName_string(t *testing.T) {
+	require.Equal(t,
+		"0x000000000001-0x0000000005f6-b54f3b59.ref",
+		Name{
+			MinUpdateIndex: 1,
+			MaxUpdateIndex: 1526,
+			Suffix:         "b54f3b59",
+		}.String(),
+	)
 }
