@@ -44,7 +44,7 @@ func (s *server) ListRefs(in *gitalypb.ListRefsRequest, stream gitalypb.RefServi
 	}
 
 	sorting := sortDirectionByEnum[in.GetSortBy().GetDirection()] + sortKeyByEnum[in.GetSortBy().GetKey()]
-	opts := buildFindRefsOpts(ctx, nil)
+	opts := buildFindRefsOpts(ctx, in.GetPaginationParams())
 	opts.cmdArgs = []gitcmd.Option{
 		// %00 inserts the null character into the output (see for-each-ref docs)
 		gitcmd.ValueFlag{Name: "--format", Value: strings.Join(format, "%00")},
@@ -56,6 +56,9 @@ func (s *server) ListRefs(in *gitalypb.ListRefsRequest, stream gitalypb.RefServi
 	}
 
 	if err := s.findRefs(ctx, writer, repo, patterns, opts); err != nil {
+		if errors.Is(err, lines.ErrInvalidPageToken) {
+			return structerr.NewInvalidArgument("invalid page token: %w", err)
+		}
 		return structerr.NewInternal("%w", err)
 	}
 
@@ -116,7 +119,15 @@ func newListRefsWriter(stream gitalypb.RefService_ListRefsServer, headOID git.Ob
 			}
 		}
 
-		return stream.Send(&gitalypb.ListRefsResponse{References: refNames})
+		response := &gitalypb.ListRefsResponse{References: refNames}
+
+		if len(refNames) > 0 && hasNextPage {
+			lastName := refNames[len(refNames)-1].GetName()
+
+			response.PaginationCursor = &gitalypb.PaginationCursor{NextCursor: string(lastName)}
+		}
+
+		return stream.Send(response)
 	}
 }
 
