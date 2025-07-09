@@ -146,7 +146,7 @@ func TestLocalRepository_ResetRefs(t *testing.T) {
 	locator := config.NewLocator(cfg)
 	catfileCache := catfile.NewCache(cfg)
 	t.Cleanup(catfileCache.Stop)
-	migrationStateManager := migration.NewStateManager([]migration.Migration{})
+	migrationStateManager := migration.NewStateManager(&[]migration.Migration{})
 
 	lr := localrepo.New(testhelper.SharedLogger(t), locator, gitCmdFactory, catfileCache, repo)
 	localRepo := backup.NewLocalRepository(
@@ -253,7 +253,7 @@ func TestLocalRepository_SetHeadReference(t *testing.T) {
 	locator := config.NewLocator(cfg)
 	catfileCache := catfile.NewCache(cfg)
 	t.Cleanup(catfileCache.Stop)
-	migrationStateManager := migration.NewStateManager([]migration.Migration{})
+	migrationStateManager := migration.NewStateManager(&[]migration.Migration{})
 
 	localRepo := backup.NewLocalRepository(
 		testhelper.SharedLogger(t),

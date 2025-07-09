@@ -39,7 +39,7 @@ type migrationManager struct {
 	metrics  Metrics
 	// migrations defines all migration jobs that are expected to be performed on a repository
 	// before it can process incoming transactions.
-	migrations []Migration
+	migrations *[]Migration
 	// migrationStates defines the state of a repository migration and is used to block concurrent
 	// transactions on the same repository while a migration is pending.
 	migrationStates map[string]*migrationState
@@ -48,7 +48,7 @@ type migrationManager struct {
 }
 
 // newPartition creates a migration manager that wraps the provided partition.
-func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, storageName string, migrations []Migration) storagemgr.Partition {
+func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, storageName string, migrations *[]Migration) storagemgr.Partition {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &migrationManager{
@@ -81,7 +81,7 @@ func (m *migrationManager) migrate(ctx context.Context, opts storage.BeginOption
 	relativePaths := opts.RelativePaths
 	// To perform a migration, the manager must have migrations configured and the transaction must
 	// target a repository. If not, skip migration handling and proceed with the transaction.
-	if len(m.migrations) == 0 || len(relativePaths) == 0 {
+	if m.migrations == nil || len(*m.migrations) == 0 || len(relativePaths) == 0 {
 		return nil
 	}
 
@@ -144,7 +144,7 @@ func (m *migrationManager) performMigrations(ctx context.Context, opts storage.B
 
 	// If the repository is already up-to-date, there is no need to start a transaction and perform
 	// migrations.
-	maxID := m.migrations[len(m.migrations)-1].ID
+	maxID := (*m.migrations)[len(*m.migrations)-1].ID
 	if id == maxID {
 		return nil
 	} else if id > maxID {
@@ -168,7 +168,7 @@ func (m *migrationManager) performMigrations(ctx context.Context, opts storage.B
 		}
 	}()
 
-	for _, migration := range m.migrations {
+	for _, migration := range *m.migrations {
 		timer := prometheus.NewTimer(m.metrics.latencyMetric.With(prometheus.Labels{
 			"migration_name": migration.Name,
 		}))

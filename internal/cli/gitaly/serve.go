@@ -453,7 +453,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 				migration.NewFactory(
 					partition.NewFactory(partitionFactoryOptions...),
 					migrationMetrics,
-					migrations,
+					&migrations,
 				),
 				cfg.Transactions.MaxInactivePartitions,
 				storageMetrics,
@@ -699,7 +699,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			BackupLocator:          backupLocator,
 			LocalRepositoryFactory: localrepoFactory,
 			BundleURIManager:       bundleURIManager,
-			MigrationStateManager:  migration.NewStateManager(migrations),
+			MigrationStateManager:  migration.NewStateManager(&migrations),
 		})
 		b.RegisterStarter(starter.New(c, srv, logger))
 	}

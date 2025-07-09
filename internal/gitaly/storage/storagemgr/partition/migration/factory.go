@@ -11,7 +11,7 @@ import (
 type migrationFactory struct {
 	factory    storagemgr.PartitionFactory
 	metrics    Metrics
-	migrations []Migration
+	migrations *[]Migration
 }
 
 // NewFactory returns a new Factory.
@@ -20,7 +20,7 @@ type migrationFactory struct {
 func NewFactory(
 	factory storagemgr.PartitionFactory,
 	metrics Metrics,
-	migrations []Migration,
+	migrations *[]Migration,
 ) storagemgr.PartitionFactory {
 	return &migrationFactory{
 		factory:    factory,

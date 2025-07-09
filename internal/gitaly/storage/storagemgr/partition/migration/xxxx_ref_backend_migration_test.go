@@ -180,7 +180,7 @@ func TestReftableMigration(t *testing.T) {
 				logger,
 				NewMetrics(),
 				storageName,
-				[]Migration{NewReferenceBackendMigration(
+				&[]Migration{NewReferenceBackendMigration(
 					migrationid.Reftable,
 					gittest.FilesOrReftables(git.ReferenceBackendReftables, git.ReferenceBackendFiles),
 					localRepoFactory,

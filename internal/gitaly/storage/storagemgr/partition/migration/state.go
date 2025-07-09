@@ -15,7 +15,7 @@ type StateManager interface {
 }
 
 type stateManager struct {
-	migrations []Migration
+	migrations *[]Migration
 }
 
 // RecordKeyCreation initializes the migration key for a new repository.
@@ -24,8 +24,8 @@ func (m stateManager) RecordKeyCreation(txn storage.Transaction, relativePath st
 	// be created repositories with outdated state. The ID of the latest configured migration is
 	// recorded in the transaction. If no migrations are configured, the ID is set to zero.
 	var migr Migration
-	if len(m.migrations) > 0 {
-		migr = m.migrations[len(m.migrations)-1]
+	if m.migrations != nil && len(*m.migrations) > 0 {
+		migr = (*m.migrations)[len(*m.migrations)-1]
 	}
 
 	if err := migr.recordID(txn, relativePath); err != nil {
@@ -45,7 +45,7 @@ func (stateManager) RecordKeyDeletion(txn storage.Transaction, relativePath stri
 }
 
 // NewStateManager returns an implementation of the StateManager interface.
-func NewStateManager(migrations []Migration) StateManager {
+func NewStateManager(migrations *[]Migration) StateManager {
 	return stateManager{
 		migrations: migrations,
 	}
