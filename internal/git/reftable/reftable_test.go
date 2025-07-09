@@ -368,6 +368,38 @@ func TestParseTable_validation(t *testing.T) {
 	}
 }
 
+func TestTable_updateIndex(t *testing.T) {
+	if !testhelper.IsReftableEnabled() {
+		t.Skip("This test is reftable specific.")
+	}
+
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+
+	// Create a new branch. This creates a table that contains the original
+	// HEAD at update index 1 and the new branch at updated index 2.
+	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("branch-1"))
+
+	tables, err := ReadTablesList(repoPath)
+	require.NoError(t, err)
+
+	file, err := os.OpenFile(filepath.Join(repoPath, "reftable", tables[0].String()), os.O_RDWR, 0)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, file)
+
+	table, err := ParseTable(file)
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(1), table.MinUpdateIndex())
+	require.Equal(t, uint64(2), table.MaxUpdateIndex())
+}
+
 func TestParseName(t *testing.T) {
 	t.Parallel()
 

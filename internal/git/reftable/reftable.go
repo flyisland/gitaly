@@ -157,6 +157,16 @@ type Table struct {
 	footer       footer
 }
 
+// MinUpdateIndex is the minimum update index in the table.
+func (t *Table) MinUpdateIndex() uint64 {
+	return t.footer.MinUpdateIndex
+}
+
+// MaxUpdateIndex is the maximum update index in the table.
+func (t *Table) MaxUpdateIndex() uint64 {
+	return t.footer.MaxUpdateIndex
+}
+
 // shaFormat maps reftable sha format to Gitaly's hash object.
 func (t *Table) shaFormat() git.ObjectHash {
 	if t.footer.Version == 2 && t.footer.HashID == hashIDSHA256 {
