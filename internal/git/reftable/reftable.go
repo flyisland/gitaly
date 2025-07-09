@@ -153,7 +153,7 @@ type block struct {
 type Table struct {
 	blockSize    uint
 	footerOffset uint
-	src          io.ReadSeeker
+	src          *os.File
 	footer       footer
 }
 
@@ -368,8 +368,27 @@ func (t *Table) GetReferences() ([]git.Reference, error) {
 	return allRefs, nil
 }
 
-// ParseTable instantiates a new reftable from the given reftable content.
-func ParseTable(src io.ReadSeeker) (*Table, error) {
+// Close closes the table's associated file.
+func (t *Table) Close() error {
+	return t.src.Close()
+}
+
+// ParseTable opens the table at the given path and parses it. Close must be called
+// once the table is no longer used to close the associated file.
+func ParseTable(absolutePath string) (_ *Table, returnedErr error) {
+	src, err := os.Open(absolutePath)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+
+	defer func() {
+		if returnedErr != nil {
+			if err := src.Close(); err != nil {
+				returnedErr = errors.Join(returnedErr, fmt.Errorf("close: %w", err))
+			}
+		}
+	}()
+
 	t := &Table{src: src}
 
 	var h header

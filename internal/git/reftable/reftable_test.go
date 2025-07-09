@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -247,12 +246,9 @@ func TestParseTable(t *testing.T) {
 			gittest.Exec(t, cfg, "-C", repoPath, "pack-refs")
 			reftablePath := getReftables(repoPath)[0]
 
-			file, err := os.Open(reftablePath)
+			table, err := ParseTable(reftablePath)
 			require.NoError(t, err)
-			defer file.Close()
-
-			table, err := ParseTable(file)
-			require.NoError(t, err)
+			defer testhelper.MustClose(t, table)
 
 			references, err := table.GetReferences()
 			require.NoError(t, err)
@@ -349,19 +345,18 @@ func TestParseTable_validation(t *testing.T) {
 			tables, err := ReadTablesList(repoPath)
 			require.NoError(t, err)
 
-			file, err := os.OpenFile(filepath.Join(repoPath, "reftable", tables[0].String()), os.O_RDWR, 0)
+			tablePath := filepath.Join(repoPath, "reftable", tables[0].String())
+			table, err := ParseTable(tablePath)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, table)
+
+			file, err := os.OpenFile(tablePath, os.O_RDWR, 0)
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, file)
 
-			table, err := ParseTable(file)
-			require.NoError(t, err)
-
 			tc.patchTable(t, file, table.footer)
 
-			_, err = file.Seek(0, io.SeekStart)
-			require.NoError(t, err)
-
-			table, err = ParseTable(file)
+			table, err = ParseTable(tablePath)
 			require.EqualError(t, err, tc.expectedErrorMessage)
 			require.Nil(t, table)
 		})
@@ -389,12 +384,9 @@ func TestTable_updateIndex(t *testing.T) {
 	tables, err := ReadTablesList(repoPath)
 	require.NoError(t, err)
 
-	file, err := os.OpenFile(filepath.Join(repoPath, "reftable", tables[0].String()), os.O_RDWR, 0)
+	table, err := ParseTable(filepath.Join(repoPath, "reftable", tables[0].String()))
 	require.NoError(t, err)
-	defer testhelper.MustClose(t, file)
-
-	table, err := ParseTable(file)
-	require.NoError(t, err)
+	defer testhelper.MustClose(t, table)
 
 	require.Equal(t, uint64(1), table.MinUpdateIndex())
 	require.Equal(t, uint64(2), table.MaxUpdateIndex())

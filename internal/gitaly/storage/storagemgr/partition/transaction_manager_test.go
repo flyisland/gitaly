@@ -130,8 +130,9 @@ func buildReftableDirectory(data map[int][]git.ReferenceUpdates) testhelper.Dire
 				Mode:    mode.File,
 				Content: updates[i-1],
 				ParseContent: func(tb testing.TB, path string, content []byte) any {
-					table, err := reftable.ParseTable(bytes.NewReader(content))
+					table, err := reftable.ParseTable(path)
 					require.NoError(tb, err)
+					defer testhelper.MustClose(tb, table)
 
 					references, err := table.GetReferences()
 					require.NoError(tb, err)
