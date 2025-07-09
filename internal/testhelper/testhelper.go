@@ -321,6 +321,9 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	newRepoReftableEnabled := env.GetString("GIT_DEFAULT_REF_FORMAT", "files")
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.NewRepoReftableBackend, newRepoReftableEnabled == "reftable")
 
+	// Randomly enable either Git version 2.49 or 2.50.
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.GitV250, rnd.Int()%2 == 0)
+
 	// Enable snapshot filter
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.SnapshotFilter, true)
 
