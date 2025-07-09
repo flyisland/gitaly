@@ -477,3 +477,91 @@ func TestName_string(t *testing.T) {
 		}.String(),
 	)
 }
+
+func TestTable_PatchUpdateIndexes(t *testing.T) {
+	if !testhelper.IsReftableEnabled() {
+		t.Skipf("This test is specific to reftables.")
+	}
+
+	ctx := testhelper.Context(t)
+
+	cfg := testcfg.Build(t)
+
+	_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+
+	tables, err := ReadTablesList(repoPath)
+	require.NoError(t, err)
+	// In a new repository, there should only be a single table that contains HEAD.
+	require.Len(t, tables, 1)
+
+	tablePath := filepath.Join(repoPath, "reftable", tables[0].String())
+
+	originalData, err := os.ReadFile(tablePath)
+	require.NoError(t, err)
+
+	// First check the table as Git wrote it matches our expectations.
+	originalTable, err := ParseTable(tablePath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, originalTable)
+
+	require.Equal(t, footer{
+		header: header{
+			headerV1: headerV1{
+				Magic: magic,
+				Version: gittest.ObjectHashDependent(t, map[string]version{
+					git.ObjectHashSHA1.Format:   1,
+					git.ObjectHashSHA256.Format: 2,
+				}),
+				BlockSize:      [...]byte{0, 16, 0},
+				MinUpdateIndex: 1,
+				MaxUpdateIndex: 1,
+			},
+			HashID: gittest.ObjectHashDependent(t, map[string][4]byte{
+				git.ObjectHashSHA1.Format:   hashIDSHA1,
+				git.ObjectHashSHA256.Format: hashIDSHA256,
+			}),
+		},
+		footerEnd: footerEnd{
+			CRC32: gittest.ObjectHashDependent(t, map[string]uint32{
+				git.ObjectHashSHA1.Format:   3066034058,
+				git.ObjectHashSHA256.Format: 1113112077,
+			}),
+		},
+	}, originalTable.footer)
+
+	originalFooter := originalTable.footer
+
+	// Patch the table and assert that all of the relevant fields in both Table instance
+	// and the file have been updated.
+	require.NoError(t, originalTable.PatchUpdateIndexes(2, 3))
+
+	patchedData, err := os.ReadFile(tablePath)
+	require.NoError(t, err)
+	require.NotEqual(t, patchedData, originalData)
+
+	patchedTable, err := ParseTable(tablePath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, patchedTable)
+
+	expectedPatchedFooter := originalFooter
+	expectedPatchedFooter.MinUpdateIndex = 2
+	expectedPatchedFooter.MaxUpdateIndex = 3
+	expectedPatchedFooter.CRC32 = gittest.ObjectHashDependent(t, map[string]uint32{
+		git.ObjectHashSHA1.Format:   4151879677,
+		git.ObjectHashSHA256.Format: 1567373335,
+	})
+
+	require.Equal(t, expectedPatchedFooter, patchedTable.footer)
+	require.Equal(t, originalTable.footer, patchedTable.footer,
+		"expected the internal fields on the patched table to be updated along the file",
+	)
+
+	// Finally, check that we arrive back at the original if we patch the file with
+	// the same update indexes again.
+	require.NoError(t, patchedTable.PatchUpdateIndexes(1, 1))
+	roundtrippedData, err := os.ReadFile(tablePath)
+	require.NoError(t, err)
+	require.Equal(t, originalData, roundtrippedData)
+}
