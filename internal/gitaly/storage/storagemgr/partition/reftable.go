@@ -17,10 +17,10 @@ func reftableDirectoryPath(repositoryPath string) string {
 }
 
 // getLatestReftableName reads the filename of the latest table from the tables.list file.
-func getLatestReftableName(reftableDir string) (string, error) {
+func getLatestReftableName(reftableDir string) (reftable.Name, error) {
 	f, err := os.Open(filepath.Join(reftableDir, "tables.list"))
 	if err != nil {
-		return "", fmt.Errorf("open: %w", err)
+		return reftable.Name{}, fmt.Errorf("open: %w", err)
 	}
 	defer f.Close()
 
@@ -29,20 +29,18 @@ func getLatestReftableName(reftableDir string) (string, error) {
 	const tableLineLength = int64(len("0x000000000001-0x000000000002-RANDOM3.ref\n")) + 1
 
 	if _, err := f.Seek(-tableLineLength, io.SeekEnd); err != nil {
-		return "", fmt.Errorf("seek: %w", err)
+		return reftable.Name{}, fmt.Errorf("seek: %w", err)
 	}
 
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return "", fmt.Errorf("read all: %w", err)
+		return reftable.Name{}, fmt.Errorf("read all: %w", err)
 	}
 
 	// Each table line ends in a newline. Trim it as it's not part of the table name.
-	latestTable := string(bytes.TrimSuffix(data, []byte("\n")))
-
-	// This is purely for sanity checking that we're not reading garbage from the file.
-	if _, err := reftable.ParseName(latestTable); err != nil {
-		return "", fmt.Errorf("parse name: %w", err)
+	latestTable, err := reftable.ParseName(string(bytes.TrimSuffix(data, []byte("\n"))))
+	if err != nil {
+		return reftable.Name{}, fmt.Errorf("parse name: %w", err)
 	}
 
 	return latestTable, nil
@@ -63,7 +61,7 @@ func preventReftableCompaction(repositoryPath string) error {
 		return fmt.Errorf("get latest reftable name: %w", err)
 	}
 
-	return os.WriteFile(filepath.Join(reftableDir, latestTableName+".lock"), nil, mode.File)
+	return os.WriteFile(filepath.Join(reftableDir, latestTableName.String()+".lock"), nil, mode.File)
 }
 
 // allowReftableCompaction enables compaction of table files that existed in the
@@ -77,5 +75,5 @@ func allowReftableCompaction(repositoryPath string) error {
 		return fmt.Errorf("get latest reftableName: %w", err)
 	}
 
-	return os.Remove(filepath.Join(reftableDir, latestTableName+".lock"))
+	return os.Remove(filepath.Join(reftableDir, latestTableName.String()+".lock"))
 }
