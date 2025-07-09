@@ -422,6 +422,9 @@ func collectReftableReferencesState(
 			require.NoError(tb, err)
 			defer testhelper.MustClose(tb, reftable)
 
+			require.Equal(tb, table.MinIndex, reftable.MinUpdateIndex(), "min update index inside table didn't match the name")
+			require.Equal(tb, table.MaxIndex, reftable.MaxUpdateIndex(), "max update index inside table didn't match the name")
+
 			table.References, err = reftable.GetReferences()
 			require.NoError(tb, err)
 		}()

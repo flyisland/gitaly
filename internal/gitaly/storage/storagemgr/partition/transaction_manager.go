@@ -26,7 +26,6 @@ import (
 	housekeepingcfg "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
@@ -177,8 +176,12 @@ type Transaction struct {
 	db keyvalue.Transaction
 	// fs is the transaction's file system handle. Operations through it are recorded in the transaction.
 	fs fsrecorder.FS
-	// referenceRecorder records the file system operations performed by reference transactions.
+	// referenceRecorder records the file system operations performed by reference transactions with the files backend.
 	referenceRecorder *wal.ReferenceRecorder
+	// reftableRecorder identifies the new reftables written out by the transactions and implements logic to resequence
+	// them on the latest state and stage them into the WAL entry.
+	reftableRecorder *reftableRecorder
+
 	// recordingReadWriter is a ReadWriter operating on db that also records operations performed. This
 	// is used to record the operations performed so they can be conflict checked and write-ahead logged.
 	recordingReadWriter keyvalue.RecordingReadWriter
@@ -457,6 +460,10 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 
 						if err := preventReftableCompaction(snapshotRepositoryPath); err != nil {
 							return nil, fmt.Errorf("prevent reftable compaction: %w", err)
+						}
+
+						if txn.reftableRecorder, err = newReftableRecorder(snapshotRepositoryPath); err != nil {
+							return nil, fmt.Errorf("new reftable recorder: %w", err)
 						}
 					}
 				} else {
@@ -1791,8 +1798,11 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 
 				if refBackend == git.ReferenceBackendReftables || transaction.runHousekeeping != nil {
 					if refBackend == git.ReferenceBackendReftables {
-						if err := mgr.verifyReferences(ctx, transaction); err != nil {
-							return commitResult{error: fmt.Errorf("verify references: %w", err)}
+						if err := transaction.reftableRecorder.stageTables(ctx,
+							mgr.getAbsolutePath(transaction.relativePath),
+							transaction,
+						); err != nil {
+							return commitResult{error: fmt.Errorf("stage tables: %w", err)}
 						}
 					}
 
@@ -2115,196 +2125,6 @@ func (mgr *TransactionManager) getAbsolutePath(relativePath ...string) string {
 // packFilePath returns a log entry's pack file's absolute path in the wal files directory.
 func packFilePath(walFiles string) string {
 	return filepath.Join(walFiles, "transaction.pack")
-}
-
-// verifyReferences verifies that the references in the transaction apply on top of the already accepted
-// reference changes. The old tips in the transaction are verified against the current actual tips.
-// It returns the write-ahead log entry for the reference transactions successfully verified.
-func (mgr *TransactionManager) verifyReferences(ctx context.Context, transaction *Transaction) error {
-	defer trace.StartRegion(ctx, "verifyReferences").End()
-
-	if len(transaction.referenceUpdates) == 0 {
-		return nil
-	}
-
-	span, _ := tracing.StartSpanIfHasParent(ctx, "transaction.verifyReferences", nil)
-	defer span.Finish()
-
-	stagingRepository, err := mgr.setupStagingRepository(ctx, transaction)
-	if err != nil {
-		return fmt.Errorf("setup staging snapshot: %w", err)
-	}
-
-	// Apply quarantine to the staging repository in order to ensure the new objects are available when we
-	// are verifying references. Without it we'd encounter errors about missing objects as the new objects
-	// are not in the repository.
-	stagingRepositoryWithQuarantine, err := stagingRepository.Quarantine(ctx, transaction.quarantineDirectory)
-	if err != nil {
-		return fmt.Errorf("quarantine: %w", err)
-	}
-
-	if err := mgr.verifyReferencesWithGitForReftables(ctx, transaction.manifest.GetReferenceTransactions(), transaction, stagingRepositoryWithQuarantine); err != nil {
-		return fmt.Errorf("verify references with git: %w", err)
-	}
-
-	return nil
-}
-
-// verifyReferencesWithGitForReftables is responsible for converting the logical reference updates
-// to transaction operations.
-//
-// To ensure that we don't modify existing tables and autocompact, we lock the existing tables
-// before applying the updates. This way the reftable backend will only create new tables
-func (mgr *TransactionManager) verifyReferencesWithGitForReftables(
-	ctx context.Context,
-	referenceTransactions []*gitalypb.LogEntry_ReferenceTransaction,
-	tx *Transaction,
-	repo *localrepo.Repo,
-) error {
-	reftablePath := mgr.getAbsolutePath(repo.GetRelativePath(), "reftable/")
-	existingTables := make(map[string]struct{})
-	lockedTables := make(map[string]struct{})
-
-	// reftableWalker allows us to walk the reftable directory.
-	reftableWalker := func(handler func(path string) error) fs.WalkDirFunc {
-		return func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if d.IsDir() {
-				if filepath.Base(path) == "reftable" {
-					return nil
-				}
-
-				return fmt.Errorf("unexpected directory: %s", filepath.Base(path))
-			}
-
-			return handler(path)
-		}
-	}
-
-	// We first track the existing tables in the reftable directory.
-	if err := filepath.WalkDir(
-		reftablePath,
-		reftableWalker(func(path string) error {
-			if filepath.Base(path) == "tables.list" {
-				return nil
-			}
-
-			existingTables[path] = struct{}{}
-
-			return nil
-		}),
-	); err != nil {
-		return fmt.Errorf("finding reftables: %w", err)
-	}
-
-	// We then lock existing tables as to disable the autocompaction.
-	for table := range existingTables {
-		lockedPath := table + ".lock"
-
-		f, err := os.Create(lockedPath)
-		if err != nil {
-			return fmt.Errorf("creating reftable lock: %w", err)
-		}
-		if err = f.Close(); err != nil {
-			return fmt.Errorf("closing reftable lock: %w", err)
-		}
-
-		lockedTables[lockedPath] = struct{}{}
-	}
-
-	// Since autocompaction is now disabled, adding references will
-	// add new tables but not compact them.
-	for _, referenceTransaction := range referenceTransactions {
-		if err := mgr.applyReferenceTransaction(ctx, referenceTransaction.GetChanges(), repo); err != nil {
-			return fmt.Errorf("applying reference: %w", err)
-		}
-	}
-
-	// With this, we can track the new tables added along with the 'tables.list'
-	// as operations on the transaction.
-	if err := filepath.WalkDir(
-		reftablePath,
-		reftableWalker(func(path string) error {
-			if _, ok := lockedTables[path]; ok {
-				return nil
-			}
-
-			if _, ok := existingTables[path]; ok {
-				return nil
-			}
-
-			base := filepath.Base(path)
-
-			if base == "tables.list" {
-				tx.walEntry.RemoveDirectoryEntry(filepath.Join(tx.relativePath, "reftable", base))
-			}
-			return tx.walEntry.CreateFile(path, filepath.Join(tx.relativePath, "reftable", base))
-		}),
-	); err != nil {
-		return fmt.Errorf("finding reftables: %w", err)
-	}
-
-	// Finally release the locked tables.
-	for lockedTable := range lockedTables {
-		if err := os.Remove(lockedTable); err != nil {
-			return fmt.Errorf("deleting locked file: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// applyReferenceTransaction applies a reference transaction with `git update-ref`.
-func (mgr *TransactionManager) applyReferenceTransaction(ctx context.Context, changes []*gitalypb.LogEntry_ReferenceTransaction_Change, repository *localrepo.Repo) (returnedErr error) {
-	defer trace.StartRegion(ctx, "applyReferenceTransaction").End()
-
-	updater, err := updateref.New(ctx, repository, updateref.WithDisabledTransactions(), updateref.WithNoDeref())
-	if err != nil {
-		return fmt.Errorf("new: %w", err)
-	}
-	defer func() {
-		if err := updater.Close(); err != nil {
-			returnedErr = errors.Join(returnedErr, fmt.Errorf("close updater: %w", err))
-		}
-	}()
-
-	if err := updater.Start(); err != nil {
-		return fmt.Errorf("start: %w", err)
-	}
-
-	version, err := repository.GitVersion(ctx)
-	if err != nil {
-		return fmt.Errorf("git version: %w", err)
-	}
-
-	for _, change := range changes {
-		if len(change.GetNewTarget()) > 0 {
-			if err := updater.UpdateSymbolicReference(
-				version,
-				git.ReferenceName(change.GetReferenceName()),
-				git.ReferenceName(change.GetNewTarget()),
-			); err != nil {
-				return fmt.Errorf("update symref %q: %w", change.GetReferenceName(), err)
-			}
-		} else {
-			if err := updater.Update(git.ReferenceName(change.GetReferenceName()), git.ObjectID(change.GetNewOid()), ""); err != nil {
-				return fmt.Errorf("update %q: %w", change.GetReferenceName(), err)
-			}
-		}
-	}
-
-	if err := updater.Prepare(); err != nil {
-		return fmt.Errorf("prepare: %w", err)
-	}
-
-	if err := updater.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
-	}
-
-	return nil
 }
 
 // appendLogEntry appends a log entry of a transaction to the write-ahead log. After the log entry is appended to WAL,

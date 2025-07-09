@@ -506,22 +506,28 @@ func TestTable_PatchUpdateIndexes(t *testing.T) {
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, originalTable)
 
+	expectedVersion := gittest.ObjectHashDependent(t, map[string]version{
+		git.ObjectHashSHA1.Format:   1,
+		git.ObjectHashSHA256.Format: 2,
+	})
+
 	require.Equal(t, footer{
 		header: header{
 			headerV1: headerV1{
-				Magic: magic,
-				Version: gittest.ObjectHashDependent(t, map[string]version{
-					git.ObjectHashSHA1.Format:   1,
-					git.ObjectHashSHA256.Format: 2,
-				}),
+				Magic:          magic,
+				Version:        expectedVersion,
 				BlockSize:      [...]byte{0, 16, 0},
 				MinUpdateIndex: 1,
 				MaxUpdateIndex: 1,
 			},
-			HashID: gittest.ObjectHashDependent(t, map[string][4]byte{
-				git.ObjectHashSHA1.Format:   hashIDSHA1,
-				git.ObjectHashSHA256.Format: hashIDSHA256,
-			}),
+			HashID: testhelper.DependingOn(expectedVersion == 2,
+				gittest.ObjectHashDependent(t, map[string][4]byte{
+					git.ObjectHashSHA1.Format:   hashIDSHA1,
+					git.ObjectHashSHA256.Format: hashIDSHA256,
+				}),
+				// Version 1 doesn't have a hash ID field.
+				[4]byte{},
+			),
 		},
 		footerEnd: footerEnd{
 			CRC32: gittest.ObjectHashDependent(t, map[string]uint32{
