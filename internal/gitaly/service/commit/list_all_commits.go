@@ -3,7 +3,6 @@ package commit
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitpipe"
@@ -56,7 +55,7 @@ func (s *server) ListAllCommits(
 			return objectInfo.Type != "commit"
 		}),
 	}
-	if featureflag.CatfileObjectTypeFilter.IsEnabled(ctx) && gitVersion.IsCatfileObjectTypeFilterSupported() {
+	if gitVersion.IsCatfileObjectTypeFilterSupported() {
 		catfileInfoOptions = append(catfileInfoOptions, gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeCommit))
 	}
 
