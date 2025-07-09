@@ -18,6 +18,15 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 )
 
+var (
+	// magic is the magic value of a reftable header.
+	magic = [...]byte{'R', 'E', 'F', 'T'}
+	// hashIDSHA1 denotes this reftable uses SHA1.
+	hashIDSHA1 = [...]byte{'s', 'h', 'a', '1'}
+	// hashIDSHA256 denotes this reftable uses SHA256.
+	hashIDSHA256 = [...]byte{'s', '2', '5', '6'}
+)
+
 // version represents a reftable version.
 type version uint8
 
@@ -71,7 +80,7 @@ func parseHeader(reader io.Reader, hdr *header) error {
 		return fmt.Errorf("reading header: %w", err)
 	}
 
-	if hdr.Magic != [...]byte{'R', 'E', 'F', 'T'} {
+	if hdr.Magic != magic {
 		return fmt.Errorf("unexpected magic bytes: %q", hdr.Magic)
 	}
 
@@ -84,7 +93,7 @@ func parseHeader(reader io.Reader, hdr *header) error {
 			return fmt.Errorf("read hash id: %w", err)
 		}
 
-		if !(hdr.HashID == [...]byte{'s', 'h', 'a', '1'} || hdr.HashID == [...]byte{'s', '2', '5', '6'}) {
+		if !(hdr.HashID == hashIDSHA1 || hdr.HashID == hashIDSHA256) {
 			return fmt.Errorf("unsupported hash id: %q", hdr.HashID)
 		}
 	}
@@ -150,7 +159,7 @@ type Table struct {
 
 // shaFormat maps reftable sha format to Gitaly's hash object.
 func (t *Table) shaFormat() git.ObjectHash {
-	if t.footer.Version == 2 && bytes.Equal(t.footer.HashID[:], []byte("s256")) {
+	if t.footer.Version == 2 && t.footer.HashID == hashIDSHA256 {
 		return git.ObjectHashSHA256
 	}
 	return git.ObjectHashSHA1
