@@ -159,6 +159,11 @@ func (m *migrator) Run() {
 					}
 
 					latency, err := m.migrate(ctx, data.storageName, data.relativePath)
+					// We shouldn't care about migration status for repositories which don't
+					// event exist.
+					if errors.Is(err, storage.ErrRepositoryNotFound) {
+						return
+					}
 
 					state.attempts = state.attempts + 1
 					state.cancelCtx = nil

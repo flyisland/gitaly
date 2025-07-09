@@ -24,13 +24,18 @@ import (
 )
 
 type mockMigrationHandler struct {
-	ch <-chan struct{}
+	ch  <-chan struct{}
+	err error
 }
 
 func (m *mockMigrationHandler) Migrate(ctx context.Context, tx storage.Transaction, storageName string, relativePath string) error {
 	if m.ch != nil {
 		<-m.ch
 		<-m.ch
+	}
+
+	if m.err != nil {
+		return m.err
 	}
 
 	return nil
@@ -221,37 +226,80 @@ func TestMigrator(t *testing.T) {
 	require.NoError(t, err)
 	defer ptnMgr.Close()
 
+	type setupData struct {
+		run              func(m *migrator, repo *gitalypb.Repository)
+		migrationHandler migrationHandler
+		repo             *gitalypb.Repository
+	}
+
 	for _, tc := range []struct {
 		desc           string
-		setup          func() (func(m *migrator, repo *gitalypb.Repository), migrationHandler)
+		setup          func() setupData
 		completed      bool
+		attempts       uint
 		expectedLogMsg string
 	}{
 		{
 			desc: "cancelled migration",
-			setup: func() (func(m *migrator, repo *gitalypb.Repository), migrationHandler) {
+			setup: func() setupData {
 				ch := make(chan struct{})
 
-				return func(m *migrator, repo *gitalypb.Repository) {
-					ch <- struct{}{}
-					m.CancelMigration(cfg.Storages[0].Name, repo.GetRelativePath())
-					ch <- struct{}{}
-				}, &mockMigrationHandler{ch: ch}
+				repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				return setupData{
+					run: func(m *migrator, repo *gitalypb.Repository) {
+						ch <- struct{}{}
+						m.CancelMigration(cfg.Storages[0].Name, repo.GetRelativePath())
+						ch <- struct{}{}
+					},
+					migrationHandler: &mockMigrationHandler{ch: ch},
+					repo:             repo,
+				}
 			},
 			completed:      false,
+			attempts:       1,
 			expectedLogMsg: "migration failed for repository",
 		},
 		{
+			desc: "repository not found error",
+			setup: func() setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				return setupData{
+					run:              func(m *migrator, repo *gitalypb.Repository) {},
+					migrationHandler: &mockMigrationHandler{err: storage.ErrRepositoryNotFound},
+					repo:             repo,
+				}
+			},
+			// When we encounter a ErrRepositoryNotFound error, we simply
+			// skip the migration and don't mark it as completed or attempted.
+			completed: false,
+			attempts:  0,
+		},
+		{
 			desc: "successful migration",
-			setup: func() (func(m *migrator, repo *gitalypb.Repository), migrationHandler) {
-				return func(m *migrator, repo *gitalypb.Repository) {}, &mockMigrationHandler{}
+			setup: func() setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				return setupData{
+					run:              func(m *migrator, repo *gitalypb.Repository) {},
+					migrationHandler: &mockMigrationHandler{},
+					repo:             repo,
+				}
 			},
 			completed:      true,
+			attempts:       1,
 			expectedLogMsg: "migration successful for repository",
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			run, migrationHandler := tc.setup()
+			data := tc.setup()
 
 			parentCtx, parentCancel := context.WithCancel(context.Background())
 			m := &migrator{
@@ -261,16 +309,12 @@ func TestMigrator(t *testing.T) {
 				metrics:          metrics,
 				node:             ptnMgr,
 				state:            sync.Map{},
-				migrationHandler: migrationHandler,
+				migrationHandler: data.migrationHandler,
 				ctx:              parentCtx,
 				ctxCancel:        parentCancel,
 			}
 
 			storageName := cfg.Storages[0].Name
-
-			repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
-				SkipCreationViaService: true,
-			})
 
 			m.Run()
 			defer m.Close()
@@ -278,27 +322,29 @@ func TestMigrator(t *testing.T) {
 			// It is not guaranteed that the migration is registered, so run it in a
 			// loop until it is.
 			for {
-				if _, ok := m.state.Load(migrationKey(storageName, repo.GetRelativePath())); ok {
+				if _, ok := m.state.Load(migrationKey(storageName, data.repo.GetRelativePath())); ok {
 					break
 				}
 
-				m.RegisterMigration(storageName, repo.GetRelativePath())
+				m.RegisterMigration(storageName, data.repo.GetRelativePath())
 			}
 
-			run(m, repo)
+			data.run(m, data.repo)
 
 			// Block till the old migration is complete.
 			m.migrateCh <- migrationData{}
 
-			val, ok := m.state.Load(migrationKey(storageName, repo.GetRelativePath()))
+			val, ok := m.state.Load(migrationKey(storageName, data.repo.GetRelativePath()))
 			state := val.(migratorState)
 
 			require.True(t, ok)
 			require.Equal(t, tc.completed, state.completed)
-			require.Equal(t, uint(1), state.attempts)
+			require.Equal(t, tc.attempts, state.attempts)
 
-			entries := hook.AllEntries()
-			require.Equal(t, tc.expectedLogMsg, entries[len(entries)-1].Message)
+			if tc.expectedLogMsg != "" {
+				entries := hook.AllEntries()
+				require.Equal(t, tc.expectedLogMsg, entries[len(entries)-1].Message)
+			}
 		})
 	}
 }
