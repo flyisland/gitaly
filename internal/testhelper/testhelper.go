@@ -65,12 +65,20 @@ func IsRaftEnabled() bool {
 	return ok
 }
 
+// DependingOn is a helper that returns the yes value when the condition is true,
+// and otherwise returns the no value. This is a general helper for switching
+// test assertions based on a condition.
+func DependingOn[T any](condition bool, yes, no T) T {
+	if condition {
+		return yes
+	}
+
+	return no
+}
+
 // WithOrWithoutRaft returns a value correspondingly to if Raft is enabled or not.
 func WithOrWithoutRaft[T any](raftVal, noRaftVal T) T {
-	if IsRaftEnabled() {
-		return raftVal
-	}
-	return noRaftVal
+	return DependingOn(IsRaftEnabled(), raftVal, noRaftVal)
 }
 
 // SkipWithRaft skips the test if Raft is enabled in this testing run.
@@ -91,10 +99,7 @@ func SkipWithWAL(tb testing.TB, reason string) {
 
 // WithOrWithoutWAL returns a value correspondingly to if WAL is enabled or not.
 func WithOrWithoutWAL[T any](walVal, noWalVal T) T {
-	if IsWALEnabled() {
-		return walVal
-	}
-	return noWalVal
+	return DependingOn(IsWALEnabled(), walVal, noWalVal)
 }
 
 // IsPraefectEnabled returns whether this testing run is done with Praefect in front of the Gitaly.
