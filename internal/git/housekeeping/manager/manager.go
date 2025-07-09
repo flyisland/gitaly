@@ -36,11 +36,6 @@ type Manager interface {
 type repositoryState struct {
 	sync.Mutex
 
-	// packRefsDone is a channel used to denote when the ongoing (if any) call to packRefsIfNeeded
-	// is completed.
-	packRefsDone chan struct{}
-	// packRefsInhibitors keeps a count of the number of inhibitors on running packRefsIfNeeded.
-	packRefsInhibitors int32
 	// isRunning is used to indicate if housekeeping is running.
 	isRunning bool
 }
@@ -124,38 +119,6 @@ func (s *repositoryStates) tryRunningHousekeeping(repo storage.Repository) (succ
 		defer state.Unlock()
 
 		state.isRunning = false
-	}
-}
-
-// tryRunningPackRefs checks if we can run `git-pack-refs(1)` for a given repository. If there
-// is at least one inhibitors then we return false. If there are no inhibitors, we setup the `packRefsDone`
-// channel to denote when `git-pack-refs(1)` finishes, this is handled when the caller calls the
-// cleanup function returned by this function.
-func (s *repositoryStates) tryRunningPackRefs(repo storage.Repository) (successful bool, _ func()) {
-	state, cleanup := s.getState(repo)
-	defer func() {
-		if !successful {
-			cleanup()
-		}
-	}()
-
-	state.Lock()
-	defer state.Unlock()
-
-	if state.packRefsInhibitors > 0 || state.packRefsDone != nil {
-		return false, nil
-	}
-
-	state.packRefsDone = make(chan struct{})
-
-	return true, func() {
-		defer cleanup()
-
-		state.Lock()
-		defer state.Unlock()
-
-		close(state.packRefsDone)
-		state.packRefsDone = nil
 	}
 }
 

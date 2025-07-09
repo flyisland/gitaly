@@ -437,13 +437,6 @@ func (m *RepositoryManager) packRefsIfNeeded(ctx context.Context, repo *localrep
 		return false, nil
 	}
 
-	// If there are any inhibitors, we don't run git-pack-refs(1).
-	ok, cleanup := m.repositoryStates.tryRunningPackRefs(repo)
-	if !ok {
-		return false, nil
-	}
-	defer cleanup()
-
 	var stderr bytes.Buffer
 	if err := repo.ExecAndWait(ctx, gitcmd.Command{
 		Name: "pack-refs",
