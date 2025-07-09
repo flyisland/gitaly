@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.1.2 (2025-07-09)
+
+No changes.
+
 ## 18.1.1 (2025-06-24)
 
 No changes.
@@ -10,6 +14,10 @@ No changes.
 
 - [commit: Implement message regex filtering for FindCommits](gitlab-org/gitaly@6cf3323d93fe8075d7aeb07c72836ebf6e9543f7) ([merge request](gitlab-org/gitaly!7883))
 - [protobuf: Add message_regex field to FindCommitsRequest](gitlab-org/gitaly@35def91974ca1e339870cdfaa4cd9d68b1b4f1f4) ([merge request](gitlab-org/gitaly!7883))
+
+## 18.0.4 (2025-07-09)
+
+No changes.
 
 ## 18.0.3 (2025-06-24)
 
@@ -29,6 +37,10 @@ No changes.
 
 - [pktline: Add test for ReadMonitor error logging](gitlab-org/gitaly@bcbfee5ab681c6248220d17bd8224a05920874c4) by @santhanuv ([merge request](gitlab-org/gitaly!7866))
 - [pktline: Log read errors in ReadMonitor](gitlab-org/gitaly@62674c1f784971350c5e13aceb64ddd50904db0c) by @santhanuv ([merge request](gitlab-org/gitaly!7866))
+
+## 17.11.6 (2025-07-09)
+
+No changes.
 
 ## 17.11.5 (2025-06-24)
 
