@@ -171,12 +171,8 @@ func (n *PackfileNegotiation) UpdateLogFields(ctx context.Context) {
 	if n.Filter != "" {
 		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.filter", n.Filter)
 	}
-	if n.Haves > 0 {
-		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.haves", n.Haves)
-	}
-	if n.Wants > 0 {
-		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.wants", n.Wants)
-	}
+	log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.haves", n.Haves)
+	log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.wants", n.Wants)
 	if n.Shallows > 0 {
 		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.shallows", n.Shallows)
 	}
