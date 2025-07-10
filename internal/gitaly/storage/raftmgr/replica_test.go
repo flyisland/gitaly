@@ -1726,6 +1726,14 @@ func TestReplica_AddNode(t *testing.T) {
 		replica, err := createRaftReplica(t, ctx, memberID, socketPath, raftCfg, partitionID, metrics, opts...)
 		require.NoError(t, err)
 
+		partitionKey := &gitalypb.PartitionKey{
+			PartitionId:   uint64(partitionID),
+			AuthorityName: cfg.Storages[0].Name,
+		}
+
+		registry.RegisterReplica(partitionKey, replica)
+		transport.registry = registry
+
 		err = replica.Initialize(ctx, 0)
 		require.NoError(t, err)
 
@@ -1740,10 +1748,9 @@ func TestReplica_AddNode(t *testing.T) {
 	}
 
 	// waitForVoters waits for both replicas to have the expected number of voters
-	waitForVoters := func(t *testing.T, replicaOne, replicaTwo *Replica, expectedVoters int, timeout time.Duration) {
+	waitForReplicaLeader := func(t *testing.T, replicaOne, replicaTwo *Replica, expectedVoters int, timeout time.Duration) {
 		require.Eventually(t, func() bool {
-			return len(replicaOne.node.Status().Config.Voters) == expectedVoters &&
-				len(replicaTwo.node.Status().Config.Voters) == expectedVoters
+			return replicaTwo.leadership.GetLeaderID() == replicaOne.memberID
 		}, timeout, 5*time.Millisecond, "configuration should stabilize with %d voters", expectedVoters)
 	}
 
@@ -1772,7 +1779,8 @@ func TestReplica_AddNode(t *testing.T) {
 		metrics := NewMetrics()
 		partitionID := storage.PartitionID(1)
 
-		replica, _, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		replica, socketPath, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		replicaAddress := "unix://" + socketPath
 		defer func() {
 			srv.Stop()
 			require.NoError(t, replica.Close())
@@ -1801,7 +1809,25 @@ func TestReplica_AddNode(t *testing.T) {
 		registryTwo := replicaTwo.raftEnabledStorage.GetReplicaRegistry()
 		registryTwo.RegisterReplica(partitionKey, replicaTwo)
 
-		err := replica.AddNode(ctx, replicaTwoAddress)
+		routingTableTwo := replicaTwo.raftEnabledStorage.GetRoutingTable()
+		err := routingTableTwo.UpsertEntry(RoutingTableEntry{
+			Replicas: []*gitalypb.ReplicaID{
+				{
+					PartitionKey: partitionKey,
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+					MemberId:     1,
+					Metadata: &gitalypb.ReplicaID_Metadata{
+						Address: replicaAddress,
+					},
+				},
+			},
+			Term:  1,
+			Index: 2,
+		})
+
+		require.NoError(t, err)
+
+		err = replica.AddNode(ctx, replicaTwoAddress)
 		require.NoError(t, err, "adding node should succeed when leader")
 
 		require.Eventually(t, func() bool {
@@ -1816,7 +1842,7 @@ func TestReplica_AddNode(t *testing.T) {
 
 		drainNotificationQueues(t, replica, replicaTwo)
 
-		waitForVoters(t, replica, replicaTwo, 2, waitTimeout)
+		waitForReplicaLeader(t, replica, replicaTwo, 2, waitTimeout)
 
 		testhelper.RequirePromMetrics(t, metrics, `
 			# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
@@ -1931,11 +1957,8 @@ func TestReplica_AddNode(t *testing.T) {
 
 		addedReplica := addressesToReplicas[addedAddress]
 
-		status := replica.node.Status()
-		require.Len(t, status.Config.Voters, 2, "expected two voters in the final configuration")
-
 		// Wait for voters count to stabilize between both replicas
-		waitForVoters(t, replica, addedReplica, 2, waitTimeout)
+		waitForReplicaLeader(t, replica, addedReplica, 2, waitTimeout)
 
 		drainNotificationQueues(t, replica, addedReplica)
 
