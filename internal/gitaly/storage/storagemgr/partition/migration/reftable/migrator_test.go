@@ -230,6 +230,7 @@ func TestMigrator(t *testing.T) {
 		run              func(m *migrator, repo *gitalypb.Repository)
 		migrationHandler migrationHandler
 		repo             *gitalypb.Repository
+		startState       *migratorState
 	}
 
 	for _, tc := range []struct {
@@ -260,6 +261,30 @@ func TestMigrator(t *testing.T) {
 			},
 			completed:      false,
 			attempts:       1,
+			expectedLogMsg: "migration failed for repository",
+		},
+		{
+			desc: "existing state, cancelled migration",
+			setup: func() setupData {
+				ch := make(chan struct{})
+
+				repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				return setupData{
+					run: func(m *migrator, repo *gitalypb.Repository) {
+						ch <- struct{}{}
+						m.CancelMigration(cfg.Storages[0].Name, repo.GetRelativePath())
+						ch <- struct{}{}
+					},
+					migrationHandler: &mockMigrationHandler{ch: ch},
+					repo:             repo,
+					startState:       &migratorState{attempts: 3},
+				}
+			},
+			completed:      false,
+			attempts:       4,
 			expectedLogMsg: "migration failed for repository",
 		},
 		{
@@ -315,6 +340,9 @@ func TestMigrator(t *testing.T) {
 			}
 
 			storageName := cfg.Storages[0].Name
+			if data.startState != nil {
+				m.state.Store(migrationKey(storageName, data.repo.GetRelativePath()), *data.startState)
+			}
 
 			m.Run()
 			defer m.Close()
@@ -322,8 +350,10 @@ func TestMigrator(t *testing.T) {
 			// It is not guaranteed that the migration is registered, so run it in a
 			// loop until it is.
 			for {
-				if _, ok := m.state.Load(migrationKey(storageName, data.repo.GetRelativePath())); ok {
-					break
+				if val, ok := m.state.Load(migrationKey(storageName, data.repo.GetRelativePath())); ok {
+					if val.(migratorState).cancelCtx != nil {
+						break
+					}
 				}
 
 				m.RegisterMigration(storageName, data.repo.GetRelativePath())
