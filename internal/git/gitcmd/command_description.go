@@ -198,6 +198,9 @@ var commandDescriptions = map[string]commandDescription{
 	"log": {
 		flags: scNoRefUpdates,
 	},
+	"last-modified": {
+		flags: scNoRefUpdates,
+	},
 	"ls-remote": {
 		flags: scNoRefUpdates,
 		opts: func(context.Context) []GlobalOption {

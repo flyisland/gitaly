@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
@@ -18,6 +19,12 @@ import (
 func TestListLastCommitsForTree(t *testing.T) {
 	t.Parallel()
 
+	testhelper.NewFeatureSets(
+		featureflag.GitLastModified,
+	).Run(t, testListLastCommitsForTree)
+}
+
+func testListLastCommitsForTree(t *testing.T, ctx context.Context) {
 	commitResponse := func(path string, commit *gitalypb.GitCommit) *gitalypb.ListLastCommitsForTreeResponse_CommitForTree {
 		return &gitalypb.ListLastCommitsForTreeResponse_CommitForTree{
 			PathBytes: []byte(path),
@@ -141,18 +148,20 @@ func TestListLastCommitsForTree(t *testing.T) {
 		{
 			desc: "root directory",
 			setup: func(t *testing.T, ctx context.Context, data TestData) setupData {
+				request := &gitalypb.ListLastCommitsForTreeRequest{
+					Repository: data.repoProto,
+					Revision:   data.parentCommit.GetId(),
+					Path:       []byte("/"),
+					Limit:      5,
+				}
+				expectedCommits := []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree{
+					commitResponse("subdir", data.parentCommit),
+					commitResponse("changed", data.parentCommit),
+					commitResponse("unchanged", data.childCommit),
+				}
 				return setupData{
-					request: &gitalypb.ListLastCommitsForTreeRequest{
-						Repository: data.repoProto,
-						Revision:   data.parentCommit.GetId(),
-						Path:       []byte("/"),
-						Limit:      5,
-					},
-					expectedCommits: []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree{
-						commitResponse("subdir", data.parentCommit),
-						commitResponse("changed", data.parentCommit),
-						commitResponse("unchanged", data.childCommit),
-					},
+					request:         request,
+					expectedCommits: expectedCommits,
 				}
 			},
 		},
@@ -316,7 +325,6 @@ func TestListLastCommitsForTree(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := testhelper.Context(t)
 			cfg, client := setupCommitService(t, ctx)
 
 			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
@@ -363,7 +371,7 @@ func TestListLastCommitsForTree(t *testing.T) {
 			) []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree {
 				return append(result, response.GetCommits()...)
 			})
-			testhelper.RequireGrpcError(t, setup.expectedErr, err)
+			testhelper.RequireGrpcErrorContains(t, setup.expectedErr, err)
 			testhelper.ProtoEqual(t, setup.expectedCommits, commits)
 		})
 	}

@@ -1,15 +1,22 @@
 package log
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
@@ -73,10 +80,69 @@ func EachPathLastCommit(
 	options *gitalypb.GlobalOptions,
 	fn func(string, *catfile.Commit) error,
 ) error {
+	if featureflag.GitLastModified.IsEnabled(ctx) && featureflag.GitMaster.IsEnabled(ctx) {
+		stderr := &bytes.Buffer{}
+
+		cmd, err := repo.Exec(ctx, gitcmd.Command{
+			Name: "last-modified",
+			Flags: []gitcmd.Option{
+				gitcmd.Flag{Name: "-t"},
+				gitcmd.Flag{Name: "--max-depth=1"},
+				gitcmd.Flag{Name: "-z"},
+			},
+			Args:        []string{revision.String()},
+			PostSepArgs: paths,
+		},
+			append(gitcmd.ConvertGlobalOptions(options),
+				gitcmd.WithSetupStdout(), gitcmd.WithStderr(stderr))...)
+		if err != nil {
+			return err
+		}
+
+		reader := bufio.NewReader(cmd)
+		for {
+			blurb, err := reader.ReadBytes(0x00)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				return err
+			}
+			blurb = bytes.TrimSuffix(blurb, []byte{0x00})
+
+			if len(blurb) == 0 {
+				break
+			}
+
+			oid, path, found := strings.Cut(string(blurb), "\t")
+			if !found {
+				return fmt.Errorf("last-modified tab not found")
+			}
+			if !slices.Contains(paths, path) {
+				continue
+			}
+			commit, err := catfile.GetCommit(ctx, objectReader, git.Revision(strings.TrimPrefix(oid, "^")))
+			if err != nil {
+				return fmt.Errorf("get commit %v, %w", oid, err)
+			}
+			err = fn(path, commit)
+			if err != nil {
+				return fmt.Errorf("each last path %v, %w", oid, err)
+			}
+		}
+
+		if err := cmd.Wait(); err != nil {
+			return structerr.NewInternal("%w", err).
+				WithMetadata("stderr", stderr.String()).
+				WithMetadata("command", "last-modified")
+		}
+		return nil
+	}
+
 	for _, path := range paths {
 		c, err := LastCommitForPath(ctx, objectReader, repo, revision, path, options)
 		if err != nil {
-			return fmt.Errorf("last commit for %q failed: %w", err)
+			return fmt.Errorf("last commit for %q failed: %w", path, err)
 		}
 		err = fn(path, c)
 		if err != nil {
