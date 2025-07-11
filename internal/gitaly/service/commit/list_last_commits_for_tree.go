@@ -9,9 +9,10 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/git/log"
+	gitlog "gitlab.com/gitlab-org/gitaly/v18/internal/git/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
@@ -67,14 +68,15 @@ func (s *server) listLastCommitsForTree(in *gitalypb.ListLastCommitsForTreeReque
 		limit = len(entries)
 	}
 
-	for _, entry := range entries[offset:limit] {
-		commit, err := log.LastCommitForPath(ctx, objectReader, repo, git.Revision(in.GetRevision()), entry.Path, in.GetGlobalOptions())
-		if err != nil {
-			return err
-		}
+	entries = entries[offset:limit]
+	paths := make([]string, 0, len(entries))
+	for _, e := range entries {
+		paths = append(paths, e.Path)
+	}
 
+	err = gitlog.EachPathLastCommit(ctx, objectReader, repo, git.Revision(in.GetRevision()), paths, in.GetGlobalOptions(), func(path string, commit *catfile.Commit) error {
 		commitForTree := &gitalypb.ListLastCommitsForTreeResponse_CommitForTree{
-			PathBytes: []byte(entry.Path),
+			PathBytes: []byte(path),
 			Commit:    commit.GitCommit,
 		}
 
@@ -86,6 +88,10 @@ func (s *server) listLastCommitsForTree(in *gitalypb.ListLastCommitsForTreeReque
 
 			batch = batch[0:0]
 		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	if err := cmd.Wait(); err != nil {

@@ -61,6 +61,32 @@ func LastCommitForPath(
 	return catfile.GetCommit(ctx, objectReader, git.Revision(commitID))
 }
 
+// EachPathLastCommit returns the last commit that modified each path in `paths`.
+// It does so by calling the provided function `fn` for each path in `paths` with the
+// related commit. It is up to the caller to decide what to do with the commit then.
+func EachPathLastCommit(
+	ctx context.Context,
+	objectReader catfile.ObjectContentReader,
+	repo gitcmd.RepositoryExecutor,
+	revision git.Revision,
+	paths []string,
+	options *gitalypb.GlobalOptions,
+	fn func(string, *catfile.Commit) error,
+) error {
+	for _, path := range paths {
+		c, err := LastCommitForPath(ctx, objectReader, repo, revision, path, options)
+		if err != nil {
+			return fmt.Errorf("last commit for %q failed: %w", err)
+		}
+		err = fn(path, c)
+		if err != nil {
+			return fmt.Errorf("callback last commit: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // GitLogCommand returns a Command that executes git log with the given the arguments
 func GitLogCommand(ctx context.Context, repo gitcmd.RepositoryExecutor, revisions []git.Revision, paths []string, options *gitalypb.GlobalOptions, extraArgs ...gitcmd.Option) (*command.Command, error) {
 	args := make([]string, len(revisions))
