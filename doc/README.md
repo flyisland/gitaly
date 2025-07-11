@@ -24,9 +24,18 @@ The reference guide is documented in <https://docs.gitlab.com/administration/git
 Gitaly does not replicate any data. If a Gitaly server goes down, any of its
 clients can't read or write to the repositories stored on that server. This
 means that Gitaly is not highly available. How this will be solved is described
-[in the HA design document](design_ha.md)
+[in the HA design document](design_ha.md).
 
 For configuration please read [Praefect's configuration documentation](configuration/praefect.md).
+
+## Upgrading the Go version used by Gitaly
+
+To upgrade the version of Go that is used by Gitaly requires:
+
+- Updating multiple files within the Gitaly repository.
+- Ensuring compatible Go versions in all dependent repositories.
+
+For more information, see [Upgrading Go used by Gitaly](go_upgrade_gitaly.md)
 
 ## Technical explanations
 
