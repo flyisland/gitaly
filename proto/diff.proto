@@ -328,6 +328,24 @@ message FindChangedPathsRequest {
     MERGE_COMMIT_DIFF_MODE_ALL_PARENTS = 2;
   }
 
+  // DiffStatus defines the possible status types for a diff. This is used to filter requested diffs.
+  enum DiffStatus {
+    // DIFF_STATUS_UNSPECIFIED indicates a file with unknown change type.
+    DIFF_STATUS_UNSPECIFIED = 0;
+    // DIFF_STATUS_ADDED indicates a file was added.
+    DIFF_STATUS_ADDED = 1;
+    // DIFF_STATUS_MODIFIED indicates a file was modified.
+    DIFF_STATUS_MODIFIED = 2;
+    // DIFF_STATUS_DELETED indicates a file was deleted.
+    DIFF_STATUS_DELETED = 3;
+    // DIFF_STATUS_TYPE_CHANGE indicates change in the type of the file (regular file, symbolic link or submodule).
+    DIFF_STATUS_TYPE_CHANGE = 4;
+    // DIFF_STATUS_COPIED indicates Git determined the file was copied.
+    DIFF_STATUS_COPIED = 5;
+    // DIFF_STATUS_RENAMED indicates Git determined the file was renamed.
+    DIFF_STATUS_RENAMED = 6;
+  }
+
   // Request is a single request to pass to git diff-tree.
   message Request {
     // TreeRequest compares two trees.
@@ -373,6 +391,11 @@ message FindChangedPathsRequest {
   MergeCommitDiffMode merge_commit_diff_mode = 4;
   // find_renames toggles rename detection on the files in the diff.
   bool find_renames = 5;
+
+  // diff_filters allows the underlying git-diff-tree(1) to be configured with a specific
+  // --diff-filter flag to filter output for specific diff statuses. When not specified, the
+  // default is "AMDTCR".
+  repeated DiffStatus diff_filters = 6;
 }
 
 // FindChangedPathsResponse is the response for the FindChangedPaths RPC.
