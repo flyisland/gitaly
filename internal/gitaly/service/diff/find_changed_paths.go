@@ -32,6 +32,15 @@ var statusTypeMap = map[byte]gitalypb.ChangedPaths_Status{
 	'R': gitalypb.ChangedPaths_RENAMED,
 }
 
+var diffFilterMap = map[gitalypb.FindChangedPathsRequest_DiffStatus]byte{
+	gitalypb.FindChangedPathsRequest_DIFF_STATUS_ADDED:       'A',
+	gitalypb.FindChangedPathsRequest_DIFF_STATUS_MODIFIED:    'M',
+	gitalypb.FindChangedPathsRequest_DIFF_STATUS_DELETED:     'D',
+	gitalypb.FindChangedPathsRequest_DIFF_STATUS_TYPE_CHANGE: 'T',
+	gitalypb.FindChangedPathsRequest_DIFF_STATUS_COPIED:      'C',
+	gitalypb.FindChangedPathsRequest_DIFF_STATUS_RENAMED:     'R',
+}
+
 // changedPathsRequestToString converts the given FindChangedPathsRequest to a string that can be passed to git-diff-tree(1). Note
 // that this function expects that all revisions have already been resolved to their respective object IDs.
 func changedPathsRequestToString(r *gitalypb.FindChangedPathsRequest_Request) (string, error) {
@@ -62,6 +71,26 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 		requests[i] = str
 	}
 
+	diffFilter := "AMDTCR"
+	if len(in.GetDiffFilters()) > 0 {
+		seenStatus := make(map[gitalypb.FindChangedPathsRequest_DiffStatus]struct{})
+		var filter string
+
+		for _, status := range in.GetDiffFilters() {
+			filterStatus, ok := diffFilterMap[status]
+			if !ok {
+				return structerr.NewInvalidArgument("invalid diff filter requested")
+			}
+
+			// Filter out repeated statuses.
+			if _, ok := seenStatus[status]; !ok {
+				filter += string(filterStatus)
+				seenStatus[status] = struct{}{}
+			}
+		}
+		diffFilter = filter
+	}
+
 	flags := []gitcmd.Option{
 		gitcmd.Flag{Name: "-z"},
 		gitcmd.Flag{Name: "--stdin"},
@@ -71,7 +100,7 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 		// By adding below flag we ask Git to behave as when comparing to an empty
 		// tree in that case.
 		gitcmd.Flag{Name: "--root"},
-		gitcmd.Flag{Name: "--diff-filter=AMDTCR"},
+		gitcmd.Flag{Name: "--diff-filter=" + diffFilter},
 	}
 
 	if in.GetFindRenames() {
