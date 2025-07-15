@@ -44,7 +44,7 @@ var (
 		// include reftable/table.list and files end in .ref only.
 		regexp.MustCompile(`^reftable$`),
 		regexp.MustCompile(`^reftable/tables.list$`),
-		regexp.MustCompile(`^reftable/.*\.ref$`),
+		regexp.MustCompile(`^reftable/0x([[:xdigit:]]{12,16})-0x([[:xdigit:]]{12,16})-([0-9a-zA-Z]{8}).ref$`),
 
 		// include everything in refs/. The exclusion patterns will filter out .lock files.
 		regexp.MustCompile(`^refs$`),
