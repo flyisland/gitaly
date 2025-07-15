@@ -206,7 +206,7 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ReplicaOptions, error
 type RaftReplicaFactory func(
 	memberID uint64,
 	storageName string,
-	partitionID storage.PartitionID,
+	partitionKey *gitalypb.PartitionKey,
 	logStore *ReplicaLogStore,
 	logger logging.Logger,
 	metrics *Metrics,
@@ -218,7 +218,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 	return func(
 		memberID uint64,
 		storageName string,
-		partitionID storage.PartitionID,
+		partitionKey *gitalypb.PartitionKey,
 		logStore *ReplicaLogStore,
 		logger logging.Logger,
 		metrics *Metrics,
@@ -233,14 +233,14 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
 
-		replica, err := NewReplica(memberID, storageName, partitionID, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
+		replica, err := NewReplica(memberID, partitionKey, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("create replica %q: %w", storageName, err)
 		}
 
-		if err := raftEnabledStorage.RegisterReplica(partitionID, replica); err != nil {
-			return nil, fmt.Errorf("register replica for partition %d in storage %q: %w",
-				partitionID, storageName, err)
+		if err := raftEnabledStorage.RegisterReplica(replica); err != nil {
+			return nil, fmt.Errorf("register replica %q in storage %q: %w",
+				partitionKey.String(), storageName, err)
 		}
 
 		return replica, nil
@@ -253,8 +253,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 // the Raft protocol operation.
 func NewReplica(
 	memberID uint64,
-	authorityName string,
-	partitionID storage.PartitionID,
+	partitionKey *gitalypb.PartitionKey,
 	raftCfg config.Raft,
 	logStore *ReplicaLogStore,
 	raftEnabledStorage *RaftEnabledStorage,
@@ -276,16 +275,15 @@ func NewReplica(
 	}
 
 	logger = logger.WithFields(logging.Fields{
-		"component":      "raft",
-		"raft.authority": authorityName,
-		"raft.partition": partitionID,
+		"component":         "raft",
+		"raft.partitionKey": partitionKey.String(),
 	})
 
-	scopedMetrics := metrics.Scope(authorityName)
+	scopedMetrics := metrics.Scope(partitionKey.AuthorityName)
 
 	return &Replica{
 		memberID:           memberID,
-		partitionKey:       NewPartitionKey(authorityName, partitionID),
+		partitionKey:       partitionKey,
 		raftCfg:            raftCfg,
 		options:            options,
 		logStore:           logStore,

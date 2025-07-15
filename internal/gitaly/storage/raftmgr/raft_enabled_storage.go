@@ -35,7 +35,7 @@ func (s *RaftEnabledStorage) GetReplicaRegistry() ReplicaRegistry {
 
 // RegisterReplica registers a replica with this RaftEnabledStorage
 // This should be called after both the replica and RaftEnabledStorage are created
-func (s *RaftEnabledStorage) RegisterReplica(partitionID storage.PartitionID, replica *Replica) error {
+func (s *RaftEnabledStorage) RegisterReplica(replica *Replica) error {
 	s.replicaRegistry.RegisterReplica(replica.partitionKey, replica)
 
 	return nil
