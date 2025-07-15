@@ -143,8 +143,7 @@ func WithEntryRecorder(recorder *ReplicaEntryRecorder) OptionFunc {
 // Internally, the Replica integrates with etcd/raft to implement the Raft consensus algorithm
 // and implements the storage.LogManager interface to interact with Gitaly's transaction system.
 //
-// A Replica is identified by a Replica ID, which consists of
-// (Partition ID, Member ID, Replica Storage Name).
+// A Replica is identified by a gitalypb.ReplicaID.
 type Replica struct {
 	mutex sync.Mutex
 
