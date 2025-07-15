@@ -166,6 +166,16 @@ func TestRepositories_Validate(t *testing.T) {
 			name: "empty",
 		},
 		{
+			name: "valid with zero limits",
+			repositories: Repositories{
+				Count:             1,
+				MaxCgroupsPerRepo: 1,
+				MemoryBytes:       0,
+				CPUShares:         0,
+				CPUQuotaUs:        0,
+			},
+		},
+		{
 			name: "valid",
 			repositories: Repositories{
 				Count:             2,
