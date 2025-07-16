@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
@@ -57,13 +56,6 @@ func testUnaryInterceptor(t *testing.T, ctx context.Context) {
 
 	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
-	repo := localrepo.NewTestRepo(t, cfg, repoProto)
-	backend, err := repo.ReferenceBackend(ctx)
-	require.NoError(t, err)
-	if backend == git.ReferenceBackendReftables {
-		return
-	}
-
 	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"), gittest.WithTreeEntries(
 		gittest.TreeEntry{Mode: "100644", Path: "foo", Content: "bar"},
 	))
@@ -95,7 +87,10 @@ func testUnaryInterceptor(t *testing.T, ctx context.Context) {
 	require.Equal(t,
 		testhelper.EnabledOrDisabledFlag(ctx, featureflag.ReftableMigration,
 			gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
-			gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+			gittest.FilesOrReftables(
+				gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+				gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+			),
 		),
 		repoInfo.GetReferences().GetReferenceBackend(),
 	)
@@ -135,13 +130,6 @@ func testStreamInterceptor(t *testing.T, ctx context.Context) {
 	cfg.SocketPath = serverSocketPath
 
 	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
-
-	repo := localrepo.NewTestRepo(t, cfg, repoProto)
-	backend, err := repo.ReferenceBackend(ctx)
-	require.NoError(t, err)
-	if backend == git.ReferenceBackendReftables {
-		return
-	}
 
 	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"), gittest.WithTreeEntries(
 		gittest.TreeEntry{Mode: "100644", Path: "foo", Content: "bar"},
@@ -186,7 +174,10 @@ func testStreamInterceptor(t *testing.T, ctx context.Context) {
 	require.Equal(t,
 		testhelper.EnabledOrDisabledFlag(ctx, featureflag.ReftableMigration,
 			gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
-			gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+			gittest.FilesOrReftables(
+				gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
+				gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
+			),
 		),
 		repoInfo.GetReferences().GetReferenceBackend(),
 	)
