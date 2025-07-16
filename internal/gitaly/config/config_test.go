@@ -541,13 +541,9 @@ func TestLoadConfigCommand(t *testing.T) {
 				return setupData{
 					cfg: Cfg{
 						ConfigCommand: cmd,
-						Git: Git{
-							BinPath: "foo/bar",
-						},
 					},
 					expectedCfg: modifyDefaultConfig(func(cfg *Cfg) {
 						cfg.ConfigCommand = cmd
-						cfg.Git.BinPath = "foo/bar"
 						cfg.Git.SigningKey = "signing_key"
 						cfg.Git.RotatedSigningKeys = []string{"rotated_key_1", "rotated_key_2"}
 						cfg.Git.CommitterEmail = "noreply@gitlab.com"
@@ -809,7 +805,6 @@ func TestStoragePath(t *testing.T) {
 
 func TestLoadGit(t *testing.T) {
 	tmpFile := strings.NewReader(`[git]
-bin_path = "/my/git/path"
 catfile_cache_size = 50
 
 [[git.config]]
@@ -825,7 +820,6 @@ value = "second-value"
 	require.NoError(t, err)
 
 	require.Equal(t, Git{
-		BinPath:          "/my/git/path",
 		CatfileCacheSize: 50,
 		Config: []GitConfig{
 			{Key: "first.key", Value: "first-value"},

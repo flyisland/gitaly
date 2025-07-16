@@ -101,7 +101,6 @@ The following values can be set in the `[git]` section of the configuration file
 
 | Name                 | Type    | Required | Notes                                                                 |
 |:---------------------|:--------|:---------|:----------------------------------------------------------------------|
-| `bin_path`           | string  | no       | Path to Git binary. If not set, will be resolved using PATH.          |
 | `catfile_cache_size` | integer | no       | Maximum number of cached cat-file processes (see below). Default 100. |
 
 #### cat-file cache

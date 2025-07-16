@@ -76,7 +76,7 @@ func handleExecErr(tb testing.TB, cfg config.Cfg, execCfg ExecConfig, args []str
 		}
 		stderr = exitErr.Stderr
 	}
-	tb.Log(cfg.Git.BinPath, args)
+	tb.Log(args)
 	if len(stderr) > 0 {
 		tb.Logf("%s\n", stderr)
 	}

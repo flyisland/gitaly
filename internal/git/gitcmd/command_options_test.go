@@ -388,7 +388,8 @@ func TestWithConfigEnv(t *testing.T) {
 }
 
 func TestWithInternalFetch(t *testing.T) {
-	cfg := config.Cfg{BinDir: testhelper.TempDir(t)}
+	cfg := testcfg.Build(t)
+	cfg.BinDir = testhelper.TempDir(t)
 
 	gitCmdFactory := newCommandFactory(t, cfg, WithSkipHooks())
 	ctx := testhelper.Context(t)

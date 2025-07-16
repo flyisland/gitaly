@@ -97,7 +97,7 @@ type DistributedGitEnvironmentConstructor struct{}
 // For testing purposes, this function overrides the configured Git binary path if the
 // `GITALY_TESTING_GIT_BINARY` environment variable is set.
 func (c DistributedGitEnvironmentConstructor) Construct(cfg config.Cfg) (ExecutionEnvironment, error) {
-	binaryPath := cfg.Git.BinPath
+	var binaryPath string
 	var environmentVariables []string
 	if override := os.Getenv("GITALY_TESTING_GIT_BINARY"); binaryPath == "" && override != "" {
 		binaryPath = override
@@ -144,7 +144,9 @@ type BundledGitEnvironmentConstructor struct {
 // environment variable to point to that directory such that Git is able to locate its auxiliary
 // binaries.
 func (c BundledGitEnvironmentConstructor) Construct(cfg config.Cfg) (_ ExecutionEnvironment, returnedErr error) {
-	if !cfg.Git.UseBundledBinaries {
+	// During testing, if GITALY_TESTING_GIT_BINARY is set, we want the DistributedGitEnvironmentConstructor
+	// to handle it instead of trying to use bundled binaries.
+	if os.Getenv("GITALY_TESTING_GIT_BINARY") != "" {
 		return ExecutionEnvironment{}, ErrNotConfigured
 	}
 

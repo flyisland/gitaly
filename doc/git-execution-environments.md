@@ -1,24 +1,10 @@
-# Methods for Gitaly to access Git
+# Bundled Git binaries
 
 Because Git is at the heart of almost all interfaces provided by Gitaly, Gitaly
-must have access to Git. Gitaly supports three ways of accessing Git:
-
-- Bundled Git (recommended): Gitaly accesses bundled Git binaries. Unlike the
-  other two ways of accessing Git, this is not a complete Git installation but
-  only contains a subset of binaries that are required at runtime. Bundled Git
-  binaries are directly embedded into the Gitaly binary during compilation.
-- External Git distribution (not recommended): Gitaly accesses Git provided by
-  the operating system or manually installed by the administrator.
-- Gitaly Git distribution (not recommended): Gitaly accesses it's own version of
-  Git that may carry custom patches which are recommended, but not required.
-  These patches may fix known bugs or fix performance issues.
-
-The bundled Git execution environment is the recommended way to set up Gitaly.
-
-## Bundled Git (recommended)
-
-Instead of using a full Git distribution, you can use a bundled Git execution
-environment.
+must have access to Git. To ensure Gitaly always has access to Git,
+Gitaly accesses bundled Git binaries. These binaries are not a complete
+Git installation but only contains a subset of binaries that are required at runtime.
+Bundled Git binaries are directly embedded into the Gitaly binary during compilation.
 
 Bundled Git binaries are compiled whenever Gitaly is compiled. There's no
 need to explicitly build and install them. If you're running a test without
@@ -56,62 +42,3 @@ To fix this, Gitaly has to bootstrap a Git execution environment on startup by:
 To tell Git where to find those symlinks, we run all Git commands with the
 `GIT_EXEC_PATH` environment variable that points into that temporary execution
 environment.
-
-Gitaly can be configured to use bundled binaries by setting the following keys:
-
-```toml
-[git]
-use_bundled_binaries = true
-```
-
-## External Git Distribution
-
-You can run Gitaly with an external Git distribution that is not provided by
-Gitaly itself. For example:
-
-- Git distributions provided by the operating system's own package repositories.
-- A custom version of Git installed by the system administrator.
-
-To configure Gitaly to use an external Git distribution, point the Git binary
-path in its configuration file to the Git executable:
-
-```toml
-[git]
-bin_path = "/usr/bin/git"
-```
-
-If the binary path is not configured and Gitaly is not configured to use bundled
-binaries, Gitaly tries to resolve a Git executable automatically using the
-`PATH` variable. Relying on this behavior is not recommended and results in a
-warning on start up.
-
-External Git distributions must meet a minimum required version (for example,
-for [GitLab 17.8.0](https://docs.gitlab.com/update/versions/gitlab_17_changes/#1780)) which can change
-when upgrading Gitaly. Gitaly refuses to boot if the external Git distribution
-does not fulfill this version requirement.
-
-## Gitaly Git Distribution
-
-Gitaly provides its own version of Git that may contain a custom set of patches.
-These patches fix known issues we experience with Gitaly and may fix performance
-issues we have observed.
-
-While we backport patches that have been accepted in the upstream Git project,
-we do not plan to apply patches that will not eventually end up in Git itself.
-
-To use Gitaly's Git distribution, run `make install-git`. This Make target
-automatically fetches, builds, and installs Git into a specific directory that
-is configurable with the `GIT_PREFIX` environment variable. The version of Git
-is configurable using the `GIT_VERSION` environment variable. For example, to
-install the Git version 2.37.3 into `/usr/local`:
-
-1. Run the command `make GIT_VERSION=2.37.3 GIT_PREFIX=/usr/local install-git`
-   to build Git v2.37.3 and install it in `/usr/local`.
-1. Configure Gitaly to use the Git distribution:
-
-```toml
-# Git settings
-[git]
-use_bundled_binaries = false
-bin_path = "/usr/local/bin/git"
-```
