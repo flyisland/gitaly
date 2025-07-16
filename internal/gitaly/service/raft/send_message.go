@@ -54,7 +54,7 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 	return stream.SendAndClose(&gitalypb.RaftMessageResponse{})
 }
 
-func extractRaftMessageReq(req *gitalypb.RaftMessageRequest, s *Server) (*gitalypb.ReplicaID, *gitalypb.PartitionKey, error) {
+func extractRaftMessageReq(req *gitalypb.RaftMessageRequest, s *Server) (*gitalypb.ReplicaID, *gitalypb.RaftPartitionKey, error) {
 	replicaID := req.GetReplicaId()
 	partitionKey := replicaID.GetPartitionKey()
 

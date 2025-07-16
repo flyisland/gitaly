@@ -13,7 +13,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
-func routingKey(partitionKey *gitalypb.PartitionKey) []byte {
+func routingKey(partitionKey *gitalypb.RaftPartitionKey) []byte {
 	return []byte(fmt.Sprintf("raft/%s", partitionKey.GetValue()))
 }
 
@@ -35,10 +35,10 @@ type ReplicaMetadata struct {
 
 // RoutingTable handles translation between member IDs and addresses
 type RoutingTable interface {
-	Translate(partitionKey *gitalypb.PartitionKey, memberID uint64) (*gitalypb.ReplicaID, error)
-	GetEntry(partitionKey *gitalypb.PartitionKey) (*RoutingTableEntry, error)
+	Translate(partitionKey *gitalypb.RaftPartitionKey, memberID uint64) (*gitalypb.ReplicaID, error)
+	GetEntry(partitionKey *gitalypb.RaftPartitionKey) (*RoutingTableEntry, error)
 	UpsertEntry(entry RoutingTableEntry) error
-	ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.PartitionKey, changes *ReplicaConfChanges) error
+	ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.RaftPartitionKey, changes *ReplicaConfChanges) error
 }
 
 // PersistentRoutingTable implements the RoutingTable interface with KV storage
@@ -108,7 +108,7 @@ func (r *kvRoutingTable) UpsertEntry(entry RoutingTableEntry) error {
 }
 
 // GetEntry retrieves a routing table entry
-func (r *kvRoutingTable) GetEntry(partitionKey *gitalypb.PartitionKey) (*RoutingTableEntry, error) {
+func (r *kvRoutingTable) GetEntry(partitionKey *gitalypb.RaftPartitionKey) (*RoutingTableEntry, error) {
 	key := routingKey(partitionKey)
 
 	var entry RoutingTableEntry
@@ -129,7 +129,7 @@ func (r *kvRoutingTable) GetEntry(partitionKey *gitalypb.PartitionKey) (*Routing
 }
 
 // Translate returns the storage name and address for a given partition key and member ID
-func (r *kvRoutingTable) Translate(partitionKey *gitalypb.PartitionKey, memberID uint64) (*gitalypb.ReplicaID, error) {
+func (r *kvRoutingTable) Translate(partitionKey *gitalypb.RaftPartitionKey, memberID uint64) (*gitalypb.ReplicaID, error) {
 	entry, err := r.GetEntry(partitionKey)
 	if err != nil {
 		return nil, fmt.Errorf("get entry: %w", err)
@@ -144,7 +144,7 @@ func (r *kvRoutingTable) Translate(partitionKey *gitalypb.PartitionKey, memberID
 	return nil, fmt.Errorf("no address found for memberID %d", memberID)
 }
 
-func (r *kvRoutingTable) ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.PartitionKey, changes *ReplicaConfChanges) error {
+func (r *kvRoutingTable) ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.RaftPartitionKey, changes *ReplicaConfChanges) error {
 	routingTableEntry, err := r.GetEntry(partitionKey)
 	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 		return fmt.Errorf("getting routing table entry: %w", err)

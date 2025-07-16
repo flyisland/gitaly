@@ -151,7 +151,7 @@ type Replica struct {
 	cancel context.CancelFunc
 
 	memberID     uint64 // Member ID of the replica
-	partitionKey *gitalypb.PartitionKey
+	partitionKey *gitalypb.RaftPartitionKey
 	node         raft.Node             // etcd/raft node representation
 	raftCfg      config.Raft           // etcd/raft configurations
 	options      ReplicaOptions        // Additional replica configuration
@@ -206,7 +206,7 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ReplicaOptions, error
 type RaftReplicaFactory func(
 	memberID uint64,
 	storageName string,
-	partitionKey *gitalypb.PartitionKey,
+	partitionKey *gitalypb.RaftPartitionKey,
 	logStore *ReplicaLogStore,
 	logger logging.Logger,
 	metrics *Metrics,
@@ -218,7 +218,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 	return func(
 		memberID uint64,
 		storageName string,
-		partitionKey *gitalypb.PartitionKey,
+		partitionKey *gitalypb.RaftPartitionKey,
 		logStore *ReplicaLogStore,
 		logger logging.Logger,
 		metrics *Metrics,
@@ -253,7 +253,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 // the Raft protocol operation.
 func NewReplica(
 	memberID uint64,
-	partitionKey *gitalypb.PartitionKey,
+	partitionKey *gitalypb.RaftPartitionKey,
 	raftCfg config.Raft,
 	logStore *ReplicaLogStore,
 	raftEnabledStorage *RaftEnabledStorage,
@@ -1064,9 +1064,9 @@ func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable)
 }
 
 // NewPartitionKey creates a partition key for a newly-minted partition. A partition should only
-// ever have a single PartitionKey, computed by the replica which first created the partition.
-func NewPartitionKey(storageName string, partitionID storage.PartitionID) *gitalypb.PartitionKey {
-	return &gitalypb.PartitionKey{
+// ever have a single RaftPartitionKey, computed by the replica which first created the partition.
+func NewPartitionKey(storageName string, partitionID storage.PartitionID) *gitalypb.RaftPartitionKey {
+	return &gitalypb.RaftPartitionKey{
 		Value: fmt.Sprintf("%x", sha256.Sum256([]byte(storageName+partitionID.String()))),
 	}
 }

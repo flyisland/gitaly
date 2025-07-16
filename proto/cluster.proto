@@ -36,11 +36,11 @@ message RaftEntry {
   LogData data = 2;
 }
 
-// PartitionKey is a globally-unique identifier for a replicated partition.
-// The replica which minted the partition is responsible for computing the PartitionKey,
+// RaftPartitionKey is a globally-unique identifier for a replicated partition.
+// The replica which minted the partition is responsible for computing the RaftPartitionKey,
 // which is a hash of the storage name and partition ID. The key is then consumed
 // as-is by other replicas wishing to store the partition.
-message PartitionKey {
+message RaftPartitionKey {
   // value is the SHA256 digest of the storage name and partition ID of the
   // newly-minted partition.
   string value = 1;
@@ -50,7 +50,7 @@ message PartitionKey {
 // It combines partition information with node-specific details.
 message ReplicaID {
   // partition_key identifies which partition this replica belongs to.
-  PartitionKey partition_key = 1;
+  RaftPartitionKey partition_key = 1;
   // member_id is the unique identifier assigned by etcd/raft.
   uint64 member_id = 2;
   // storage_name is the name of the storage where this replica is hosted.

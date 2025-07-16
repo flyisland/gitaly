@@ -12,11 +12,11 @@ var errNoReplicaFound = structerr.NewNotFound("no replica found")
 // ReplicaRegistry is an interface that defines the methods to register and retrieve replicas.
 type ReplicaRegistry interface {
 	// GetReplica returns the replica for a given partition key.
-	GetReplica(key *gitalypb.PartitionKey) (RaftReplica, error)
+	GetReplica(key *gitalypb.RaftPartitionKey) (RaftReplica, error)
 	// RegisterReplica registers a replica for a given partition key.
-	RegisterReplica(key *gitalypb.PartitionKey, replica RaftReplica)
+	RegisterReplica(key *gitalypb.RaftPartitionKey, replica RaftReplica)
 	// DeregisterReplica removes the replica with the given key from the registry.
-	DeregisterReplica(key *gitalypb.PartitionKey)
+	DeregisterReplica(key *gitalypb.RaftPartitionKey)
 }
 
 // raftRegistry is a concrete implementation of the ReplicaRegistry interface.
@@ -30,7 +30,7 @@ func NewReplicaRegistry() *raftRegistry {
 }
 
 // GetReplica returns the replica for a given partitionKey.
-func (r *raftRegistry) GetReplica(key *gitalypb.PartitionKey) (RaftReplica, error) {
+func (r *raftRegistry) GetReplica(key *gitalypb.RaftPartitionKey) (RaftReplica, error) {
 	if mgr, ok := r.replicas.Load(key.GetValue()); ok {
 		return mgr.(RaftReplica), nil
 	}
@@ -38,11 +38,11 @@ func (r *raftRegistry) GetReplica(key *gitalypb.PartitionKey) (RaftReplica, erro
 }
 
 // RegisterReplica registers a replica for a given partitionKey.
-func (r *raftRegistry) RegisterReplica(key *gitalypb.PartitionKey, replica RaftReplica) {
+func (r *raftRegistry) RegisterReplica(key *gitalypb.RaftPartitionKey, replica RaftReplica) {
 	r.replicas.LoadOrStore(key.GetValue(), replica)
 }
 
 // DeregisterReplica removes the replica with the given key from the registry.
-func (r *raftRegistry) DeregisterReplica(key *gitalypb.PartitionKey) {
+func (r *raftRegistry) DeregisterReplica(key *gitalypb.RaftPartitionKey) {
 	r.replicas.Delete(key.GetValue())
 }
