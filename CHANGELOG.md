@@ -1,5 +1,20 @@
 # Gitaly changelog
 
+## 18.2.0 (2025-07-16)
+
+### Added (2 changes)
+
+- [Add pagination support to ListRefs RPC](gitlab-org/gitaly@e9c50dc076966640a947f386273e6bf3e9677073) ([merge request](gitlab-org/gitaly!7223))
+- [commit: Add unmailmapped committer email to GetCommitSignatures](gitlab-org/gitaly@c2e7e871af8160caef7a0ce434dbbc330bd8a2fd) ([merge request](gitlab-org/gitaly!7966))
+
+### Fixed (1 change)
+
+- [Fix edge case when limit is not provided](gitlab-org/gitaly@4056d7fdea49c8cf712b0ba77920a3c43a0d5774) ([merge request](gitlab-org/gitaly!7983))
+
+### Changed (1 change)
+
+- [Detect next page presence for paginated requests](gitlab-org/gitaly@7f72195b67f3ec94b66669bf977958eae7fcbc83) ([merge request](gitlab-org/gitaly!7979))
+
 ## 18.1.2 (2025-07-09)
 
 No changes.
