@@ -263,6 +263,12 @@ BUILD_GEM_OPTIONS ?=
 ## Options to override the name of Gitaly gem
 BUILD_GEM_NAME ?= gitaly
 
+ifdef CI
+	# We introduced this flag in fb75a2f11 (test: Enable the --rerun-fails flag, 2025-03-13) and specified
+	# it unconditionally. However, it's better to limit the reruns to CI only.
+	GOTESTSUM_OPTIONS += --rerun-fails --packages '$(TEST_PACKAGES)'
+endif
+
 # Git binaries that are eventually embedded into the Gitaly binary.
 GIT_PACKED_EXECUTABLES       = $(addprefix ${BUILD_DIR}/bin/gitaly-, $(addsuffix -v2.49, ${GIT_EXECUTABLES})) \
                                $(addprefix ${BUILD_DIR}/bin/gitaly-, $(addsuffix -v2.50, ${GIT_EXECUTABLES}))
@@ -286,7 +292,7 @@ find_go_sources              = $(shell find ${SOURCE_DIR} -type d \( -path "${SO
 run_go_tests = PATH='${SOURCE_DIR}/internal/testhelper/testdata/home/bin:${PATH}' \
     TEST_TMP_DIR='${TEST_TMP_DIR}' \
     TEST_LOG_DIR='${TEST_LOG_DIR}' \
-    ${GOTESTSUM} --rerun-fails --packages '$(TEST_PACKAGES)' --format ${TEST_FORMAT} --junitfile '${TEST_JUNIT_REPORT}' --jsonfile '${TEST_JSON_REPORT}' ${GOTESTSUM_OPTIONS} -- -ldflags '${GO_LDFLAGS}' -tags '${SERVER_BUILD_TAGS}' ${TEST_OPTIONS} ${TEST_PACKAGES}
+    ${GOTESTSUM} --format ${TEST_FORMAT} --junitfile '${TEST_JUNIT_REPORT}' --jsonfile '${TEST_JSON_REPORT}' ${GOTESTSUM_OPTIONS} -- -ldflags '${GO_LDFLAGS}' -tags '${SERVER_BUILD_TAGS}' ${TEST_OPTIONS} ${TEST_PACKAGES}
 
 ## Test options passed to `dlv test`.
 DEBUG_OPTIONS      ?= $(patsubst -%,-test.%,${TEST_OPTIONS})
