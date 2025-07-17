@@ -18,6 +18,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/tracing"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/labkit/correlation"
 	"google.golang.org/grpc/codes"
 )
 
@@ -199,6 +200,7 @@ func (m *RepositoryManager) optimizeRepository(
 		totalTime := finishTotalTimer()
 
 		m.logger.WithFields(logrus.Fields{
+			"correlation_id":        correlation.ExtractFromContext(ctx),
 			"optimizations":         optimizations,
 			"total_time":            totalTime,
 			"clean_stale_data_time": cleanStaleDataTime,
@@ -207,6 +209,10 @@ func (m *RepositoryManager) optimizeRepository(
 			"pack_refs_time":        packRefsTime,
 			"prune_time":            pruneTime,
 			"commit_graph_time":     commitGraphTime,
+			"storage_name":          repo.Repository.GetStorageName(),
+			"relative_path":         repo.Repository.GetRelativePath(),
+			"gl_project_path":       repo.Repository.GetGlProjectPath(),
+			"gl_repo":               repo.Repository.GetGlRepository(),
 		}).Info("optimized repository")
 
 		for task, status := range optimizations {
@@ -378,7 +384,12 @@ func (m *RepositoryManager) optimizeRepositoryWithTransaction(
 		}
 	}
 
-	m.logger.WithField("optimizations", optimizations).Info("optimized repository with WAL")
+	m.logger.WithFields(logrus.Fields{
+		"correlation_id": correlation.ExtractFromContext(ctx),
+		"optimizations":  optimizations,
+		"storage_name":   repo.Repository.GetStorageName(),
+		"relative_path":  repo.Repository.GetRelativePath(),
+	}).Info("optimized repository with WAL")
 	for task, status := range optimizations {
 		m.metrics.TasksTotal.WithLabelValues(task, status).Inc()
 	}
