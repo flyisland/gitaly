@@ -14,7 +14,7 @@ require (
 	github.com/containerd/cgroups/v3 v3.0.5
 	github.com/dgraph-io/badger/v4 v4.7.0
 	github.com/getsentry/sentry-go v0.34.1
-	github.com/git-lfs/git-lfs/v3 v3.6.1
+	github.com/git-lfs/git-lfs/v3 v3.7.0
 	github.com/go-enry/go-enry/v2 v2.9.2
 	github.com/go-enry/go-license-detector/v4 v4.3.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
@@ -128,7 +128,7 @@ require (
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/git-lfs/gitobj/v2 v2.1.1 // indirect
-	github.com/git-lfs/go-netrc v0.0.0-20210914205454-f0c862dd687a // indirect
+	github.com/git-lfs/go-netrc v0.0.0-20250218165306-ba0029b43d11 // indirect
 	github.com/git-lfs/pktline v0.0.0-20210330133718-06e9096e2825 // indirect
 	github.com/git-lfs/wildmatch/v2 v2.0.1 // indirect
 	github.com/go-enry/go-oniguruma v1.2.1 // indirect
@@ -141,7 +141,7 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/pprof v0.0.0-20240711041743-f6c9dda6c6da // indirect

@@ -256,12 +256,12 @@ github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMo
 github.com/getsentry/sentry-go v0.34.1 h1:HSjc1C/OsnZttohEPrrqKH42Iud0HuLCXpv8cU1pWcw=
 github.com/getsentry/sentry-go v0.34.1/go.mod h1:C55omcY9ChRQIUcVcGcs+Zdy4ZpQGvNJ7JYHIoSWOtE=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
-github.com/git-lfs/git-lfs/v3 v3.6.1 h1:0RA2HzkMVl69KE5zCGY1PxqkDSbd/f/O7Du6CNkTYtY=
-github.com/git-lfs/git-lfs/v3 v3.6.1/go.mod h1:1YO3nafGw2wKBR5LTZ7/LXJ7U7ELdvIGvcCBrLt6mfM=
+github.com/git-lfs/git-lfs/v3 v3.7.0 h1:1ok1tLci2otCsTruDjpKF3ER+NbCO2n+e4PKHq0CJNk=
+github.com/git-lfs/git-lfs/v3 v3.7.0/go.mod h1:KMl1legoclSotIdD1jbqoVo+C5KdE8sMkwiGGnRGsAc=
 github.com/git-lfs/gitobj/v2 v2.1.1 h1:tf/VU6zL1kxa3he+nf6FO/syX+LGkm6WGDsMpfuXV7Q=
 github.com/git-lfs/gitobj/v2 v2.1.1/go.mod h1:q6aqxl6Uu3gWsip5GEKpw+7459F97er8COmU45ncAxw=
-github.com/git-lfs/go-netrc v0.0.0-20210914205454-f0c862dd687a h1:6pskVZacdMUL93pCpMAYnMDLjH1yDFhssPYGe32sjdk=
-github.com/git-lfs/go-netrc v0.0.0-20210914205454-f0c862dd687a/go.mod h1:70O4NAtvWn1jW8V8V+OKrJJYcxDLTmIozfi2fmSz5SI=
+github.com/git-lfs/go-netrc v0.0.0-20250218165306-ba0029b43d11 h1:LotqdxyBRc7u2fxoBrzW6Mn3ZBvv7FlcBPlAa10DKAg=
+github.com/git-lfs/go-netrc v0.0.0-20250218165306-ba0029b43d11/go.mod h1:GTFwpcANSAXgAw+IaUFijK1DZFT0D1x0Wh9rG+Fa814=
 github.com/git-lfs/pktline v0.0.0-20210330133718-06e9096e2825 h1:riQhgheTL7tMF4d5raz9t3+IzoR1i1wqxE1kZC6dY+U=
 github.com/git-lfs/pktline v0.0.0-20210330133718-06e9096e2825/go.mod h1:fenKRzpXDjNpsIBhuhUzvjCKlDjKam0boRAenTE0Q6A=
 github.com/git-lfs/wildmatch/v2 v2.0.1 h1:Ds+aobrV5bK0wStILUOn9irllPyf9qrFETbKzwzoER8=
@@ -316,8 +316,8 @@ github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfU
 github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6/go.mod h1:cIg4eruTrX1D+g88fzRXU5OdNfaM+9IcxsU14FzY7Hc=
 github.com/golang/groupcache v0.0.0-20191227052852-215e87163ea7/go.mod h1:cIg4eruTrX1D+g88fzRXU5OdNfaM+9IcxsU14FzY7Hc=
 github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e/go.mod h1:cIg4eruTrX1D+g88fzRXU5OdNfaM+9IcxsU14FzY7Hc=
-github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da h1:oI5xCqsCo564l8iNU+DwB5epxmsaqB+rhGL0m5jtYqE=
-github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da/go.mod h1:cIg4eruTrX1D+g88fzRXU5OdNfaM+9IcxsU14FzY7Hc=
+github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 h1:f+oWsMOmNPc8JmEHVZIycC7hBoQxHH9pNKQORJNozsQ=
+github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8/go.mod h1:wcDNUvekVysuuOpQKo3191zZyTpiI6se1N1ULghS0sw=
 github.com/golang/mock v1.1.1/go.mod h1:oTYuIxOrZwtPieC+H1uAHpcLFnEyAGVDL/k47Jfbm0A=
 github.com/golang/mock v1.2.0/go.mod h1:oTYuIxOrZwtPieC+H1uAHpcLFnEyAGVDL/k47Jfbm0A=
 github.com/golang/mock v1.3.1/go.mod h1:sBzyDLLjw3U8JLTeZvSv8jJB+tU5PVekmnlKIyFUx0Y=
