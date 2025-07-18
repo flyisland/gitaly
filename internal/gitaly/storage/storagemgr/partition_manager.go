@@ -302,7 +302,8 @@ func clearStagingDirectory(stagingDir string) error {
 	return nil
 }
 
-func keyPrefixPartition(ptnID storage.PartitionID) []byte {
+// KeyPrefixPartition returns the prefix to be used for KV-store entries scoped to ptnID.
+func KeyPrefixPartition(ptnID storage.PartitionID) []byte {
 	return []byte(fmt.Sprintf("%s%s/", PrefixPartition, ptnID.MarshalBinary()))
 }
 
@@ -540,7 +541,7 @@ func (sm *StorageManager) startPartition(ctx context.Context, partitionID storag
 				mgr := sm.partitionFactory.New(
 					logger,
 					partitionID,
-					keyvalue.NewPrefixedTransactioner(sm.database, keyPrefixPartition(partitionID)),
+					keyvalue.NewPrefixedTransactioner(sm.database, KeyPrefixPartition(partitionID)),
 					sm.name,
 					sm.path,
 					absoluteStateDir,
@@ -688,7 +689,7 @@ func (sm *StorageManager) ListPartitions(partitionID storage.PartitionID) (stora
 	pi := &partitionIterator{
 		txn:  txn,
 		it:   iter,
-		seek: keyPrefixPartition(partitionID),
+		seek: KeyPrefixPartition(partitionID),
 	}
 
 	return pi, nil

@@ -28,17 +28,18 @@ optional storage capacity (e.g., HDD or SSD).
 
 ## Partition Identity and Membership Management
 
-Each partition in a cluster is identified by a globally unique **Partition ID**. The Partition ID of a partition is generated
-once when it is created. Under the hood, the Partition ID is a tuple of `(Authority Name, Local Partition ID)`, in which:
+Each partition in a cluster is identified by a globally unique **PartitionKey**. The PartitionKey of a partition is
+generated once when it is created. Under the hood, the PartitionKey is a SHA256 hash of
+`(Authority Name, Local Partition ID)`, in which:
 
 - Authority Name: Represents the storage that created the partition.
 - Local Partition ID: A local, monotonic identifier for the partition within the authority's storage.
 
-This identity system allows distributed partition creation without the need for a global ID registry. Although the
-authority storage name is a part of the Partition ID, it does not imply ownership of the partition. A partition can move
-freely to other storages after creation.
+This identity system allows distributed partition creation without the need for a global ID registry. A partition can
+move freely to other storages after creation due to replication, and ownership of a partition can change based on the
+current leadership.
 
-Each partition is a Raft group with one or more members. Raft groups are also identified by the Partition ID due to
+Each partition is a Raft group with one or more members. Raft groups are also identified by the PartitionKey due to
 the one-to-one relationship.
 
 The `raftmgr.Replica` oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
@@ -56,7 +57,7 @@ scope of `etcd/raft` integration.
 
 Since Gitaly follows a multi-Raft architecture, the Member ID alone is insufficient to precisely locate a
 partition or Raft group replica. Therefore, each replica (including the leader) is identified using a
-**Replica ID**, which consists of `(Partition ID, Member ID, Replica Storage Name)`.
+**Replica ID**, which consists of `(PartitionKey, Member ID, Replica Storage Name)`.
 
 To ensure fault tolerance in a quorum-based system, a Raft cluster requires a minimum replication factor of 3.
 It can tolerate up to `(n-1)/2` failures. For example, a 3-replica cluster can tolerate 1 failure.
@@ -65,7 +66,7 @@ The cluster maintains a global, eventually consistent **routing table** for look
 in the table includes:
 
 ```plaintext
-Partition ID: [
+PartitionKey: [
     RelativePath: "@hashed/2c/62/2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3.git"
     Replicas: [
       <Replica ID 1, Replica 1 Metadata>
@@ -83,8 +84,8 @@ groups and the high update frequency. The routing table and advertised storage a
 gossip network.
 
 The `RelativePath` field in the routing table aims to maintain backward compatibility with GitLab-specific clients. It is
-removed after clients fully transition to the new Partition ID system. The `Term` and `Index` fields ensure the order of
-updates. Entries of the same Partition ID with either a lower term or index are replaced by newer ones.
+removed after clients fully transition to the new PartitionKey system. The `Term` and `Index` fields ensure the order of
+updates. Entries of the same PartitionKey with either a lower term or index are replaced by newer ones.
 
 The following chart illustrates a simplified semantic organization of data (not actual data placement) on a Gitaly
 server.

@@ -156,7 +156,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		// Second initialization should fail
 		err = mgr.Initialize(ctx, 0)
-		require.EqualError(t, err, fmt.Sprintf("raft replica for partition %q already started", partitionID))
+		require.EqualError(t, err, fmt.Sprintf("raft replica %q already started", mgr.partitionKey.GetValue()))
 
 		require.NoError(t, mgr.Close())
 	})
@@ -239,7 +239,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr, err := raftFactory(1, storageName, partitionID, logStore, logger, metrics)
+		mgr, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
@@ -317,7 +317,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr, err := raftFactory(1, storageName, partitionID, logStore, logger, metrics)
+		mgr, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
@@ -362,7 +362,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr1, err := raftFactory(1, storageName, partitionID, logStore1, logger, metrics)
+		mgr1, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore1, logger, metrics)
 		require.NoError(t, err)
 
 		// Initialize the raft replica
@@ -424,7 +424,7 @@ func TestReplica_Initialize(t *testing.T) {
 		logStore2, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr2, err := raftFactory(1, storageName, partitionID, logStore2, logger, metrics)
+		mgr2, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore2, logger, metrics)
 		require.NoError(t, err)
 
 		// Re-initialize Raft with the highest LSN
@@ -711,7 +711,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 		mgr, err := raftFactory(
 			1,
 			storageName,
-			partitionID,
+			NewPartitionKey(storageName, partitionID),
 			logStore,
 			logger,
 			metrics,
@@ -829,7 +829,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
 		// Configure replica
-		mgr, err := raftFactory(1, storageName, partitionID, logStore, logger, metrics)
+		mgr, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
 		require.NoError(t, err)
 
 		for _, f := range setupFuncs {
@@ -882,7 +882,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(env.recorder))
 
-		recoveryMgr, err := raftFactory(1, env.storageName, env.partitionID, logStore, logger, env.metrics)
+		recoveryMgr, err := raftFactory(1, env.storageName, NewPartitionKey(env.storageName, env.partitionID), logStore, logger, env.metrics)
 		require.NoError(t, err)
 
 		// Initialize with the last known LSN
@@ -1663,7 +1663,7 @@ func TestReplica_StorageConnection(t *testing.T) {
 	// Create factory that connects replicas to storage
 	raftFactory := DefaultFactoryWithNode(cfg.Raft, raftNode)
 
-	replica, err := raftFactory(1, storageName, partitionID, logStore, logger, NewMetrics())
+	replica, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, replica.Close()) })
 
@@ -1683,10 +1683,7 @@ func TestReplica_StorageConnection(t *testing.T) {
 		registry := raftNodeStorage.GetReplicaRegistry()
 		require.NotNil(t, registry)
 
-		partitionKey := &gitalypb.PartitionKey{
-			PartitionId:   uint64(partitionID),
-			AuthorityName: storageName,
-		}
+		partitionKey := NewPartitionKey(storageName, partitionID)
 
 		registeredReplica, err := registry.GetReplica(partitionKey)
 		require.NoError(t, err)
@@ -1697,14 +1694,14 @@ func TestReplica_StorageConnection(t *testing.T) {
 	})
 
 	t.Run("multiple replicas for same partition key", func(t *testing.T) {
-		duplicateReplica, err := raftFactory(1, storageName, partitionID, logStore, logger, NewMetrics())
+		duplicateReplica, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
 		require.NoError(t, err)
 		require.NotNil(t, duplicateReplica)
 	})
 
 	t.Run("Register different replicas for different partition keys", func(t *testing.T) {
 		partitionID := storage.PartitionID(2)
-		replicaTwo, err := raftFactory(1, storageName, partitionID, logStore, logger, NewMetrics())
+		replicaTwo, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
 		require.NoError(t, err)
 		require.NotNil(t, replicaTwo)
 	})
@@ -1726,10 +1723,7 @@ func TestReplica_AddNode(t *testing.T) {
 		replica, err := createRaftReplica(t, ctx, memberID, socketPath, raftCfg, partitionID, metrics, opts...)
 		require.NoError(t, err)
 
-		partitionKey := &gitalypb.PartitionKey{
-			PartitionId:   uint64(partitionID),
-			AuthorityName: cfg.Storages[0].Name,
-		}
+		partitionKey := NewPartitionKey(cfg.Storages[0].Name, partitionID)
 
 		registry.RegisterReplica(partitionKey, replica)
 		transport.registry = registry
@@ -1793,10 +1787,7 @@ func TestReplica_AddNode(t *testing.T) {
 		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 		routingTable := raftEnabledStorage.GetRoutingTable()
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: replica.authorityName,
-			PartitionId:   uint64(partitionID),
-		}
+		partitionKey := replica.partitionKey
 
 		// Create second node
 		replicaTwo, socketPathTwo, srvTwo := createTestNode(t, ctx, 3, partitionID, raftCfg, metrics)
@@ -1880,10 +1871,7 @@ func TestReplica_AddNode(t *testing.T) {
 		require.NotNil(t, raftEnabledStorage, "storage should be a RaftEnabledStorage")
 
 		routingTable := raftEnabledStorage.GetRoutingTable()
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: replica.authorityName,
-			PartitionId:   uint64(partitionID),
-		}
+		partitionKey := replica.partitionKey
 
 		var destinationAddresses []string
 		var servers []*grpc.Server

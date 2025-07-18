@@ -31,10 +31,10 @@ type Transport interface {
 	// Send dispatches a batch of Raft messages. It returns an error if the sending fails. This function receives a
 	// context, the list of messages to send and a function that returns the path of WAL directory of a particular
 	// log entry. The implementation must respect input context's cancellation.
-	Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error
+	Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.RaftPartitionKey, messages []raftpb.Message) error
 	// Receive receives a Raft message and processes it.
-	Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error
-	SendSnapshot(ctx context.Context, partitionKey *gitalypb.PartitionKey, message raftpb.Message, snapshot *ReplicaSnapshot) error
+	Receive(ctx context.Context, partitionKey *gitalypb.RaftPartitionKey, raftMsg raftpb.Message) error
+	SendSnapshot(ctx context.Context, partitionKey *gitalypb.RaftPartitionKey, message raftpb.Message, snapshot *ReplicaSnapshot) error
 }
 
 // GrpcTransport is a gRPC transport implementation for sending Raft messages across nodes.
@@ -59,7 +59,7 @@ func NewGrpcTransport(logger log.Logger, cfg config.Cfg, routingTable RoutingTab
 }
 
 // Send sends Raft messages to the appropriate nodes.
-func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, messages []raftpb.Message) error {
+func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.RaftPartitionKey, messages []raftpb.Message) error {
 	messagesByNode, err := t.prepareRaftMessageRequests(ctx, logReader, partitionKey, messages)
 	if err != nil {
 		return fmt.Errorf("preparing raft messages: %w", err)
@@ -94,7 +94,7 @@ func (t *GrpcTransport) Send(ctx context.Context, logReader storage.LogReader, p
 	return nil
 }
 
-func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.PartitionKey, msgs []raftpb.Message) (map[string][]*gitalypb.RaftMessageRequest, error) {
+func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReader storage.LogReader, partitionKey *gitalypb.RaftPartitionKey, msgs []raftpb.Message) (map[string][]*gitalypb.RaftMessageRequest, error) {
 	messagesByAddress := make(map[string][]*gitalypb.RaftMessageRequest)
 	messagesByAddressMutex := sync.Mutex{}
 	g := &errgroup.Group{}
@@ -209,7 +209,7 @@ func (t *GrpcTransport) packLogData(ctx context.Context, lsn storage.LSN, messag
 }
 
 // Receive receives a stream of Raft messages and processes them.
-func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.PartitionKey, raftMsg raftpb.Message) error {
+func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.RaftPartitionKey, raftMsg raftpb.Message) error {
 	// Retrieve the replica from the registry, assumption is that all the messages are from the same partition key.
 	replica, err := t.registry.GetReplica(partitionKey)
 	if err != nil {
@@ -290,7 +290,7 @@ func unpackLogData(msg *gitalypb.RaftEntry, logEntryPath string) error {
 }
 
 // SendSnapshot sends a snapshot of a partition to a specified node in the cluster.
-func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.PartitionKey, message raftpb.Message, snapshot *ReplicaSnapshot) (returnedErr error) {
+func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.RaftPartitionKey, message raftpb.Message, snapshot *ReplicaSnapshot) (returnedErr error) {
 	followerMemberID := message.To
 
 	// Find replica's address as recipient of snapshot
@@ -325,11 +325,8 @@ func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.Partition
 			RaftMsg: &gitalypb.RaftMessageRequest{
 				ClusterId: t.cfg.Raft.ClusterID,
 				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: replica.GetStorageName(),
-					PartitionKey: &gitalypb.PartitionKey{
-						AuthorityName: pk.GetAuthorityName(),
-						PartitionId:   pk.GetPartitionId(),
-					},
+					StorageName:  replica.GetStorageName(),
+					PartitionKey: pk,
 				},
 				Message: &message,
 			},

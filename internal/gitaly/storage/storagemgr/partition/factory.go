@@ -64,6 +64,13 @@ func (f Factory) New(
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
 
+		// TODO: The PartitionKey will be retrieved from the incoming context when a Raft
+		//       replica is booted up. This allows us to maintain a persistent key across
+		//       all replicas of the partition.
+		//       storageName will then represent the target storage where we intend on
+		//       placing the new replicated partition.
+		partitionKey := raftmgr.NewPartitionKey(storageName, partitionID)
+
 		absoluteStateDir = getRaftPartitionPath(storageName, partitionID, absoluteStateDir)
 
 		replicaLogStore, err := raftmgr.NewReplicaLogStore(
@@ -84,7 +91,7 @@ func (f Factory) New(
 		raftReplica, err := factory(
 			1,
 			storageName,
-			partitionID,
+			partitionKey,
 			replicaLogStore,
 			logger,
 			f.partitionMetrics.raft,

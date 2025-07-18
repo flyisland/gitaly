@@ -128,17 +128,17 @@ var (
                                          Not ready to be used
 */
 type ReplicaLogStore struct {
-	ctx           context.Context
-	mutex         sync.Mutex
-	authorityName string
-	partitionID   storage.PartitionID
-	database      keyvalue.Transactioner
-	localLog      *log.Manager
-	committedLSN  storage.LSN
-	lastTerm      uint64
-	consumer      storage.LogConsumer
-	stagingDir    string
-	snapshotter   ReplicaSnapshotter
+	ctx          context.Context
+	mutex        sync.Mutex
+	storageName  string
+	partitionID  storage.PartitionID
+	database     keyvalue.Transactioner
+	localLog     *log.Manager
+	committedLSN storage.LSN
+	lastTerm     uint64
+	consumer     storage.LogConsumer
+	stagingDir   string
+	snapshotter  ReplicaSnapshotter
 
 	// hooks is a collection of hooks, used in test environment to intercept critical events
 	hooks replicaHooks
@@ -155,7 +155,7 @@ func raftManifestPath(logEntryPath string) string {
 
 // NewReplicaLogStore creates and initializes a new Storage instance.
 func NewReplicaLogStore(
-	authorityName string,
+	storageName string,
 	partitionID storage.PartitionID,
 	raftCfg config.Raft,
 	db keyvalue.Transactioner,
@@ -176,7 +176,7 @@ func NewReplicaLogStore(
 	// Initialize the local log manager without a consumer since notifications
 	// should only be sent when entries are committed, not when they're appended
 	localLog := log.NewManager(
-		authorityName,
+		storageName,
 		partitionID,
 		stagingDirectory,
 		stateDirectory,
@@ -186,23 +186,23 @@ func NewReplicaLogStore(
 
 	logger = logger.WithFields(lg.Fields{
 		"partition_id": partitionID,
-		"storage_name": authorityName,
+		"storage_name": storageName,
 	})
 
-	snapshotter, err := NewReplicaSnapshotter(raftCfg, logger, metrics.Scope(authorityName))
+	snapshotter, err := NewReplicaSnapshotter(raftCfg, logger, metrics.Scope(storageName))
 	if err != nil {
 		return nil, fmt.Errorf("create raft snapshotter: %w", err)
 	}
 
 	return &ReplicaLogStore{
-		database:      db,
-		authorityName: authorityName,
-		partitionID:   partitionID,
-		localLog:      localLog,
-		consumer:      consumer,
-		stagingDir:    stagingDirectory,
-		snapshotter:   snapshotter,
-		hooks:         noopHooks(),
+		database:    db,
+		storageName: storageName,
+		partitionID: partitionID,
+		localLog:    localLog,
+		consumer:    consumer,
+		stagingDir:  stagingDirectory,
+		snapshotter: snapshotter,
+		hooks:       noopHooks(),
 	}, nil
 }
 
@@ -296,7 +296,7 @@ func (s *ReplicaLogStore) initialize(ctx context.Context, appliedLSN storage.LSN
 		}
 
 		if s.consumer != nil {
-			s.consumer.NotifyNewEntries(s.authorityName, s.partitionID, s.localLog.LowWaterMark(), s.committedLSN)
+			s.consumer.NotifyNewEntries(s.storageName, s.partitionID, s.localLog.LowWaterMark(), s.committedLSN)
 		}
 	}
 
@@ -493,7 +493,7 @@ func (s *ReplicaLogStore) saveHardState(hardState raftpb.HardState) error {
 	}
 
 	if s.consumer != nil {
-		s.consumer.NotifyNewEntries(s.authorityName, s.partitionID, s.localLog.LowWaterMark(), committedLSN)
+		s.consumer.NotifyNewEntries(s.storageName, s.partitionID, s.localLog.LowWaterMark(), committedLSN)
 	}
 
 	return nil

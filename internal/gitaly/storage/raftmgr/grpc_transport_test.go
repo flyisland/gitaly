@@ -172,10 +172,7 @@ func TestGrpcTransport_SendAndReceive(t *testing.T) {
 				require.NoError(t, leader.transport.(*GrpcTransport).connectionPool.Close())
 			})
 
-			partitionKey := &gitalypb.PartitionKey{
-				PartitionId:   uint64(tc.partitionID),
-				AuthorityName: storageName,
-			}
+			partitionKey := NewPartitionKey(storageName, storage.PartitionID(tc.partitionID))
 
 			mgr, err := leader.managerRegistry.GetReplica(partitionKey)
 			require.NoError(t, err)
@@ -294,10 +291,7 @@ func setupCluster(t *testing.T, logger logger.LogrusLogger, numNodes int, partit
 		// Create and set up replica
 		replica := newReplica(config)
 
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: storageName,
-			PartitionId:   uint64(partitionID),
-		}
+		partitionKey := NewPartitionKey(storageName, storage.PartitionID(partitionID))
 
 		// Register the manager with the registry
 		registries[i].RegisterReplica(partitionKey, replica)
@@ -575,10 +569,7 @@ func TestGrpcTransport_SendSnapshot(t *testing.T) {
 				}()
 			}
 
-			err = leader.transport.SendSnapshot(ctx, &gitalypb.PartitionKey{
-				AuthorityName: storageName,
-				PartitionId:   1,
-			}, msg, snapshot)
+			err = leader.transport.SendSnapshot(ctx, NewPartitionKey(storageName, 1), msg, snapshot)
 			if tc.expectedError != "" {
 				require.ErrorContains(t, err, tc.expectedError)
 			} else {

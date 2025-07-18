@@ -43,6 +43,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	logrus "gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -1733,7 +1734,8 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		for _, key := range raftmgr.RaftDBKeys {
 			tc.expectedState.Database[string(key)] = &anypb.Any{}
 		}
-		peerKey := fmt.Sprintf("p/1/raft/%s/%d", storageName, setup.PartitionID)
+		partitionPrefix := storagemgr.KeyPrefixPartition(storagemgr.MetadataPartitionID)
+		peerKey := fmt.Sprintf("%sraft/%s", partitionPrefix, raftmgr.NewPartitionKey(storageName, setup.PartitionID).GetValue())
 		if _, ok := tc.expectedState.Database[peerKey]; !ok {
 			tc.expectedState.Database[peerKey] = &anypb.Any{}
 		}

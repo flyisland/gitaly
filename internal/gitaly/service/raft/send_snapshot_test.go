@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -57,10 +58,7 @@ func TestServer_SendSnapshot_Success(t *testing.T) {
 	registry := storage.(*raftmgr.RaftEnabledStorage).GetReplicaRegistry()
 	replica := &mockRaftReplica{}
 
-	partitionKey := &gitalypb.PartitionKey{
-		AuthorityName: authorityName,
-		PartitionId:   1,
-	}
+	partitionKey := raftmgr.NewPartitionKey(authorityName, 1)
 	registry.RegisterReplica(partitionKey, replica)
 
 	client := runRaftServer(t, ctx, cfg, mockNode)
@@ -75,11 +73,8 @@ func TestServer_SendSnapshot_Success(t *testing.T) {
 			RaftMsg: &gitalypb.RaftMessageRequest{
 				ClusterId: clusterID,
 				ReplicaId: &gitalypb.ReplicaID{
-					StorageName: storageNameOne,
-					PartitionKey: &gitalypb.PartitionKey{
-						AuthorityName: authorityName,
-						PartitionId:   1,
-					},
+					StorageName:  storageNameOne,
+					PartitionKey: raftmgr.NewPartitionKey(authorityName, 1),
 				},
 				Message: &raftpb.Message{
 					Type:  raftpb.MsgApp,
@@ -110,7 +105,7 @@ func TestServer_SendSnapshot_Success(t *testing.T) {
 
 	testhelper.RequireDirectoryState(t, cfg.Raft.SnapshotDir, "", testhelper.DirectoryState{
 		"/": {Mode: mode.Directory},
-		"/0000000000000001-0000000000000002-0000000000000003.snap": {Mode: os.FileMode(0o644), Content: data},
+		fmt.Sprintf("/%s-0000000000000002-0000000000000003.snap", partitionKey.GetValue()): {Mode: os.FileMode(0o644), Content: data},
 	})
 }
 
@@ -130,11 +125,8 @@ func TestServer_SendSnapshot_Errors(t *testing.T) {
 				RaftSnapshotPayload: &gitalypb.RaftSnapshotMessageRequest_RaftMsg{
 					RaftMsg: &gitalypb.RaftMessageRequest{
 						ReplicaId: &gitalypb.ReplicaID{
-							StorageName: storageNameOne,
-							PartitionKey: &gitalypb.PartitionKey{
-								AuthorityName: authorityName,
-								PartitionId:   1,
-							},
+							StorageName:  storageNameOne,
+							PartitionKey: raftmgr.NewPartitionKey(authorityName, 1),
 						},
 						Message: &raftpb.Message{
 							Type: raftpb.MsgApp,
@@ -153,11 +145,8 @@ func TestServer_SendSnapshot_Errors(t *testing.T) {
 					RaftMsg: &gitalypb.RaftMessageRequest{
 						ClusterId: "wrong-cluster",
 						ReplicaId: &gitalypb.ReplicaID{
-							StorageName: storageNameOne,
-							PartitionKey: &gitalypb.PartitionKey{
-								AuthorityName: authorityName,
-								PartitionId:   1,
-							},
+							StorageName:  storageNameOne,
+							PartitionKey: raftmgr.NewPartitionKey(authorityName, 1),
 						},
 						Message: &raftpb.Message{
 							Type: raftpb.MsgApp,
@@ -168,50 +157,6 @@ func TestServer_SendSnapshot_Errors(t *testing.T) {
 			},
 			expectedGrpcErr: codes.PermissionDenied,
 			expectedError:   `rpc error: code = PermissionDenied desc = message from wrong cluster: got "wrong-cluster", want "test-cluster"`,
-		},
-		{
-			desc: "missing authority name",
-			req: &gitalypb.RaftSnapshotMessageRequest{
-				RaftSnapshotPayload: &gitalypb.RaftSnapshotMessageRequest_RaftMsg{
-					RaftMsg: &gitalypb.RaftMessageRequest{
-						ClusterId: clusterID,
-						ReplicaId: &gitalypb.ReplicaID{
-							StorageName: storageNameOne,
-							PartitionKey: &gitalypb.PartitionKey{
-								PartitionId: 1,
-							},
-						},
-						Message: &raftpb.Message{
-							Type: raftpb.MsgApp,
-							To:   2,
-						},
-					},
-				},
-			},
-			expectedGrpcErr: codes.InvalidArgument,
-			expectedError:   "rpc error: code = InvalidArgument desc = authority_name is required",
-		},
-		{
-			desc: "missing partition ID",
-			req: &gitalypb.RaftSnapshotMessageRequest{
-				RaftSnapshotPayload: &gitalypb.RaftSnapshotMessageRequest_RaftMsg{
-					RaftMsg: &gitalypb.RaftMessageRequest{
-						ClusterId: clusterID,
-						ReplicaId: &gitalypb.ReplicaID{
-							StorageName: storageNameOne,
-							PartitionKey: &gitalypb.PartitionKey{
-								AuthorityName: authorityName,
-							},
-						},
-						Message: &raftpb.Message{
-							Type: raftpb.MsgApp,
-							To:   2,
-						},
-					},
-				},
-			},
-			expectedGrpcErr: codes.InvalidArgument,
-			expectedError:   "rpc error: code = InvalidArgument desc = partition_id is required",
 		},
 	}
 
@@ -254,10 +199,7 @@ func TestServer_SendSnapshot_Errors(t *testing.T) {
 			registry := storage.(*raftmgr.RaftEnabledStorage).GetReplicaRegistry()
 			replica := &mockRaftReplica{}
 
-			partitionKey := &gitalypb.PartitionKey{
-				AuthorityName: authorityName,
-				PartitionId:   1,
-			}
+			partitionKey := raftmgr.NewPartitionKey(authorityName, 1)
 			registry.RegisterReplica(partitionKey, replica)
 
 			client := runRaftServer(t, ctx, cfg, mockNode)

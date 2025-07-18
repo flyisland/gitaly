@@ -54,11 +54,9 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 	return stream.SendAndClose(&gitalypb.RaftMessageResponse{})
 }
 
-func extractRaftMessageReq(req *gitalypb.RaftMessageRequest, s *Server) (*gitalypb.ReplicaID, *gitalypb.PartitionKey, error) {
+func extractRaftMessageReq(req *gitalypb.RaftMessageRequest, s *Server) (*gitalypb.ReplicaID, *gitalypb.RaftPartitionKey, error) {
 	replicaID := req.GetReplicaId()
 	partitionKey := replicaID.GetPartitionKey()
-	authorityName := partitionKey.GetAuthorityName()
-	partitionID := partitionKey.GetPartitionId()
 
 	// The cluster ID protects Gitaly from cross-cluster interactions, which could potentially corrupt the clusters.
 	// This is particularly crucial after disaster recovery so that an identical cluster is restored from backup.
@@ -72,11 +70,8 @@ func extractRaftMessageReq(req *gitalypb.RaftMessageRequest, s *Server) (*gitaly
 			req.GetClusterId(), s.cfg.Raft.ClusterID)
 	}
 
-	if authorityName == "" {
-		return nil, nil, structerr.NewInvalidArgument("authority_name is required")
-	}
-	if partitionID == 0 {
-		return nil, nil, structerr.NewInvalidArgument("partition_id is required")
+	if partitionKey.GetValue() == "" {
+		return nil, nil, structerr.NewInvalidArgument("partition_key cannot be empty")
 	}
 	return replicaID, partitionKey, nil
 }

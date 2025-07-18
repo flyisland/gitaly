@@ -27,7 +27,7 @@ func (s *Server) SendSnapshot(stream gitalypb.RaftService_SendSnapshotServer) (r
 		return err
 	}
 
-	fname := fmt.Sprintf("%016d-%016d-%016d%s", partitionKey.GetPartitionId(), raftMsg.GetMessage().Term, raftMsg.GetMessage().Index, ".snap")
+	fname := fmt.Sprintf("%s-%016d-%016d%s", partitionKey.GetValue(), raftMsg.GetMessage().Term, raftMsg.GetMessage().Index, ".snap")
 	snapshotPath := filepath.Join(s.cfg.Raft.SnapshotDir, fname)
 	snapshotFile, err := os.Create(snapshotPath)
 	if err != nil {

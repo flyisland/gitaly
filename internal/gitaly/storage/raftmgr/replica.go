@@ -2,6 +2,7 @@ package raftmgr
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"runtime"
@@ -142,29 +143,27 @@ func WithEntryRecorder(recorder *ReplicaEntryRecorder) OptionFunc {
 // Internally, the Replica integrates with etcd/raft to implement the Raft consensus algorithm
 // and implements the storage.LogManager interface to interact with Gitaly's transaction system.
 //
-// A Replica is identified by a Replica ID, which consists of
-// (Partition ID, Member ID, Replica Storage Name).
+// A Replica is identified by a gitalypb.ReplicaID.
 type Replica struct {
 	mutex sync.Mutex
 
 	ctx    context.Context // Context for controlling replica's lifecycle
 	cancel context.CancelFunc
 
-	memberID      uint64                // Member ID of the replica
-	authorityName string                // Name of the storage this partition belongs to
-	ptnID         storage.PartitionID   // Unique identifier for the managed partition
-	node          raft.Node             // etcd/raft node representation
-	raftCfg       config.Raft           // etcd/raft configurations
-	options       ReplicaOptions        // Additional replica configuration
-	logger        logging.Logger        // Internal logging
-	logStore      *ReplicaLogStore      // Persistent storage for Raft logs and state
-	registry      *ReplicaEventRegistry // Event tracking
-	leadership    *ReplicaLeadership    // Current leadership information
-	syncer        safe.Syncer           // Synchronization operations
-	wg            sync.WaitGroup        // Goroutine lifecycle management
-	ready         *ready                // Initialization state tracking
-	started       bool                  // Indicates if replica has been started
-	metrics       RaftMetrics           // Scoped metrics for this replica
+	memberID     uint64 // Member ID of the replica
+	partitionKey *gitalypb.RaftPartitionKey
+	node         raft.Node             // etcd/raft node representation
+	raftCfg      config.Raft           // etcd/raft configurations
+	options      ReplicaOptions        // Additional replica configuration
+	logger       logging.Logger        // Internal logging
+	logStore     *ReplicaLogStore      // Persistent storage for Raft logs and state
+	registry     *ReplicaEventRegistry // Event tracking
+	leadership   *ReplicaLeadership    // Current leadership information
+	syncer       safe.Syncer           // Synchronization operations
+	wg           sync.WaitGroup        // Goroutine lifecycle management
+	ready        *ready                // Initialization state tracking
+	started      bool                  // Indicates if replica has been started
+	metrics      RaftMetrics           // Scoped metrics for this replica
 
 	// Reference to the RaftEnabledStorage that contains this replica
 	raftEnabledStorage *RaftEnabledStorage
@@ -207,7 +206,7 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ReplicaOptions, error
 type RaftReplicaFactory func(
 	memberID uint64,
 	storageName string,
-	partitionID storage.PartitionID,
+	partitionKey *gitalypb.RaftPartitionKey,
 	logStore *ReplicaLogStore,
 	logger logging.Logger,
 	metrics *Metrics,
@@ -219,7 +218,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 	return func(
 		memberID uint64,
 		storageName string,
-		partitionID storage.PartitionID,
+		partitionKey *gitalypb.RaftPartitionKey,
 		logStore *ReplicaLogStore,
 		logger logging.Logger,
 		metrics *Metrics,
@@ -234,14 +233,14 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
 
-		replica, err := NewReplica(memberID, storageName, partitionID, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
+		replica, err := NewReplica(memberID, partitionKey, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("create replica %q: %w", storageName, err)
 		}
 
-		if err := raftEnabledStorage.RegisterReplica(partitionID, replica); err != nil {
-			return nil, fmt.Errorf("register replica for partition %d in storage %q: %w",
-				partitionID, storageName, err)
+		if err := raftEnabledStorage.RegisterReplica(replica); err != nil {
+			return nil, fmt.Errorf("register replica %q in storage %q: %w",
+				partitionKey.GetValue(), storageName, err)
 		}
 
 		return replica, nil
@@ -254,8 +253,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 // the Raft protocol operation.
 func NewReplica(
 	memberID uint64,
-	authorityName string,
-	partitionID storage.PartitionID,
+	partitionKey *gitalypb.RaftPartitionKey,
 	raftCfg config.Raft,
 	logStore *ReplicaLogStore,
 	raftEnabledStorage *RaftEnabledStorage,
@@ -277,17 +275,15 @@ func NewReplica(
 	}
 
 	logger = logger.WithFields(logging.Fields{
-		"component":      "raft",
-		"raft.authority": authorityName,
-		"raft.partition": partitionID,
+		"component":         "raft",
+		"raft.partitionKey": partitionKey.GetValue(),
 	})
 
-	scopedMetrics := metrics.Scope(authorityName)
+	scopedMetrics := metrics.Scope(logStore.storageName)
 
 	return &Replica{
 		memberID:           memberID,
-		authorityName:      authorityName,
-		ptnID:              partitionID,
+		partitionKey:       partitionKey,
 		raftCfg:            raftCfg,
 		options:            options,
 		logStore:           logStore,
@@ -323,7 +319,7 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 	defer replica.mutex.Unlock()
 
 	if replica.started {
-		return fmt.Errorf("raft replica for partition %q already started", replica.ptnID)
+		return fmt.Errorf("raft replica %q already started", replica.partitionKey.GetValue())
 	}
 	replica.started = true
 
@@ -861,18 +857,13 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 		return fmt.Errorf("saving config state: %w", err)
 	}
 
-	partitionKey := &gitalypb.PartitionKey{
-		AuthorityName: replica.authorityName,
-		PartitionId:   uint64(replica.ptnID),
-	}
-
 	routingTable := replica.raftEnabledStorage.GetRoutingTable()
 	if routingTable == nil {
 		return fmt.Errorf("routing table not found")
 	}
 
 	// Apply the changes to the routing table
-	if err := routingTable.ApplyReplicaConfChange(partitionKey, replicaChanges); err != nil {
+	if err := routingTable.ApplyReplicaConfChange(replica.logStore.storageName, replica.partitionKey, replicaChanges); err != nil {
 		return fmt.Errorf("applying conf changes: %w", err)
 	}
 
@@ -894,15 +885,11 @@ func (replica *Replica) sendMessages(rd *raft.Ready) error {
 		// techniques such as batching health checks and quiescing inactive groups.
 		//
 		// See https://gitlab.com/gitlab-org/gitaly/-/issues/6304
-		partitionKey := &gitalypb.PartitionKey{
-			AuthorityName: replica.authorityName,
-			PartitionId:   uint64(replica.ptnID),
-		}
 		transport := replica.raftEnabledStorage.GetTransport()
 		if transport == nil {
 			return fmt.Errorf("transport not found")
 		}
-		err := transport.Send(replica.ctx, replica, partitionKey, rd.Messages)
+		err := transport.Send(replica.ctx, replica, replica.partitionKey, rd.Messages)
 		if err != nil {
 			return err
 		}
@@ -1069,16 +1056,19 @@ func (replica *Replica) proposeMembershipChange(
 }
 
 func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {
-	partitionKey := &gitalypb.PartitionKey{
-		AuthorityName: replica.authorityName,
-		PartitionId:   uint64(replica.ptnID),
-	}
-
-	_, err := routingTable.Translate(partitionKey, memberID)
+	_, err := routingTable.Translate(replica.partitionKey, memberID)
 	if err != nil {
 		return fmt.Errorf("translating member ID: %w", err)
 	}
 	return nil
+}
+
+// NewPartitionKey creates a partition key for a newly-minted partition. A partition should only
+// ever have a single RaftPartitionKey, computed by the replica which first created the partition.
+func NewPartitionKey(storageName string, partitionID storage.PartitionID) *gitalypb.RaftPartitionKey {
+	return &gitalypb.RaftPartitionKey{
+		Value: fmt.Sprintf("%x", sha256.Sum256([]byte(storageName+partitionID.String()))),
+	}
 }
 
 var _ = (storage.LogManager)(&Replica{}) // Ensure Replica implements LogManager interface
