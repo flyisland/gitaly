@@ -39,9 +39,15 @@ func NewUnaryInterceptor(logger log.Logger, registry *protoregistry.Registry, re
 
 			targetRepo = tx.OriginalRepository(targetRepo)
 
-			if methodInfo.Operation == protoregistry.OpAccessor {
+			switch methodInfo.Operation {
+			case protoregistry.OpAccessor:
 				register.RegisterMigration(targetRepo.GetStorageName(), targetRepo.GetRelativePath())
-			} else {
+			case protoregistry.OpMutator:
+				defer register.RegisterMigration(targetRepo.GetStorageName(), targetRepo.GetRelativePath())
+				fallthrough
+			default:
+				// Cancel any ongoing migrations to avoid conflicts
+				// but schedule one to start after we serve the request
 				register.CancelMigration(targetRepo.GetStorageName(), targetRepo.GetRelativePath())
 			}
 		}
@@ -84,9 +90,15 @@ func NewStreamInterceptor(logger log.Logger, registry *protoregistry.Registry, r
 
 			targetRepo = tx.OriginalRepository(targetRepo)
 
-			if methodInfo.Operation == protoregistry.OpAccessor {
+			switch methodInfo.Operation {
+			case protoregistry.OpAccessor:
 				register.RegisterMigration(targetRepo.GetStorageName(), targetRepo.GetRelativePath())
-			} else {
+			case protoregistry.OpMutator:
+				defer register.RegisterMigration(targetRepo.GetStorageName(), targetRepo.GetRelativePath())
+				fallthrough
+			default:
+				// Cancel any ongoing migrations to avoid conflicts
+				// but schedule one to start after we serve the request
 				register.CancelMigration(targetRepo.GetStorageName(), targetRepo.GetRelativePath())
 			}
 

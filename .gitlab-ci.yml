@@ -315,9 +315,10 @@ test:pgbouncer:
 
 test:reftable:
   <<: *test_definition
-  variables:
-    <<: *test_variables
-    TEST_TARGET: test-with-reftable
+  parallel:
+    matrix:
+      - TEST_TARGET: [test, test-wal, test-raft, test-with-praefect-wal]
+        GITALY_TEST_REF_FORMAT: "reftable"
 
 test:nightly:
   <<: *test_definition

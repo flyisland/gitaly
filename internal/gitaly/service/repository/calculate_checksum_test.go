@@ -190,6 +190,9 @@ func TestCalculateChecksum(t *testing.T) {
 						reftableFileContent[i+headRefIdx] = nope[i]
 					}
 
+					// When the WAL is enabled, files in the canonical repository will have read-only permissions.
+					// We need to first remove the file and re-create it.
+					require.NoError(t, os.Remove(reftableFilePath))
 					require.NoError(t, os.WriteFile(reftableFilePath, reftableFileContent, os.ModePerm))
 				} else {
 					commitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch))

@@ -142,16 +142,23 @@ func (m *migrator) Run() {
 
 					ctx, cancel := context.WithCancel(m.ctx)
 
-					val, _ := m.state.LoadOrStore(
-						migrationKey(data.storageName, data.relativePath),
-						migratorState{cancelCtx: cancel},
-					)
+					key := migrationKey(data.storageName, data.relativePath)
+
+					val, ok := m.state.LoadOrStore(key, migratorState{cancelCtx: cancel})
 					state := val.(migratorState)
+
+					// If the state was present, we still need to store our
+					// cancellation function.
+					if ok {
+						state.cancelCtx = cancel
+						m.state.Store(key, state)
+					}
+
 					// We don't do 'defer m.state.Store(...)' here, because that would
 					// fix the state as is here. We want to delay the evaluvation of the
 					// state
 					defer func() {
-						m.state.Store(migrationKey(data.storageName, data.relativePath), state)
+						m.state.Store(key, state)
 					}()
 
 					if state.completed || state.coolDown.After(time.Now()) {
@@ -159,6 +166,11 @@ func (m *migrator) Run() {
 					}
 
 					latency, err := m.migrate(ctx, data.storageName, data.relativePath)
+					// We shouldn't care about migration status for repositories which don't
+					// event exist.
+					if errors.Is(err, storage.ErrRepositoryNotFound) {
+						return
+					}
 
 					state.attempts = state.attempts + 1
 					state.cancelCtx = nil
