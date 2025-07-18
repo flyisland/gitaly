@@ -313,6 +313,7 @@ type gitalyServerDeps struct {
 	bundleURISink             *bundleuri.Sink
 	bundleURIStrategy         bundleuri.GenerationStrategy
 	localRepoFactory          localrepo.Factory
+	migrations                *[]migration.Migration
 	MigrationStateManager     migration.StateManager
 	transactionInterceptorsFn func(log.Logger, storage.Node, localrepo.Factory) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor)
 }
@@ -356,10 +357,8 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		gsd.procReceiveRegistry = hook.NewProcReceiveRegistry()
 	}
 
-	migrations := []migration.Migration{}
-
 	if gsd.MigrationStateManager == nil {
-		gsd.MigrationStateManager = migration.NewStateManager(migrations)
+		gsd.MigrationStateManager = migration.NewStateManager(gsd.migrations)
 	}
 
 	var node storage.Node
@@ -403,7 +402,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 				migration.NewFactory(
 					partition.NewFactory(partitionFactoryOptions...),
 					migration.NewMetrics(),
-					migrations,
+					gsd.migrations,
 				),
 				config.DefaultMaxInactivePartitions,
 				storagemgr.NewMetrics(cfg.Prometheus),
@@ -721,6 +720,14 @@ func WithTransactionInterceptors(
 ) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
 		deps.transactionInterceptorsFn = fn
+		return deps
+	}
+}
+
+// WithMigrations registers migration tasks to be executed before any transaction begins.
+func WithMigrations(migrations *[]migration.Migration) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.migrations = migrations
 		return deps
 	}
 }

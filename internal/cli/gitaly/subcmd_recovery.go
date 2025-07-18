@@ -168,7 +168,7 @@ func setupRecoveryContext(ctx context.Context, cmd *cli.Command) (rc recoveryCon
 			migration.NewFactory(
 				partition.NewFactory(partitionFactoryOptions...),
 				migration.NewMetrics(),
-				[]migration.Migration{},
+				&[]migration.Migration{},
 			),
 			1,
 			storagemgr.NewMetrics(cfg.Prometheus),

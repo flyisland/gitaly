@@ -455,8 +455,10 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 							return nil, fmt.Errorf("snapshot repository path: %w", err)
 						}
 
-						if err := preventReftableCompaction(snapshotRepositoryPath); err != nil {
-							return nil, fmt.Errorf("prevent reftable compaction: %w", err)
+						if !opts.SkipPreventingReftableCompaction {
+							if err := preventReftableCompaction(snapshotRepositoryPath); err != nil {
+								return nil, fmt.Errorf("prevent reftable compaction: %w", err)
+							}
 						}
 					}
 				} else {

@@ -7,6 +7,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
+	migrationid "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration/id"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -34,7 +35,7 @@ func (s *server) MigrateReferenceBackend(
 		targetBackend = git.ReferenceBackendReftables
 	}
 
-	migrator := migration.NewReferenceBackendMigration(1, targetBackend, s.localRepoFactory, nil)
+	migrator := migration.NewReferenceBackendMigration(migrationid.Reftable, targetBackend, s.localRepoFactory, nil)
 
 	logger := log.FromContext(ctx)
 	t := time.Now()

@@ -18,6 +18,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
+	migrationid "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration/id"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
@@ -179,8 +180,8 @@ func TestReftableMigration(t *testing.T) {
 				logger,
 				NewMetrics(),
 				storageName,
-				[]Migration{NewReferenceBackendMigration(
-					1,
+				&[]Migration{NewReferenceBackendMigration(
+					migrationid.Reftable,
 					gittest.FilesOrReftables(git.ReferenceBackendReftables, git.ReferenceBackendFiles),
 					localRepoFactory,
 					nil,

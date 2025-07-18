@@ -422,7 +422,7 @@ func (n Name) String() string {
 //
 // See the reftable documentation at https://www.git-scm.com/docs/reftable#_layout for more
 // information.
-var nameRegex = regexp.MustCompile("^0x([[:xdigit:]]{12})-0x([[:xdigit:]]{12})-([0-9a-zA-Z]{8}).ref$")
+var nameRegex = regexp.MustCompile("^0x([[:xdigit:]]{12,16})-0x([[:xdigit:]]{12,16})-([0-9a-zA-Z]{8}).ref$")
 
 // ParseName parses the name of a reftable file.
 func ParseName(reftableName string) (Name, error) {

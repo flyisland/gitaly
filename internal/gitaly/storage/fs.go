@@ -98,7 +98,7 @@ func MkdirAll(f FS, path string) error {
 
 // RecordDirectoryCreation records the operations to create a given directory all of its children.
 func RecordDirectoryCreation(f FS, relativePath string) error {
-	if err := walkDirectory(f.Root(), relativePath,
+	if err := WalkDirectory(f.Root(), relativePath,
 		func(relativePath string, dirEntry fs.DirEntry) error {
 			// Create the directories before descending in them so they exist when
 			// we try to create the children.
@@ -129,7 +129,7 @@ func RecordDirectoryCreation(f FS, relativePath string) error {
 
 // RecordDirectoryRemoval records a directory to be removed with all of its children.
 func RecordDirectoryRemoval(f FS, storageRoot, directoryRelativePath string) error {
-	if err := walkDirectory(storageRoot, directoryRelativePath,
+	if err := WalkDirectory(storageRoot, directoryRelativePath,
 		func(string, fs.DirEntry) error { return nil },
 		func(relativePath string, dirEntry fs.DirEntry) error {
 			if err := f.RecordRemoval(relativePath); err != nil {

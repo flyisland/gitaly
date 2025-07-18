@@ -39,7 +39,7 @@ type migrationManager struct {
 	metrics  Metrics
 	// migrations defines all migration jobs that are expected to be performed on a repository
 	// before it can process incoming transactions.
-	migrations []Migration
+	migrations *[]Migration
 	// migrationStates defines the state of a repository migration and is used to block concurrent
 	// transactions on the same repository while a migration is pending.
 	migrationStates map[string]*migrationState
@@ -48,7 +48,7 @@ type migrationManager struct {
 }
 
 // newPartition creates a migration manager that wraps the provided partition.
-func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, storageName string, migrations []Migration) storagemgr.Partition {
+func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Metrics, storageName string, migrations *[]Migration) storagemgr.Partition {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &migrationManager{
@@ -64,7 +64,7 @@ func newPartition(partition storagemgr.Partition, logger log.Logger, metrics Met
 }
 
 func (m *migrationManager) Begin(ctx context.Context, opts storage.BeginOptions) (storage.Transaction, error) {
-	if err := m.migrate(ctx, opts.RelativePaths); err != nil {
+	if err := m.migrate(ctx, opts); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
@@ -77,10 +77,11 @@ func (m *migrationManager) Close() {
 }
 
 // migrate handles setting up migration state and executing outstanding migrations.
-func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) error {
+func (m *migrationManager) migrate(ctx context.Context, opts storage.BeginOptions) error {
+	relativePaths := opts.RelativePaths
 	// To perform a migration, the manager must have migrations configured and the transaction must
 	// target a repository. If not, skip migration handling and proceed with the transaction.
-	if len(m.migrations) == 0 || len(relativePaths) == 0 {
+	if m.migrations == nil || len(*m.migrations) == 0 || len(relativePaths) == 0 {
 		return nil
 	}
 
@@ -119,7 +120,7 @@ func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) 
 		mCtx = metadata.NewIncomingContext(mCtx, md)
 	}
 
-	if err := m.performMigrations(mCtx, relativePaths); err != nil {
+	if err := m.performMigrations(mCtx, opts); err != nil {
 		// Record the error as part of the migration state so concurrent transactions are notified.
 		state.err = err
 		return fmt.Errorf("performing migrations: %w", err)
@@ -129,8 +130,8 @@ func (m *migrationManager) migrate(ctx context.Context, relativePaths []string) 
 }
 
 // performMigrations performs any missing migrations on a repository.
-func (m *migrationManager) performMigrations(ctx context.Context, relativePaths []string) (returnedErr error) {
-	relativePath := relativePaths[0]
+func (m *migrationManager) performMigrations(ctx context.Context, opts storage.BeginOptions) (returnedErr error) {
+	relativePath := opts.RelativePaths[0]
 
 	id, err := m.getLastMigrationID(ctx, relativePath)
 	if errors.Is(err, storage.ErrRepositoryNotFound) {
@@ -143,7 +144,7 @@ func (m *migrationManager) performMigrations(ctx context.Context, relativePaths 
 
 	// If the repository is already up-to-date, there is no need to start a transaction and perform
 	// migrations.
-	maxID := m.migrations[len(m.migrations)-1].ID
+	maxID := (*m.migrations)[len(*m.migrations)-1].ID
 	if id == maxID {
 		return nil
 	} else if id > maxID {
@@ -152,8 +153,9 @@ func (m *migrationManager) performMigrations(ctx context.Context, relativePaths 
 
 	// Start a single transaction that records all outstanding migrations that get executed.
 	txn, err := m.Partition.Begin(ctx, storage.BeginOptions{
-		Write:         true,
-		RelativePaths: relativePaths,
+		Write:                            true,
+		RelativePaths:                    opts.RelativePaths,
+		SkipPreventingReftableCompaction: true,
 	})
 	if err != nil {
 		return fmt.Errorf("begin migration update: %w", err)
@@ -166,7 +168,7 @@ func (m *migrationManager) performMigrations(ctx context.Context, relativePaths 
 		}
 	}()
 
-	for _, migration := range m.migrations {
+	for _, migration := range *m.migrations {
 		timer := prometheus.NewTimer(m.metrics.latencyMetric.With(prometheus.Labels{
 			"migration_name": migration.Name,
 		}))

@@ -181,6 +181,7 @@ func createFsForSnapshotFilterTest(t *testing.T, storageDir string) {
 		"pools/h/refs/heads/main.lock":              {Mode: mode.File, Data: []byte("pool h main branch lock file")},
 		"pools/h/reftable/tables.list.garbage.file": {Mode: mode.File, Data: []byte("pool h reftable garbage file")},
 		"pools/h/reftable/4-a85b824b.ref.lock":      {Mode: mode.File, Data: []byte("pool h reftable ref lock")},
+		"pools/h/reftable/i-am-invalid-name.ref":    {Mode: mode.File, Data: []byte("pool h invalid ref name")},
 		"pools/h/info":                              {Mode: mode.Directory},
 		"pools/h/info/attributes":                   {Mode: mode.File, Data: []byte("pool h info attributes")},
 		"pools/h/objects/pack/pack-abcdef1234234567890abcdef12345678905678.keep":                           {Mode: mode.File, Data: []byte("pool h SHA1 keep")},
@@ -204,6 +205,7 @@ func createFsForSnapshotFilterTest(t *testing.T, storageDir string) {
 		"repositories/j/custom_hooks.useless.file": {Mode: mode.File, Data: []byte("custom_hooks.useless.file")},
 		"repositories/j/reftable/ref.useless.file": {Mode: mode.File, Data: []byte("reftable/ref.useless.file")},
 
+		"repositories/j/reftable/i-am-invalid.ref":                                                                {Mode: mode.File, Data: []byte("invalid ref name file")},
 		"repositories/j/reftable/0x000000000002-0x000000000008-c56a834b.ref.lock":                                 {Mode: mode.File, Data: []byte("reftable lock file")},
 		"repositories/j/objects/pack/pack-234567890abcdef1234567890abcdef12345678.keep":                           {Mode: mode.File, Data: []byte("SHA1 keep")},
 		"repositories/j/objects/pack/pack-1234567890abcdef1234567890abcdef12345678.mtime":                         {Mode: mode.File, Data: []byte("SHA1 mtime")},
@@ -317,8 +319,10 @@ func getExpectedDirectoryStateAfterSnapshotFilter(ctx context.Context, isExclusi
 		"/pools/h/refs/heads/main.lock":              {Mode: mode.File, Content: []byte("pool h main branch lock file")},
 		"/pools/h/reftable/tables.list.garbage.file": {Mode: mode.File, Content: []byte("pool h reftable garbage file")},
 		"/pools/h/reftable/4-a85b824b.ref.lock":      {Mode: mode.File, Content: []byte("pool h reftable ref lock")},
-		"/pools/h/info":                              {Mode: dirMode()},
-		"/pools/h/info/attributes":                   {Mode: mode.File, Content: []byte("pool h info attributes")},
+		"/pools/h/reftable/i-am-invalid-name.ref":    {Mode: mode.File, Content: []byte("pool h invalid ref name")},
+
+		"/pools/h/info":            {Mode: dirMode()},
+		"/pools/h/info/attributes": {Mode: mode.File, Content: []byte("pool h info attributes")},
 		"/pools/h/objects/pack/pack-abcdef1234234567890abcdef12345678905678.keep":                           {Mode: mode.File, Content: []byte("pool h SHA1 keep")},
 		"/pools/h/objects/pack/pack-cdef12341234567890ab567890abcdef12345678.mtime":                         {Mode: mode.File, Content: []byte("pool h SHA1 mtime")},
 		"/pools/h/objects/pack/pack-1b9f3e7c4d2b1f0e8a3c73ed1a7c8f0b2e4c1d9a8e3f4b0c5d6ad5b2e0a9c6d3.keep":  {Mode: mode.File, Content: []byte("pool h SHA256 keep")},
@@ -340,6 +344,7 @@ func getExpectedDirectoryStateAfterSnapshotFilter(ctx context.Context, isExclusi
 		"/repositories/j/custom_hooks.useless.file": {Mode: mode.File, Content: []byte("custom_hooks.useless.file")},
 		"/repositories/j/reftable/ref.useless.file": {Mode: mode.File, Content: []byte("reftable/ref.useless.file")},
 
+		"/repositories/j/reftable/i-am-invalid.ref":                                                                {Mode: mode.File, Content: []byte("invalid ref name file")},
 		"/repositories/j/reftable/0x000000000002-0x000000000008-c56a834b.ref.lock":                                 {Mode: mode.File, Content: []byte("reftable lock file")},
 		"/repositories/j/objects/pack/pack-234567890abcdef1234567890abcdef12345678.keep":                           {Mode: mode.File, Content: []byte("SHA1 keep")},
 		"/repositories/j/objects/pack/pack-1234567890abcdef1234567890abcdef12345678.mtime":                         {Mode: mode.File, Content: []byte("SHA1 mtime")},
