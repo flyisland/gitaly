@@ -278,7 +278,13 @@ func TestCache_diskCleanup(t *testing.T) {
 		return cleanSleepTimerCh
 	}
 
-	c := newCacheWithSleep(tmp, 0, filestoreClean, cleanSleep, testhelper.SharedLogger(t), true)
+	streamCacheCfg := config.StreamCacheConfig{
+		Enabled:      true,
+		Backpressure: true,
+		Dir:          tmp,
+		MaxAge:       duration.Duration(0),
+	}
+	c := newCacheWithSleep(streamCacheCfg, filestoreClean, cleanSleep, testhelper.SharedLogger(t))
 	defer c.Stop()
 
 	var removalLock sync.Mutex

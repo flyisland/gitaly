@@ -29,34 +29,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/dontpanic"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-)
-
-var (
-	cacheIndexSize = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "gitaly_streamcache_index_entries",
-			Help: "Number of index entries in streamcache",
-		},
-		[]string{"dir"},
-	)
-
-	packObjectsCacheEnabled = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "gitaly_pack_objects_cache_enabled",
-			Help: "If set to 1, indicates that the cache for PackObjectsHook has been enabled in this process",
-		},
-		[]string{"dir", "max_age"},
-	)
 )
 
 // Cache is a cache for large byte streams.
@@ -140,46 +119,43 @@ type cache struct {
 	// removalCond is a condition that gets signalled after files have been removed from disk.
 	// This field is optional and should only be used for tests.
 	removalCond *sync.Cond
+
+	metrics *streamCacheMetrics
 }
 
 // New returns a new cache instance.
 func New(cfg config.StreamCacheConfig, logger log.Logger) Cache {
 	if cfg.Enabled {
-		packObjectsCacheEnabled.WithLabelValues(
-			cfg.Dir,
-			strconv.Itoa(int(cfg.MaxAge.Duration().Seconds())),
-		).Set(1)
-
-		maxAge := cfg.MaxAge.Duration()
 		return &minOccurrences{
 			N:      cfg.MinOccurrences,
-			MinAge: maxAge,
-			Cache:  newCacheWithSleep(cfg.Dir, maxAge, time.After, time.After, logger, cfg.Backpressure),
+			MinAge: cfg.MaxAge.Duration(),
+			Cache:  newCacheWithSleep(cfg, time.After, time.After, logger),
 		}
 	}
-
 	return NullCache{}
 }
 
 func newCacheWithSleep(
-	dir string,
-	maxAge time.Duration,
+	cfg config.StreamCacheConfig,
 	filestoreSleep func(time.Duration) <-chan time.Time,
 	cleanSleep func(time.Duration) <-chan time.Time,
 	logger log.Logger,
-	backpressure bool,
 ) *cache {
-	fs := newFilestore(dir, maxAge, filestoreSleep, logger)
+	fs := newFilestore(cfg.Dir, cfg.MaxAge.Duration(), filestoreSleep, logger)
+
+	cacheMetrics := newStreamCacheMetrics(cfg)
+	cacheMetrics.setEnabled()
 
 	c := &cache{
-		maxAge:       maxAge,
+		maxAge:       cfg.MaxAge.Duration(),
 		index:        make(map[string]*entry),
 		createFile:   fs.Create,
 		stop:         make(chan struct{}),
 		logger:       logger,
-		dir:          dir,
+		dir:          cfg.Dir,
 		sleepLoop:    dontpanic.NewForever(logger, time.Minute),
-		backpressure: backpressure,
+		backpressure: cfg.Backpressure,
+		metrics:      cacheMetrics,
 	}
 
 	c.sleepLoop.Go(func() {
@@ -233,7 +209,7 @@ func (c *cache) delete(key string) {
 }
 
 func (c *cache) setIndexSize() {
-	cacheIndexSize.WithLabelValues(c.dir).Set(float64(len(c.index)))
+	c.metrics.setIndexSize(float64(len(c.index)))
 }
 
 func (c *cache) Fetch(ctx context.Context, key string, dst io.Writer, create func(io.Writer) error) (written int64, created bool, err error) {

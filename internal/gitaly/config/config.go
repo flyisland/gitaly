@@ -680,11 +680,8 @@ func (bc BundleURIConfig) Validate() error {
 }
 
 // StreamCacheConfig contains settings for a streamcache instance.
-// This is used by the pack-objects cache for handling Git fetch requests.
 type StreamCacheConfig struct {
 	// Enabled determines whether the cache is active.
-	// When enabled, Gitaly will cache the output of git-pack-objects to improve performance
-	// for repeated fetches of the same objects.
 	// Default: false
 	Enabled bool `json:"enabled" toml:"enabled"`
 
@@ -695,7 +692,7 @@ type StreamCacheConfig struct {
 	Backpressure bool `json:"backpressure" toml:"backpressure"`
 
 	// Dir specifies the directory where cache files are stored.
-	// Default: <FIRST STORAGE PATH>/+gitaly/PackObjectsCache
+	// Default: <FIRST STORAGE PATH>/+gitaly/<cache-name>
 	Dir string `json:"dir" toml:"dir"`
 
 	// MaxAge defines how long cache entries should be retained.
@@ -708,6 +705,10 @@ type StreamCacheConfig struct {
 	// prevent filling the cache with objects that are requested only once.
 	// Default: 1
 	MinOccurrences int `json:"min_occurrences" toml:"min_occurrences"`
+
+	// Name is the name of the cache. This name field is used to add to metrics
+	// labels to differentiate the many cache instances.
+	Name string `json:"-" toml:"-"`
 }
 
 // Validate runs validation on all fields and compose all found errors.
@@ -896,6 +897,8 @@ func (cfg *Cfg) Sanitize() error {
 	}
 
 	if cfg.PackObjectsCache.Enabled {
+		cfg.PackObjectsCache.Name = "pack_objects"
+
 		if cfg.PackObjectsCache.MaxAge == 0 {
 			cfg.PackObjectsCache.MaxAge = duration.Duration(5 * time.Minute)
 		}
