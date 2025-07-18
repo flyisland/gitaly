@@ -141,6 +141,7 @@ type Cfg struct {
 	Cgroups                cgroups.Config      `json:"cgroups"                     toml:"cgroups,omitempty"`
 	PackObjectsCache       StreamCacheConfig   `json:"pack_objects_cache"          toml:"pack_objects_cache,omitempty"`
 	PackObjectsLimiting    PackObjectsLimiting `json:"pack_objects_limiting"       toml:"pack_objects_limiting,omitempty"`
+	ArchiveCache           StreamCacheConfig   `json:"archive_cache"               toml:"archive_cache,omitempty"`
 	Backup                 BackupConfig        `json:"backup"                      toml:"backup,omitempty"`
 	BundleURI              BundleURIConfig     `json:"bundle_uri"                  toml:"bundle_uri,omitempty"`
 	Timeout                TimeoutConfig       `json:"timeout"                     toml:"timeout,omitempty"`
@@ -910,6 +911,18 @@ func (cfg *Cfg) Sanitize() error {
 
 	if cfg.PackObjectsLimiting.MaxQueueLength == 0 {
 		cfg.PackObjectsLimiting.MaxQueueLength = defaultPackObjectsLimitingQueueSize
+	}
+
+	if cfg.ArchiveCache.Enabled {
+		cfg.ArchiveCache.Name = "archive"
+
+		if cfg.ArchiveCache.MaxAge == 0 {
+			cfg.ArchiveCache.MaxAge = duration.Duration(5 * time.Minute)
+		}
+
+		if cfg.ArchiveCache.Dir == "" && len(cfg.Storages) > 0 {
+			cfg.ArchiveCache.Dir = filepath.Join(cfg.Storages[0].Path, GitalyDataPrefix, "ArchiveCache")
+		}
 	}
 
 	for i := range cfg.Concurrency {

@@ -52,6 +52,7 @@ type Dependencies struct {
 	BundleURIManager       *bundleuri.GenerationManager
 	LocalRepositoryFactory localrepo.Factory
 	MigrationStateManager  migration.StateManager
+	ArchiveCache           streamcache.Cache
 }
 
 // GetLogger returns the logger.
@@ -177,4 +178,9 @@ func (dc *Dependencies) GetBundleURIManager() *bundleuri.GenerationManager {
 // GetMigrationStateManager returns the migration.StateManager
 func (dc *Dependencies) GetMigrationStateManager() migration.StateManager {
 	return dc.MigrationStateManager
+}
+
+// GetArchiveCache returns the archive cache
+func (dc *Dependencies) GetArchiveCache() streamcache.Cache {
+	return dc.ArchiveCache
 }

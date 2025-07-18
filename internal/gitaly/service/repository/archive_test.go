@@ -9,18 +9,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/smudge"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/duration"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/streamcache"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -28,6 +34,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"gitlab.com/gitlab-org/gitaly/v16/streamio"
 	"gitlab.com/gitlab-org/labkit/correlation"
+	"google.golang.org/grpc"
 )
 
 func TestGetArchive(t *testing.T) {
@@ -580,6 +587,156 @@ func TestGetArchive_environment(t *testing.T) {
 			require.True(t, foundEnvLogConfiguration)
 
 			require.Equal(t, tc.expectedEnv, actualEnv)
+		})
+	}
+}
+
+func TestGetArchive_withCache(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	gitlabURL, cleanup := gitlab.NewTestServer(t, gitlab.TestServerOptions{
+		SecretToken: "gitlab-secret-token",
+		LfsBody:     "replaced LFS pointer contents",
+	})
+	t.Cleanup(cleanup)
+
+	gitattributesContent := "*.lfs filter=lfs diff=lfs merge=lfs -text"
+	lfsPointerContent := "version https://git-lfs.github.com/spec/v1\noid sha256:bad71f905b60729f502ca339f7c9f001281a3d12c68a5da7f15de8009f4bd63d\nsize 18\n"
+
+	writeCommitToRepo := func(cfg config.Cfg, repoPath string) git.ObjectID {
+		treeEntry := gittest.WithTreeEntries(
+			gittest.TreeEntry{Path: ".gitattributes", Mode: "100644", Content: gitattributesContent},
+			gittest.TreeEntry{Path: "pointer.lfs", Mode: "100644", Content: lfsPointerContent},
+			gittest.TreeEntry{Path: "LICENSE", Mode: "100644", Content: "license content"},
+			gittest.TreeEntry{Path: "README.md", Mode: "100644", Content: "readme content"},
+			gittest.TreeEntry{Path: "subdir", Mode: "040000", OID: gittest.WriteTree(t, cfg, repoPath, []gittest.TreeEntry{
+				{Path: "subfile", Mode: "100644", Content: "subfile content"},
+				{Path: "subsubdir", Mode: "040000", OID: gittest.WriteTree(t, cfg, repoPath, []gittest.TreeEntry{
+					{Path: "subsubfile", Mode: "100644", Content: "subsubfile content"},
+				})},
+			})},
+		)
+		return gittest.WriteCommit(t, cfg, repoPath, treeEntry)
+	}
+
+	for _, format := range []gitalypb.GetArchiveRequest_Format{
+		gitalypb.GetArchiveRequest_ZIP,
+		gitalypb.GetArchiveRequest_TAR,
+		gitalypb.GetArchiveRequest_TAR_GZ,
+		gitalypb.GetArchiveRequest_TAR_BZ2,
+	} {
+		t.Run(format.String(), func(t *testing.T) {
+			t.Parallel()
+
+			testCases := []struct {
+				desc             string
+				numRequests      int
+				minOccurrences   int
+				packfileCreation []bool
+			}{
+				{
+					desc:           "number of requests less than min occurrences",
+					numRequests:    2,
+					minOccurrences: 4,
+					packfileCreation: []bool{
+						true,
+						true,
+						true,
+						true,
+					},
+				},
+				{
+					desc:           "number of requests equals min occurrences",
+					numRequests:    4,
+					minOccurrences: 4,
+					packfileCreation: []bool{
+						true,
+						true,
+						true,
+						true,
+					},
+				},
+				{
+					desc:           "number of requests more than min occurrences",
+					numRequests:    6,
+					minOccurrences: 2,
+					packfileCreation: []bool{
+						true,
+						true,
+						true,
+						false,
+						false,
+						false,
+					},
+				},
+			}
+
+			for _, tc := range testCases {
+				t.Run(tc.desc, func(t *testing.T) {
+					archiveCacheDir := filepath.Join(t.TempDir(), "archive_cache")
+
+					cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
+						Gitlab: config.Gitlab{
+							URL:        gitlabURL,
+							SecretFile: gitlab.WriteShellSecretFile(t, testhelper.TempDir(t), "gitlab-secret-token"),
+						},
+						ArchiveCache: config.StreamCacheConfig{
+							Enabled:        true,
+							Backpressure:   true,
+							Dir:            archiveCacheDir,
+							MaxAge:         duration.Duration(time.Second * 600),
+							MinOccurrences: tc.minOccurrences,
+							Name:           "archive_cache",
+						},
+					}))
+					testcfg.BuildGitalyLFSSmudge(t, cfg)
+
+					tlc := &streamcache.TestLoggingCache{}
+					serverSocketPath := testserver.RunGitalyServer(t, cfg, func(srv *grpc.Server, deps *service.Dependencies) {
+						if _, ok := deps.ArchiveCache.(*streamcache.TestLoggingCache); !ok {
+							tlc.Cache = deps.ArchiveCache
+							deps.ArchiveCache = tlc
+						}
+						gitalypb.RegisterRepositoryServiceServer(srv, NewServer(deps))
+					})
+					cfg.SocketPath = serverSocketPath
+					client := newRepositoryClient(t, cfg, serverSocketPath)
+
+					repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+					commitID := writeCommitToRepo(cfg, repoPath)
+
+					for i := 0; i < tc.numRequests; i++ {
+						req := &gitalypb.GetArchiveRequest{
+							Repository: repo,
+							CommitId:   commitID.String(),
+							Format:     format,
+						}
+
+						stream, err := client.GetArchive(ctx, req)
+						require.NoError(t, err)
+
+						data, err := consumeArchive(stream)
+						require.NoError(t, err)
+
+						// We ignore the response here because this test only validates
+						// that the caching mechanisms is working. However, this call
+						// will fail with an error if the archive format is not as
+						// expected. So while we don't validate the content, we at least
+						// here validate the format. There is another test above that
+						// thoroughly tests the content of the archives.
+						_ = compressedFileContents(t, format, data)
+					}
+
+					require.Len(t, tlc.Entries(), tc.numRequests)
+
+					cacheEntries := tlc.Entries()
+					for i := 0; i < len(cacheEntries); i++ {
+						require.Equal(t, tc.packfileCreation[i], cacheEntries[i].Created)
+					}
+				})
+			}
 		})
 	}
 }

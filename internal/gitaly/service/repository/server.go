@@ -19,6 +19,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/streamcache"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/unarycache"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -43,6 +44,7 @@ type server struct {
 	licenseCache          *unarycache.Cache[git.ObjectID, *gitalypb.FindLicenseResponse]
 	bundleURIManager      *bundleuri.GenerationManager
 	migrationStateManager migration.StateManager
+	archiveCache          streamcache.Cache
 }
 
 // NewServer creates a new instance of a gRPC repo server
@@ -65,6 +67,7 @@ func NewServer(deps *service.Dependencies) gitalypb.RepositoryServiceServer {
 		licenseCache:          newLicenseCache(),
 		bundleURIManager:      deps.GetBundleURIManager(),
 		migrationStateManager: deps.GetMigrationStateManager(),
+		archiveCache:          deps.GetArchiveCache(),
 	}
 }
 

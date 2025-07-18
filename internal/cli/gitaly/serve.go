@@ -607,7 +607,8 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 
 	updaterWithHooks := updateref.NewUpdaterWithHooks(cfg, logger, locator, hookManager, gitCmdFactory, catfileCache)
 
-	streamCache := streamcache.New(cfg.PackObjectsCache, logger)
+	packObjectStreamCache := streamcache.New(cfg.PackObjectsCache, logger)
+	archiveStreamCache := streamcache.New(cfg.ArchiveCache, logger)
 
 	var backupSink *backup.Sink
 	var backupLocator backup.Locator
@@ -690,7 +691,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			GitCmdFactory:          gitCmdFactory,
 			CatfileCache:           catfileCache,
 			DiskCache:              diskCache,
-			PackObjectsCache:       streamCache,
+			PackObjectsCache:       packObjectStreamCache,
 			PackObjectsLimiter:     packObjectsLimiter,
 			RepositoryCounter:      repoCounter,
 			UpdaterWithHooks:       updaterWithHooks,
@@ -702,6 +703,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			LocalRepositoryFactory: localrepoFactory,
 			BundleURIManager:       bundleURIManager,
 			MigrationStateManager:  migration.NewStateManager(&migrations),
+			ArchiveCache:           archiveStreamCache,
 		})
 		b.RegisterStarter(starter.New(c, srv, logger))
 	}
