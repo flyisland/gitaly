@@ -16,8 +16,6 @@ import (
 )
 
 func TestRestoreRepository(t *testing.T) {
-	testhelper.SkipWithReftable(t, "This needs a fix on the restore package, which is being done in #6786")
-
 	t.Parallel()
 	ctx := testhelper.Context(t)
 
