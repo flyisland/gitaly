@@ -2601,6 +2601,51 @@ func TestRepositoryManager_CleanStaleData_removeGitLabFullPathConfig(t *testing.
 	})
 }
 
+func TestPackRefsWithKeepAroundReferences(t *testing.T) {
+	testhelper.SkipWithReftable(t, "tests are specific to files backend")
+
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+	logger := testhelper.NewLogger(t)
+
+	gitCmdFactory := gittest.NewCommandFactory(t, cfg)
+
+	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+	repo := localrepo.New(logger, gitalycfg.NewLocator(cfg), gitCmdFactory, nil, repoProto)
+
+	commitOID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
+
+	for i := 0; i < 20; i++ {
+		refName := fmt.Sprintf("refs/keep-around/%s-%d", commitOID, i)
+		gittest.Exec(t, cfg, "-C", repoPath, "update-ref", refName, commitOID.String())
+	}
+
+	packedRefsPath := filepath.Join(repoPath, "packed-refs")
+	_, err := os.Stat(packedRefsPath)
+	require.True(t, os.IsNotExist(err), "packed-refs should not exist initially")
+
+	manager := New(gitalycfgprom.Config{}, logger, nil, nil)
+
+	strategy := mockOptimizationStrategy{
+		shouldRepackReferences: func(context.Context) bool { return true },
+	}
+
+	didPackRefs, err := manager.packRefsIfNeeded(ctx, repo, strategy)
+	require.NoError(t, err)
+	require.True(t, didPackRefs)
+
+	packedRefsContent, err := os.ReadFile(packedRefsPath)
+	require.NoError(t, err)
+	packedRefs := string(packedRefsContent)
+
+	// Check that keep-around refs are packed
+	require.Contains(t, packedRefs, "refs/keep-around/", "packed-refs should contain keep-around references")
+}
+
 // mockOptimizationStrategy is a mock strategy that can be used with OptimizeRepository.
 type mockOptimizationStrategy struct {
 	shouldRepackObjects    bool
