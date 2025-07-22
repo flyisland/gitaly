@@ -1,12 +1,14 @@
 package ref
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
@@ -19,7 +21,10 @@ import (
 func TestFindLocalBranches(t *testing.T) {
 	t.Parallel()
 
-	ctx := testhelper.Context(t)
+	testhelper.NewFeatureSets(featureflag.RefIterator).Run(t, testFindLocalBranches)
+}
+
+func testFindLocalBranches(t *testing.T, ctx context.Context) {
 	cfg, client := setupRefService(t)
 
 	type setupData struct {
