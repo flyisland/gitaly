@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
-	"time"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -36,13 +34,6 @@ func newParser() *parser {
 	}
 }
 
-const maxUnixCommitDate = 1 << 53
-
-// fallbackTimeValue is the value returned in case there is a parse error. It's the maximum
-// time value possible in golang. See
-// https://gitlab.com/gitlab-org/gitaly/issues/556#note_40289573
-var fallbackTimeValue = time.Unix(1<<63-62135596801, 999999999)
-
 func parseCommitAuthor(line string) *gitalypb.CommitAuthor {
 	author := &gitalypb.CommitAuthor{}
 
@@ -65,10 +56,7 @@ func parseCommitAuthor(line string) *gitalypb.CommitAuthor {
 		return author
 	}
 
-	sec, err := strconv.ParseInt(secSplit[0], 10, 64)
-	if err != nil || sec > maxUnixCommitDate || sec < 0 {
-		sec = fallbackTimeValue.Unix()
-	}
+	sec := git.ParseDateSeconds(secSplit[0])
 
 	author.Date = &timestamppb.Timestamp{Seconds: sec}
 
@@ -82,21 +70,6 @@ func parseCommitAuthor(line string) *gitalypb.CommitAuthor {
 func subjectFromBody(body []byte) []byte {
 	subject, _, _ := bytes.Cut(body, []byte("\n"))
 	return bytes.TrimRight(subject, "\r\n")
-}
-
-func detectSignatureType(line string) gitalypb.SignatureType {
-	switch strings.TrimSuffix(line, "\n") {
-	case "-----BEGIN SIGNED MESSAGE-----":
-		return gitalypb.SignatureType_X509
-	case "-----BEGIN PGP MESSAGE-----":
-		return gitalypb.SignatureType_PGP
-	case "-----BEGIN PGP SIGNATURE-----":
-		return gitalypb.SignatureType_PGP
-	case "-----BEGIN SSH SIGNATURE-----":
-		return gitalypb.SignatureType_SSH
-	default:
-		return gitalypb.SignatureType_NONE
-	}
 }
 
 // ParseTag parses the given object, which is expected to refer to a Git tag. The tag's tagged
@@ -197,7 +170,7 @@ func (p *parser) parseTag(object git.Object, name []byte) (*gitalypb.Tag, tagged
 
 			if length > 0 {
 				signature := string(signature[:length])
-				tag.SignatureType = detectSignatureType(signature)
+				tag.SignatureType = git.DetectSignatureType(signature)
 			}
 		}
 	}

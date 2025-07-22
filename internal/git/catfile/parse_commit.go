@@ -146,7 +146,7 @@ func (p *parser) ParseCommit(object git.Object) (*Commit, error) {
 			case gpgSignaturePrefix, gpgSignaturePrefixSha256:
 				// Since Git only considers the first signature, we only
 				// capture the first signature's type.
-				commit.SignatureType = detectSignatureType(value)
+				commit.SignatureType = git.DetectSignatureType(value)
 
 				state = parseCommitStateSignature
 				signatures = append(signatures, []byte(value+"\n"))
