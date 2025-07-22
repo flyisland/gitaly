@@ -40,6 +40,7 @@ type Partition interface {
 type PartitionFactory interface {
 	// New returns a new Partition instance.
 	New(
+		ctx context.Context,
 		logger log.Logger,
 		partitionID storage.PartitionID,
 		db keyvalue.Transactioner,
@@ -340,6 +341,8 @@ func (sm *StorageManager) Begin(ctx context.Context, opts storage.TransactionOpt
 		return nil, fmt.Errorf("get partition: %w", err)
 	}
 
+	ctx = storage.ContextWithPartitioningHint(ctx, relativePath)
+
 	ptn, err := sm.startPartition(ctx, partitionID)
 	if err != nil {
 		return nil, err
@@ -540,6 +543,7 @@ func (sm *StorageManager) startPartition(ctx context.Context, partitionID storag
 				logger := sm.logger.WithField("partition_id", partitionID)
 
 				mgr := sm.partitionFactory.New(
+					ctx,
 					logger,
 					partitionID,
 					keyvalue.NewPrefixedTransactioner(sm.database, KeyPrefixPartition(partitionID)),

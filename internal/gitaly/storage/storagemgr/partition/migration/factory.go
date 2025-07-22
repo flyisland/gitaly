@@ -1,6 +1,8 @@
 package migration
 
 import (
+	"context"
+
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
@@ -31,6 +33,7 @@ func NewFactory(
 
 // New returns a new Partition instance.
 func (f migrationFactory) New(
+	ctx context.Context,
 	logger log.Logger,
 	partitionID storage.PartitionID,
 	db keyvalue.Transactioner,
@@ -39,6 +42,6 @@ func (f migrationFactory) New(
 	absoluteStateDir string,
 	stagingDir string,
 ) storagemgr.Partition {
-	partition := f.factory.New(logger, partitionID, db, storageName, storagePath, absoluteStateDir, stagingDir)
+	partition := f.factory.New(ctx, logger, partitionID, db, storageName, storagePath, absoluteStateDir, stagingDir)
 	return newPartition(partition, logger, f.metrics, storageName, f.migrations)
 }

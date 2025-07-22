@@ -34,6 +34,7 @@ type Factory struct {
 
 // New returns a new Partition instance.
 func (f Factory) New(
+	ctx context.Context,
 	logger logger.Logger,
 	partitionID storage.PartitionID,
 	db keyvalue.Transactioner,
@@ -89,6 +90,7 @@ func (f Factory) New(
 			panic(fmt.Errorf("creating raft log store: %w", err))
 		}
 		raftReplica, err := factory(
+			ctx,
 			1,
 			storageName,
 			partitionKey,

@@ -151,6 +151,7 @@ type Replica struct {
 	cancel context.CancelFunc
 
 	memberID     uint64 // Member ID of the replica
+	relativePath string
 	partitionKey *gitalypb.RaftPartitionKey
 	node         raft.Node             // etcd/raft node representation
 	raftCfg      config.Raft           // etcd/raft configurations
@@ -204,6 +205,7 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ReplicaOptions, error
 // RaftReplicaFactory defines a function type that creates a new Raft Replica instance.
 // This factory is used to create and initialize Replica objects for partitions.
 type RaftReplicaFactory func(
+	ctx context.Context,
 	memberID uint64,
 	storageName string,
 	partitionKey *gitalypb.RaftPartitionKey,
@@ -216,6 +218,7 @@ type RaftReplicaFactory func(
 // This function creates a Replica and registers it with the appropriate RaftEnabledStorage.
 func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionFunc) RaftReplicaFactory {
 	return func(
+		ctx context.Context,
 		memberID uint64,
 		storageName string,
 		partitionKey *gitalypb.RaftPartitionKey,
@@ -233,7 +236,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
 
-		replica, err := NewReplica(memberID, partitionKey, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
+		replica, err := NewReplica(ctx, memberID, partitionKey, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("create replica %q: %w", storageName, err)
 		}
@@ -252,6 +255,7 @@ func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionF
 // start the Raft protocol. The Initialize method must be called separately to start
 // the Raft protocol operation.
 func NewReplica(
+	ctx context.Context,
 	memberID uint64,
 	partitionKey *gitalypb.RaftPartitionKey,
 	raftCfg config.Raft,
@@ -263,6 +267,11 @@ func NewReplica(
 ) (*Replica, error) {
 	if !raftCfg.Enabled {
 		return nil, fmt.Errorf("raft is not enabled")
+	}
+
+	relativePath, err := storage.ExtractPartitioningHint(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("extract partitioning hint: %w", err)
 	}
 
 	options, err := applyOptions(raftCfg, opts)
@@ -283,6 +292,7 @@ func NewReplica(
 
 	return &Replica{
 		memberID:           memberID,
+		relativePath:       relativePath,
 		partitionKey:       partitionKey,
 		raftCfg:            raftCfg,
 		options:            options,

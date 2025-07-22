@@ -1247,7 +1247,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		)
 
 		// transactionManager is the current TransactionManager instance.
-		transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
+		transactionManager = factory.New(ctx, logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 		// managerErr is used for synchronizing manager closing and returning
 		// the error from Run.
 		managerErr chan error
@@ -1296,7 +1296,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.NoError(t, os.RemoveAll(stagingDir))
 			require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
-			transactionManager = factory.New(logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
+			transactionManager = factory.New(ctx, logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 			if step.OverridingSink != nil {
 				// Typically, transactionManager.offloadingSink is properly set by Factory.New().
 				// We override it here only in case when we need to simulate custom sink behaviors

@@ -94,6 +94,7 @@ func newStubPartitionFactory() PartitionFactory {
 }
 
 func (m mockPartitionFactory) New(
+	ctx context.Context,
 	logger log.Logger,
 	partitionID storage.PartitionID,
 	db keyvalue.Transactioner,

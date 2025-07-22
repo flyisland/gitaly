@@ -169,6 +169,7 @@ func TestReftableMigration(t *testing.T) {
 
 			p := newPartition(
 				partitionFactory.New(
+					ctx,
 					logger,
 					storage.PartitionID(1),
 					database,
