@@ -40,16 +40,16 @@ import (
 )
 
 func TestReplicateRepository(t *testing.T) {
-	t.Parallel()
-
 	ctx := testhelper.Context(t)
 
 	type setupData struct {
-		source              *gitalypb.Repository
-		target              *gitalypb.Repository
-		expectedObjects     []string
-		expectedCustomHooks []string
-		expectedError       error
+		source                 *gitalypb.Repository
+		target                 *gitalypb.Repository
+		expectedObjects        []string
+		expectedCustomHooks    []string
+		expectedError          error
+		expectedConfigMismatch bool
+		env                    map[string]string
 	}
 
 	setupSourceAndTarget := func(t *testing.T, cfg config.Cfg, createTarget bool) (*gitalypb.Repository, string, *gitalypb.Repository, string) {
@@ -125,6 +125,32 @@ func TestReplicateRepository(t *testing.T) {
 				return setupData{
 					source: source,
 					target: target,
+				}
+			},
+		},
+		{
+			desc: "replicate source repo is of different reference backend",
+			setup: func(t *testing.T, cfg config.Cfg) setupData {
+				source, sourcePath, target, _ := setupSourceAndTarget(t, cfg, false)
+
+				// Create a new branch that only exists in the source repository to verify that it
+				// is getting created in the target repository as expected.
+				gittest.WriteCommit(t, cfg, sourcePath, gittest.WithBranch("branch"))
+
+				migrateTo := git.ReferenceBackendReftables.Name
+				if testhelper.IsReftableEnabled() {
+					migrateTo = git.ReferenceBackendFiles.Name
+				}
+
+				gittest.Exec(t, cfg, "-C", sourcePath, "refs", "migrate", "--ref-format="+migrateTo)
+
+				return setupData{
+					source: source,
+					target: target,
+					env: map[string]string{
+						"GIT_DEFAULT_REF_FORMAT": "",
+					},
+					expectedConfigMismatch: true,
 				}
 			},
 		},
@@ -292,17 +318,21 @@ func TestReplicateRepository(t *testing.T) {
 					require.NoError(t, os.RemoveAll(filepath.Join(sourcePath, path)))
 				}
 
+				// Operating on invalid repositories is not supported with transactions.
+				//
+				// Praefect deletes metdata record of a repository on ErrInvalidSourceRepository. While this functionality
+				// won't work, we have a more general replacement for the ad-hoc repair with the background metadata verifier.
+				err := ErrInvalidSourceRepository
+				if testhelper.IsWALEnabled() && testhelper.IsPraefectEnabled() {
+					err = structerr.NewInternal("source reference backend: repository info: rpc error: code = Internal desc = begin transaction: get snapshot: new shared snapshot: create repository snapshots: validate git directory: invalid git directory")
+				} else if testhelper.IsWALEnabled() {
+					err = structerr.NewInternal("checking for repo existence: begin transaction: get snapshot: new shared snapshot: create repository snapshots: validate git directory: invalid git directory")
+				}
+
 				return setupData{
-					source: source,
-					target: target,
-					expectedError: testhelper.WithOrWithoutWAL[error](
-						// Operating on invalid repositories is not supported with transactions.
-						//
-						// Praefect deletes metdata record of a repository on ErrInvalidSourceRepository. While this functionality
-						// won't work, we have a more general replacement for the ad-hoc repair with the background metadata verifier.
-						structerr.NewInternal("could not create repository from snapshot: creating repository: extracting snapshot: first snapshot read: rpc error: code = Internal desc = begin transaction: get snapshot: new shared snapshot: create repository snapshots: validate git directory: invalid git directory"),
-						ErrInvalidSourceRepository,
-					),
+					source:        source,
+					target:        target,
+					expectedError: err,
 				}
 			},
 		},
@@ -394,8 +424,6 @@ func TestReplicateRepository(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			t.Parallel()
-
 			cfgBuilder := testcfg.NewGitalyCfgBuilder(testcfg.WithStorages("default", "target"))
 			cfg := cfgBuilder.Build(t)
 
@@ -406,6 +434,10 @@ func TestReplicateRepository(t *testing.T) {
 			cfg.SocketPath = serverSocketPath
 
 			setup := tc.setup(t, cfg)
+
+			for key, value := range setup.env {
+				t.Setenv(key, value)
+			}
 
 			ctx := testhelper.MergeOutgoingMetadata(ctx, testcfg.GitalyServersMetadataFromCfg(t, cfg))
 			_, err := repoClient.ReplicateRepository(ctx, &gitalypb.ReplicateRepositoryRequest{
@@ -436,11 +468,13 @@ func TestReplicateRepository(t *testing.T) {
 			require.Equal(t, sourceRefs, targetRefs, "refs including HEAD should match")
 
 			// Verify Git config matches.
-			require.Equal(t,
-				testhelper.MustReadFile(t, filepath.Join(sourcePath, "config")),
-				testhelper.MustReadFile(t, filepath.Join(targetPath, "config")),
-				"config file must match",
-			)
+			if !setup.expectedConfigMismatch {
+				require.Equal(t,
+					testhelper.MustReadFile(t, filepath.Join(sourcePath, "config")),
+					testhelper.MustReadFile(t, filepath.Join(targetPath, "config")),
+					"config file must match",
+				)
+			}
 
 			// Verify custom hooks replicated.
 			var targetHooks []string
@@ -464,6 +498,12 @@ func TestReplicateRepository(t *testing.T) {
 			for _, oid := range setup.expectedObjects {
 				gittest.Exec(t, cfg, "-C", targetPath, "cat-file", "-p", oid)
 			}
+
+			sourceBackend, err := localrepo.NewTestRepo(t, cfg, setup.source).ReferenceBackend(ctx)
+			require.NoError(t, err)
+			targetBackend, err := localrepo.NewTestRepo(t, cfg, setup.target).ReferenceBackend(ctx)
+			require.NoError(t, err)
+			require.Equal(t, sourceBackend.Name, targetBackend.Name)
 		})
 	}
 }
