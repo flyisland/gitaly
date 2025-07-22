@@ -15,6 +15,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
 	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
@@ -50,7 +51,7 @@ type RaftReplica interface {
 
 	// AddNode adds a new node to the Raft cluster.
 	// This operation can only be performed by the leader.
-	AddNode(ctx context.Context, address string) error
+	AddNode(ctx context.Context, address, destinationStorageName string) error
 
 	// RemoveNode removes a node from the Raft cluster.
 	// This operation can only be performed by the leader.
@@ -281,6 +282,10 @@ func NewReplica(
 
 	if raftEnabledStorage == nil {
 		return nil, fmt.Errorf("raft enabled storage is required")
+	}
+
+	if _, ok := raftEnabledStorage.GetTransport().(*GrpcTransport); !ok {
+		return nil, fmt.Errorf("transport is not a GrpcTransport")
 	}
 
 	logger = logger.WithFields(logging.Fields{
@@ -868,9 +873,6 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 	}
 
 	routingTable := replica.raftEnabledStorage.GetRoutingTable()
-	if routingTable == nil {
-		return fmt.Errorf("routing table not found")
-	}
 
 	// Apply the changes to the routing table
 	if err := routingTable.ApplyReplicaConfChange(replica.logStore.storageName, replica.partitionKey, replicaChanges); err != nil {
@@ -972,31 +974,30 @@ func (replica *Replica) Step(ctx context.Context, msg raftpb.Message) error {
 }
 
 // AddNode implements RaftReplica.AddNode
-func (replica *Replica) AddNode(ctx context.Context, address string) error {
+func (replica *Replica) AddNode(ctx context.Context, address, destinationStorageName string) error {
 	memberID := uint64(replica.AppendedLSN() + 1)
-	return replica.proposeMembershipChange(ctx, string(addVoter), memberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
+	return replica.proposeMembershipChange(ctx, string(addVoter), destinationStorageName, memberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
 		Address: address,
 	})
 }
 
 // RemoveNode implements RaftReplica.RemoveNode
 func (replica *Replica) RemoveNode(ctx context.Context, memberID uint64) error {
-	return replica.proposeMembershipChange(ctx, string(removeNode), memberID, ConfChangeRemoveNode, nil)
+	return replica.proposeMembershipChange(ctx, string(removeNode), "", memberID, ConfChangeRemoveNode, nil)
 }
 
 // AddLearner implements RaftReplica.AddLearner
 func (replica *Replica) AddLearner(ctx context.Context, address string) error {
 	memberID := uint64(replica.AppendedLSN() + 1)
-	return replica.proposeMembershipChange(ctx, string(addLearner), memberID, ConfChangeAddLearnerNode, &gitalypb.ReplicaID_Metadata{
+	return replica.proposeMembershipChange(ctx, string(addLearner), "", memberID, ConfChangeAddLearnerNode, &gitalypb.ReplicaID_Metadata{
 		Address: address,
 	})
 }
 
-// proposeMembershipChange is a helper function that handles the common pattern for membership changes.
-// It checks leadership and proposes the configuration change.
 func (replica *Replica) proposeMembershipChange(
 	ctx context.Context,
-	changeType string,
+	changeType,
+	destinationStorageName string,
 	memberID uint64,
 	confChangeType ConfChangeType,
 	metadata *gitalypb.ReplicaID_Metadata,
@@ -1009,33 +1010,77 @@ func (replica *Replica) proposeMembershipChange(
 		return fmt.Errorf("replica is not the leader")
 	}
 
-	if confChangeType == ConfChangeRemoveNode {
-		routingTable := replica.raftEnabledStorage.GetRoutingTable()
-		if routingTable == nil {
-			return fmt.Errorf("routing table not found")
-		}
-		if err := checkMemberID(replica, memberID, routingTable); err != nil {
-			return fmt.Errorf("checking member ID: %w", err)
-		}
+	switch confChangeType {
+	case ConfChangeRemoveNode:
+		return replica.proposeRemoveNode(ctx, changeType, memberID)
+
+	case ConfChangeAddNode:
+		return replica.proposeAddNode(ctx, changeType, destinationStorageName, memberID, metadata)
+
+	case ConfChangeAddLearnerNode:
+		return replica.proposeAddLearner(ctx, changeType, memberID, metadata)
+
+	default:
+		return fmt.Errorf("config change type %v not supported", confChangeType)
+	}
+}
+
+func (replica *Replica) proposeRemoveNode(ctx context.Context, changeType string, memberID uint64) error {
+	// Validate member exists before removing
+	routingTable := replica.raftEnabledStorage.GetRoutingTable()
+	if err := checkMemberID(replica, memberID, routingTable); err != nil {
+		return err
 	}
 
-	w := replica.registry.Register()
+	return replica.proposeConfChange(ctx, changeType, memberID, ConfChangeRemoveNode, nil)
+}
 
+func (replica *Replica) proposeAddNode(ctx context.Context, changeType, destinationStorageName string, memberID uint64, metadata *gitalypb.ReplicaID_Metadata) (returnedErr error) {
+	// First, propose the configuration change
+	if err := replica.proposeConfChange(ctx, changeType, memberID, ConfChangeAddNode, metadata); err != nil {
+		return err
+	}
+
+	// After conf change commits, call JoinCluster on the target node
+	if err := replica.joinCluster(ctx, memberID, destinationStorageName, metadata); err != nil {
+		// If join fails, attempt to remove the node from the cluster
+		replica.logger.WithError(err).Warn("join cluster failed, attempting to remove node")
+
+		if removeErr := replica.proposeConfChange(ctx, string(removeNode), memberID, ConfChangeRemoveNode, nil); removeErr != nil {
+			replica.logger.WithError(removeErr).Error("failed to remove node after join failure")
+		}
+
+		return fmt.Errorf("join cluster failed: %w", err)
+	}
+
+	return nil
+}
+
+func (replica *Replica) proposeAddLearner(ctx context.Context, changeType string, memberID uint64, metadata *gitalypb.ReplicaID_Metadata) error {
+	return replica.proposeConfChange(ctx, changeType, memberID, ConfChangeAddLearnerNode, metadata)
+}
+
+func (replica *Replica) proposeConfChange(
+	ctx context.Context,
+	changeType string,
+	memberID uint64,
+	confChangeType ConfChangeType,
+	metadata *gitalypb.ReplicaID_Metadata,
+) (returnedErr error) {
+	waiter := replica.registry.Register()
 	defer func() {
+		replica.registry.Untrack(waiter.ID)
 		if returnedErr != nil {
-			replica.registry.Untrack(w.ID)
 			replica.metrics.IncMembershipError(changeType, "propose_failed")
 		}
 	}()
-
 	changes := NewReplicaConfChanges(
 		replica.node.Status().Term,
 		uint64(replica.AppendedLSN()),
 		replica.leadership.GetLeaderID(),
-		w.ID,
+		waiter.ID,
 		metadata,
 	)
-
 	changes.AddChange(memberID, confChangeType)
 
 	cc, err := changes.ToConfChangeV2()
@@ -1049,8 +1094,6 @@ func (replica *Replica) proposeMembershipChange(
 
 	replica.metrics.IncMembershipChange(changeType)
 
-	// Wait for the configuration change to be committed with a timeout
-	// If Raft silently drops the proposal (e.g., duplicate member ID), we need to timeout
 	timeout := time.Duration(replica.raftCfg.ProposalConfChangeTimeout) * time.Millisecond
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -1060,9 +1103,49 @@ func (replica *Replica) proposeMembershipChange(
 		return ctx.Err()
 	case <-timer.C:
 		return fmt.Errorf("configuration change timed out after %v - proposal may have been rejected by Raft", timeout)
-	case err := <-w.C:
+	case err := <-waiter.C:
 		return err
 	}
+}
+
+func (replica *Replica) joinCluster(ctx context.Context, targetMemberID uint64, destination string, targetMetadata *gitalypb.ReplicaID_Metadata) error {
+	if targetMetadata == nil || targetMetadata.GetAddress() == "" {
+		return fmt.Errorf("target node address is required")
+	}
+
+	routingTable := replica.raftEnabledStorage.GetRoutingTable()
+
+	routingEntry, err := routingTable.GetEntry(replica.partitionKey)
+	if err != nil {
+		return fmt.Errorf("getting routing table entry: %w", err)
+	}
+
+	transport := replica.raftEnabledStorage.GetTransport()
+	grpcTransport, ok := transport.(*GrpcTransport)
+	if !ok {
+		return fmt.Errorf("transport is not a GrpcTransport")
+	}
+
+	client, err := grpcTransport.getRaftClient(ctx, targetMetadata.GetAddress())
+	if err != nil {
+		return fmt.Errorf("get raft client for %s: %w", targetMetadata.GetAddress(), err)
+	}
+
+	_, err = client.JoinCluster(ctx, &gitalypb.JoinClusterRequest{
+		PartitionKey: replica.partitionKey,
+		LeaderId:     replica.leadership.GetLeaderID(),
+		MemberId:     targetMemberID,
+		Term:         replica.node.Status().Term,
+		Index:        replica.node.Status().Applied,
+		StorageName:  destination,
+		RelativePath: replica.relativePath,
+		Replicas:     routingEntry.Replicas,
+	})
+	if err != nil {
+		return structerr.NewInternal("join cluster RPC failed: %w", err)
+	}
+
+	return nil
 }
 
 func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {

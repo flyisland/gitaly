@@ -1818,8 +1818,9 @@ func TestReplica_AddNode(t *testing.T) {
 		})
 
 		require.NoError(t, err)
+		destination := "default"
 
-		err = replica.AddNode(ctx, replicaTwoAddress)
+		err = replica.AddNode(ctx, replicaTwoAddress, destination)
 		require.NoError(t, err, "adding node should succeed when leader")
 
 		require.Eventually(t, func() bool {
@@ -1860,11 +1861,13 @@ func TestReplica_AddNode(t *testing.T) {
 		metrics := NewMetrics()
 		partitionID := storage.PartitionID(1)
 
-		replica, _, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		replica, socketPath, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
 		defer func() {
 			srv.Stop()
 			require.NoError(t, replica.Close())
 		}()
+
+		replicaOneAdress := "unix://" + socketPath
 
 		waitForLeadership(t, replica, waitTimeout)
 
@@ -1891,18 +1894,38 @@ func TestReplica_AddNode(t *testing.T) {
 		lastMemberID := uint64(3)
 
 		for i := uint64(2); i <= lastMemberID; i++ {
+			// create multiple replicas with new addresses
 			replica, socketPath, srv := createTestNode(t, ctx, i, partitionID, raftCfg, metrics)
 
 			servers = append(servers, srv)
 			address := "unix://" + socketPath
 			destinationAddresses = append(destinationAddresses, address)
 			addressesToReplicas[address] = replica
+
+			routingTableTwo := replica.raftEnabledStorage.GetRoutingTable()
+			err := routingTableTwo.UpsertEntry(RoutingTableEntry{
+				Replicas: []*gitalypb.ReplicaID{
+					{
+						PartitionKey: partitionKey,
+						Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+						MemberId:     1,
+						Metadata: &gitalypb.ReplicaID_Metadata{
+							Address: replicaOneAdress,
+						},
+					},
+				},
+				Term:  1,
+				Index: 2,
+			})
+			require.NoError(t, err)
 		}
+
+		destination := "default"
 
 		// Propose concurrent membership changes. Same member ID but different address.
 		var errs []error
 		for i := 0; i < 2; i++ {
-			err := replica.proposeMembershipChange(ctx, string(addVoter), lastMemberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
+			err := replica.proposeMembershipChange(ctx, string(addVoter), destination, lastMemberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
 				Address: destinationAddresses[i],
 			})
 			errs = append(errs, err)
@@ -1918,7 +1941,7 @@ func TestReplica_AddNode(t *testing.T) {
 			require.ErrorContains(t, err, "configuration change timed out after")
 		}
 
-		require.Equal(t, successfulProposals, 1, "only one of the proposals should succeed")
+		require.Equal(t, 1, successfulProposals, "only one of the proposals should succeed")
 
 		var addedAddress string
 		require.Eventually(t, func() bool {
@@ -1990,7 +2013,7 @@ func TestReplica_AddNode(t *testing.T) {
 		waitForLeadership(t, replica, waitTimeout)
 
 		err := replica.RemoveNode(ctx, 999)
-		require.EqualError(t, err, "checking member ID: translating member ID: no address found for memberID 999")
+		require.EqualError(t, err, "translating member ID: no address found for memberID 999")
 	})
 
 	t.Run("fails when node is not leader", func(t *testing.T) {
@@ -2011,7 +2034,9 @@ func TestReplica_AddNode(t *testing.T) {
 		// Set a random leader ID to simulate a non-leader
 		replica.leadership.SetLeader(999, false)
 
-		err := replica.AddNode(ctx, "gitaly-node-2:8075")
+		destination := "default"
+
+		err := replica.AddNode(ctx, "gitaly-node-2:8075", destination)
 		require.EqualError(t, err, "replica is not the leader", "adding node should fail when not leader")
 
 		testhelper.RequirePromMetrics(t, metrics, `
