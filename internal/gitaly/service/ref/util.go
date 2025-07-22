@@ -57,7 +57,7 @@ func buildAllBranchesBranch(ctx context.Context, objectReader catfile.ObjectCont
 	}, nil
 }
 
-func buildBranch(ctx context.Context, objectReader catfile.ObjectContentReader, elements [][]byte) (*gitalypb.Branch, error) {
+func buildBranchWithCatfile(ctx context.Context, objectReader catfile.ObjectContentReader, elements [][]byte) (*gitalypb.Branch, error) {
 	target, err := catfile.GetCommit(ctx, objectReader, git.Revision(elements[1]))
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func buildBranch(ctx context.Context, objectReader catfile.ObjectContentReader, 
 	}, nil
 }
 
-func buildBranchWithoutCatfile(elements [][]byte) (*gitalypb.Branch, error) {
+func buildBranch(elements [][]byte) (*gitalypb.Branch, error) {
 	var commit gitalypb.GitCommit
 	var author, committer gitalypb.CommitAuthor
 
@@ -143,7 +143,7 @@ func newFindLocalBranchesWriter(stream gitalypb.RefService_FindLocalBranchesServ
 				return err
 			}
 
-			branch, err := buildBranch(ctx, objectReader, elements)
+			branch, err := buildBranchWithCatfile(ctx, objectReader, elements)
 			if err != nil {
 				return err
 			}
@@ -187,7 +187,7 @@ func newFindAllRemoteBranchesWriter(stream gitalypb.RefService_FindAllRemoteBran
 			if err != nil {
 				return err
 			}
-			branch, err := buildBranch(ctx, objectReader, elements)
+			branch, err := buildBranchWithCatfile(ctx, objectReader, elements)
 			if err != nil {
 				return err
 			}
@@ -336,7 +336,7 @@ func (c *commitIterator) Next() bool {
 
 			c.numLines++
 
-			branch, err := buildBranchWithoutCatfile(bytes.Split(record, []byte("\x00")))
+			branch, err := buildBranch(bytes.Split(record, []byte("\x00")))
 			if err != nil {
 				c.err = err
 				return false
