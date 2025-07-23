@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.2.1 (2025-07-22)
+
+No changes.
+
 ## 18.2.0 (2025-07-16)
 
 ### Added (2 changes)
@@ -15,6 +19,10 @@
 
 - [Detect next page presence for paginated requests](gitlab-org/gitaly@7f72195b67f3ec94b66669bf977958eae7fcbc83) ([merge request](gitlab-org/gitaly!7979))
 
+## 18.1.3 (2025-07-22)
+
+No changes.
+
 ## 18.1.2 (2025-07-09)
 
 No changes.
@@ -29,6 +37,10 @@ No changes.
 
 - [commit: Implement message regex filtering for FindCommits](gitlab-org/gitaly@6cf3323d93fe8075d7aeb07c72836ebf6e9543f7) ([merge request](gitlab-org/gitaly!7883))
 - [protobuf: Add message_regex field to FindCommitsRequest](gitlab-org/gitaly@35def91974ca1e339870cdfaa4cd9d68b1b4f1f4) ([merge request](gitlab-org/gitaly!7883))
+
+## 18.0.5 (2025-07-22)
+
+No changes.
 
 ## 18.0.4 (2025-07-09)
 
