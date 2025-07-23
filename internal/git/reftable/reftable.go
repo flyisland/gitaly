@@ -18,6 +18,15 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 )
 
+var (
+	// magic is the magic value of a reftable header.
+	magic = [...]byte{'R', 'E', 'F', 'T'}
+	// hashIDSHA1 denotes this reftable uses SHA1.
+	hashIDSHA1 = [...]byte{'s', 'h', 'a', '1'}
+	// hashIDSHA256 denotes this reftable uses SHA256.
+	hashIDSHA256 = [...]byte{'s', '2', '5', '6'}
+)
+
 // version represents a reftable version.
 type version uint8
 
@@ -71,7 +80,7 @@ func parseHeader(reader io.Reader, hdr *header) error {
 		return fmt.Errorf("reading header: %w", err)
 	}
 
-	if hdr.Magic != [...]byte{'R', 'E', 'F', 'T'} {
+	if hdr.Magic != magic {
 		return fmt.Errorf("unexpected magic bytes: %q", hdr.Magic)
 	}
 
@@ -84,7 +93,7 @@ func parseHeader(reader io.Reader, hdr *header) error {
 			return fmt.Errorf("read hash id: %w", err)
 		}
 
-		if !(hdr.HashID == [...]byte{'s', 'h', 'a', '1'} || hdr.HashID == [...]byte{'s', '2', '5', '6'}) {
+		if !(hdr.HashID == hashIDSHA1 || hdr.HashID == hashIDSHA256) {
 			return fmt.Errorf("unsupported hash id: %q", hdr.HashID)
 		}
 	}
@@ -144,13 +153,24 @@ type block struct {
 type Table struct {
 	blockSize    uint
 	footerOffset uint
-	src          io.ReadSeeker
+	src          *os.File
+	absolutePath string
 	footer       footer
+}
+
+// MinUpdateIndex is the minimum update index in the table.
+func (t *Table) MinUpdateIndex() uint64 {
+	return t.footer.MinUpdateIndex
+}
+
+// MaxUpdateIndex is the maximum update index in the table.
+func (t *Table) MaxUpdateIndex() uint64 {
+	return t.footer.MaxUpdateIndex
 }
 
 // shaFormat maps reftable sha format to Gitaly's hash object.
 func (t *Table) shaFormat() git.ObjectHash {
-	if t.footer.Version == 2 && bytes.Equal(t.footer.HashID[:], []byte("s256")) {
+	if t.footer.Version == 2 && t.footer.HashID == hashIDSHA256 {
 		return git.ObjectHashSHA256
 	}
 	return git.ObjectHashSHA1
@@ -349,9 +369,98 @@ func (t *Table) GetReferences() ([]git.Reference, error) {
 	return allRefs, nil
 }
 
-// ParseTable instantiates a new reftable from the given reftable content.
-func ParseTable(src io.ReadSeeker) (*Table, error) {
-	t := &Table{src: src}
+// PatchUpdateIndexes patches in-place the update indexes stored in the table's
+// header and footer, and syncs the file to the disk.
+func (t *Table) PatchUpdateIndexes(min, max uint64) (returnedErr error) {
+	// Table typically opens the file with read-only permissions. The update index
+	// patching is an exception, and the only case when we should be modifying tables.
+	// Typically the table files would not be modified, and the files in the storage
+	// are read-only to prevent accidental modifications. Due to the default read-only
+	// permissions, we'd fail to open most of the files in the storage for writes.
+	//
+	// Open a separate descriptor with write permissions to handle this special case
+	// of patching update indexes.
+	file, err := os.OpenFile(t.absolutePath, os.O_RDWR, 0)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+
+	defer func() {
+		if err := file.Close(); err != nil {
+			returnedErr = errors.Join(err, fmt.Errorf("close: %w", err))
+		}
+	}()
+
+	t.footer.headerV1.MinUpdateIndex = min
+	t.footer.headerV1.MaxUpdateIndex = max
+
+	// Construct a buffer that contains the full footer with patched values.
+	//
+	// The footer contains the header as well. First serialize the header.
+	buffer := bytes.NewBuffer(make([]byte, 0, t.footer.Version.FooterSize()))
+	if err := binary.Write(buffer, binary.BigEndian, t.footer.headerV1); err != nil {
+		return fmt.Errorf("write header: %w", err)
+	}
+
+	// Only the version two header contains the HashID.
+	if t.footer.header.Version == 2 {
+		if err := binary.Write(buffer, binary.BigEndian, t.footer.HashID); err != nil {
+			return fmt.Errorf("write hash ID: %w", err)
+		}
+	}
+
+	// After the header, serialize the remaining footer values. This will also serialize
+	// the old CRC32 into the footer, but we'll patch it below.
+	if err := binary.Write(buffer, binary.BigEndian, t.footer.footerEnd); err != nil {
+		return fmt.Errorf("write footer: %w", err)
+	}
+
+	// The footer ends with a CRC32 that covers everything in the footer except the checksum
+	// itself. Compute the checksum and override the old value that was written above when
+	// we serialized the footer with the patched update indexes.
+	footerWithoutChecksum := buffer.Bytes()[:buffer.Len()-crc32.Size]
+	t.footer.CRC32 = crc32.ChecksumIEEE(footerWithoutChecksum)
+
+	footerBytes := binary.BigEndian.AppendUint32(footerWithoutChecksum, t.footer.CRC32)
+
+	// Finally, write the updated header and footer into the file.
+	if _, err := file.WriteAt(footerBytes[:t.footer.Version.HeaderSize()], 0); err != nil {
+		return fmt.Errorf("patch header: %w", err)
+	}
+
+	if _, err := file.WriteAt(footerBytes, int64(t.footerOffset)); err != nil {
+		return fmt.Errorf("patch footer: %w", err)
+	}
+
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync: %w", err)
+	}
+
+	return nil
+}
+
+// Close closes the table's associated file.
+func (t *Table) Close() error {
+	return t.src.Close()
+}
+
+// ParseTable opens the table at the given path and parses it. Close must be called
+// once the table is no longer used to close the associated file.
+func ParseTable(absolutePath string) (_ *Table, returnedErr error) {
+	src, err := os.Open(absolutePath)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+
+	defer func() {
+		if returnedErr != nil {
+			if err := src.Close(); err != nil {
+				returnedErr = errors.Join(returnedErr, fmt.Errorf("close: %w", err))
+			}
+		}
+	}()
+
+	t := &Table{src: src, absolutePath: absolutePath}
 
 	var h header
 	if err := parseHeader(src, &h); err != nil {

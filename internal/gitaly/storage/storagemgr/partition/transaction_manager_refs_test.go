@@ -8,7 +8,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	housekeepingcfg "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/fshistory"
@@ -215,16 +214,10 @@ func generateModifyReferencesTests(t *testing.T, setup testTransactionSetup) []t
 					ReferenceUpdates: git.ReferenceUpdates{
 						"refs/heads/parent/child": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
 					},
-					ExpectedError: gittest.FilesOrReftables[error](
-						refdb.ParentReferenceExistsError{
-							ExistingReference: "refs/heads/parent",
-							TargetReference:   "refs/heads/parent/child",
-						},
-						updateref.FileDirectoryConflictError{
-							ConflictingReferenceName: "refs/heads/parent/child",
-							ExistingReferenceName:    "refs/heads/parent",
-						},
-					),
+					ExpectedError: refdb.ParentReferenceExistsError{
+						ExistingReference: "refs/heads/parent",
+						TargetReference:   "refs/heads/parent/child",
+					},
 				},
 			},
 			expectedState: StateAssertion{
@@ -1237,6 +1230,159 @@ func generateModifyReferencesTests(t *testing.T, setup testTransactionSetup) []t
 								},
 							},
 						},
+					},
+				},
+			},
+		},
+		{
+			desc: "concurrently create two different references",
+			steps: steps{
+				StartManager{},
+				Begin{
+					TransactionID: 1,
+					RelativePaths: []string{setup.RelativePath},
+				},
+				Begin{
+					TransactionID: 2,
+					RelativePaths: []string{setup.RelativePath},
+				},
+				Commit{
+					TransactionID: 1,
+					ReferenceUpdates: git.ReferenceUpdates{
+						"refs/heads/branch-1": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
+					},
+				},
+				Commit{
+					TransactionID: 2,
+					ReferenceUpdates: git.ReferenceUpdates{
+						"refs/heads/branch-2": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.Second.OID},
+					},
+				},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN): storage.LSN(2).ToProto(),
+				},
+				Repositories: RepositoryStates{
+					setup.RelativePath: {
+						DefaultBranch: "refs/heads/main",
+						References: gittest.FilesOrReftables(
+							&ReferencesState{
+								FilesBackend: &FilesBackendState{
+									LooseReferences: map[git.ReferenceName]git.ObjectID{
+										"refs/heads/branch-1": setup.Commits.First.OID,
+										"refs/heads/branch-2": setup.Commits.Second.OID,
+									},
+								},
+							},
+							&ReferencesState{
+								ReftableBackend: &ReftableBackendState{
+									Tables: []ReftableTable{
+										{
+											MinIndex: 1,
+											MaxIndex: 1,
+											References: []git.Reference{
+												{Name: "HEAD", Target: "refs/heads/main", IsSymbolic: true},
+											},
+										},
+										{
+											MinIndex: 2,
+											MaxIndex: 2,
+											References: []git.Reference{
+												{Name: "refs/heads/branch-1", Target: setup.Commits.First.OID.String()},
+											},
+										},
+										{
+											MinIndex: 3,
+											MaxIndex: 3,
+											References: []git.Reference{
+												{Name: "refs/heads/branch-2", Target: setup.Commits.Second.OID.String()},
+											},
+										},
+									},
+								},
+							},
+						),
+					},
+				},
+			},
+		},
+		{
+			desc: "concurrently create two different references with compaction",
+			steps: steps{
+				StartManager{},
+				Begin{
+					TransactionID: 1,
+					RelativePaths: []string{setup.RelativePath},
+				},
+				Begin{
+					TransactionID: 2,
+					RelativePaths: []string{setup.RelativePath},
+				},
+				Commit{
+					TransactionID: 1,
+					ReferenceUpdates: git.ReferenceUpdates{
+						"refs/heads/branch-1": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.First.OID},
+					},
+				},
+				Begin{
+					TransactionID:       3,
+					RelativePaths:       []string{setup.RelativePath},
+					ExpectedSnapshotLSN: 1,
+				},
+				RunPackRefs{
+					TransactionID: 3,
+				},
+				Commit{
+					TransactionID: 3,
+				},
+				Commit{
+					TransactionID: 2,
+					ReferenceUpdates: git.ReferenceUpdates{
+						"refs/heads/branch-2": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.Commits.Second.OID},
+					},
+				},
+			},
+			expectedState: StateAssertion{
+				Database: DatabaseState{
+					string(keyAppliedLSN): storage.LSN(3).ToProto(),
+				},
+				Repositories: RepositoryStates{
+					setup.RelativePath: {
+						DefaultBranch: "refs/heads/main",
+						References: gittest.FilesOrReftables(
+							&ReferencesState{
+								FilesBackend: &FilesBackendState{
+									PackedReferences: map[git.ReferenceName]git.ObjectID{
+										"refs/heads/branch-1": setup.Commits.First.OID,
+									},
+									LooseReferences: map[git.ReferenceName]git.ObjectID{
+										"refs/heads/branch-2": setup.Commits.Second.OID,
+									},
+								},
+							},
+							&ReferencesState{
+								ReftableBackend: &ReftableBackendState{
+									Tables: []ReftableTable{
+										{
+											MinIndex: 1,
+											MaxIndex: 2,
+											References: []git.Reference{
+												{Name: "HEAD", Target: "refs/heads/main", IsSymbolic: true},
+												{Name: "refs/heads/branch-1", Target: setup.Commits.First.OID.String()},
+											},
+										},
+										{
+											MinIndex: 3,
+											MaxIndex: 3,
+											References: []git.Reference{
+												{Name: "refs/heads/branch-2", Target: setup.Commits.Second.OID.String()},
+											},
+										},
+									},
+								},
+							},
+						),
 					},
 				},
 			},

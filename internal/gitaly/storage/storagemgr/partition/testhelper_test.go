@@ -416,16 +416,19 @@ func collectReftableReferencesState(
 
 		tablePath := filepath.Join(repoPath, "reftable", tableName.String())
 
-		data, err := os.ReadFile(tablePath)
-		require.NoError(tb, err)
-
 		table.MinIndex, table.MaxIndex = tableName.MinUpdateIndex, tableName.MaxUpdateIndex
 
-		reftable, err := reftable.ParseTable(bytes.NewReader(data))
-		require.NoError(tb, err)
+		func() {
+			reftable, err := reftable.ParseTable(tablePath)
+			require.NoError(tb, err)
+			defer testhelper.MustClose(tb, reftable)
 
-		table.References, err = reftable.GetReferences()
-		require.NoError(tb, err)
+			require.Equal(tb, table.MinIndex, reftable.MinUpdateIndex(), "min update index inside table didn't match the name")
+			require.Equal(tb, table.MaxIndex, reftable.MaxUpdateIndex(), "max update index inside table didn't match the name")
+
+			table.References, err = reftable.GetReferences()
+			require.NoError(tb, err)
+		}()
 
 		for _, reference := range table.References {
 			actualReferences[reference.Name] = git.ObjectID(reference.Target)
