@@ -503,7 +503,15 @@ func TestReplicateRepository(t *testing.T) {
 			require.NoError(t, err)
 			targetBackend, err := localrepo.NewTestRepo(t, cfg, setup.target).ReferenceBackend(ctx)
 			require.NoError(t, err)
-			require.Equal(t, sourceBackend.Name, targetBackend.Name)
+
+			// When reftable is enabled, and the source backend is files. We manually
+			// migrate the target to use reftables.
+			if sourceBackend == git.ReferenceBackendFiles &&
+				testhelper.IsReftableEnabled() && testhelper.IsWALEnabled() {
+				require.Equal(t, git.ReferenceBackendReftables.Name, targetBackend.Name)
+			} else {
+				require.Equal(t, sourceBackend.Name, targetBackend.Name)
+			}
 		})
 	}
 }

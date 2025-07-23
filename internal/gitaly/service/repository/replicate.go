@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
@@ -18,6 +19,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/repoutil"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
+	migrationid "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration/id"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
@@ -98,11 +101,18 @@ func (s *server) ReplicateRepository(ctx context.Context, in *gitalypb.Replicate
 		return nil, structerr.NewInternal("source reference backend: %w", err)
 	}
 
+	// While the target repository is created using the same reference backend as
+	// the source. For newly created repositories, we want to migrate them to
+	// reftables, if we've enabled the flag to use reftables for new repositories.
+	repoCreated := false
+
 	if err := s.locator.ValidateRepository(ctx, in.GetRepository()); err != nil {
 		repoPath, err := s.locator.GetRepoPath(ctx, in.GetRepository(), storage.WithRepositoryVerificationSkipped())
 		if err != nil {
 			return nil, structerr.NewInternal("%w", err)
 		}
+
+		repoCreated = true
 
 		if err = s.create(ctx, in, sourceBackend, repoPath); err != nil {
 			if errors.Is(err, ErrInvalidSourceRepository) {
@@ -119,6 +129,25 @@ func (s *server) ReplicateRepository(ctx context.Context, in *gitalypb.Replicate
 
 	if err := s.replicateRepository(outgoingCtx, in.GetSource(), in.GetRepository()); err != nil {
 		return nil, structerr.NewInternal("replicating repository: %w", err)
+	}
+
+	// ReplicateRepository sets the backend of the newly created repository to be the same as that of the source
+	// repository. Although it is a new repository, it doesn't follow the featureflag for using reftables for new
+	// repositories. So let's migrate the repository.
+	if tx := storage.ExtractTransaction(ctx); tx != nil && repoCreated {
+		shouldBeReftables := featureflag.NewRepoReftableBackend.IsEnabled(ctx)
+		if shouldBeReftables && sourceBackend.Name != git.ReferenceBackendReftables.Name {
+			migrator := migration.NewReferenceBackendMigration(migrationid.Reftable,
+				git.ReferenceBackendReftables, s.localRepoFactory, nil)
+
+			if err := migrator.Fn(ctx,
+				tx,
+				in.GetRepository().GetStorageName(),
+				tx.OriginalRepository(in.GetRepository()).GetRelativePath(),
+			); err != nil {
+				return nil, structerr.NewInternal("migration failed: %w", err)
+			}
+		}
 	}
 
 	return &gitalypb.ReplicateRepositoryResponse{}, nil
