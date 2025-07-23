@@ -166,6 +166,47 @@ raftmgr.Replica                          etcd/raft state machine
                                      └──────────┘     └──────────┘
 ```
 
+### Bootstrap Raft Replica on a remote node
+
+Bootstrapping replicas on remote nodes is a critical operation for maintaining cluster health, performance, and availability in distributed settings. This process ensures that partitions are properly replicated across multiple nodes to maintain consistency and fault tolerance. Replicas are bootstrapped during an add-join operation or a replication event. Since the lifecycle of a replica is managed by transaction, during a join or replication event the replica need to be started via transaction.
+
+To bootstrap a replica on a remote node, we need to propagate the same PartitionKey that is being used by the leader. The PartitionKey is what makes the replica identifiable as part of the specific Raft group managing that partition. When a replica is created by a transaction, it receives a local partition ID. However, to maintain consistency across the cluster, the follower must be registered under the PartitionKey provided by the leader.
+
+The replica bootstrapping process is handled as part of the JoinCluster RPC, which is invoked by the leader after proposing the configuration change. Using this RPC, the leader sends the PartitionKey, peer list, relative path, and other necessary parameters. These are used by the destination storage to update its routing table and initiate a transaction that creates the new partition.
+
+```mermaid
+sequenceDiagram
+    participant Admin as Admin
+    participant Leader as Leader
+    participant Raft as Raft Engine
+    participant Target as Follower Node
+
+    Admin->>Leader: AddNode RPC
+    Leader->>Raft: ProposeConfChange(add member)
+    Raft-->>Leader: ConfChange committed
+    Leader->>Target: JoinCluster RPC(partitionKey, memberID, peers)
+    Target->>Target: Update routing table
+    Target->>Target: Create replica via transaction
+    Target->>Target: replica should be marked as started
+    Target-->>Leader: JoinCluster Response
+    alt Successful response
+         Leader->>Target: AppendEntries (normal flow)
+    else Failure
+        Target->>Target: Update routing table
+        Leader->>Raft: replica.node.ProposeConfChange (removeNode)
+        Raft-->>Leader: ConfChange committed
+    end
+
+    Target->>Target: isReplicaStarted?
+    alt Replica is healthy and started
+        Target->>Target: Process Raft messages
+        Leader->>Target: Ongoing AppendEntries
+    else Replica has stopped
+        Leader->>Target: Restart Replica via Transaction
+        Note right of Admin: Monitor for persistent failures <br> No automatic removal - manual intervention if required.
+    end
+```
+
 ## References
 
 - [Raft-based decentralized architecture for Gitaly Cluster](https://gitlab.com/groups/gitlab-org/-/epics/8903)
