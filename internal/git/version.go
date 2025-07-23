@@ -2,9 +2,12 @@ package git
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 )
 
 // minimumVersion is the minimum required Git version. If updating this version, be sure to
@@ -95,8 +98,8 @@ func (v Version) IsCatfileObjectTypeFilterSupported() bool {
 
 // UsesBatchedUpdates checks whether the current Git version uses batched updates in 'git-fetch(1)' and
 // 'git-receive-pack(1)'.
-func (v Version) UsesBatchedUpdates() bool {
-	return v.GreaterOrEqual(NewVersion(2, 52, 0, 0))
+func (v Version) UsesBatchedUpdates(ctx context.Context) bool {
+	return v.GreaterOrEqual(NewVersion(2, 51, 0, 0)) || featureflag.GitMaster.IsEnabled(ctx)
 }
 
 // LessThan determines whether the version is older than another version.
