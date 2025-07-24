@@ -87,6 +87,11 @@ var forceReadOnly = map[string]bool{
 	gitalypb.RepositoryService_OptimizeRepository_FullMethodName: true,
 }
 
+// skipPreventingReftableCompaction skips preventing reftable compaction for the specified RPCs
+var skipPreventingReftableCompaction = map[string]bool{
+	gitalypb.RepositoryService_MigrateReferenceBackend_FullMethodName: true,
+}
+
 func isReadOnly(info protoregistry.MethodInfo) bool {
 	return info.Operation == protoregistry.OpAccessor || forceReadOnly[info.FullMethodName()]
 }
@@ -245,7 +250,11 @@ func beginTransactionForPartition(ctx context.Context, logger log.Logger, txRegi
 	}()
 
 	isWrite := !isReadOnly(methodInfo)
-	tx, err := partition.Begin(ctx, storage.BeginOptions{Write: isWrite})
+
+	tx, err := partition.Begin(ctx, storage.BeginOptions{
+		Write:                            isWrite,
+		SkipPreventingReftableCompaction: skipPreventingReftableCompaction[methodInfo.FullMethodName()],
+	})
 	if err != nil {
 		return transactionalizedRequest{}, fmt.Errorf("begin: %w", err)
 	}
@@ -380,6 +389,7 @@ func beginTransactionForRepository(ctx context.Context, logger log.Logger, txReg
 		AlternateRelativePath: alternateRelativePath,
 		AllowPartitionAssignmentWithoutRepository: isRepositoryCreation,
 		ForceExclusiveSnapshot:                    forceExclusiveSnapshot[methodInfo.FullMethodName()],
+		SkipPreventingReftableCompaction:          skipPreventingReftableCompaction[methodInfo.FullMethodName()],
 	})
 	if err != nil {
 		var relativePath relativePathNotFoundError
