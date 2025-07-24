@@ -1,0 +1,17 @@
+workload:
+  - type: rpc
+    rpc: FindCommit
+    rps: 100
+    concurrency: 10
+    duration: "30s"
+    service: gitaly.CommitService
+    proto: commit.proto
+    repo: git.git
+  - type: rpc
+    rpc: FindCommit
+    rps: 200
+    concurrency: 20
+    duration: "60s"
+    service: gitaly.CommitService
+    proto: commit.proto
+    repo: gitlab.git
