@@ -80,6 +80,7 @@ type CommitServiceClient interface {
 	CommitStats(ctx context.Context, in *CommitStatsRequest, opts ...grpc.CallOption) (*CommitStatsResponse, error)
 	// FindAllCommits lists all the commits which can be traversed from the
 	// provided commitish.
+	// DEPRECATED: https://gitlab.com/gitlab-org/gitaly/-/issues/6846
 	FindAllCommits(ctx context.Context, in *FindAllCommitsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FindAllCommitsResponse], error)
 	// FindCommits lists all the commits which are associated with the provided revision
 	// and paths.
@@ -526,6 +527,7 @@ type CommitServiceServer interface {
 	CommitStats(context.Context, *CommitStatsRequest) (*CommitStatsResponse, error)
 	// FindAllCommits lists all the commits which can be traversed from the
 	// provided commitish.
+	// DEPRECATED: https://gitlab.com/gitlab-org/gitaly/-/issues/6846
 	FindAllCommits(*FindAllCommitsRequest, grpc.ServerStreamingServer[FindAllCommitsResponse]) error
 	// FindCommits lists all the commits which are associated with the provided revision
 	// and paths.

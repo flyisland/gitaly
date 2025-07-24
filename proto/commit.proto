@@ -92,6 +92,7 @@ service CommitService {
 
   // FindAllCommits lists all the commits which can be traversed from the
   // provided commitish.
+  // DEPRECATED: https://gitlab.com/gitlab-org/gitaly/-/issues/6846
   rpc FindAllCommits(FindAllCommitsRequest) returns (stream FindAllCommitsResponse) {
     option (op_type) = {
       op: ACCESSOR
