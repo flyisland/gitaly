@@ -13,15 +13,77 @@ provider "google" {
   zone    = local.config.benchmark_zone
 }
 
-data "google_compute_disk" "repository-disk" {
-  name    = "git-repos"
-  project = local.config.project
+# Temporary disk from which we create the `git-repositories-<hash>` disk image from.
+resource "google_compute_disk" "prepare_repos" {
+  name = format("%s-prepare-repos-disk", var.gitaly_benchmarking_instance_name)
+  type = "pd-standard"
+  size = 100
+}
+
+# Temporary VM which clones and prepares the `git-repositories-<hash>` disk.
+resource "google_compute_instance" "prepare_repos" {
+  name         = format("%s-prepare-repos-vm", var.gitaly_benchmarking_instance_name)
+  machine_type = "n2d-standard-2"
+  zone         = local.config.benchmark_zone
+
+  boot_disk {
+    initialize_params {
+      image = local.config.os_image
+    }
+  }
+
+  attached_disk {
+    source      = google_compute_disk.prepare_repos.self_link
+    device_name = "repositories"
+  }
+
+  network_interface {
+    network = "default"
+    access_config {}
+  }
+
+  # If the script fails, you can SSH into the VM manually to debug the script:
+  # https://cloud.google.com/compute/docs/instances/startup-scripts/linux
+  metadata = {
+    startup-script = templatefile("${path.module}/../setup-repositories.sh", {
+      repositories = local.config.repositories
+    })
+  }
+}
+
+# Waits for the temporary setup VM to shut down, signalling the repos have been cloned.
+resource "null_resource" "prepare_repos_wait" {
+  provisioner "local-exec" {
+    command = <<-EOF
+      timeout 7200 bash -c '
+        while true; do
+          STATUS=$(gcloud compute instances describe ${google_compute_instance.prepare_repos.name} \
+            --zone=${google_compute_instance.prepare_repos.zone} \
+            --format="value(status)" \
+            --project=${local.config.project})
+          if [ "$STATUS" = "TERMINATED" ]; then
+            break
+          fi
+          sleep 30
+        done
+      '
+    EOF
+  }
+
+  depends_on = [google_compute_instance.prepare_repos]
+}
+
+resource "google_compute_image" "repos" {
+  name        = "git-repos"
+  source_disk = google_compute_disk.prepare_repos.self_link
+
+  depends_on = [null_resource.prepare_repos_wait]
 }
 
 resource "google_compute_disk" "repository-disk" {
   name  = format("%s-repository-disk", var.gitaly_benchmarking_instance_name)
   type  = local.config.repository_disk_type
-  image = format("projects/%s/global/images/git-repositories", local.config.project)
+  image = google_compute_image.repos.self_link
 }
 
 resource "google_compute_region_disk" "repository-region-disk" {
@@ -69,10 +131,6 @@ resource "google_compute_instance" "gitaly" {
   }
 
   tags = ["gitaly"]
-
-  lifecycle {
-    ignore_changes = [attached_disk]
-  }
 }
 
 resource "google_compute_instance" "client" {

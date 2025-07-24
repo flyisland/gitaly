@@ -13,3 +13,11 @@ benchmark_zone: "us-central1-a"
 use_regional_disk: false
 # One of these zones must be the zone for benchmark_zone
 regional_disk_replica_zones: ["us-central1-a", "us-central1-b"]
+
+# The list of repositories which will be cloned into Gitaly's storage disk.
+repositories:
+  - "https://gitlab.com/gitlab-org/git.git"
+  - "https://gitlab.com/gitlab-org/gitlab"
+  - "https://gitlab.com/linux-kernel/linux.git"
+  - "https://github.com/Homebrew/homebrew-core.git"
+  - "https://chromium.googlesource.com/chromium/src"
