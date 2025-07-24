@@ -32,6 +32,15 @@
   pause:
     seconds: 5
 
+- name: Copy workload configuration to client node
+  copy:
+    src: "{{ playbook_dir }}/config-workload.yml"
+    dest: /opt/benchmark-gitaly/config-workload.yml
+    mode: "0644"
+    owner: git
+    group: git
+  delegate_to: "{{ groups['client'][0] }}"
+
 # We run this task as async and poll 0 to make it non-blocking.
 # It will be allowed to run up to `workload_wait_duration` before
 # being treated as failed.
@@ -43,7 +52,7 @@
       - main.go
       - "{{ hostvars[groups['gitaly'][0]]['internal'] }}"
       - "{{ run_name }}"
-      - testdata/workload.yaml
+      - config-workload.yml
     chdir: /opt/benchmark-gitaly
   async: "{{ workload_wait_duration }}"
   poll: 0

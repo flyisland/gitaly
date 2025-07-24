@@ -7,4 +7,5 @@
 !/terraform-prepare/locals.tf
 /group_vars/all.yml
 /results/*
-config.yml
+config-infrastructure.yml
+config-workload.yml
