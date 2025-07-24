@@ -453,6 +453,7 @@ func (m *RepositoryManager) packRefsIfNeeded(ctx context.Context, repo *localrep
 		Name: "pack-refs",
 		Flags: []gitcmd.Option{
 			gitcmd.Flag{Name: "--auto"},
+			gitcmd.Flag{Name: "--all"},
 		},
 	}, gitcmd.WithStderr(&stderr)); err != nil {
 		return false, fmt.Errorf("packing refs: %w, stderr: %q", err, stderr.String())
