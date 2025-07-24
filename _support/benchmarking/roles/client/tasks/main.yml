@@ -54,6 +54,8 @@
   set_fact:
     golang_version: "{{ golang_version['stdout'] }}"
 
+- include_tasks: "{{ playbook_dir }}/roles/gitaly/tasks/setup_go.yml"
+
 - name: Find Gitaly's Ruby version
   shell: "awk '/^ruby/{ print $2 }' /src/gitaly/.tool-versions"
   register: ruby_version
