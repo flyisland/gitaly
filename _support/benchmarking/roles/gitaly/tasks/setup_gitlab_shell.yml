@@ -41,6 +41,7 @@
     chdir: /src/gitlab-shell
   environment:
     PATH: '/usr/local/go/bin:{{ ansible_env.PATH }}'
+  become_user: git
 
 - name: Create gitlab-shell secret
   file:
