@@ -18,12 +18,9 @@ usage() {
 }
 
 profile() {
-	# Profile Gitaly only
-	# --no-inherit    - Don't profile child Git processes.
-	# --call-graph=fp - Use framepointers for call stack, works well with Golang
-	#                   and ~10x smaller output than DWARF.
-	perf record --freq=99 --call-graph=fp --pid="$(pidof -s gitaly)" \
-		--no-inherit --output="${gitaly_perf_data}" -- sleep "${seconds}" &
+	# Profile Gitaly and child processes
+	perf record --freq=99 -g --pid="$(pidof -s gitaly)" \
+	    --output="${gitaly_perf_data}" -- sleep "${seconds}" &
 
 	# Profile whole system
 	# --call-graph=dwarf - Use DWARF debug info for call stack, works well with
