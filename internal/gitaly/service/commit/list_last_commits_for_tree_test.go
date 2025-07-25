@@ -2,6 +2,7 @@ package commit
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"unicode/utf8"
 
@@ -373,6 +374,48 @@ func testListLastCommitsForTree(t *testing.T, ctx context.Context) {
 			})
 			testhelper.RequireGrpcErrorContains(t, setup.expectedErr, err)
 			testhelper.ProtoEqual(t, setup.expectedCommits, commits)
+		})
+	}
+}
+
+func BenchmarkListLastCommitsForTree(b *testing.B) {
+	ctx := testhelper.Context(b)
+	cfg, client := setupCommitService(b, ctx)
+
+	repoProto, _ := gittest.CreateRepository(b, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+		Seed:                   "benchmark.git",
+	})
+	request := &gitalypb.ListLastCommitsForTreeRequest{
+		Repository: repoProto,
+		Revision:   "58f4691876e4301fda53285b0413c64ed67a4585",
+		Path:       []byte("/"),
+		Limit:      25,
+	}
+
+	for _, limit := range []int32{5, 25, 50} {
+		b.Run(fmt.Sprintf("limit=%d", limit), func(b *testing.B) {
+			request.Limit = limit
+
+			testhelper.NewFeatureSets(
+				featureflag.GitLastModified,
+			).Bench(b, func(b *testing.B, ctx context.Context) {
+				for i := int32(0); i < 120; i += limit {
+					request.Offset = i
+
+					stream, err := client.ListLastCommitsForTree(ctx, request)
+					require.NoError(b, err)
+
+					commits, err := testhelper.ReceiveAndFold(stream.Recv, func(
+						result []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree,
+						response *gitalypb.ListLastCommitsForTreeResponse,
+					) []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree {
+						return append(result, response.GetCommits()...)
+					})
+					require.NoError(b, err)
+					require.NotEmpty(b, commits)
+				}
+			})
 		})
 	}
 }
