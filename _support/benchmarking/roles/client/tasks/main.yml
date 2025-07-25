@@ -80,11 +80,13 @@
     group: git
     mode: '0755'
 
-- name: Install benchmark-gitaly.sh as benchmark-gitaly
+- name: Copy benchmark-gitaly Go program
   copy:
-    src: benchmark-gitaly.sh
-    dest: /usr/local/bin/benchmark-gitaly
-    mode: '0755'
+    src: benchmark-gitaly
+    dest: /opt/
+    owner: git
+    group: git
+    mode: "0755"
 
 - name: Generate SSH key
   shell: ssh-keygen -q -t ed25519 -f /root/.ssh/id_ed25519 -N ""

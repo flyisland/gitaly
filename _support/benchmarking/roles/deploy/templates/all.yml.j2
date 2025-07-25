@@ -1,9 +1,2 @@
 ---
 gitaly_revision: "{{ gitaly_revision }}"
-rpcs:
-  - description: Get default branch HEAD
-    rpc: FindCommit
-    service: gitaly.CommitService
-    proto: commit.proto
-    repos:
-      - git.git

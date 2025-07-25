@@ -1,6 +1,5 @@
 ---
 profile: true
 clear_page_cache: true
-bench_duration: 35
 profile_duration: 30
-ghz_wait_duration: 120
+workload_wait_duration: 120
