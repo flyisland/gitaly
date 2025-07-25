@@ -21,7 +21,7 @@ func TestNewProtoRegistry(t *testing.T) {
 		},
 		"CommitService": {
 			"CommitIsAncestor":         OpAccessor,
-			"CommitLanguages":          OpAccessor,
+			"CommitLanguages":          OpMutator,
 			"CommitStats":              OpAccessor,
 			"CommitsByMessage":         OpAccessor,
 			"CountCommits":             OpAccessor,

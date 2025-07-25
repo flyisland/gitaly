@@ -112,7 +112,7 @@ service CommitService {
   // given commit. Returns an error in case no languages could be detected.
   rpc CommitLanguages(CommitLanguagesRequest) returns (CommitLanguagesResponse) {
     option (op_type) = {
-      op: ACCESSOR
+      op: MUTATOR
     };
   }
 
