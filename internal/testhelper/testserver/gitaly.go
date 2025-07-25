@@ -314,6 +314,7 @@ type gitalyServerDeps struct {
 	bundleURIStrategy         bundleuri.GenerationStrategy
 	localRepoFactory          localrepo.Factory
 	migrations                *[]migration.Migration
+	archiveCache              streamcache.Cache
 	MigrationStateManager     migration.StateManager
 	transactionInterceptorsFn func(log.Logger, storage.Node, localrepo.Factory) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor)
 }
@@ -476,6 +477,11 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		)
 	}
 
+	if gsd.archiveCache == nil {
+		gsd.archiveCache = streamcache.New(cfg.ArchiveCache, gsd.logger)
+		tb.Cleanup(gsd.archiveCache.Stop)
+	}
+
 	if gsd.limitHandler == nil {
 		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 		gsd.limitHandler = limithandler.New(cfg, limithandler.LimitConcurrencyByRepo, setupPerRPCConcurrencyLimiters)
@@ -525,6 +531,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		BundleURIManager:       gsd.bundleURIManager,
 		LocalRepositoryFactory: gsd.localRepoFactory,
 		MigrationStateManager:  gsd.MigrationStateManager,
+		ArchiveCache:           gsd.archiveCache,
 	}
 }
 

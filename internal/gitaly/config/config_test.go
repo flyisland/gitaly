@@ -1654,7 +1654,7 @@ path="/foobar"
 			in: storageConfig + `[pack_objects_cache]
 enabled = true
 `,
-			out: StreamCacheConfig{Enabled: true, MaxAge: duration.Duration(5 * time.Minute), Dir: "/foobar/+gitaly/PackObjectsCache", MinOccurrences: 1, Backpressure: true},
+			out: StreamCacheConfig{Enabled: true, MaxAge: duration.Duration(5 * time.Minute), Dir: "/foobar/+gitaly/PackObjectsCache", MinOccurrences: 1, Backpressure: true, Name: "pack_objects"},
 		},
 		{
 			desc: "enabled with custom values",
@@ -1665,7 +1665,7 @@ max_age = "10m"
 min_occurrences = 0
 backpressure = false
 `,
-			out: StreamCacheConfig{Enabled: true, MaxAge: duration.Duration(10 * time.Minute), Dir: "/bazqux", MinOccurrences: 0, Backpressure: false},
+			out: StreamCacheConfig{Enabled: true, MaxAge: duration.Duration(10 * time.Minute), Dir: "/bazqux", MinOccurrences: 0, Backpressure: false, Name: "pack_objects"},
 		},
 		{
 			desc: "enabled with 0 storages",

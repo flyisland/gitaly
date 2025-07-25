@@ -206,7 +206,7 @@ func (s *server) handleArchive(ctx context.Context, p archiveParams) error {
 	}
 
 	var env []string
-	var config []gitcmd.ConfigPair
+	var gitConfig []gitcmd.ConfigPair
 
 	if p.in.GetIncludeLfsBlobs() {
 		smudgeCfg := smudge.Config{
@@ -230,37 +230,42 @@ func (s *server) handleArchive(ctx context.Context, p archiveParams) error {
 			env,
 			smudgeEnv,
 		)
-		config = append(config, smudgeGitConfig)
+		gitConfig = append(gitConfig, smudgeGitConfig)
 	}
 
 	repo := s.localRepoFactory.Build(p.in.GetRepository())
 
-	archiveCommand, err := repo.Exec(ctx, gitcmd.Command{
-		Name:        "archive",
-		Flags:       []gitcmd.Option{gitcmd.ValueFlag{Name: "--format", Value: p.format}, gitcmd.ValueFlag{Name: "--prefix", Value: p.in.GetPrefix() + "/"}},
-		Args:        args,
-		PostSepArgs: pathspecs,
-	}, gitcmd.WithEnv(env...), gitcmd.WithConfig(config...), gitcmd.WithSetupStdout())
-	if err != nil {
-		return err
-	}
-
-	if len(p.compressArgs) > 0 {
-		command, err := command.New(ctx, s.logger, p.compressArgs,
-			command.WithStdin(archiveCommand), command.WithStdout(p.writer),
-		)
+	cacheKey := createArchiveCacheKey(repo.GetGlProjectPath(), args, pathspecs)
+	_, _, err := s.archiveCache.Fetch(ctx, cacheKey, p.writer, func(writer io.Writer) error {
+		archiveCommand, err := repo.Exec(ctx, gitcmd.Command{
+			Name:        "archive",
+			Flags:       []gitcmd.Option{gitcmd.ValueFlag{Name: "--format", Value: p.format}, gitcmd.ValueFlag{Name: "--prefix", Value: p.in.GetPrefix() + "/"}},
+			Args:        args,
+			PostSepArgs: pathspecs,
+		}, gitcmd.WithEnv(env...), gitcmd.WithConfig(gitConfig...), gitcmd.WithSetupStdout())
 		if err != nil {
 			return err
 		}
 
-		if err := command.Wait(); err != nil {
+		if len(p.compressArgs) > 0 {
+			command, err := command.New(ctx, s.logger, p.compressArgs,
+				command.WithStdin(archiveCommand), command.WithStdout(writer),
+			)
+			if err != nil {
+				return err
+			}
+
+			if err := command.Wait(); err != nil {
+				return err
+			}
+		} else if _, err = io.Copy(writer, archiveCommand); err != nil {
 			return err
 		}
-	} else if _, err = io.Copy(p.writer, archiveCommand); err != nil {
-		return err
-	}
 
-	return archiveCommand.Wait()
+		return archiveCommand.Wait()
+	})
+
+	return err
 }
 
 func requestHash(req proto.Message) string {
@@ -271,4 +276,15 @@ func requestHash(req proto.Message) string {
 
 	hash := sha256.Sum256(reqBytes)
 	return hex.EncodeToString(hash[:])
+}
+
+// createArchiveCacheKey creates a cache key using the GitLab project's path, the `git archive`
+// command arguments and the pathspecs. The goal is to create a key that is unique not only
+// across repository, but also across the content of each archive within the same repository.
+func createArchiveCacheKey(gitLabProjectPath string, args []string, pathspecs []string) string {
+	cacheKeyHash := sha256.New()
+	cacheKeyHash.Write([]byte(gitLabProjectPath))
+	cacheKeyHash.Write([]byte(strings.Join(args, ",")))
+	cacheKeyHash.Write([]byte(strings.Join(pathspecs, ",")))
+	return hex.EncodeToString(cacheKeyHash.Sum(nil))
 }
