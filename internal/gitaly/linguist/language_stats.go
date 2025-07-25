@@ -4,6 +4,7 @@ import (
 	"compress/zlib"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -127,47 +128,93 @@ func (c *languageStats) save(ctx context.Context, repo *localrepo.Repo, commitID
 		return fmt.Errorf("languageStats save get repo path: %w", err)
 	}
 
-	tempPath, err := repo.StorageTempDir()
-	if err != nil {
-		return fmt.Errorf("languageStats locate temp dir: %w", err)
+	// Determine temp dir and final path based on transaction context
+	var tempDir, finalPath string
+	var recordFunc func() error
+
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		// Transaction path
+		relPath, err := filepath.Rel(tx.FS().Root(), repoPath)
+		if err != nil {
+			return fmt.Errorf("getting relative path: %w", err)
+		}
+		tempDir = tx.FS().Root()
+		finalPath = filepath.Join(tx.FS().Root(), relPath, languageStatsFilename)
+		recordFunc = func() error {
+			return tx.FS().RecordFile(filepath.Join(relPath, languageStatsFilename))
+		}
+	} else {
+		// Non-transaction path
+		tempDir, err = repo.StorageTempDir()
+		if err != nil {
+			return fmt.Errorf("locating temp dir: %w", err)
+		}
+		finalPath = filepath.Join(repoPath, languageStatsFilename)
+		recordFunc = func() error { return nil } // Don't need to record anything if not in transaction
 	}
 
-	file, err := os.CreateTemp(tempPath, languageStatsFilename)
+	// Write to temp file
+	if err := c.writeToFile(ctx, tempDir, finalPath); err != nil {
+		return err
+	}
+
+	// Record in transaction if needed
+	return recordFunc()
+}
+
+func (c *languageStats) writeToFile(ctx context.Context, tempDir, finalPath string) (returnedErr error) {
+	// Create temp file
+	tempFile, err := os.CreateTemp(tempDir, languageStatsFilename+".*")
 	if err != nil {
 		return fmt.Errorf("languageStats create temp file: %w", err)
 	}
+	tempPath := tempFile.Name()
+
+	// Track if we successfully moved the file
+	var fileMoved bool
+
+	// Ensure cleanup
 	defer func() {
-		file.Close()
-		_ = os.Remove(file.Name())
+		if tempFile != nil {
+			if err := tempFile.Close(); err != nil {
+				returnedErr = errors.Join(err, fmt.Errorf("closing temp linguist cache file: %w", err))
+			}
+		}
+		if !fileMoved {
+			if err := os.Remove(tempPath); err != nil {
+				returnedErr = errors.Join(err, fmt.Errorf("removing temp linguist cache file: %w", err))
+			}
+		}
 	}()
 
-	w := zlib.NewWriter(file)
-	defer func() {
-		// We already check the error further down.
+	// Write compressed JSON
+	w := zlib.NewWriter(tempFile)
+	if err := json.NewEncoder(w).Encode(c); err != nil {
 		_ = w.Close()
-	}()
-
-	if err = json.NewEncoder(w).Encode(c); err != nil {
 		return fmt.Errorf("languageStats encode json: %w", err)
 	}
-
-	if err = w.Close(); err != nil {
-		return fmt.Errorf("languageStats zlib write: %w", err)
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("languageStats close zlib writer: %w", err)
 	}
 
+	// Sync if needed
 	if storage.NeedsSync(ctx) {
-		if err = file.Sync(); err != nil {
-			return fmt.Errorf("languageStats flush: %w", err)
+		if err := tempFile.Sync(); err != nil {
+			return fmt.Errorf("languageStats syncing temp file: %w", err)
 		}
 	}
 
-	if err = file.Close(); err != nil {
+	// Close before rename
+	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("languageStats close: %w", err)
 	}
+	tempFile = nil // Prevent defer from trying to close again
 
-	if err = os.Rename(file.Name(), filepath.Join(repoPath, languageStatsFilename)); err != nil {
+	// Atomic rename
+	if err := os.Rename(tempPath, finalPath); err != nil {
 		return fmt.Errorf("languageStats rename: %w", err)
 	}
+	fileMoved = true
 
 	return nil
 }
