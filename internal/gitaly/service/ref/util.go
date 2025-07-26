@@ -82,30 +82,31 @@ func buildBranch(elements [][]byte) (*gitalypb.Branch, error) {
 		case 1:
 			commit.Id = string(element)
 		case 2:
-			commit.Subject = element
+			author.Name = element
 		case 3:
+			commit.Subject = element
+		case 4:
+			author.Email = trimEmail(element)
+		case 5:
+			authorDateSec := git.ParseDateSeconds(string(element))
+			author.Date = &timestamppb.Timestamp{Seconds: authorDateSec}
+		case 6:
+			author.Timezone = element
+		case 7:
+			committer.Name = element
+		case 8:
 			if len(element) > helper.MaxCommitOrTagMessageSize {
 				element = element[:helper.MaxCommitOrTagMessageSize]
 			}
 
 			commit.Body = element
 			commit.BodySize = int64(len(element))
-		case 4:
-			author.Name = element
-		case 5:
-			author.Email = trimEmail(element)
-		case 6:
-			authorDateSec := git.ParseDateSeconds(string(element))
-			author.Date = &timestamppb.Timestamp{Seconds: authorDateSec}
-		case 7:
-			author.Timezone = element
-		case 8:
-			committer.Name = element
 		case 9:
 			committer.Email = trimEmail(element)
 		case 10:
 			committerDateSec := git.ParseDateSeconds(string(element))
 			committer.Date = &timestamppb.Timestamp{Seconds: committerDateSec}
+
 		case 11:
 			committer.Timezone = element
 		case 12:
@@ -231,13 +232,13 @@ type commitIterator struct {
 var fullCommitFields = []string{
 	"%(refname)",
 	"%(objectname)",
-	"%(subject)",
-	"%(contents)",
 	"%(authorname)",
+	"%(subject)",
 	"%(authoremail)",
 	"%(authordate:unix)",
 	"%(authordate:format:%z)",
 	"%(committername)",
+	"%(contents)",
 	"%(committeremail)",
 	"%(committerdate:unix)",
 	"%(committerdate:format:%z)",
@@ -255,19 +256,18 @@ func NewBranchIterator(
 ) (Iterator, error) {
 	// An extra character is necessary for the delimiter between lines
 	// because there might be \n characters in the commit body.
-	extraDelimiterChar := "\x03"
 	c := &commitIterator{
 		stderr:         bytes.Buffer{},
 		opts:           opts,
 		foundPageToken: !opts.PageTokenError,
-		lineDelimiter:  []byte(extraDelimiterChar + "\n"),
+		lineDelimiter:  []byte("\x00\n"),
 		accumulated:    []byte{},
 		buffer:         make([]byte, 4096),
 	}
 
 	options := []gitcmd.Option{
 		// %00 inserts the null character into the output (see for-each-ref docs)
-		gitcmd.Flag{Name: "--format=" + strings.Join(fullCommitFields, "%00") + extraDelimiterChar},
+		gitcmd.Flag{Name: "--format=" + strings.Join(fullCommitFields, "%00") + "%00"},
 	}
 
 	if opts.sortBy != "" {
@@ -293,7 +293,7 @@ func NewBranchIterator(
 }
 
 // Next will advance the reader to the next line of git for-each-ref's output
-// that includes all commit fields where each line is delimited by \n\x003.
+// that includes all commit fields where each line is delimited by \x00\n.
 func (c *commitIterator) Next() bool {
 	if c.numLines >= c.opts.Limit {
 		c.done = true

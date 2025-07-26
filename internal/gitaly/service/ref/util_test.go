@@ -216,6 +216,48 @@ func TestCommitIterator(t *testing.T) {
 				}
 			},
 		},
+		{
+			desc: "special characters",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+				_, commit := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch"), gittest.WithMessage(
+					"some special \x03 \x01 \x05 \x06 \x07 characters",
+				))
+
+				return setupData{
+					expectedErr: nil,
+					expectedBranches: []*gitalypb.Branch{
+						{
+							Name:         []byte("refs/heads/branch"),
+							TargetCommit: commit,
+						},
+					},
+					opts: &findRefsOpts{SenderOpts: lines.SenderOpts{Limit: 10000}},
+					repo: repo,
+				}
+			},
+		},
+		{
+			desc: "empty fields",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+				_, commit := writeCommit(t, ctx, cfg, repo,
+					gittest.WithBranch("branch-new"),
+					gittest.WithMessage(""))
+
+				return setupData{
+					expectedErr: nil,
+					expectedBranches: []*gitalypb.Branch{
+						{
+							Name:         []byte("refs/heads/branch-new"),
+							TargetCommit: commit,
+						},
+					},
+					opts: &findRefsOpts{SenderOpts: lines.SenderOpts{Limit: 10000}},
+					repo: repo,
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			setup := tc.setup(t)
