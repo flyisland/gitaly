@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -94,14 +95,30 @@ func main() {
 	fmt.Printf("Gitaly Address: %s\n", gitalyAddr)
 	fmt.Printf("Run Name: %s\n", runName)
 
-	for i, item := range config.Workload {
-		fmt.Printf("\n[%d/%d] Executing workload: %s/%s against %s (RPS: %d, Concurrency: %d, Duration: %s)\n",
-			i+1, len(config.Workload), item.Service, item.RPC, item.Repo, item.RPS, item.Concurrency, item.Duration)
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(config.Workload))
 
-		if err := executeGhz(gitalyAddr, runName, item); err != nil {
-			fmt.Fprintf(os.Stderr, "Error executing workload item %d: %v\n", i+1, err)
-			os.Exit(1)
-		}
+	for i, item := range config.Workload {
+		wg.Add(1)
+		go func(index int, workloadItem WorkloadItem) {
+			defer wg.Done()
+
+			fmt.Printf("\n[%d/%d] Executing workload: %s/%s against %s (RPS: %d, Concurrency: %d, Duration: %s)\n",
+				index+1, len(config.Workload), workloadItem.Service, workloadItem.RPC, workloadItem.Repo,
+				workloadItem.RPS, workloadItem.Concurrency, workloadItem.Duration)
+
+			if err := executeGhz(gitalyAddr, runName, workloadItem); err != nil {
+				errChan <- fmt.Errorf("error executing workload item %d: %w", index+1, err)
+			}
+		}(i, item)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
 	}
 
 	fmt.Println("\nAll workload items completed successfully!")
