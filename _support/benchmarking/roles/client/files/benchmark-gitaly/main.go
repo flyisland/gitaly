@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,11 +69,10 @@ func executeGhz(gitalyAddr, runName string, item WorkloadItem) error {
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Command output:\n%s\n", string(output))
-		return fmt.Errorf("ghz command failed: %w", err)
+		return fmt.Errorf("ghz command failed: %w\nCommand output:\n%s", err, string(output))
 	}
 
-	fmt.Printf("Results written to: %s\n", filepath.Join(outputDir, "ghz.json"))
+	log.Printf("Results written to: %s\n", filepath.Join(outputDir, "ghz.json"))
 	return nil
 }
 
@@ -85,15 +85,25 @@ func main() {
 	runName := os.Args[2]
 	configFile := os.Args[3]
 
+	logFile, err := os.OpenFile(filepath.Join("/tmp", runName, "workload.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to open log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
+	log.SetOutput(logFile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	config, err := loadConfig(configFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		log.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Loaded configuration with %d workload items\n", len(config.Workload))
-	fmt.Printf("Gitaly Address: %s\n", gitalyAddr)
-	fmt.Printf("Run Name: %s\n", runName)
+	log.Printf("Loaded configuration with %d workload items\n", len(config.Workload))
+	log.Printf("Gitaly Address: %s\n", gitalyAddr)
+	log.Printf("Run Name: %s\n", runName)
 
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(config.Workload))
@@ -103,7 +113,7 @@ func main() {
 		go func(index int, workloadItem WorkloadItem) {
 			defer wg.Done()
 
-			fmt.Printf("\n[%d/%d] Executing workload: %s/%s against %s (RPS: %d, Concurrency: %d, Duration: %s)\n",
+			log.Printf("[%d/%d] Executing workload: %s/%s against %s (RPS: %d, Concurrency: %d, Duration: %s)\n",
 				index+1, len(config.Workload), workloadItem.Service, workloadItem.RPC, workloadItem.Repo,
 				workloadItem.RPS, workloadItem.Concurrency, workloadItem.Duration)
 
@@ -117,9 +127,9 @@ func main() {
 	close(errChan)
 
 	for err := range errChan {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		log.Printf("ERROR: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("\nAll workload items completed successfully!")
+	log.Println("All workload items completed successfully!")
 }
