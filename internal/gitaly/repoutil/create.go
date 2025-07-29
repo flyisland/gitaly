@@ -66,6 +66,13 @@ func WithSkipInit() CreateOption {
 	}
 }
 
+// WithReferenceBackend sets the reference backend for the new repository.
+func WithReferenceBackend(refBackend git.ReferenceBackend) CreateOption {
+	return func(cfg *createConfig) {
+		cfg.gitOptions = append(cfg.gitOptions, gitcmd.ValueFlag{Name: "--ref-format", Value: refBackend.Name})
+	}
+}
+
 // Create will create a new repository in a race-free way with proper transactional semantics. The
 // repository will only be created if it doesn't yet exist and if nodes which take part in the
 // transaction reach quorum. Otherwise, the target path of the new repository will not be modified.

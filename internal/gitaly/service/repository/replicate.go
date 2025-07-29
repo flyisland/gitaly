@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
@@ -18,6 +19,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/repoutil"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
+	migrationid "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration/id"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/metadata"
@@ -33,6 +36,26 @@ import (
 // ErrInvalidSourceRepository is returned when attempting to replicate from an invalid source repository.
 var ErrInvalidSourceRepository = status.Error(codes.NotFound, "invalid source repository")
 
+func (s *server) getReferenceBackend(
+	ctx context.Context,
+	repoClient gitalypb.RepositoryServiceClient,
+	source *gitalypb.Repository,
+) (*git.ReferenceBackend, error) {
+	resp, err := repoClient.RepositoryInfo(ctx, &gitalypb.RepositoryInfoRequest{Repository: source})
+	if err != nil {
+		return nil, fmt.Errorf("repository info: %w", err)
+	}
+
+	switch resp.GetReferences().GetReferenceBackend() {
+	case gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES:
+		return &git.ReferenceBackendFiles, nil
+	case gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE:
+		return &git.ReferenceBackendReftables, nil
+	default:
+		return nil, fmt.Errorf("unknown reference backend")
+	}
+}
+
 // ReplicateRepository replicates data from a source repository to target repository. On the target
 // repository, this operation ensures synchronization of the following components:
 //
@@ -43,21 +66,6 @@ var ErrInvalidSourceRepository = status.Error(codes.NotFound, "invalid source re
 func (s *server) ReplicateRepository(ctx context.Context, in *gitalypb.ReplicateRepositoryRequest) (*gitalypb.ReplicateRepositoryResponse, error) {
 	if err := validateReplicateRepository(ctx, s.locator, in); err != nil {
 		return nil, structerr.NewInvalidArgument("%w", err)
-	}
-
-	if err := s.locator.ValidateRepository(ctx, in.GetRepository()); err != nil {
-		repoPath, err := s.locator.GetRepoPath(ctx, in.GetRepository(), storage.WithRepositoryVerificationSkipped())
-		if err != nil {
-			return nil, structerr.NewInternal("%w", err)
-		}
-
-		if err = s.create(ctx, in, repoPath); err != nil {
-			if errors.Is(err, ErrInvalidSourceRepository) {
-				return nil, ErrInvalidSourceRepository
-			}
-
-			return nil, structerr.NewInternal("%w", err)
-		}
 	}
 
 	repoClient, err := s.newRepoClient(ctx, in.GetSource().GetStorageName())
@@ -81,12 +89,65 @@ func (s *server) ReplicateRepository(ctx context.Context, in *gitalypb.Replicate
 		return nil, ErrInvalidSourceRepository
 	}
 
+	// When creating a replica, we extract the tar of the source repository into
+	// the target repository. So we need to ensure that they use the same reference
+	// backend.
+	sourceBackend, err := s.getReferenceBackend(ctx, repoClient, in.GetSource())
+	if err != nil {
+		if structerr.GRPCCode(err) == codes.FailedPrecondition {
+			return nil, ErrInvalidSourceRepository
+		}
+
+		return nil, structerr.NewInternal("source reference backend: %w", err)
+	}
+
+	// While the target repository is created using the same reference backend as
+	// the source. For newly created repositories, we want to migrate them to
+	// reftables, if we've enabled the flag to use reftables for new repositories.
+	repoCreated := false
+
+	if err := s.locator.ValidateRepository(ctx, in.GetRepository()); err != nil {
+		repoPath, err := s.locator.GetRepoPath(ctx, in.GetRepository(), storage.WithRepositoryVerificationSkipped())
+		if err != nil {
+			return nil, structerr.NewInternal("%w", err)
+		}
+
+		repoCreated = true
+
+		if err = s.create(ctx, in, sourceBackend, repoPath); err != nil {
+			if errors.Is(err, ErrInvalidSourceRepository) {
+				return nil, ErrInvalidSourceRepository
+			}
+
+			return nil, structerr.NewInternal("%w", err)
+		}
+	}
+
 	// The partitioning hint should not be forwarded to other Gitaly nodes as the path is irrelevant for them.
 	outgoingCtx := storage.ContextWithoutPartitioningHint(ctx)
 	outgoingCtx = metadata.IncomingToOutgoing(outgoingCtx)
 
 	if err := s.replicateRepository(outgoingCtx, in.GetSource(), in.GetRepository()); err != nil {
 		return nil, structerr.NewInternal("replicating repository: %w", err)
+	}
+
+	// ReplicateRepository sets the backend of the newly created repository to be the same as that of the source
+	// repository. Although it is a new repository, it doesn't follow the featureflag for using reftables for new
+	// repositories. So let's migrate the repository.
+	if tx := storage.ExtractTransaction(ctx); tx != nil && repoCreated {
+		shouldBeReftables := featureflag.NewRepoReftableBackend.IsEnabled(ctx)
+		if shouldBeReftables && sourceBackend.Name != git.ReferenceBackendReftables.Name {
+			migrator := migration.NewReferenceBackendMigration(migrationid.Reftable,
+				git.ReferenceBackendReftables, s.localRepoFactory, nil)
+
+			if err := migrator.Fn(ctx,
+				tx,
+				in.GetRepository().GetStorageName(),
+				tx.OriginalRepository(in.GetRepository()).GetRelativePath(),
+			); err != nil {
+				return nil, structerr.NewInternal("migration failed: %w", err)
+			}
+		}
 	}
 
 	return &gitalypb.ReplicateRepositoryResponse{}, nil
@@ -145,7 +206,12 @@ func validateReplicateRepository(ctx context.Context, locator storage.Locator, i
 	return nil
 }
 
-func (s *server) create(ctx context.Context, in *gitalypb.ReplicateRepositoryRequest, repoPath string) error {
+func (s *server) create(
+	ctx context.Context,
+	in *gitalypb.ReplicateRepositoryRequest,
+	sourceBackend *git.ReferenceBackend,
+	repoPath string,
+) error {
 	// if the directory exists, remove it
 	if _, err := os.Stat(repoPath); err == nil {
 		tempDir, err := tempdir.NewWithoutContext(in.GetRepository().GetStorageName(), s.logger, s.locator)
@@ -160,14 +226,18 @@ func (s *server) create(ctx context.Context, in *gitalypb.ReplicateRepositoryReq
 		s.logger.WithField("repo_path", repoPath).WarnContext(ctx, "removed invalid repository")
 	}
 
-	if err := s.createFromSnapshot(ctx, in.GetSource(), in.GetRepository()); err != nil {
+	if err := s.createFromSnapshot(ctx, sourceBackend, in.GetSource(), in.GetRepository()); err != nil {
 		return fmt.Errorf("could not create repository from snapshot: %w", err)
 	}
 
 	return nil
 }
 
-func (s *server) createFromSnapshot(ctx context.Context, source, target *gitalypb.Repository) error {
+func (s *server) createFromSnapshot(
+	ctx context.Context,
+	sourceBackend *git.ReferenceBackend,
+	source, target *gitalypb.Repository,
+) error {
 	if err := repoutil.Create(ctx, s.logger, s.locator, s.gitCmdFactory, s.catfileCache, s.txManager, s.repositoryCounter, target, func(repo *gitalypb.Repository) error {
 		if err := s.extractSnapshot(ctx, source, repo); err != nil {
 			return fmt.Errorf("extracting snapshot: %w", err)
@@ -206,7 +276,7 @@ func (s *server) createFromSnapshot(ctx context.Context, source, target *gitalyp
 		}
 
 		return nil
-	}); err != nil {
+	}, repoutil.WithReferenceBackend(*sourceBackend)); err != nil {
 		return fmt.Errorf("creating repository: %w", err)
 	}
 

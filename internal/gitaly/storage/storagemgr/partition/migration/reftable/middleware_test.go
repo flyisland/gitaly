@@ -56,6 +56,11 @@ func testInterceptor(t *testing.T, ctx context.Context) {
 		t.Skip("only works with the WAL")
 	}
 
+	// Ideally we should use an RPC routed via praefect to avoid the race.
+	if testhelper.IsPraefectEnabled() {
+		t.Skip("usage of gittest.WriteCommit causes a race condition.")
+	}
+
 	mockMigrator := mockReftableMigrator{}
 	var reftableMigrator *migrator
 	callback := func(logger log.Logger, node storage.Node, factory localrepo.Factory) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor) {
