@@ -2,19 +2,12 @@
 - name: Set run_name
   set_fact: "run_name=benchmark-{{ gitaly_revision }}-{{ lookup('pipe', 'date +%s') }}"
 
-- name: Run benchmarks
-  vars:
-    profile: true
-    clear_page_cache: true
-  include_tasks: rpc_loop.yml
-  loop: "{{ rpcs }}"
-  loop_control:
-    loop_var: rpc_info
+- include_tasks: bench.yml
 
 - name: Archive results
   archive:
     path:
-    - "/tmp/{{ run_name }}"
+      - "/tmp/{{ run_name }}"
     dest: "/tmp/{{ run_name }}.tar.gz"
     owner: git
 

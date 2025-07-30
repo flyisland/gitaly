@@ -1,8 +1,0 @@
----
-- name: Run RPC benchmark against designated repos
-  vars:
-    output_dir: "/tmp/{{ run_name }}/{{ rpc_info.rpc }}/{{ repo_name }}"
-  include_tasks: bench.yml
-  loop: "{{ rpc_info.repos }}"
-  loop_control:
-    loop_var: repo_name
