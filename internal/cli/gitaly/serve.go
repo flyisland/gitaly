@@ -562,6 +562,14 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 				},
 			}
 		}
+
+		// When transactions are disabled, set up dry-run statistics middleware
+		// to collect snapshot statistics without creating actual snapshots
+		txMiddleware.UnaryInterceptors = append(txMiddleware.UnaryInterceptors,
+			storagemgr.NewDryRunUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, locator))
+
+		txMiddleware.StreamInterceptors = append(txMiddleware.StreamInterceptors,
+			storagemgr.NewDryRunStreamInterceptor(logger, protoregistry.GitalyProtoPreregistered, locator))
 	}
 
 	housekeepingManager := housekeepingmgr.New(cfg.Prometheus, logger, transactionManager, node)

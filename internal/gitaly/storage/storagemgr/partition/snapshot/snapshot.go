@@ -30,6 +30,21 @@ type snapshotStatistics struct {
 	fileCount int
 }
 
+type dryRunSnapshotStatistics struct {
+	// directoryCount is the total number of directories created in the snapshot.
+	directoryCount int
+	// fileCount is the total number of files linked in the snapshot.
+	fileCount int
+	// maxDirectoryDepth is the maximum directory nesting depth encountered in the snapshot.
+	maxDirectoryDepth int
+	// maxFilesInSingleDirectory is the maximum number of files found in any single directory.
+	maxFilesInSingleDirectory int
+	// hasKeepFiles indicates whether the repository has .keep files in the objects/pack/ directory.
+	hasKeepFiles bool
+	// hasLogsDirectory indicates whether the repository has a logs/ directory.
+	hasLogsDirectory bool
+}
+
 // snapshot is a snapshot of a file system's state.
 type snapshot struct {
 	// root is the absolute path of the snapshot.
