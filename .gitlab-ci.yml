@@ -25,7 +25,7 @@ default:
   pgbouncer: "1.24.0"
   postgres_default: "16-alpine"
   postgres_minimum: "14-alpine"
-  ruby: "3.2"
+  ruby: "3.3"
   rust: "1.73"
   ubi: "9.5"
 
