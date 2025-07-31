@@ -24,9 +24,6 @@ var (
 		{
 			Suffix: "-v2.50",
 		},
-		{
-			Suffix: "-v2.49",
-		},
 	}
 
 	// defaultExecutionEnvironmentConstructors is the list of Git environments supported by the
