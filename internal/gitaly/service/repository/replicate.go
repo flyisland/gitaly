@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"errors"
@@ -10,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
@@ -304,11 +304,7 @@ func (s *server) extractSnapshot(ctx context.Context, source, target *gitalypb.R
 	}
 
 	// We need to catch a possible 'invalid repository' error from GetSnapshot. On an empty read,
-	// BSD tar exits with code 0 so we'd receive the error when waiting for the command. GNU tar on
-	// Linux exits with a non-zero code, which causes Go to return an os.ExitError hiding the original
-	// error reading from stdin. To get access to the error on both Linux and macOS, we read the first
-	// message from the stream here to get access to the possible 'invalid repository' first on both
-	// platforms.
+	// we read the first message from the stream here to get access to the possible 'invalid repository' error.
 	firstBytes, err := stream.Recv()
 	if err != nil {
 		switch {
@@ -338,17 +334,139 @@ func (s *server) extractSnapshot(ctx context.Context, source, target *gitalypb.R
 		return fmt.Errorf("target path: %w", err)
 	}
 
-	stderr := &bytes.Buffer{}
-	cmd, err := command.New(ctx, s.logger, []string{"tar", "-C", targetPath, "-xvf", "-"},
-		command.WithStdin(snapshotReader),
-		command.WithStderr(stderr),
-	)
-	if err != nil {
-		return fmt.Errorf("create tar command: %w", err)
+	// Extract tar using Go's tar package
+	if err := s.extractTarToDirectory(ctx, snapshotReader, targetPath); err != nil {
+		return fmt.Errorf("extract tar: %w", err)
 	}
 
-	if err = cmd.Wait(); err != nil {
-		return structerr.New("wait for tar: %w", err).WithMetadata("stderr", stderr)
+	return nil
+}
+
+// extractTarToDirectory extracts a tar archive to the specified directory using Go's tar package
+func (s *server) extractTarToDirectory(ctx context.Context, reader io.Reader, targetDir string) error {
+	tarReader := tar.NewReader(reader)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break // End of archive
+		}
+		if err != nil {
+			return fmt.Errorf("reading tar header: %w", err)
+		}
+
+		targetPath := filepath.Join(targetDir, header.Name)
+
+		if !strings.HasPrefix(targetPath, filepath.Clean(targetDir)+string(os.PathSeparator)) &&
+			targetPath != filepath.Clean(targetDir) {
+			return fmt.Errorf("invalid file path in tar: %s", header.Name)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+				return fmt.Errorf("creating directory %s: %w", targetPath, err)
+			}
+
+		case tar.TypeReg:
+			if err := s.extractFile(ctx, tarReader, targetPath, header); err != nil {
+				return fmt.Errorf("extracting file %s: %w", targetPath, err)
+			}
+
+		case tar.TypeSymlink:
+			if filepath.IsAbs(header.Linkname) {
+				return fmt.Errorf("absolute symlink not allowed: %s -> %s", header.Name, header.Linkname)
+			}
+
+			// Remove existing file/symlink if it exists
+			if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("removing existing file for symlink %s: %w", targetPath, err)
+			}
+
+			if err := os.Symlink(header.Linkname, targetPath); err != nil {
+				return fmt.Errorf("creating symlink %s -> %s: %w", targetPath, header.Linkname, err)
+			}
+
+		case tar.TypeLink:
+			linkTarget := filepath.Join(targetDir, header.Linkname)
+
+			if !strings.HasPrefix(linkTarget, filepath.Clean(targetDir)+string(os.PathSeparator)) &&
+				linkTarget != filepath.Clean(targetDir) {
+				return fmt.Errorf("invalid hard link target: %s", header.Linkname)
+			}
+
+			// Remove existing file if it exists
+			if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("removing existing file for hard link %s: %w", targetPath, err)
+			}
+
+			if err := os.Link(linkTarget, targetPath); err != nil {
+				return fmt.Errorf("creating hard link %s -> %s: %w", targetPath, linkTarget, err)
+			}
+
+		default:
+			// Skip unsupported file types (devices, FIFOs, etc.)
+			s.logger.WithField("file", header.Name).WithField("type", header.Typeflag).
+				WarnContext(ctx, "skipping unsupported file type in tar archive")
+		}
+
+		if header.Typeflag == tar.TypeReg || header.Typeflag == tar.TypeDir {
+			if err := os.Chmod(targetPath, os.FileMode(header.Mode)); err != nil {
+				return fmt.Errorf("setting permissions for %s: %w", targetPath, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractFile extracts a regular file from the tar archive
+func (s *server) extractFile(ctx context.Context, tarReader *tar.Reader, targetPath string, header *tar.Header) error {
+	if err := os.MkdirAll(filepath.Dir(targetPath), mode.Directory); err != nil {
+		return fmt.Errorf("creating parent directory: %w", err)
+	}
+
+	file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+	if err != nil {
+		return fmt.Errorf("creating file: %w", err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			s.logger.WithField("file", targetPath).WithError(closeErr).
+				WarnContext(ctx, "failed to close file during tar extraction")
+		}
+	}()
+
+	// Copy file content with context cancellation support
+	const bufferSize = 32 * 1024 // 32KB buffer
+	buffer := make([]byte, bufferSize)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		n, err := tarReader.Read(buffer)
+		if n > 0 {
+			if _, writeErr := file.Write(buffer[:n]); writeErr != nil {
+				return fmt.Errorf("writing to file: %w", writeErr)
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("reading from tar: %w", err)
+		}
 	}
 
 	return nil
