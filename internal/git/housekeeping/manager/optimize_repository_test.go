@@ -1613,6 +1613,31 @@ func TestRepositoryManager_CleanStaleData(t *testing.T) {
 				packFileLocks: 1,
 			},
 		},
+		{
+			name: "temporary object directories",
+			entries: []entry{
+				d("objects", []entry{
+					// Recent temporary directory should be kept
+					d("tmp_obj_recent", []entry{
+						f("somefile", withData("content")),
+					}, withAge(1*time.Hour)),
+					// Stale temporary directory should be deleted
+					d("tmp_obj_stale", []entry{
+						d("ab", []entry{
+							f("1234567890abcdef", withData("object content"), expectDeletion),
+						}, expectDeletion),
+						f("loose_object", withData("loose object"), expectDeletion),
+					}, expectDeletion),
+					// Directory without tmp_obj_ prefix should be kept
+					d("tmp_other", []entry{
+						f("file", withData("content")),
+					}),
+				}),
+			},
+			expectedMetrics: cleanStaleDataMetrics{
+				objectdirs: 1,
+			},
+		},
 	}
 
 	for _, tc := range testcases {
