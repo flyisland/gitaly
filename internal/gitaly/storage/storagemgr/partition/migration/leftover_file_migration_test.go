@@ -22,6 +22,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/transactiontest"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc"
 )
@@ -100,6 +101,14 @@ func testNewLeftoverFileMigration(t *testing.T, ctx context.Context) {
 			})
 			mu.Unlock()
 			require.NoError(t, err)
+
+			// Force WAL sync to ensure migration transaction effects are applied to disk
+			// before checking directory state. Migration commits to WAL but doesn't
+			// guarantee immediate filesystem application.
+			conn, err := client.New(ctx, cfg.SocketPath)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, conn)
+			transactiontest.ForceWALSync(t, ctx, conn, repoSetup.repo)
 
 			// Verify repo directory
 			testhelper.RequireDirectoryState(t, repoSetup.repoPath, "", repoSetup.expectedRepoDirState)
