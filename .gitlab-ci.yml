@@ -15,7 +15,6 @@ default:
 .versions:
   debian: "bookworm"
   git_default: "default"
-  git_minimum: "v2.47.0"
   go_default: "1.23"
   # Follow the following process to upgrade Go version:
   # - https://gitlab.com/gitlab-org/gitlab-build-images/-/tree/master#note-regarding-golang-and-fips
@@ -237,8 +236,6 @@ build:
       - GO_VERSION: !reference [.versions, go_supported]
         TEST_BOOT_ARGS: "--bundled-git"
         BINARY_SIZE_CHECKER_ARGS: "--binary-size-threshold 350"
-      - GIT_VERSION: !reference [.versions, git_minimum]
-        BINARY_SIZE_CHECKER_ARGS: "--binary-size-threshold 350"
 build:binaries:
   needs: []
   stage: build
@@ -273,10 +270,6 @@ test:
         USE_MESON: YesPlease
       - TEST_TARGET:
           [test-with-praefect, race-go, test-wal, test-raft, test-with-praefect-wal]
-      # We also verify that things work as expected with a non-bundled Git
-      # version matching our minimum required Git version.
-      - TEST_TARGET: test
-        GIT_VERSION: !reference [.versions, git_minimum]
       # Execute tests with our minimum required Postgres version, as well. If
       # the minimum version changes, please change this to the new minimum
       # version. Furthermore, please make sure to update the minimum required

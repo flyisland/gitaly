@@ -186,27 +186,3 @@ func TestVersion_GreaterOrEqual(t *testing.T) {
 		require.True(t, second.GreaterOrEqual(first))
 	})
 }
-
-func TestVersion_IsSupported(t *testing.T) {
-	for _, tc := range []struct {
-		version string
-		expect  bool
-	}{
-		{"2.20.0", false},
-		{"2.24.0-rc0", false},
-		{"2.24.0", false},
-		{"2.43.0", false},
-		{"2.44.0", false},
-		{"2.46.0-rc0", false},
-		{"2.46.0", false},
-		{"2.47.0", true},
-		{"3.0.0", true},
-		{"3.0.0.gl5", true},
-	} {
-		t.Run(tc.version, func(t *testing.T) {
-			version, err := ParseVersion(tc.version)
-			require.NoError(t, err)
-			require.Equal(t, tc.expect, version.IsSupported())
-		})
-	}
-}

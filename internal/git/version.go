@@ -10,23 +10,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 )
 
-// minimumVersion is the minimum required Git version. If updating this version, be sure to
-// also update the following locations:
-// - https://gitlab.com/gitlab-org/gitaly/blob/master/README.md#installation
-// - https://gitlab.com/gitlab-org/gitaly/blob/master/.gitlab-ci.yml
-// - https://docs.gitlab.com/install/installation/#software-requirements
-// - https://docs.gitlab.com/update/ (see e.g. https://docs.gitlab.com/update/versions/gitlab_17_changes/)
-var minimumVersion = Version{
-	versionString: "2.47.0",
-	major:         2,
-	minor:         47,
-	patch:         0,
-	rc:            false,
-
-	// gl is the GitLab patch level.
-	gl: 0,
-}
-
 // Version represents the version of git itself.
 type Version struct {
 	// versionString is the string representation of the version. The string representation is
@@ -82,12 +65,6 @@ func ParseVersionOutput(versionOutput []byte) (Version, error) {
 // String returns the string representation of the version.
 func (v Version) String() string {
 	return v.versionString
-}
-
-// IsSupported checks if a version string corresponds to a Git version
-// supported by Gitaly.
-func (v Version) IsSupported() bool {
-	return !v.LessThan(minimumVersion)
 }
 
 // IsCatfileObjectTypeFilterSupported checks whether the current Git version supports the `git cat-file --filter=`

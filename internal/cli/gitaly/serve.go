@@ -255,10 +255,6 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	}
 	logger.WithField("duration_ms", time.Since(began).Milliseconds()).Info("finished detecting git version")
 
-	if !gitVersion.IsSupported() {
-		return fmt.Errorf("unsupported Git version: %q", gitVersion)
-	}
-
 	logger.WithField("version", gitVersion.String()).Info("using Git version")
 
 	registry := backchannel.NewRegistry()
