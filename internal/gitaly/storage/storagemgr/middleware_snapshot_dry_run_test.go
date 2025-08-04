@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -32,9 +33,12 @@ func testDryRunMiddleware(t *testing.T, ctx context.Context) {
 	cfg := testcfg.Build(t)
 	logger := testhelper.SharedLogger(t)
 	locator := config.NewLocator(cfg)
+	cache, err := storagemgr.NewDryRunLogCache(time.Minute, 10)
+	require.NoError(t, err)
+	defer cache.Close()
 
 	t.Run("unary interceptor", func(t *testing.T) {
-		interceptor := storagemgr.NewDryRunUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, locator)
+		interceptor := storagemgr.NewDryRunUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, locator, cache)
 
 		testCases := []struct {
 			desc      string
@@ -113,7 +117,7 @@ func testDryRunMiddleware(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("stream interceptor", func(t *testing.T) {
-		interceptor := storagemgr.NewDryRunStreamInterceptor(logger, protoregistry.GitalyProtoPreregistered, locator)
+		interceptor := storagemgr.NewDryRunStreamInterceptor(logger, protoregistry.GitalyProtoPreregistered, locator, cache)
 
 		testCases := []struct {
 			desc        string
@@ -211,6 +215,79 @@ func testDryRunMiddleware(t *testing.T, ctx context.Context) {
 			})
 		}
 	})
+}
+
+func TestDryRunMiddleware_cache(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.SnapshotDryRunStats, true)
+	cfg := testcfg.Build(t)
+	locator := config.NewLocator(cfg)
+	logger := testhelper.SharedLogger(t)
+	hook := testhelper.AddLoggerHook(logger)
+	defer hook.Reset()
+
+	cache, err := storagemgr.NewDryRunLogCache(time.Millisecond*500, 1)
+	require.NoError(t, err)
+	defer cache.Close()
+	interceptor := storagemgr.NewDryRunUnaryInterceptor(logger, protoregistry.GitalyProtoPreregistered, locator, cache)
+
+	repoProto, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+
+	// Verify that dry-run statistics collection runs for the first invocation.
+	handlerCalled, err := receiveUnaryRequest(ctx, interceptor, repoProto)
+	require.NoError(t, err)
+	require.True(t, handlerCalled, "handler should be called")
+	require.True(t, verifyDryRunLog(t, hook.AllEntries()), "should have logged dry-run statistics collection")
+
+	// Second call should not trigger dry-run statistics collection due to cache.
+	hook.Reset()
+	handlerCalled, err = receiveUnaryRequest(ctx, interceptor, repoProto)
+	require.NoError(t, err)
+	require.True(t, handlerCalled, "handler should be called")
+	require.False(t, verifyDryRunLog(t, hook.AllEntries()), "should not have logged dry-run statistics collection")
+
+	// After the cache TTL reached, it should be evicted and the call should trigger statistics collection.
+	time.Sleep(time.Millisecond * 750)
+	hook.Reset()
+	handlerCalled, err = receiveUnaryRequest(ctx, interceptor, repoProto)
+	require.NoError(t, err)
+	require.True(t, handlerCalled, "handler should be called")
+	require.True(t, verifyDryRunLog(t, hook.AllEntries()), "should have logged dry-run statistics collection")
+
+	// Call to different repo will evict the first repo because our cache capacity is 1
+	repoProto2, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+	hook.Reset()
+	handlerCalled, err = receiveUnaryRequest(ctx, interceptor, repoProto2)
+	require.NoError(t, err)
+	require.True(t, handlerCalled, "handler should be called")
+	require.True(t, verifyDryRunLog(t, hook.AllEntries()), "should have logged dry-run statistics collection")
+
+	// Call to first repo again will run the stat collection as it got evicted in previous run.
+	hook.Reset()
+	handlerCalled, err = receiveUnaryRequest(ctx, interceptor, repoProto)
+	require.NoError(t, err)
+	require.True(t, handlerCalled, "handler should be called")
+	require.True(t, verifyDryRunLog(t, hook.AllEntries()), "should have logged dry-run statistics collection")
+}
+
+func receiveUnaryRequest(ctx context.Context, interceptor grpc.UnaryServerInterceptor, repo *gitalypb.Repository) (bool, error) {
+	handlerCalled := false
+	_, err := interceptor(ctx, &gitalypb.CreateRepositoryRequest{
+		Repository: repo,
+	}, &grpc.UnaryServerInfo{
+		FullMethod: gitalypb.RepositoryService_CreateRepository_FullMethodName,
+	}, func(ctx context.Context, req interface{}) (interface{}, error) {
+		handlerCalled = true
+		return &gitalypb.CreateRepositoryResponse{}, nil
+	})
+
+	return handlerCalled, err
 }
 
 func verifyDryRunLog(t *testing.T, entries []*logrus.Entry) bool {
