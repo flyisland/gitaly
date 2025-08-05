@@ -157,7 +157,15 @@ func (mw *TransactionRecoveryMiddleware) applyPendingWAL(ctx context.Context, me
 
 	key := fmt.Sprintf("%s:%d", targetRepo.GetStorageName(), ptnID)
 	if _, ok := mw.readyPartitions.Load(key); ok {
-		// The partitition has already been checked and all pending WAL entries applied.
+		// The partition has already been checked and all pending WAL entries applied.
+		return nil
+	}
+
+	if hasPendingWAL, err := storageHandle.HasPendingWAL(ctx, ptnID); err != nil {
+		return fmt.Errorf("check WAL entries: %w", err)
+	} else if !hasPendingWAL {
+		// No WAL entries found, mark the partition as ready without creating a transaction
+		mw.readyPartitions.Store(key, struct{}{})
 		return nil
 	}
 
