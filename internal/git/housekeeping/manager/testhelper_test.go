@@ -140,6 +140,7 @@ type cleanStaleDataMetrics struct {
 	configkeys     int
 	configsections int
 	objects        int
+	objectdirs     int
 	locks          int
 	refs           int
 	reflocks       int
@@ -167,6 +168,7 @@ func requireCleanStaleDataMetrics(t *testing.T, m *RepositoryManager, metrics cl
 		"configkeys":     metrics.configkeys,
 		"configsections": metrics.configsections,
 		"objects":        metrics.objects,
+		"objectdirs":     metrics.objectdirs,
 		"locks":          metrics.locks,
 		"refs":           metrics.refs,
 		"reflocks":       metrics.reflocks,
