@@ -662,6 +662,18 @@ func (sm *StorageManager) MaybeAssignToPartition(ctx context.Context, relativePa
 	return sm.partitionAssigner.getPartitionID(ctx, relativePath, "", false)
 }
 
+// HasPendingWAL checks if a partition has any pending WAL entries by examining the partition's WAL directory.
+// It returns true if there are any WAL entries that needs to be applied, false otherwise.
+func (sm *StorageManager) HasPendingWAL(ctx context.Context, partitionID storage.PartitionID) (bool, error) {
+	ptn, err := sm.GetPartition(ctx, partitionID)
+	if err != nil {
+		return false, fmt.Errorf("get partition: %w", err)
+	}
+	defer ptn.Close()
+
+	return ptn.GetLogReader().HasPendingWAL()
+}
+
 // deriveStateDirectory hashes the partition ID and returns the state
 // directory where state related to the partition should be stored.
 func deriveStateDirectory(id storage.PartitionID) string {

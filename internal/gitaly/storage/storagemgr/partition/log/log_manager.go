@@ -366,6 +366,22 @@ func (mgr *Manager) AppendedLSN() storage.LSN {
 	return mgr.appendedLSN
 }
 
+// HasPendingWAL checks if there are any log entries in the state directory.
+func (mgr *Manager) HasPendingWAL() (bool, error) {
+	// Read the WAL directory contents
+	entries, err := os.ReadDir(StatePath(mgr.stateDirectory))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// No WAL directory means no WAL entries
+			return false, nil
+		}
+		return false, fmt.Errorf("read WAL directory: %w", err)
+	}
+
+	// If there are any entries in the WAL directory, we have pending WAL entries
+	return len(entries) > 0, nil
+}
+
 // GetEntryPath returns the path of the log entry's root directory.
 func (mgr *Manager) GetEntryPath(lsn storage.LSN) string {
 	return EntryPath(mgr.stateDirectory, lsn)

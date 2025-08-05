@@ -181,6 +181,9 @@ type LogConsumer interface {
 
 // LogReader consumes and acknowledges entries from the Write-Ahead Log.
 type LogReader interface {
+	// HasPendingWAL checks if there are any log entries in the state directory.
+	HasPendingWAL() (bool, error)
+
 	// GetEntryPath returns the path of the log entry's root directory.
 	GetEntryPath(lsn LSN) string
 
@@ -292,6 +295,10 @@ type Storage interface {
 	// GetPartition returns a new handle to a given partition. The caller must call
 	// Partition.Close() when the Partition is no longer needed.
 	GetPartition(context.Context, PartitionID) (Partition, error)
+	// HasPendingWAL checks if a partition has any pending WAL entries by examining
+	// the partition's WAL directory. It returns true if there are any WAL entries
+	// that needs to be applied, false otherwise.
+	HasPendingWAL(ctx context.Context, partitionID PartitionID) (bool, error)
 }
 
 // Node is the interface of a node. Each Node may have zero or more storages.

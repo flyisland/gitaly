@@ -20,6 +20,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	logmgr "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -88,6 +89,9 @@ func newStubPartitionFactory() PartitionFactory {
 						close(closing)
 					})
 				},
+				logReader: func() storage.LogReader {
+					return logmgr.NewManager(storageName, partitionID, stagingDir, absoluteStateDir, nil, logmgr.NewPositionTracker())
+				},
 			}
 		},
 	}
@@ -116,6 +120,7 @@ func (m mockPartitionFactory) New(
 type mockPartition struct {
 	begin       func(context.Context, storage.BeginOptions) (storage.Transaction, error)
 	run         func() error
+	logReader   func() storage.LogReader
 	close       func()
 	closeCalled atomic.Bool
 	storage.Partition
@@ -140,6 +145,10 @@ func (m *mockPartition) CloseSnapshots() error {
 	}
 
 	return nil
+}
+
+func (m *mockPartition) GetLogReader() storage.LogReader {
+	return m.logReader()
 }
 
 type mockTransaction struct {
@@ -1594,6 +1603,89 @@ func TestStorageManager_ListPartitions(t *testing.T) {
 		require.False(t, iterator.Next())
 		require.NoError(t, iterator.Err())
 	})
+}
+
+func TestHasWALEntries(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	logger := testhelper.SharedLogger(t)
+	cfg := testcfg.Build(t)
+
+	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	storageMgr, err := NewStorageManager(
+		logger,
+		cfg.Storages[0].Name,
+		cfg.Storages[0].Path,
+		dbMgr,
+		newStubPartitionFactory(),
+		config.DefaultMaxInactivePartitions,
+		NewMetrics(cfg.Prometheus),
+	)
+	require.NoError(t, err)
+	t.Cleanup(storageMgr.Close)
+
+	for _, tc := range []struct {
+		desc           string
+		setup          func(t *testing.T, cfg config.Cfg) storage.PartitionID
+		expectedHasWAL bool
+	}{
+		{
+			desc: "no WAL directory",
+			setup: func(t *testing.T, cfg config.Cfg) storage.PartitionID {
+				partitionID := storage.PartitionID(2)
+				relativeStateDir := deriveStateDirectory(partitionID)
+				absoluteStateDir := filepath.Join(cfg.Storages[0].Path, relativeStateDir)
+				require.NoError(t, os.MkdirAll(absoluteStateDir, mode.Directory))
+
+				return partitionID
+			},
+			expectedHasWAL: false,
+		},
+		{
+			desc: "empty WAL directory",
+			setup: func(t *testing.T, cfg config.Cfg) storage.PartitionID {
+				partitionID := storage.PartitionID(3)
+				relativeStateDir := deriveStateDirectory(partitionID)
+				absoluteStateDir := filepath.Join(cfg.Storages[0].Path, relativeStateDir)
+				walDir := filepath.Join(absoluteStateDir, "wal")
+				require.NoError(t, os.MkdirAll(walDir, mode.Directory))
+
+				return partitionID
+			},
+			expectedHasWAL: false,
+		},
+		{
+			desc: "with WAL entries",
+			setup: func(t *testing.T, cfg config.Cfg) storage.PartitionID {
+				partitionID := storage.PartitionID(4)
+				relativeStateDir := deriveStateDirectory(partitionID)
+				absoluteStateDir := filepath.Join(cfg.Storages[0].Path, relativeStateDir)
+				walDir := filepath.Join(absoluteStateDir, "wal")
+				require.NoError(t, os.MkdirAll(walDir, mode.Directory))
+
+				// Create a sample WAL entry directory
+				walEntryDir := filepath.Join(walDir, "1")
+				require.NoError(t, os.MkdirAll(walEntryDir, mode.Directory))
+
+				return partitionID
+			},
+			expectedHasWAL: true,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			partitionID := tc.setup(t, cfg)
+			hasWAL, err := storageMgr.HasPendingWAL(ctx, partitionID)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedHasWAL, hasWAL)
+		})
+	}
 }
 
 type SyncerFunc func(ctx context.Context, rootPath, relativePath string) error

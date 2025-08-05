@@ -531,6 +531,11 @@ func (replica *Replica) GetNotificationQueue() <-chan error {
 	return replica.notifyQueue
 }
 
+// HasPendingWAL checks if there are any log entries in the state directory.
+func (replica *Replica) HasPendingWAL() (bool, error) {
+	return replica.logStore.localLog.HasPendingWAL()
+}
+
 // GetEntryPath returns the filesystem path for a given log entry.
 func (replica *Replica) GetEntryPath(lsn storage.LSN) string {
 	return replica.logStore.localLog.GetEntryPath(lsn)
