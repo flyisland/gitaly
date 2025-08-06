@@ -57,7 +57,7 @@ func buildAllBranchesBranch(ctx context.Context, objectReader catfile.ObjectCont
 	}, nil
 }
 
-func buildBranch(ctx context.Context, objectReader catfile.ObjectContentReader, elements [][]byte) (*gitalypb.Branch, error) {
+func buildBranchWithCatfile(ctx context.Context, objectReader catfile.ObjectContentReader, elements [][]byte) (*gitalypb.Branch, error) {
 	target, err := catfile.GetCommit(ctx, objectReader, git.Revision(elements[1]))
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func buildBranch(ctx context.Context, objectReader catfile.ObjectContentReader, 
 	}, nil
 }
 
-func buildBranchWithoutCatfile(elements [][]byte) (*gitalypb.Branch, error) {
+func buildBranch(elements [][]byte) (*gitalypb.Branch, error) {
 	var commit gitalypb.GitCommit
 	var author, committer gitalypb.CommitAuthor
 
@@ -82,30 +82,31 @@ func buildBranchWithoutCatfile(elements [][]byte) (*gitalypb.Branch, error) {
 		case 1:
 			commit.Id = string(element)
 		case 2:
-			commit.Subject = element
+			author.Name = element
 		case 3:
+			commit.Subject = element
+		case 4:
+			author.Email = trimEmail(element)
+		case 5:
+			authorDateSec := git.ParseDateSeconds(string(element))
+			author.Date = &timestamppb.Timestamp{Seconds: authorDateSec}
+		case 6:
+			author.Timezone = element
+		case 7:
+			committer.Name = element
+		case 8:
 			if len(element) > helper.MaxCommitOrTagMessageSize {
 				element = element[:helper.MaxCommitOrTagMessageSize]
 			}
 
 			commit.Body = element
 			commit.BodySize = int64(len(element))
-		case 4:
-			author.Name = element
-		case 5:
-			author.Email = trimEmail(element)
-		case 6:
-			authorDateSec := git.ParseDateSeconds(string(element))
-			author.Date = &timestamppb.Timestamp{Seconds: authorDateSec}
-		case 7:
-			author.Timezone = element
-		case 8:
-			committer.Name = element
 		case 9:
 			committer.Email = trimEmail(element)
 		case 10:
 			committerDateSec := git.ParseDateSeconds(string(element))
 			committer.Date = &timestamppb.Timestamp{Seconds: committerDateSec}
+
 		case 11:
 			committer.Timezone = element
 		case 12:
@@ -143,7 +144,7 @@ func newFindLocalBranchesWriter(stream gitalypb.RefService_FindLocalBranchesServ
 				return err
 			}
 
-			branch, err := buildBranch(ctx, objectReader, elements)
+			branch, err := buildBranchWithCatfile(ctx, objectReader, elements)
 			if err != nil {
 				return err
 			}
@@ -187,7 +188,7 @@ func newFindAllRemoteBranchesWriter(stream gitalypb.RefService_FindAllRemoteBran
 			if err != nil {
 				return err
 			}
-			branch, err := buildBranch(ctx, objectReader, elements)
+			branch, err := buildBranchWithCatfile(ctx, objectReader, elements)
 			if err != nil {
 				return err
 			}
@@ -231,13 +232,13 @@ type commitIterator struct {
 var fullCommitFields = []string{
 	"%(refname)",
 	"%(objectname)",
-	"%(subject)",
-	"%(contents)",
 	"%(authorname)",
+	"%(subject)",
 	"%(authoremail)",
 	"%(authordate:unix)",
 	"%(authordate:format:%z)",
 	"%(committername)",
+	"%(contents)",
 	"%(committeremail)",
 	"%(committerdate:unix)",
 	"%(committerdate:format:%z)",
@@ -255,19 +256,18 @@ func NewBranchIterator(
 ) (Iterator, error) {
 	// An extra character is necessary for the delimiter between lines
 	// because there might be \n characters in the commit body.
-	extraDelimiterChar := "\x03"
 	c := &commitIterator{
 		stderr:         bytes.Buffer{},
 		opts:           opts,
 		foundPageToken: !opts.PageTokenError,
-		lineDelimiter:  []byte(extraDelimiterChar + "\n"),
+		lineDelimiter:  []byte("\x00\n"),
 		accumulated:    []byte{},
 		buffer:         make([]byte, 4096),
 	}
 
 	options := []gitcmd.Option{
 		// %00 inserts the null character into the output (see for-each-ref docs)
-		gitcmd.Flag{Name: "--format=" + strings.Join(fullCommitFields, "%00") + extraDelimiterChar},
+		gitcmd.Flag{Name: "--format=" + strings.Join(fullCommitFields, "%00") + "%00"},
 	}
 
 	if opts.sortBy != "" {
@@ -293,7 +293,7 @@ func NewBranchIterator(
 }
 
 // Next will advance the reader to the next line of git for-each-ref's output
-// that includes all commit fields where each line is delimited by \n\x003.
+// that includes all commit fields where each line is delimited by \x00\n.
 func (c *commitIterator) Next() bool {
 	if c.numLines >= c.opts.Limit {
 		c.done = true
@@ -336,7 +336,7 @@ func (c *commitIterator) Next() bool {
 
 			c.numLines++
 
-			branch, err := buildBranchWithoutCatfile(bytes.Split(record, []byte("\x00")))
+			branch, err := buildBranch(bytes.Split(record, []byte("\x00")))
 			if err != nil {
 				c.err = err
 				return false
