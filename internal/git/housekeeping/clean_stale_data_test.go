@@ -403,7 +403,7 @@ func TestFindTemporaryObjectDirectories(t *testing.T) {
 		{
 			desc: "recent temporary directory",
 			setup: func(t *testing.T) {
-				tmpDir := filepath.Join(objectsPath, "tmp_obj_recent")
+				tmpDir := filepath.Join(objectsPath, "tmp_objdir_recent")
 				require.NoError(t, os.MkdirAll(tmpDir, 0o755))
 
 				// Set recent modification time (within grace period)
@@ -415,38 +415,38 @@ func TestFindTemporaryObjectDirectories(t *testing.T) {
 		{
 			desc: "stale temporary directory",
 			setup: func(t *testing.T) {
-				tmpDir := filepath.Join(objectsPath, "tmp_obj_stale")
+				tmpDir := filepath.Join(objectsPath, "tmp_objdir_stale")
 				require.NoError(t, os.MkdirAll(tmpDir, 0o755))
 
 				// Set old modification time (beyond grace period)
 				staleTime := time.Now().Add(-deleteTempObjectDirectoriesOlderThanDuration - 1*time.Hour)
 				require.NoError(t, os.Chtimes(tmpDir, staleTime, staleTime))
 			},
-			expectedDirectories: []string{filepath.Join(objectsPath, "tmp_obj_stale")},
+			expectedDirectories: []string{filepath.Join(objectsPath, "tmp_objdir_stale")},
 		},
 		{
 			desc: "multiple temporary directories with mixed ages",
 			setup: func(t *testing.T) {
 				// Recent directory (should not be cleaned)
-				recentDir := filepath.Join(objectsPath, "tmp_obj_recent_multi")
+				recentDir := filepath.Join(objectsPath, "tmp_objdir_recent_multi")
 				require.NoError(t, os.MkdirAll(recentDir, 0o755))
 				recentTime := time.Now().Add(-1 * time.Hour)
 				require.NoError(t, os.Chtimes(recentDir, recentTime, recentTime))
 
 				// Stale directory (should be cleaned)
-				staleDir1 := filepath.Join(objectsPath, "tmp_obj_stale_1")
+				staleDir1 := filepath.Join(objectsPath, "tmp_objdir_stale_1")
 				require.NoError(t, os.MkdirAll(staleDir1, 0o755))
 				staleTime1 := time.Now().Add(-deleteTempObjectDirectoriesOlderThanDuration - 1*time.Hour)
 				require.NoError(t, os.Chtimes(staleDir1, staleTime1, staleTime1))
 
 				// Another stale directory (should be cleaned)
-				staleDir2 := filepath.Join(objectsPath, "tmp_obj_stale_2")
+				staleDir2 := filepath.Join(objectsPath, "tmp_objdir_stale_2")
 				require.NoError(t, os.MkdirAll(staleDir2, 0o755))
 				staleTime2 := time.Now().Add(-deleteTempObjectDirectoriesOlderThanDuration - 2*time.Hour)
 				require.NoError(t, os.Chtimes(staleDir2, staleTime2, staleTime2))
 
 				// Regular directory with tmp_obj_ prefix but it's a file (should be ignored)
-				tmpFile := filepath.Join(objectsPath, "tmp_obj_file")
+				tmpFile := filepath.Join(objectsPath, "tmp_objdir_file")
 				require.NoError(t, os.WriteFile(tmpFile, []byte("test"), 0o644))
 				require.NoError(t, os.Chtimes(tmpFile, staleTime1, staleTime1))
 
@@ -456,14 +456,14 @@ func TestFindTemporaryObjectDirectories(t *testing.T) {
 				require.NoError(t, os.Chtimes(regularDir, staleTime1, staleTime1))
 			},
 			expectedDirectories: []string{
-				filepath.Join(objectsPath, "tmp_obj_stale_1"),
-				filepath.Join(objectsPath, "tmp_obj_stale_2"),
+				filepath.Join(objectsPath, "tmp_objdir_stale_1"),
+				filepath.Join(objectsPath, "tmp_objdir_stale_2"),
 			},
 		},
 		{
 			desc: "temporary directory with nested content",
 			setup: func(t *testing.T) {
-				tmpDir := filepath.Join(objectsPath, "tmp_obj_with_content")
+				tmpDir := filepath.Join(objectsPath, "tmp_objdir_with_content")
 				require.NoError(t, os.MkdirAll(tmpDir, 0o755))
 
 				// Create nested directories and files
@@ -476,7 +476,7 @@ func TestFindTemporaryObjectDirectories(t *testing.T) {
 				staleTime := time.Now().Add(-deleteTempObjectDirectoriesOlderThanDuration - 1*time.Hour)
 				require.NoError(t, os.Chtimes(tmpDir, staleTime, staleTime))
 			},
-			expectedDirectories: []string{filepath.Join(objectsPath, "tmp_obj_with_content")},
+			expectedDirectories: []string{filepath.Join(objectsPath, "tmp_objdir_with_content")},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
