@@ -378,7 +378,7 @@ func FindTemporaryObjectDirectories(ctx context.Context, repoPath string) ([]str
 			continue
 		}
 
-		if !strings.HasPrefix(entry.Name(), "tmp_obj_") {
+		if !strings.HasPrefix(entry.Name(), "tmp_objdir") {
 			continue
 		}
 
