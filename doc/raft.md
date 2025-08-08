@@ -25,8 +25,8 @@ partitions from other storages.
 The data size and workload of partitions vary significantly. For example, a partition containing a monorepo and
 its forks can dominate a server's resource usage and traffic. As a result, replication factors and routing tables are
 designed at the partition level. Each partition can define its own replication constraints, such as locality and
-optional storage capacity (e.g., HDD or SSD). Customizable resources for the data and workload on a partition is the
-main benefit of Gitaly Cluster (Raft).
+optional storage capacity (e.g., HDD or SSD). Customizable constraints and resource allocation at a partition level is one of the
+main benefits of a multi-Raft architecture.
 
 ## Partition identity and membership management
 
