@@ -1,32 +1,34 @@
-# Gitaly's Multi-Raft Architecture
+# Gitaly Cluster (Raft) architecture
 
-## Overview
+## Storage hierarchy
 
-The unit of Git data storage is the **repository**. Repositories in a Gitaly cluster are hosted within **storages**, each
-with a globally unique name. A Gitaly server can host multiple storages simultaneously. Downstream services,
-particularly GitLab Rails, maintain a mapping between repositories, storages, and the addresses of the servers hosting
-them.
+The unit of Git data storage is the **repository**. Repositories in a Gitaly Cluster (Raft) are hosted within
+**storages**, each with a globally unique name. A Gitaly server can host multiple storages simultaneously. Downstream
+services, particularly GitLab Rails, maintain a mapping between repositories, storages, and the addresses of the servers
+hosting them.
 
 Within each storage, repositories are grouped into **partitions**. A partition may consist of a single repository or a
 collection of related repositories, such as those belonging to the same object pool in the case of a fork network.
 Write-Ahead Logging (WAL) operates at the partition level, with all repositories in a partition sharing the same
 monotonic log sequence number (LSN). Partition log entries are applied sequentially.
 
-The `raftmgr` package manages each partition in a separate Raft consensus group (Raft group), which operates
+The [`raftmgr` package](https://gitlab.com/gitlab-org/gitaly/-/tree/master/internal/gitaly/storage/raftmgr)
+manages each partition in a separate Raft consensus group (Raft group), which operates
 independently. Partitions are replicated across multiple storages. Storage is where partitions are placed. If a
-storage creates a partition, it will mint its ID, but there's no special relationship between the partition and
+storage creates a partition, it mints its ID, but there's no special relationship between the partition and
 storage. A partition can be moved freely to another storage. At any given time, a single Gitaly server can host thousands
 or even hundreds of thousands of Raft groups.
 
 Partitions are replicated across multiple storages. A storage can host both its own partitions and replicas of
 partitions from other storages.
 
-The data size and workload of partitions vary significantly. For example, a partition containing a monorepository and
+The data size and workload of partitions vary significantly. For example, a partition containing a monorepo and
 its forks can dominate a server's resource usage and traffic. As a result, replication factors and routing tables are
 designed at the partition level. Each partition can define its own replication constraints, such as locality and
-optional storage capacity (e.g., HDD or SSD).
+optional storage capacity (e.g., HDD or SSD). Customizable constraints and resource allocation at a partition level is one of the
+main benefits of a multi-Raft architecture.
 
-## Partition Identity and Membership Management
+## Partition identity and membership management
 
 Each partition in a cluster is identified by a globally unique **PartitionKey**. The PartitionKey of a partition is
 generated once when it is created. Under the hood, the PartitionKey is a SHA256 hash of
@@ -42,21 +44,26 @@ current leadership.
 Each partition is a Raft group with one or more members. Raft groups are also identified by the PartitionKey due to
 the one-to-one relationship.
 
-The `raftmgr.Replica` oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
+The [`raftmgr.Replica`](https://gitlab.com/gitlab-org/gitaly/-/blob/master/internal/gitaly/storage/raftmgr/replica.go)
+oversees all Raft activities for a Raft group member. Internally, etcd/raft assigns an
 integer **Member ID** to a Raft group member. The Member ID does not change throughout the lifecycle of a group member.
 
-When a partition is bootstrapped for the first time, the Raft replica initializes the `etcd/raft` state machine,
-elects itself as the initial leader, and persists all Raft metadata to persistent storage. Its internal Member ID
-is always 1 at this stage, making it a fully functional single-node Raft instance.
+When a partition is bootstrapped for the first time, the Raft replica:
 
-When a new member joins a Raft group, the leader issues a Config Change entry. This entry contains the metadata
-of the storage, such as storage name, address, and authentication/authorization info. The new member's Member ID
+1. Initializes the [`etcd/raft`](https://github.com/etcd-io/raft) state machine.
+1. Elects itself as the initial leader.
+1. Persists all Raft metadata to persistent storage.
+
+Its internal Member ID is always 1 at this stage, making it a fully functional single-node Raft instance.
+
+When a new member joins a Raft group, the leader issues a configuration change entry. This entry contains the metadata
+of the storage, such as storage name, address, and authentication/authorization information. The new member's Member ID
 is assigned the LSN of this log entry, ensuring unambiguous identification of members. As the LSN is monotonic,
 Member IDs are never reused even if the storage re-joins later. This Member ID system is not exposed outside the
 scope of `etcd/raft` integration.
 
-Since Gitaly follows a multi-Raft architecture, the Member ID alone is insufficient to precisely locate a
-partition or Raft group replica. Therefore, each replica (including the leader) is identified using a
+Because Gitaly Cluster (Raft) follows a multi-Raft architecture, where a single member can host many partitions, the Member ID alone is insufficient to precisely locate
+a partition or Raft group replica. Therefore, each replica (including the leader) is identified using a
 **Replica ID**, which consists of `(PartitionKey, Member ID, Replica Storage Name)`.
 
 To ensure fault tolerance in a quorum-based system, a Raft cluster requires a minimum replication factor of 3.
@@ -108,24 +115,24 @@ gitaly-server-1344
    |_ ...
 ```
 
-## Communication Between Members of a Raft Group
+## Communication between members of a Raft group
 
 The `etcd/raft` package does not include network communication implementation. Gitaly uses gRPC to transfer messages.
-Messages are sent through a single RPC, `RaftService.SendMessage`, which enhances Raft messages with Gitaly's partition
+Messages are sent through a single RPC, `RaftService.SendMessage`, which enhances Raft messages with Gitaly partition
 identity metadata. Membership management is facilitated by another RPC (TBD).
 
 Given that a Gitaly server may host a large number of Raft groups, the "chatty" nature of the Raft protocol can
 cause potential issues. Additionally, the protocol is sensitive to health-check failures. To mitigate these challenges,
 Gitaly applies techniques such as batching node health checks and quiescing inactive Raft groups.
 
-## Communication Between Client and Gitaly Cluster (via Proxying)
+## Communication between client and Gitaly Cluster (via Proxying)
 
 TBD
 
 ## Interaction with Transactions and WAL
 
 The Raft replica implements the `storage.LogManager` interface. By default, the Transaction Manager uses `log.Manager`.
-All log entries are appended to the filesystem WAL. Once an entry is persisted, it is ready to be applied by the
+All log entries are appended to the file system WAL. Once an entry is persisted, it is ready to be applied by the
 Transaction Manager. When Raft is enabled, `log.Manager` is replaced by `raftmgr.Manager` which manages the entire
 commit flow, including network communications and quorum acknowledgment.
 
@@ -168,11 +175,24 @@ raftmgr.Replica                          etcd/raft state machine
 
 ### Bootstrap Raft Replica on a remote node
 
-Bootstrapping replicas on remote nodes is a critical operation for maintaining cluster health, performance, and availability in distributed settings. This process ensures that partitions are properly replicated across multiple nodes to maintain consistency and fault tolerance. Replicas are bootstrapped during an add-join operation or a replication event. Since the lifecycle of a replica is managed by transaction, during a join or replication event the replica need to be started via transaction.
+Bootstrapping replicas on remote nodes is a critical operation for maintaining cluster health, performance, and
+availability in distributed settings. This process ensures that partitions are properly replicated across multiple nodes
+to maintain consistency and fault tolerance. Replicas are bootstrapped during an add-join operation or a replication event.
 
-To bootstrap a replica on a remote node, we need to propagate the same PartitionKey that is being used by the leader. The PartitionKey is what makes the replica identifiable as part of the specific Raft group managing that partition. When a replica is created by a transaction, it receives a local partition ID. However, to maintain consistency across the cluster, the follower must be registered under the PartitionKey provided by the leader.
+Because the lifecycle of a replica is managed by transaction, during a join or replication event the replica need to be
+started via transaction.
 
-The replica bootstrapping process is handled as part of the JoinCluster RPC, which is invoked by the leader after proposing the configuration change. Using this RPC, the leader sends the PartitionKey, peer list, relative path, and other necessary parameters. These are used by the destination storage to update its routing table and initiate a transaction that creates the new partition.
+To bootstrap a replica on a remote node, we need to propagate the same PartitionKey that is being used by the leader.
+The PartitionKey is what makes the replica identifiable as part of the specific Raft group managing that partition. When
+a replica is created by a transaction, it receives a local partition ID.
+
+However, to maintain consistency across the cluster, the follower must be registered under the PartitionKey provided by
+the leader.
+
+The replica bootstrapping process is handled as part of the JoinCluster RPC, which is invoked by the leader after
+proposing the configuration change. Using this RPC, the leader sends the PartitionKey, peer list, relative path, and
+other necessary parameters. These are used by the destination storage to update its routing table and initiate a
+transaction that creates the new partition.
 
 ```mermaid
 sequenceDiagram
