@@ -1,21 +1,17 @@
 ---
-- name: Show repo and RPC being benched
-  debug:
-    msg: "Benchmarking {{ rpc_info.rpc }} against {{ repo_name }}"
-
 - name: Create benchmark results directory on Gitaly node
   file:
-    path: "{{ output_dir }}"
+    path: "/tmp/{{ run_name }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
     owner: git
     group: git
 
 - name: Create benchmark results directory on client node
   file:
-    path: "{{ output_dir }}"
+    path: "/tmp/{{ run_name }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
     owner: git
     group: git
   delegate_to: "{{ groups['client'][0] }}"
@@ -36,23 +32,31 @@
   pause:
     seconds: 5
 
+- name: Copy workload configuration to client node
+  copy:
+    src: "{{ playbook_dir }}/config-workload.yml"
+    dest: /opt/benchmark-gitaly/config-workload.yml
+    mode: "0644"
+    owner: git
+    group: git
+  delegate_to: "{{ groups['client'][0] }}"
+
 # We run this task as async and poll 0 to make it non-blocking.
-# It will be allowed to run up to `ghz_wait_duration` before
+# It will be allowed to run up to `workload_wait_duration` before
 # being treated as failed.
-- name: Run ghz
+- name: Run Go workload generator
   command:
     argv:
-      - /usr/local/bin/benchmark-gitaly
-      - "-a{{ hostvars[groups['gitaly'][0]]['internal'] }}"
-      - "-d{{ bench_duration }}"
-      - "-o{{ output_dir }}"
-      - "-p{{ rpc_info.proto }}"
-      - "-s{{ rpc_info.service }}"
-      - "-r{{ rpc_info.rpc }}"
-      - "-g{{ repo_name }}"
-  async: "{{ ghz_wait_duration }}"
+      - /usr/local/go/bin/go
+      - run
+      - main.go
+      - "{{ hostvars[groups['gitaly'][0]]['internal'] }}"
+      - "{{ run_name }}"
+      - config-workload.yml
+    chdir: /opt/benchmark-gitaly
+  async: "{{ workload_wait_duration }}"
   poll: 0
-  register: ghz_wait
+  register: workload_wait
   delegate_to: "{{ groups['client'][0] }}"
 
 - name: Profile system with perf and libbpf-tools
@@ -60,27 +64,28 @@
     argv:
       - /usr/local/bin/profile-gitaly
       - "-d{{ profile_duration }}"
-      - "-o{{ output_dir }}"
-      - "-r{{ rpc_info.rpc }}"
-      - "-g{{ repo_name }}"
+      - "-o/tmp/{{ run_name }}"
+      - "-rbenchmark"
+      - "-gbenchmark"
   when: profile | bool
 
-- name: Wait for ghz to exit
+- name: Wait for workload generator to exit
   async_status:
-    jid: "{{ ghz_wait.ansible_job_id }}"
-  register: ghz_result
-  until: ghz_result.finished
+    jid: "{{ workload_wait.ansible_job_id }}"
+  register: workload_result
+  until: workload_result.finished
   retries: 100
   delay: 10
   delegate_to: "{{ groups['client'][0] }}"
 
-- name: Copy ghz data to Gitaly node
+- name: Copy workload data to Gitaly node
   synchronize:
-    src: "{{ output_dir }}/ghz.json"
-    dest: "{{ output_dir }}/"
+    src: "/tmp/{{ run_name }}/"
+    dest: "/tmp/{{ run_name }}/"
     private_key: /root/.ssh/id_ed25519
     set_remote_user: false
+    recursive: true
   delegate_to: "{{ groups['client'][0] }}"
 
 - name: Capture Gitaly logs
-  shell: journalctl --output=cat _PID=$(pidof -s gitaly) > "{{ output_dir }}/gitaly.log"
+  shell: journalctl --output=cat _PID=$(pidof -s gitaly) > "/tmp/{{ run_name }}/gitaly.log"

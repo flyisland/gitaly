@@ -64,6 +64,22 @@ func (ts *testService) PruneUnreachableObjects(context.Context, *gitalypb.PruneU
 	return nil, nil
 }
 
+type testCleanupService struct {
+	gitalypb.UnimplementedCleanupServiceServer
+}
+
+// RewriteHistory is a stream RPC that forces housekeeping
+func (ts *testCleanupService) RewriteHistory(stream grpc.ClientStreamingServer[gitalypb.RewriteHistoryRequest, gitalypb.RewriteHistoryResponse]) error {
+	// Receive the first request to get the repository
+	_, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+
+	// Return success response
+	return stream.SendAndClose(&gitalypb.RewriteHistoryResponse{})
+}
+
 type healthServer struct {
 	healthpb.UnimplementedHealthServer
 }
@@ -163,8 +179,10 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 	t.Cleanup(server.Stop)
 
 	service := &testService{}
+	cleanupService := &testCleanupService{}
 
 	gitalypb.RegisterRepositoryServiceServer(server, service)
+	gitalypb.RegisterCleanupServiceServer(server, cleanupService)
 	healthpb.RegisterHealthServer(server, &healthServer{})
 
 	listener, err := net.Listen("tcp", ":0")
@@ -409,5 +427,85 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		require.Empty(t, hook.LastEntry(), "it does not log an error")
+	})
+
+	t.Run("when housekeeping is forced", func(t *testing.T) {
+		repo := &gitalypb.Repository{
+			RelativePath: "myrepo-force",
+		}
+
+		// Test RewriteHistory RPC which should force housekeeping immediately
+		stream, err := gitalypb.NewCleanupServiceClient(conn).RewriteHistory(ctx)
+		require.NoError(t, err)
+
+		err = stream.Send(&gitalypb.RewriteHistoryRequest{
+			Repository: repo,
+		})
+		require.NoError(t, err)
+
+		_, err = stream.CloseAndRecv()
+		require.NoError(t, err)
+
+		// Wait for any async housekeeping to complete
+		housekeepingMiddleware.WaitForWorkers()
+
+		// Verify that housekeeping was triggered immediately (forced) even on the first call
+		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"RewriteHistory should force immediate housekeeping")
+	})
+
+	t.Run("when forceHousekeepingRPCs bypass interval compared to regular mutators", func(t *testing.T) {
+		forceRepo := &gitalypb.Repository{
+			RelativePath: "myrepo-force-bypass",
+		}
+		regularRepo := &gitalypb.Repository{
+			RelativePath: "myrepo-regular-interval",
+		}
+
+		// Test that forceHousekeepingRPCs bypass the normal interval constraint
+		// First RewriteHistory call should immediately trigger housekeeping (force=true)
+		stream, err := gitalypb.NewCleanupServiceClient(conn).RewriteHistory(ctx)
+		require.NoError(t, err)
+
+		err = stream.Send(&gitalypb.RewriteHistoryRequest{
+			Repository: forceRepo,
+			Redactions: [][]byte{[]byte("test-pattern")},
+		})
+		require.NoError(t, err)
+
+		_, err = stream.CloseAndRecv()
+		require.NoError(t, err)
+
+		housekeepingMiddleware.WaitForWorkers()
+
+		// Should trigger housekeeping immediately despite being the first call
+		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+			housekeepingManager.getOptimizeRepositoryInvocations(forceRepo.GetRelativePath()),
+			"First RewriteHistory call should force housekeeping immediately")
+
+		// Compare with regular mutator RPCs that respect the interval
+		// Single regular mutator call should not trigger housekeeping
+		_, err = gitalypb.NewRepositoryServiceClient(conn).WriteRef(ctx, &gitalypb.WriteRefRequest{
+			Repository: regularRepo,
+		})
+		require.NoError(t, err)
+
+		housekeepingMiddleware.WaitForWorkers()
+
+		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(regularRepo.GetRelativePath()),
+			"Single regular mutator should not trigger housekeeping (respects interval)")
+
+		// The second regular mutator call should trigger housekeeping (interval=1)
+		_, err = gitalypb.NewRepositoryServiceClient(conn).WriteRef(ctx, &gitalypb.WriteRefRequest{
+			Repository: regularRepo,
+		})
+		require.NoError(t, err)
+
+		housekeepingMiddleware.WaitForWorkers()
+
+		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+			housekeepingManager.getOptimizeRepositoryInvocations(regularRepo.GetRelativePath()),
+			"Second regular mutator should trigger housekeeping after reaching interval")
 	})
 }

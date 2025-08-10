@@ -374,3 +374,122 @@ func TestRemoveGitLabFullPathConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestFindTemporaryObjectDirectories(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+	_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+
+	objectsPath := filepath.Join(repoPath, "objects")
+
+	for _, tc := range []struct {
+		desc                string
+		setup               func(t *testing.T)
+		expectedDirectories []string
+	}{
+		{
+			desc: "no temporary directories",
+			setup: func(t *testing.T) {
+				// Create some regular directories that should not be cleaned
+				require.NoError(t, os.MkdirAll(filepath.Join(objectsPath, "ab"), 0o755))
+				require.NoError(t, os.MkdirAll(filepath.Join(objectsPath, "cd"), 0o755))
+			},
+			expectedDirectories: nil,
+		},
+		{
+			desc: "recent temporary directory",
+			setup: func(t *testing.T) {
+				tmpDir := filepath.Join(objectsPath, "tmp_objdir_recent")
+				require.NoError(t, os.MkdirAll(tmpDir, 0o755))
+
+				// Set recent modification time (within grace period)
+				recentTime := time.Now().Add(-1 * time.Hour)
+				require.NoError(t, os.Chtimes(tmpDir, recentTime, recentTime))
+			},
+			expectedDirectories: nil,
+		},
+		{
+			desc: "stale temporary directory",
+			setup: func(t *testing.T) {
+				tmpDir := filepath.Join(objectsPath, "tmp_objdir_stale")
+				require.NoError(t, os.MkdirAll(tmpDir, 0o755))
+
+				// Set old modification time (beyond grace period)
+				staleTime := time.Now().Add(-deleteTempObjectDirectoriesOlderThanDuration - 1*time.Hour)
+				require.NoError(t, os.Chtimes(tmpDir, staleTime, staleTime))
+			},
+			expectedDirectories: []string{filepath.Join(objectsPath, "tmp_objdir_stale")},
+		},
+		{
+			desc: "multiple temporary directories with mixed ages",
+			setup: func(t *testing.T) {
+				// Recent directory (should not be cleaned)
+				recentDir := filepath.Join(objectsPath, "tmp_objdir_recent_multi")
+				require.NoError(t, os.MkdirAll(recentDir, 0o755))
+				recentTime := time.Now().Add(-1 * time.Hour)
+				require.NoError(t, os.Chtimes(recentDir, recentTime, recentTime))
+
+				// Stale directory (should be cleaned)
+				staleDir1 := filepath.Join(objectsPath, "tmp_objdir_stale_1")
+				require.NoError(t, os.MkdirAll(staleDir1, 0o755))
+				staleTime1 := time.Now().Add(-deleteTempObjectDirectoriesOlderThanDuration - 1*time.Hour)
+				require.NoError(t, os.Chtimes(staleDir1, staleTime1, staleTime1))
+
+				// Another stale directory (should be cleaned)
+				staleDir2 := filepath.Join(objectsPath, "tmp_objdir_stale_2")
+				require.NoError(t, os.MkdirAll(staleDir2, 0o755))
+				staleTime2 := time.Now().Add(-deleteTempObjectDirectoriesOlderThanDuration - 2*time.Hour)
+				require.NoError(t, os.Chtimes(staleDir2, staleTime2, staleTime2))
+
+				// Regular directory with tmp_obj_ prefix but it's a file (should be ignored)
+				tmpFile := filepath.Join(objectsPath, "tmp_objdir_file")
+				require.NoError(t, os.WriteFile(tmpFile, []byte("test"), 0o644))
+				require.NoError(t, os.Chtimes(tmpFile, staleTime1, staleTime1))
+
+				// Directory without tmp_obj_ prefix (should be ignored)
+				regularDir := filepath.Join(objectsPath, "regular_dir")
+				require.NoError(t, os.MkdirAll(regularDir, 0o755))
+				require.NoError(t, os.Chtimes(regularDir, staleTime1, staleTime1))
+			},
+			expectedDirectories: []string{
+				filepath.Join(objectsPath, "tmp_objdir_stale_1"),
+				filepath.Join(objectsPath, "tmp_objdir_stale_2"),
+			},
+		},
+		{
+			desc: "temporary directory with nested content",
+			setup: func(t *testing.T) {
+				tmpDir := filepath.Join(objectsPath, "tmp_objdir_with_content")
+				require.NoError(t, os.MkdirAll(tmpDir, 0o755))
+
+				// Create nested directories and files
+				nestedDir := filepath.Join(tmpDir, "ab")
+				require.NoError(t, os.MkdirAll(nestedDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(nestedDir, "1234567890abcdef"), []byte("object"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "somefile"), []byte("content"), 0o644))
+
+				// Set stale time
+				staleTime := time.Now().Add(-deleteTempObjectDirectoriesOlderThanDuration - 1*time.Hour)
+				require.NoError(t, os.Chtimes(tmpDir, staleTime, staleTime))
+			},
+			expectedDirectories: []string{filepath.Join(objectsPath, "tmp_objdir_with_content")},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			// Clean up objects directory for each test
+			require.NoError(t, os.RemoveAll(objectsPath))
+			require.NoError(t, os.MkdirAll(objectsPath, 0o755))
+
+			tc.setup(t)
+
+			directories, err := FindTemporaryObjectDirectories(ctx, repoPath)
+			require.NoError(t, err)
+
+			require.ElementsMatch(t, tc.expectedDirectories, directories)
+		})
+	}
+}

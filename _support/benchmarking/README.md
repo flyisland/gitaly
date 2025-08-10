@@ -15,7 +15,8 @@ An Ansible script for running RPC-level benchmarks against Gitaly.
 1. Create a new Python virtualenv: `python3 -m venv env`
 1. Activate the virtualenv: `source env/bin/activate`
 1. Install Ansible: `python3 -m pip install -r requirements.txt`
-1. **Optional**: Copy `config.yml.example` to `config.yml` to customize the machine type uses for benchmarking
+1. **Optional**: Copy `config-infrastructure.yml.example` to `config-infrastructure.yml` to customize the machine type uses for benchmarking
+1. **Optional**: Copy `config-workload.yml.example` to `config-workload.yml` to customize the benchmark workloads that will be executed
 
 ### 2. Create instance
 

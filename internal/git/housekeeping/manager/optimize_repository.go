@@ -490,24 +490,26 @@ func (m *RepositoryManager) CleanStaleData(ctx context.Context, repo *localrepo.
 		logEntry.InfoContext(ctx, "removed files")
 	}()
 
-	var filesToPrune []string
-	for staleFileType, staleFileFinder := range cfg.StaleFileFinders {
-		staleFiles, err := staleFileFinder(ctx, repoPath)
+	var entriesToPrune []string
+	for staleEntryType, staleFileFinder := range cfg.StaleFileFinders {
+		staleEntries, err := staleFileFinder(ctx, repoPath)
 		if err != nil {
-			return fmt.Errorf("housekeeping failed to find %s: %w", staleFileType, err)
+			return fmt.Errorf("housekeeping failed to find %s: %w", staleEntryType, err)
 		}
 
-		filesToPrune = append(filesToPrune, staleFiles...)
-		staleDataByType[staleFileType] = len(staleFiles)
+		entriesToPrune = append(entriesToPrune, staleEntries...)
+		staleDataByType[staleEntryType] = len(staleEntries)
 	}
 
-	for _, path := range filesToPrune {
-		if err := os.Remove(path); err != nil {
+	for _, path := range entriesToPrune {
+		// Remove stale entry (file or directory) - os.RemoveAll handles both cases
+		// by first calling Remove before going for recursive removal.
+		if err := os.RemoveAll(path); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
 			staleDataByType["failures"]++
-			m.logger.WithError(err).WithField("path", path).WarnContext(ctx, "unable to remove stale file")
+			m.logger.WithError(err).WithField("path", path).WarnContext(ctx, "unable to remove stale entry")
 		}
 	}
 

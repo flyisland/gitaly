@@ -42,6 +42,11 @@ type Middleware struct {
 	localRepoFactory localrepo.Factory
 }
 
+// forceHousekeepingRPCs are all of the RPCs that we should force housekeeping right after.
+var forceHousekeepingRPCs = map[string]struct{}{
+	gitalypb.CleanupService_RewriteHistory_FullMethodName: {},
+}
+
 // NewHousekeepingMiddleware returns a new middleware.
 func NewHousekeepingMiddleware(logger log.Logger, registry *protoregistry.Registry, factory localrepo.Factory, manager manager.Manager, interval int) *Middleware {
 	return &Middleware{
@@ -107,7 +112,8 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 				return resp, err
 			}
 
-			m.scheduleHousekeeping(ctx, targetRepo)
+			_, forceHousekeeping := forceHousekeepingRPCs[methodInfo.FullMethodName()]
+			m.scheduleHousekeeping(ctx, targetRepo, forceHousekeeping)
 			return resp, err
 		}
 
@@ -167,7 +173,8 @@ func (m *Middleware) StreamServerInterceptor() grpc.StreamServerInterceptor {
 				return err
 			}
 
-			m.scheduleHousekeeping(ss.Context(), targetRepo)
+			_, forceHousekeeping := forceHousekeepingRPCs[methodInfo.FullMethodName()]
+			m.scheduleHousekeeping(ss.Context(), targetRepo, forceHousekeeping)
 			return nil
 		}
 
@@ -218,7 +225,7 @@ func (m *Middleware) isActive(key repoKey) bool {
 	return a.active
 }
 
-func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Repository) {
+func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Repository, force bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -231,7 +238,7 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 	}
 	a.writeCount++
 
-	if a.writeCount <= m.interval || a.active {
+	if a.active || (a.writeCount <= m.interval && !force) {
 		return
 	}
 

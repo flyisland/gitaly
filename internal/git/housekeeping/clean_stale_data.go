@@ -19,13 +19,14 @@ import (
 )
 
 const (
-	emptyRefsGracePeriod             = 24 * time.Hour
-	deleteTempFilesOlderThanDuration = 24 * time.Hour
-	brokenRefsGracePeriod            = 24 * time.Hour
-	lockfileGracePeriod              = 15 * time.Minute
-	packedRefsLockGracePeriod        = 1 * time.Hour
-	packedRefsNewGracePeriod         = 15 * time.Minute
-	packFileLockGracePeriod          = 7 * 24 * time.Hour
+	emptyRefsGracePeriod                         = 24 * time.Hour
+	deleteTempFilesOlderThanDuration             = 24 * time.Hour
+	deleteTempObjectDirectoriesOlderThanDuration = 72 * time.Hour
+	brokenRefsGracePeriod                        = 24 * time.Hour
+	lockfileGracePeriod                          = 15 * time.Minute
+	packedRefsLockGracePeriod                    = 1 * time.Hour
+	packedRefsNewGracePeriod                     = 15 * time.Minute
+	packFileLockGracePeriod                      = 7 * 24 * time.Hour
 	// ReferenceLockfileGracePeriod is the grace period when cleaning up lock files of individual references in the
 	// repository. Lock files existing less than this period are ignored.
 	ReferenceLockfileGracePeriod = 1 * time.Hour
@@ -77,6 +78,7 @@ func DefaultStaleDataCleanup() CleanStaleDataConfig {
 	return CleanStaleDataConfig{
 		StaleFileFinders: map[string]FindStaleFileFunc{
 			"objects":        FindTemporaryObjects,
+			"objectdirs":     FindTemporaryObjectDirectories,
 			"locks":          FindStaleLockfiles,
 			"refs":           FindBrokenLooseReferences,
 			"reflocks":       FindStaleReferenceLocks(ReferenceLockfileGracePeriod),
@@ -311,8 +313,7 @@ func FindTemporaryObjects(ctx context.Context, repoPath string) ([]string, error
 			return err
 		}
 
-		// Git will never create temporary directories, but only temporary objects,
-		// packfiles and packfile indices.
+		// Tmp object dirs are handled in FindTemporaryObjectDirectories
 		if dirEntry.IsDir() {
 			return nil
 		}
@@ -356,6 +357,49 @@ func isStaleTemporaryObject(dirEntry fs.DirEntry) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// FindTemporaryObjectDirectories finds temporary object directories created by Git processes.
+// These directories are typically prefixed with "tmp_obj_" and should be cleaned up when stale.
+func FindTemporaryObjectDirectories(ctx context.Context, repoPath string) ([]string, error) {
+	var temporaryDirectories []string
+	objectsPath := filepath.Join(repoPath, "objects")
+
+	entries, err := os.ReadDir(objectsPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading objects directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		if !strings.HasPrefix(entry.Name(), "tmp_objdir") {
+			continue
+		}
+
+		dirPath := filepath.Join(objectsPath, entry.Name())
+		dirInfo, err := entry.Info()
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return nil, fmt.Errorf("getting directory info: %w", err)
+		}
+
+		// Use a longer grace period for directories (72 hours vs 24 hours for files)
+		if time.Since(dirInfo.ModTime()) <= deleteTempObjectDirectoriesOlderThanDuration {
+			continue
+		}
+
+		temporaryDirectories = append(temporaryDirectories, dirPath)
+	}
+
+	return temporaryDirectories, nil
 }
 
 // FindBrokenLooseReferences return the list of broken refs. A ref is considered to be broken when the loose ref file is
