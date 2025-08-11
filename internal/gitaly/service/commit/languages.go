@@ -71,10 +71,11 @@ func (s *server) CommitLanguages(ctx context.Context, req *gitalypb.CommitLangua
 
 	for lang, count := range stats {
 		l := &gitalypb.CommitLanguagesResponse_Language{
-			Name:  lang,
-			Share: float32(100*count) / float32(total),
-			Color: linguist.Color(lang),
-			Bytes: stats[lang],
+			Name:       lang,
+			Share:      float32(100*count) / float32(total),
+			Color:      linguist.Color(lang),
+			LanguageId: linguist.LanguageID(lang),
+			Bytes:      count,
 		}
 		resp.Languages = append(resp.Languages, l)
 	}
