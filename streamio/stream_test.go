@@ -32,6 +32,13 @@ func TestReceiveSources(t *testing.T) {
 	}
 }
 
+func TestReceiveSources_EmptyReader(t *testing.T) {
+	emptyReader := strings.NewReader("")
+	data, err := io.ReadAll(&opaqueReader{NewReader(receiverFromReader(emptyReader))})
+	require.NoError(t, err, "empty reader should not error")
+	require.Empty(t, data, "empty reader should return no data")
+}
+
 func TestReadSizes(t *testing.T) {
 	readSizes := func(t *testing.T, newReader func(string) io.Reader) {
 		testData := "Hello this is the test data that will be received. It goes on for a while bla bla bla."
