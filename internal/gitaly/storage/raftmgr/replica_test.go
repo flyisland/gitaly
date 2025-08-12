@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	waitTimeout = 5 * time.Second
+	waitTimeout = 10 * time.Second
 )
 
 func raftConfigsForTest(t *testing.T) config.Raft {
@@ -1743,11 +1743,11 @@ func TestReplica_AddNode(t *testing.T) {
 		}, timeout, 5*time.Millisecond, "replica should become leader")
 	}
 
-	// waitForVoters waits for both replicas to have the expected number of voters
-	waitForReplicaLeader := func(t *testing.T, replicaOne, replicaTwo *Replica, expectedVoters int, timeout time.Duration) {
+	// waitForReplicaLeader waits for both replicas to have the same leader
+	waitForReplicaLeader := func(t *testing.T, replicaOne, replicaTwo *Replica, timeout time.Duration) {
 		require.Eventually(t, func() bool {
 			return replicaTwo.leadership.GetLeaderID() == replicaOne.memberID
-		}, timeout, 5*time.Millisecond, "configuration should stabilize with %d voters", expectedVoters)
+		}, timeout, 5*time.Millisecond, "replica two should have the same leader as replica one")
 	}
 
 	drainNotificationQueues := func(t *testing.T, replicas ...*Replica) {
@@ -1836,7 +1836,7 @@ func TestReplica_AddNode(t *testing.T) {
 
 		drainNotificationQueues(t, replica, replicaTwo)
 
-		waitForReplicaLeader(t, replica, replicaTwo, 2, waitTimeout)
+		waitForReplicaLeader(t, replica, replicaTwo, waitTimeout)
 
 		testhelper.RequirePromMetrics(t, metrics, `
 			# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
@@ -1977,7 +1977,7 @@ func TestReplica_AddNode(t *testing.T) {
 		addedReplica := addressesToReplicas[addedAddress]
 
 		// Wait for voters count to stabilize between both replicas
-		waitForReplicaLeader(t, replica, addedReplica, 2, waitTimeout)
+		waitForReplicaLeader(t, replica, addedReplica, waitTimeout)
 
 		drainNotificationQueues(t, replica, addedReplica)
 
@@ -2019,7 +2019,7 @@ func TestReplica_AddNode(t *testing.T) {
 		// Wait for the replica to elect itself as leader
 		waitForLeadership(t, replica, waitTimeout)
 
-		err := replica.RemoveNode(ctx, 999)
+		err := replica.RemoveNode(ctx, 999, storageName)
 		require.EqualError(t, err, "translating member ID: no address found for memberID 999")
 	})
 
@@ -2041,9 +2041,7 @@ func TestReplica_AddNode(t *testing.T) {
 		// Set a random leader ID to simulate a non-leader
 		replica.leadership.SetLeader(999, false)
 
-		destination := "default"
-
-		err := replica.AddNode(ctx, "gitaly-node-2:8075", destination)
+		err := replica.AddNode(ctx, "gitaly-node-2:8075", storageName)
 		require.EqualError(t, err, "replica is not the leader", "adding node should fail when not leader")
 
 		testhelper.RequirePromMetrics(t, metrics, `

@@ -27,18 +27,12 @@ type RoutingTableEntry struct {
 	Index        uint64
 }
 
-// ReplicaMetadata contains additional information about a replica
-// that is needed for routing messages.
-type ReplicaMetadata struct {
-	Address string
-}
-
 // RoutingTable handles translation between member IDs and addresses
 type RoutingTable interface {
 	Translate(partitionKey *gitalypb.RaftPartitionKey, memberID uint64) (*gitalypb.ReplicaID, error)
 	GetEntry(partitionKey *gitalypb.RaftPartitionKey) (*RoutingTableEntry, error)
 	UpsertEntry(entry RoutingTableEntry) error
-	ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.RaftPartitionKey, changes *ReplicaConfChanges) error
+	ApplyReplicaConfChange(partitionKey *gitalypb.RaftPartitionKey, changes *ReplicaConfChanges) error
 	ListEntries() (map[string]*RoutingTableEntry, error)
 }
 
@@ -145,7 +139,7 @@ func (r *kvRoutingTable) Translate(partitionKey *gitalypb.RaftPartitionKey, memb
 	return nil, fmt.Errorf("no address found for memberID %d", memberID)
 }
 
-func (r *kvRoutingTable) ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.RaftPartitionKey, changes *ReplicaConfChanges) error {
+func (r *kvRoutingTable) ApplyReplicaConfChange(partitionKey *gitalypb.RaftPartitionKey, changes *ReplicaConfChanges) error {
 	routingTableEntry, err := r.GetEntry(partitionKey)
 	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 		return fmt.Errorf("getting routing table entry: %w", err)
@@ -162,6 +156,7 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(storageName string, partitionKey
 	routingTableEntry.Index = changes.Index()
 
 	metadata := changes.Metadata()
+	destinationStorageName := changes.DestinationStorageName()
 
 	for _, confChange := range changes.Changes() {
 		switch confChange.changeType {
@@ -173,13 +168,13 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(storageName string, partitionKey
 			if slices.ContainsFunc(routingTableEntry.Replicas, func(r *gitalypb.ReplicaID) bool {
 				return r.GetMemberId() == confChange.memberID
 			}) {
-				return fmt.Errorf("member ID %d already exists", confChange.memberID)
+				continue
 			}
 
 			replica := &gitalypb.ReplicaID{
 				PartitionKey: partitionKey,
 				MemberId:     confChange.memberID,
-				StorageName:  storageName,
+				StorageName:  destinationStorageName,
 				Metadata:     metadata,
 				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 			}
@@ -199,7 +194,7 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(storageName string, partitionKey
 			learner := &gitalypb.ReplicaID{
 				PartitionKey: partitionKey,
 				MemberId:     confChange.memberID,
-				StorageName:  storageName,
+				StorageName:  destinationStorageName,
 				Metadata:     metadata,
 				Type:         gitalypb.ReplicaID_REPLICA_TYPE_LEARNER,
 			}

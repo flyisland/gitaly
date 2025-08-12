@@ -56,13 +56,13 @@ type RaftReplica interface {
 
 	// RemoveNode removes a node from the Raft cluster.
 	// This operation can only be performed by the leader.
-	RemoveNode(ctx context.Context, memberID uint64) error
+	RemoveNode(ctx context.Context, memberID uint64, destinationStorageName string) error
 
 	// AddLearner adds a new non-voting learner node to the Raft cluster.
 	// Learner nodes receive log entries but don't participate in elections.
 	// This is typically used to bring new nodes up to speed before promoting them to voters.
 	// This operation can only be performed by the leader.
-	AddLearner(ctx context.Context, address string) error
+	AddLearner(ctx context.Context, address, destinationStorageName string) error
 
 	// GetCurrentState returns comprehensive current state information including term, index, and Raft state.
 	// This provides an efficient way to get multiple state values with consistent locking.
@@ -928,8 +928,14 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 
 	routingTable := replica.raftEnabledStorage.GetRoutingTable()
 
+	// If the destination storage name is not set, we use the storage name of the current node
+	// When the node is bootstrapped, the destination storage name is not set.
+	if replicaChanges.DestinationStorageName() == "" {
+		replicaChanges.destinationStorageName = replica.logStore.storageName
+	}
+
 	// Apply the changes to the routing table
-	if err := routingTable.ApplyReplicaConfChange(replica.logStore.storageName, replica.partitionKey, replicaChanges); err != nil {
+	if err := routingTable.ApplyReplicaConfChange(replica.partitionKey, replicaChanges); err != nil {
 		return fmt.Errorf("applying conf changes: %w", err)
 	}
 
@@ -1036,14 +1042,14 @@ func (replica *Replica) AddNode(ctx context.Context, address, destinationStorage
 }
 
 // RemoveNode implements RaftReplica.RemoveNode
-func (replica *Replica) RemoveNode(ctx context.Context, memberID uint64) error {
-	return replica.proposeMembershipChange(ctx, string(removeNode), "", memberID, ConfChangeRemoveNode, nil)
+func (replica *Replica) RemoveNode(ctx context.Context, memberID uint64, destinationStorageName string) error {
+	return replica.proposeMembershipChange(ctx, string(removeNode), destinationStorageName, memberID, ConfChangeRemoveNode, nil)
 }
 
 // AddLearner implements RaftReplica.AddLearner
-func (replica *Replica) AddLearner(ctx context.Context, address string) error {
+func (replica *Replica) AddLearner(ctx context.Context, address, destinationStorageName string) error {
 	memberID := uint64(replica.AppendedLSN() + 1)
-	return replica.proposeMembershipChange(ctx, string(addLearner), "", memberID, ConfChangeAddLearnerNode, &gitalypb.ReplicaID_Metadata{
+	return replica.proposeMembershipChange(ctx, string(addLearner), destinationStorageName, memberID, ConfChangeAddLearnerNode, &gitalypb.ReplicaID_Metadata{
 		Address: address,
 	})
 }
@@ -1086,12 +1092,12 @@ func (replica *Replica) proposeRemoveNode(ctx context.Context, changeType string
 		return err
 	}
 
-	return replica.proposeConfChange(ctx, changeType, memberID, ConfChangeRemoveNode, nil)
+	return replica.proposeConfChange(ctx, changeType, memberID, "", ConfChangeRemoveNode, nil)
 }
 
 func (replica *Replica) proposeAddNode(ctx context.Context, changeType, destinationStorageName string, memberID uint64, metadata *gitalypb.ReplicaID_Metadata) (returnedErr error) {
 	// First, propose the configuration change
-	if err := replica.proposeConfChange(ctx, changeType, memberID, ConfChangeAddNode, metadata); err != nil {
+	if err := replica.proposeConfChange(ctx, changeType, memberID, destinationStorageName, ConfChangeAddNode, metadata); err != nil {
 		return err
 	}
 
@@ -1100,7 +1106,7 @@ func (replica *Replica) proposeAddNode(ctx context.Context, changeType, destinat
 		// If join fails, attempt to remove the node from the cluster
 		replica.logger.WithError(err).Warn("join cluster failed, attempting to remove node")
 
-		if removeErr := replica.proposeConfChange(ctx, string(removeNode), memberID, ConfChangeRemoveNode, nil); removeErr != nil {
+		if removeErr := replica.proposeConfChange(ctx, string(removeNode), memberID, "", ConfChangeRemoveNode, nil); removeErr != nil {
 			replica.logger.WithError(removeErr).Error("failed to remove node after join failure")
 		}
 
@@ -1111,13 +1117,14 @@ func (replica *Replica) proposeAddNode(ctx context.Context, changeType, destinat
 }
 
 func (replica *Replica) proposeAddLearner(ctx context.Context, changeType string, memberID uint64, metadata *gitalypb.ReplicaID_Metadata) error {
-	return replica.proposeConfChange(ctx, changeType, memberID, ConfChangeAddLearnerNode, metadata)
+	return replica.proposeConfChange(ctx, changeType, memberID, "", ConfChangeAddLearnerNode, metadata)
 }
 
 func (replica *Replica) proposeConfChange(
 	ctx context.Context,
 	changeType string,
 	memberID uint64,
+	destinationStorageName string,
 	confChangeType ConfChangeType,
 	metadata *gitalypb.ReplicaID_Metadata,
 ) (returnedErr error) {
@@ -1132,6 +1139,7 @@ func (replica *Replica) proposeConfChange(
 		replica.node.Status().Term,
 		uint64(replica.AppendedLSN()),
 		replica.leadership.GetLeaderID(),
+		destinationStorageName,
 		waiter.ID,
 		metadata,
 	)
