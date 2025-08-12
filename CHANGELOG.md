@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.2.2 (2025-08-12)
+
+No changes.
+
 ## 18.2.1 (2025-07-22)
 
 No changes.
