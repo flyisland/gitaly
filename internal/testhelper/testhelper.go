@@ -329,6 +329,8 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Enable snapshot filter
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.SnapshotFilter, true)
 
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.GitMaster, rnd.Int()%2 == 0)
+
 	// Disable leftover migration, it should be enabled explicitly for each test if needed.
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LeftoverMigration, false)
 
