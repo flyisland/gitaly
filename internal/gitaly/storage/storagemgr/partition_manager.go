@@ -541,7 +541,6 @@ func (sm *StorageManager) startPartition(ctx context.Context, partitionID storag
 				}
 
 				logger := sm.logger.WithField("partition_id", partitionID)
-
 				mgr := sm.partitionFactory.New(
 					ctx,
 					logger,

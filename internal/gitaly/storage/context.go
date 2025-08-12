@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -45,6 +46,35 @@ func ExtractTransaction(ctx context.Context) Transaction {
 	}
 
 	return value.(Transaction)
+}
+
+type keyPartitionInfo struct{}
+
+type partitionInfo struct {
+	PartitionKey *gitalypb.RaftPartitionKey
+	MemberID     uint64
+	RelativePath string
+}
+
+// ContextWithPartitionInfo stores the partition info into the context.
+// This is used to pass the original partition info to the partition factory.
+func ContextWithPartitionInfo(ctx context.Context, partitionKey *gitalypb.RaftPartitionKey, memberID uint64, relativePath string) context.Context {
+	return context.WithValue(ctx, keyPartitionInfo{}, partitionInfo{
+		PartitionKey: partitionKey,
+		MemberID:     memberID,
+		RelativePath: relativePath,
+	})
+}
+
+// ExtractPartitionInfo extracts the partition info from the context. Nil is returned if there's
+// no partition info in the context.
+func ExtractPartitionInfo(ctx context.Context) partitionInfo {
+	value := ctx.Value(keyPartitionInfo{})
+	if value == nil {
+		return partitionInfo{}
+	}
+
+	return value.(partitionInfo)
 }
 
 const keyPartitioningHint = "gitaly-partitioning-hint"
