@@ -42,15 +42,21 @@ func (s *Server) JoinCluster(ctx context.Context, req *gitalypb.JoinClusterReque
 		RelativePath: req.GetRelativePath(),
 		Replicas:     req.GetReplicas(),
 		LeaderID:     req.GetLeaderId(),
-		Term:         req.GetTerm(),
-		Index:        req.GetIndex(),
 	}
 
 	if err := routingTable.UpsertEntry(*routingEntry); err != nil {
 		return nil, structerr.NewInternal("failed to update routing table: %w", err)
 	}
 
-	return nil, nil
+	ctx = storage.ContextWithPartitionInfo(ctx, req.GetPartitionKey(), req.GetMemberId(), req.GetRelativePath())
+
+	replicaRegistry := raftEnabledStorage.GetReplicaRegistry()
+	err = s.createReplicaViaTransaction(ctx, req.GetRelativePath(), raftEnabledStorage, replicaRegistry, req.GetPartitionKey())
+	if err != nil {
+		return nil, structerr.NewInternal("failed to create replica: %w", err)
+	}
+
+	return &gitalypb.JoinClusterResponse{}, nil
 }
 
 func (s *Server) validateMemberID(partitionKey *gitalypb.RaftPartitionKey, memberID uint64, routingTable raftmgr.RoutingTable) error {
@@ -80,14 +86,6 @@ func (s *Server) validateJoinClusterRequest(req *gitalypb.JoinClusterRequest) er
 
 	if req.GetLeaderId() == 0 {
 		return fmt.Errorf("leader_id is required")
-	}
-
-	if req.GetTerm() == 0 {
-		return fmt.Errorf("term is required")
-	}
-
-	if req.GetIndex() == 0 {
-		return fmt.Errorf("index is required")
 	}
 
 	return nil

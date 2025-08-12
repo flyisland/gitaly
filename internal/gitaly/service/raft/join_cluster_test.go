@@ -1,11 +1,15 @@
 package raft
 
 import (
+	"context"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
@@ -19,39 +23,24 @@ import (
 
 const (
 	testClusterID     = "test-cluster"
-	testAuthorityName = "test-authority"
 	testStorageName   = "default"
+	testAuthorityName = "test-authority"
 	testMemberID      = uint64(3)
-	testRelativePath  = "relative/path/to/repo"
+	testRelativePath  = "relative/path/to/repo.git"
 )
 
 func TestJoinCluster(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
-	cfg := testcfg.Build(t, testcfg.WithStorages(testStorageName))
-	cfg.Raft.ClusterID = testClusterID
-	logger := testhelper.SharedLogger(t)
+	partitionKey := raftmgr.NewPartitionKey(testStorageName, 1)
 
-	dbPath := testhelper.TempDir(t)
-	dbMgr, err := databasemgr.NewDBManager(
-		ctx,
-		cfg.Storages,
-		func(logger log.Logger, path string) (keyvalue.Store, error) {
-			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
-		},
-		helper.NewNullTickerFactory(),
-		logger,
-	)
+	// create a second Gitaly server
+	node, cfg, err := createRaftNodeWithStorage(t, testStorageName)
 	require.NoError(t, err)
-	t.Cleanup(dbMgr.Close)
-
-	mockNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+	conn := gittest.DialService(t, ctx, cfg)
+	client := gitalypb.NewRaftServiceClient(conn)
 	require.NoError(t, err)
-
-	client := runRaftServer(t, ctx, cfg, mockNode)
-
-	partitionKey := raftmgr.NewPartitionKey(testAuthorityName, 1)
 
 	testCases := []struct {
 		desc          string
@@ -64,8 +53,6 @@ func TestJoinCluster(t *testing.T) {
 			req: &gitalypb.JoinClusterRequest{
 				PartitionKey: partitionKey,
 				MemberId:     testMemberID,
-				Term:         1,
-				Index:        1,
 				StorageName:  testStorageName,
 				RelativePath: testRelativePath,
 				LeaderId:     testMemberID,
@@ -79,15 +66,13 @@ func TestJoinCluster(t *testing.T) {
 			req: &gitalypb.JoinClusterRequest{
 				PartitionKey: partitionKey,
 				MemberId:     testMemberID,
-				Term:         1,
-				Index:        1,
 				StorageName:  testStorageName,
 				RelativePath: testRelativePath,
 				LeaderId:     testMemberID,
 				Replicas: []*gitalypb.ReplicaID{
 					{
 						PartitionKey: partitionKey,
-						MemberId:     1,
+						MemberId:     2,
 						StorageName:  testStorageName,
 						Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 					},
@@ -105,8 +90,6 @@ func TestJoinCluster(t *testing.T) {
 			desc: "missing partition key",
 			req: &gitalypb.JoinClusterRequest{
 				MemberId:     testMemberID,
-				Term:         1,
-				Index:        1,
 				StorageName:  testStorageName,
 				RelativePath: testRelativePath,
 				Replicas: []*gitalypb.ReplicaID{
@@ -144,8 +127,6 @@ func TestJoinCluster(t *testing.T) {
 			desc: "missing storage name",
 			req: &gitalypb.JoinClusterRequest{
 				PartitionKey: partitionKey,
-				Term:         1,
-				Index:        1,
 				MemberId:     testMemberID,
 				RelativePath: testRelativePath,
 				LeaderId:     testMemberID,
@@ -166,8 +147,6 @@ func TestJoinCluster(t *testing.T) {
 			desc: "non-existent storage",
 			req: &gitalypb.JoinClusterRequest{
 				PartitionKey: partitionKey,
-				Term:         1,
-				Index:        1,
 				MemberId:     testMemberID,
 				StorageName:  "non-existent-storage",
 				RelativePath: testRelativePath,
@@ -190,8 +169,6 @@ func TestJoinCluster(t *testing.T) {
 			req: &gitalypb.JoinClusterRequest{
 				PartitionKey: partitionKey,
 				MemberId:     testMemberID,
-				Term:         1,
-				Index:        1,
 				StorageName:  testStorageName,
 				RelativePath: testRelativePath,
 				Replicas: []*gitalypb.ReplicaID{
@@ -205,48 +182,6 @@ func TestJoinCluster(t *testing.T) {
 			expectedCode:  codes.InvalidArgument,
 			expectedError: "leader_id is required",
 		},
-
-		{
-			desc: "term is not set",
-			req: &gitalypb.JoinClusterRequest{
-				PartitionKey: partitionKey,
-				MemberId:     testMemberID,
-				Index:        1,
-				StorageName:  testStorageName,
-				RelativePath: testRelativePath,
-				LeaderId:     testMemberID,
-				Replicas: []*gitalypb.ReplicaID{
-					{
-						PartitionKey: partitionKey,
-						MemberId:     1,
-						StorageName:  testStorageName,
-					},
-				},
-			},
-
-			expectedCode:  codes.InvalidArgument,
-			expectedError: "term is required",
-		},
-		{
-			desc: "index is not set",
-			req: &gitalypb.JoinClusterRequest{
-				PartitionKey: partitionKey,
-				MemberId:     testMemberID,
-				Term:         1,
-				StorageName:  testStorageName,
-				RelativePath: testRelativePath,
-				LeaderId:     testMemberID,
-				Replicas: []*gitalypb.ReplicaID{
-					{
-						PartitionKey: partitionKey,
-						MemberId:     1,
-						StorageName:  testStorageName,
-					},
-				},
-			},
-			expectedCode:  codes.InvalidArgument,
-			expectedError: "index is required",
-		},
 	}
 
 	for _, tc := range testCases {
@@ -258,7 +193,7 @@ func TestJoinCluster(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, resp)
 
-				storage, err := mockNode.GetStorage(testStorageName)
+				storage, err := node.GetStorage(testStorageName)
 				require.NoError(t, err)
 
 				raftStorage := storage.(*raftmgr.RaftEnabledStorage)
@@ -270,9 +205,6 @@ func TestJoinCluster(t *testing.T) {
 				require.NotNil(t, entry)
 
 				require.Equal(t, tc.req.GetRelativePath(), entry.RelativePath)
-				require.Equal(t, tc.req.GetLeaderId(), entry.LeaderID)
-				require.Equal(t, uint64(1), entry.Term)
-				require.Equal(t, uint64(1), entry.Index)
 
 				// Check that our replica is in the routing table
 				found := slices.ContainsFunc(entry.Replicas, func(replica *gitalypb.ReplicaID) bool {
@@ -294,6 +226,17 @@ func TestJoinCluster(t *testing.T) {
 				}
 
 				require.Len(t, entry.Replicas, len(tc.req.GetReplicas()))
+
+				replicaRegistry := raftStorage.GetReplicaRegistry()
+				require.NotNil(t, replicaRegistry, "replica registry should not be nil")
+
+				require.Eventually(t, func() bool {
+					replicaTwo, err := replicaRegistry.GetReplica(partitionKey)
+					if err != nil {
+						return false
+					}
+					return replicaTwo != nil
+				}, 5*time.Minute, 5*time.Millisecond, "replica should be created")
 
 			} else {
 				testhelper.RequireGrpcCode(t, err, tc.expectedCode)
@@ -327,7 +270,7 @@ func TestJoinCluster_MemberIDAlreadyExists(t *testing.T) {
 	mockNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
 	require.NoError(t, err)
 
-	client := runRaftServer(t, ctx, cfg, mockNode)
+	_, client := runRaftServer(t, ctx, cfg, mockNode)
 
 	partitionKey := raftmgr.NewPartitionKey(testAuthorityName, 1)
 	storage, err := mockNode.GetStorage(testStorageName)
@@ -377,4 +320,21 @@ func TestJoinCluster_MemberIDAlreadyExists(t *testing.T) {
 
 	testhelper.RequireGrpcCode(t, err, codes.InvalidArgument)
 	require.Contains(t, err.Error(), "member ID 1 already exists in the cluster")
+}
+
+func setupDB(t *testing.T, ctx context.Context, logger log.Logger, cfg config.Cfg) *databasemgr.DBManager {
+	dbPath := testhelper.TempDir(t)
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(logger log.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
+		},
+		helper.NewTimerTickerFactory(time.Minute),
+		logger,
+	)
+
+	require.NoError(t, err)
+
+	return dbMgr
 }

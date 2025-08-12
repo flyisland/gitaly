@@ -1214,6 +1214,23 @@ func (replica *Replica) joinCluster(ctx context.Context, targetMemberID uint64, 
 	return nil
 }
 
+// GetLeaderID returns the leader ID of the replica.
+func (replica *Replica) GetLeaderID() (uint64, error) {
+	if !replica.started {
+		return 0, fmt.Errorf("raft replica not started")
+	}
+	leaderID := replica.leadership.GetLeaderID()
+	return leaderID, nil
+}
+
+// GetMemberID returns the member ID of the replica.
+func (replica *Replica) GetMemberID() (uint64, error) {
+	if !replica.started {
+		return 0, fmt.Errorf("raft replica not started")
+	}
+	return replica.memberID, nil
+}
+
 func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {
 	_, err := routingTable.Translate(replica.partitionKey, memberID)
 	if err != nil {
