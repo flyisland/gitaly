@@ -21,6 +21,12 @@ var (
 	// BundledGitConstructors defines the versions of Git that we embed into the Gitaly
 	// binary.
 	BundledGitConstructors = []BundledGitEnvironmentConstructor{
+		{ // master is a pinned commit in Git's master branch that is expected to lag behind 7-14 days.
+			Suffix: "-master",
+			FeatureFlags: []featureflag.FeatureFlag{
+				featureflag.GitMaster,
+			},
+		},
 		{
 			Suffix: "-v2.50",
 		},

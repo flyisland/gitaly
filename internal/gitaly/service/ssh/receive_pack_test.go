@@ -599,7 +599,7 @@ func TestReceivePack_transactional(t *testing.T) {
 	//
 	// However, this means that the reference-transaction hook will only be invoked twice, so
 	// our expected votes would change.
-	withBatchedUpdates := version.UsesBatchedUpdates()
+	withBatchedUpdates := version.UsesBatchedUpdates(ctx)
 
 	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
 	repo := localrepo.NewTestRepo(t, cfg, repoProto)

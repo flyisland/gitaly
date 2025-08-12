@@ -2,27 +2,13 @@ package git
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 )
-
-// minimumVersion is the minimum required Git version. If updating this version, be sure to
-// also update the following locations:
-// - https://gitlab.com/gitlab-org/gitaly/blob/master/README.md#installation
-// - https://gitlab.com/gitlab-org/gitaly/blob/master/.gitlab-ci.yml
-// - https://docs.gitlab.com/install/installation/#software-requirements
-// - https://docs.gitlab.com/update/ (see e.g. https://docs.gitlab.com/update/versions/gitlab_17_changes/)
-var minimumVersion = Version{
-	versionString: "2.47.0",
-	major:         2,
-	minor:         47,
-	patch:         0,
-	rc:            false,
-
-	// gl is the GitLab patch level.
-	gl: 0,
-}
 
 // Version represents the version of git itself.
 type Version struct {
@@ -81,12 +67,6 @@ func (v Version) String() string {
 	return v.versionString
 }
 
-// IsSupported checks if a version string corresponds to a Git version
-// supported by Gitaly.
-func (v Version) IsSupported() bool {
-	return !v.LessThan(minimumVersion)
-}
-
 // IsCatfileObjectTypeFilterSupported checks whether the current Git version supports the `git cat-file --filter=`
 // option.
 func (v Version) IsCatfileObjectTypeFilterSupported() bool {
@@ -95,8 +75,8 @@ func (v Version) IsCatfileObjectTypeFilterSupported() bool {
 
 // UsesBatchedUpdates checks whether the current Git version uses batched updates in 'git-fetch(1)' and
 // 'git-receive-pack(1)'.
-func (v Version) UsesBatchedUpdates() bool {
-	return v.GreaterOrEqual(NewVersion(2, 52, 0, 0))
+func (v Version) UsesBatchedUpdates(ctx context.Context) bool {
+	return v.GreaterOrEqual(NewVersion(2, 51, 0, 0)) || featureflag.GitMaster.IsEnabled(ctx)
 }
 
 // LessThan determines whether the version is older than another version.
