@@ -232,7 +232,7 @@ func TestReplica_Initialize(t *testing.T) {
 		require.NoError(t, localLog.Close())
 
 		// Now create a Raft log store pointing to the same directories
-		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -311,7 +311,7 @@ func TestReplica_Initialize(t *testing.T) {
 		require.NoError(t, localLog.Close())
 
 		// Now create a Raft log store pointing to the same directories
-		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -357,7 +357,7 @@ func TestReplica_Initialize(t *testing.T) {
 		metrics := NewMetrics()
 
 		// PHASE 1: Create a new partition with Raft enabled
-		logStore1, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		logStore1, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -425,7 +425,7 @@ func TestReplica_Initialize(t *testing.T) {
 		}
 
 		// PHASE 3: Re-enable Raft
-		logStore2, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		logStore2, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
@@ -704,7 +704,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 
 		db, dbMgr := dbSetup(t, ctx, cfg, testhelper.TempDir(t), storageName, logger)
 		// Create a Raft log store
-		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, metrics)
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -825,7 +825,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		db, err := dbMgr.GetDB(cfg.Storages[0].Name)
 		require.NoError(t, err)
 
-		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, metrics)
+		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, metrics)
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -880,7 +880,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		db, err := dbMgr.GetDB(env.cfg.Storages[0].Name)
 		require.NoError(t, err)
 
-		logStore, err := NewReplicaLogStore(env.storageName, env.partitionID, raftCfg, db, env.stagingDir, env.stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, env.metrics)
+		logStore, err := NewReplicaLogStore(env.storageName, env.partitionID, raftCfg, db, env.stagingDir, env.stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, env.metrics)
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(env.cfg, logger, dbMgr, nil)

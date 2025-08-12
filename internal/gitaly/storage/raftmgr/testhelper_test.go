@@ -3,7 +3,6 @@ package raftmgr
 import (
 	"context"
 	"net"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -40,35 +39,6 @@ func (m *mockReplica) GetEntryPath(lsn storage.LSN) string {
 // Step is a mock implementation of the raft.Node.Step method.
 func (m *mockReplica) Step(ctx context.Context, msg raftpb.Message) error {
 	return nil
-}
-
-type mockConsumer struct {
-	notifications []mockNotification
-	mutex         sync.Mutex
-}
-
-type mockNotification struct {
-	storageName   string
-	partitionID   storage.PartitionID
-	lowWaterMark  storage.LSN
-	highWaterMark storage.LSN
-}
-
-func (mc *mockConsumer) NotifyNewEntries(storageName string, partitionID storage.PartitionID, lowWaterMark, committedLSN storage.LSN) {
-	mc.mutex.Lock()
-	defer mc.mutex.Unlock()
-	mc.notifications = append(mc.notifications, mockNotification{
-		storageName:   storageName,
-		partitionID:   partitionID,
-		lowWaterMark:  lowWaterMark,
-		highWaterMark: committedLSN,
-	})
-}
-
-func (mc *mockConsumer) GetNotifications() []mockNotification {
-	mc.mutex.Lock()
-	defer mc.mutex.Unlock()
-	return mc.notifications
 }
 
 // IsStarted is a mock implementation of RaftReplica.IsStarted
@@ -110,6 +80,7 @@ func createRaftReplica(t *testing.T, ctx context.Context, memberID uint64, addre
 	}
 	relativePath := "git.git"
 	storageName := "default"
+
 	ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), memberID, relativePath)
 
 	return createRaftReplicaWithConfig(t, ctx, raftCfg, config, metrics)
@@ -132,7 +103,7 @@ func createRaftReplicaWithConfig(t *testing.T, ctx context.Context, raftCfg conf
 	stateDir := testhelper.TempDir(t)
 	posTracker := log.NewPositionTracker()
 
-	logStore, err := NewReplicaLogStore(storageName, config.PartitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+	logStore, err := NewReplicaLogStore(storageName, config.PartitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, metrics)
 	if err != nil {
 		return nil, err
 	}
