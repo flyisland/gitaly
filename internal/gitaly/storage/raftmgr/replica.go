@@ -64,6 +64,9 @@ type RaftReplica interface {
 	// This operation can only be performed by the leader.
 	AddLearner(ctx context.Context, address, destinationStorageName string) error
 
+	// IsStarted returns true if the replica has been started.
+	IsStarted() bool
+
 	// GetCurrentState returns comprehensive current state information including term, index, and Raft state.
 	// This provides an efficient way to get multiple state values with consistent locking.
 	GetCurrentState() *ReplicaState
@@ -1018,6 +1021,11 @@ func (replica *Replica) signalReady() {
 
 func (replica *Replica) signalError(err error) {
 	replica.ready.set(err)
+}
+
+// IsStarted implements RaftReplica.IsStarted
+func (replica *Replica) IsStarted() bool {
+	return replica.started
 }
 
 // Step processes a Raft message from a remote node

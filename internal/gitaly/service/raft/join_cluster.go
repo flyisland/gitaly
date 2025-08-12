@@ -2,8 +2,10 @@ package raft
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
@@ -89,4 +91,39 @@ func (s *Server) validateJoinClusterRequest(req *gitalypb.JoinClusterRequest) er
 	}
 
 	return nil
+}
+
+func (s *Server) createReplicaViaTransaction(ctx context.Context, relativePath string, storageManager storage.Storage, replicaRegistry raftmgr.ReplicaRegistry, partitionKey *gitalypb.RaftPartitionKey) (returnedErr error) {
+	tx, err := storageManager.Begin(ctx, storage.TransactionOptions{
+		RelativePath: relativePath,
+		AllowPartitionAssignmentWithoutRepository: true,
+	})
+	if err != nil {
+		return fmt.Errorf("begin bootstrap transaction: %w", err)
+	}
+
+	replica, err := replicaRegistry.GetReplica(partitionKey)
+	if err != nil {
+		return fmt.Errorf("replica not found after partition creation: %w", err)
+	}
+
+	started := replica.(*raftmgr.Replica).IsStarted()
+	if !started {
+		return fmt.Errorf("replica has not started")
+	}
+
+	defer func() {
+		if returnedErr != nil {
+			if err := tx.Rollback(ctx); err != nil {
+				returnedErr = errors.Join(err, fmt.Errorf("rollback: %w", err))
+			}
+		} else {
+			commitLSN, err := tx.Commit(ctx)
+			if err != nil {
+				returnedErr = errors.Join(err, fmt.Errorf("fail to commit transaction: commit LSN: %d: %w", commitLSN, err))
+			}
+		}
+	}()
+
+	return returnedErr
 }

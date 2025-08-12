@@ -71,6 +71,11 @@ func (mc *mockConsumer) GetNotifications() []mockNotification {
 	return mc.notifications
 }
 
+// IsStarted is a mock implementation of RaftReplica.IsStarted
+func (m *mockReplica) IsStarted() bool {
+	return true
+}
+
 func openTestDB(t *testing.T, ctx context.Context, cfg config.Cfg, logger logger.Logger) *databasemgr.DBManager {
 	dbMgr, err := databasemgr.NewDBManager(ctx, cfg.Storages, keyvalue.NewBadgerStore, helper.NewNullTickerFactory(), logger)
 	require.NoError(t, err)

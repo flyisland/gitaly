@@ -28,6 +28,10 @@ func (m *mockRaftReplica) Step(ctx context.Context, msg raftpb.Message) error {
 	return nil
 }
 
+func (m *mockRaftReplica) IsStarted() bool {
+	return true
+}
+
 func runRaftServer(t *testing.T, ctx context.Context, cfg config.Cfg, node *raftmgr.Node) gitalypb.RaftServiceClient {
 	serverSocketPath := testserver.RunGitalyServer(t, cfg, func(srv *grpc.Server, deps *service.Dependencies) {
 		deps.Cfg = cfg
