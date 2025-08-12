@@ -11,10 +11,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/node"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition"
+	partitionlog "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
@@ -67,6 +69,49 @@ func raftConfigsForTest(t *testing.T) config.Raft {
 		SnapshotDir:               testhelper.TempDir(t),
 	}
 }
+
+func createRaftReplica(t *testing.T, ctx context.Context, partitionID storage.PartitionID, opts ...raftmgr.OptionFunc) (*raftmgr.Replica, *gitalypb.RaftPartitionKey, error) {
+	t.Helper()
+	metrics := raftmgr.NewMetrics()
+
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageOne))
+	cfg.Raft = raftConfigsForTest(t)
+	cfg.SocketPath = testserver.RunGitalyServer(t, cfg, func(srv *grpc.Server, deps *service.Dependencies) {
+		gitalypb.RegisterRaftServiceServer(srv, NewServer(deps))
+	}, testserver.WithDisablePraefect())
+
+	logger := testhelper.NewLogger(t)
+	storageName := storageOne
+	stagingDir := testhelper.TempDir(t)
+	stateDir := testhelper.TempDir(t)
+	posTracker := partitionlog.NewPositionTracker()
+
+	dbMgr := setupDB(t, ctx, logger, cfg)
+	t.Cleanup(dbMgr.Close)
+
+	db, err := dbMgr.GetDB(storageName)
+	require.NoError(t, err)
+
+	logStore, err := raftmgr.NewReplicaLogStore(storageName, partitionID, cfg.Raft, db, stagingDir, stateDir, &raftmgr.MockConsumer{}, posTracker, logger, metrics)
+	require.NoError(t, err)
+
+	conns := client.NewPool(client.WithDialOptions(client.UnaryInterceptor(), client.StreamInterceptor()))
+	t.Cleanup(func() {
+		err := conns.Close()
+		require.NoError(t, err)
+	})
+
+	raftNode, err := raftmgr.NewNode(cfg, logger, dbMgr, conns)
+	require.NoError(t, err)
+
+	raftFactory := raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode, opts...)
+	partitionKey := raftmgr.NewPartitionKey(storageName, partitionID)
+	ctx = storage.ContextWithPartitionInfo(ctx, partitionKey, 1, "gitaly.git")
+	manager, err := raftFactory(ctx, storageName, logStore, logger, metrics)
+
+	return manager, partitionKey, err
+}
+
 // createRaftNodeWithStorage creates a Raft enabled Gitaly node with a base storage.
 func createRaftNodeWithStorage(t *testing.T, storageName string) (*raftmgr.Node, config.Cfg, error) {
 	t.Helper()
