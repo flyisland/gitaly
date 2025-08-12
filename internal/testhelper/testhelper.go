@@ -332,6 +332,9 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Disable leftover migration, it should be enabled explicitly for each test if needed.
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LeftoverMigration, false)
 
+	// Enable trace2 logs for receive pack
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.ReceivePackTrace2Hook, true)
+
 	for _, opt := range opts {
 		ctx = opt(ctx)
 	}
