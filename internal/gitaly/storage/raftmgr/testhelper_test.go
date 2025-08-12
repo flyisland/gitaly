@@ -103,6 +103,9 @@ func createRaftReplica(t *testing.T, ctx context.Context, memberID uint64, addre
 		Address:     address,
 		Options:     opts,
 	}
+	relativePath := "git.git"
+	storageName := "default"
+	ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), memberID, relativePath)
 
 	return createRaftReplicaWithConfig(t, ctx, raftCfg, config, metrics)
 }
@@ -141,7 +144,7 @@ func createRaftReplicaWithConfig(t *testing.T, ctx context.Context, raftCfg conf
 	}
 
 	raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, config.Options...)
-	return raftFactory(ctx, config.MemberID, storageName, NewPartitionKey(storageName, config.PartitionID), logStore, logger, metrics)
+	return raftFactory(ctx, storageName, logStore, logger, metrics)
 }
 
 func createTempServer(t *testing.T, transport *GrpcTransport) (string, *grpc.Server) {
