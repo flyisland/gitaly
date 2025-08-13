@@ -108,6 +108,9 @@ func DefaultTrace2HooksFor(ctx context.Context, subCmd string, logger log.Logger
 	if subCmd == "pack-objects" {
 		hooks = append(hooks, trace2hooks.NewPackObjectsMetrics())
 	}
+	if subCmd == "receive-pack" && featureflag.ReceivePackTrace2Hook.IsEnabled(ctx) {
+		hooks = append(hooks, trace2hooks.NewReceivePack())
+	}
 	if featureflag.LogGitTraces.IsEnabled(ctx) {
 		hooks = append(hooks, trace2hooks.NewLogExporter(rl, logger))
 	}
