@@ -583,3 +583,199 @@ gitaly_shared_snapshots_destroyed_total{storage="storage-name"} %d
 		})
 	}
 }
+
+func TestCollectDryRunStatistics(t *testing.T) {
+	t.Parallel()
+	ctx := testhelper.Context(t)
+
+	testCases := []struct {
+		desc                        string
+		fsSetup                     func(storageDir string)
+		relativePaths               []string
+		expectedDirs                int
+		expectedFiles               int
+		expectedMaxDepth            int
+		expectedMaxFilesInSingleDir int
+		expectedHasKeepFiles        bool
+		expectedHasLogsDirectory    bool
+	}{
+		{
+			desc: "successful statistics collection",
+			fsSetup: func(storageDir string) {
+				testhelper.CreateFS(t, storageDir, fstest.MapFS{
+					".":                                         {Mode: fs.ModeDir | fs.ModePerm},
+					"working-dir":                               {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories":                              {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo":                    {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo/logs":               {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo/HEAD":               {Mode: fs.ModePerm, Data: []byte("ref: refs/heads/main\n")},
+					"repositories/test-repo/refs":               {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo/refs/heads":         {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo/refs/heads/main":    {Mode: fs.ModePerm, Data: []byte("abc123\n")},
+					"repositories/test-repo/objects":            {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo/objects/info":       {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo/objects/pack":       {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo/objects/pack/.keep": {Mode: fs.ModePerm, Data: []byte("test")},
+					"repositories/test-repo/config":             {Mode: fs.ModePerm, Data: []byte("[core]\n\trepositoryformatversion = 0\n")},
+				})
+			},
+			relativePaths:               []string{"repositories/test-repo"},
+			expectedDirs:                7,
+			expectedFiles:               4,
+			expectedMaxDepth:            3, // ./refs/heads/main is depth 3
+			expectedMaxFilesInSingleDir: 2, // root has HEAD and config files
+			expectedHasKeepFiles:        true,
+			expectedHasLogsDirectory:    true,
+		},
+		{
+			desc: "non-existent repository",
+			fsSetup: func(storageDir string) {
+				testhelper.CreateFS(t, storageDir, fstest.MapFS{
+					".":           {Mode: fs.ModeDir | fs.ModePerm},
+					"working-dir": {Mode: fs.ModeDir | fs.ModePerm},
+				})
+			},
+			relativePaths:               []string{"repositories/test-repo"},
+			expectedDirs:                0,
+			expectedFiles:               0,
+			expectedMaxDepth:            0,
+			expectedMaxFilesInSingleDir: 0,
+		},
+		{
+			desc: "multiple repositories",
+			fsSetup: func(storageDir string) {
+				testhelper.CreateFS(t, storageDir, fstest.MapFS{
+					".":                          {Mode: fs.ModeDir | fs.ModePerm},
+					"working-dir":                {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories":               {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/repo1":         {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/repo1/HEAD":    {Mode: fs.ModePerm, Data: []byte("ref: refs/heads/main\n")},
+					"repositories/repo1/refs":    {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/repo1/objects": {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/repo2":         {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/repo2/HEAD":    {Mode: fs.ModePerm, Data: []byte("ref: refs/heads/main\n")},
+					"repositories/repo2/refs":    {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/repo2/objects": {Mode: fs.ModeDir | fs.ModePerm},
+				})
+			},
+			relativePaths:               []string{"repositories/repo1", "repositories/repo2"},
+			expectedDirs:                6,
+			expectedFiles:               2,
+			expectedMaxDepth:            1, // refs and objects are depth 1
+			expectedMaxFilesInSingleDir: 1, // root has 1 HEAD file in each repo
+		},
+		{
+			desc: "empty relative paths",
+			fsSetup: func(storageDir string) {
+				testhelper.CreateFS(t, storageDir, fstest.MapFS{
+					".":                           {Mode: fs.ModeDir | fs.ModePerm},
+					"working-dir":                 {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories":                {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo":      {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/test-repo/HEAD": {Mode: fs.ModePerm, Data: []byte("ref: refs/heads/main\n")},
+				})
+			},
+			relativePaths:               []string{},
+			expectedDirs:                0,
+			expectedFiles:               0,
+			expectedMaxDepth:            0,
+			expectedMaxFilesInSingleDir: 0,
+		},
+		{
+			desc: "deep directory structure",
+			fsSetup: func(storageDir string) {
+				testhelper.CreateFS(t, storageDir, fstest.MapFS{
+					".":                                                       {Mode: fs.ModeDir | fs.ModePerm},
+					"working-dir":                                             {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories":                                            {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo":                                  {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo/HEAD":                             {Mode: fs.ModePerm, Data: []byte("ref: refs/heads/main\n")},
+					"repositories/deep-repo/refs":                             {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo/objects":                          {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo/deep":                             {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo/deep/logs":                        {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo/deep/very":                        {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo/deep/very/.keep":                  {Mode: fs.ModePerm, Data: []byte("test\n")},
+					"repositories/deep-repo/deep/very/deeply":                 {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo/deep/very/deeply/nested":          {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/deep-repo/deep/very/deeply/nested/file.txt": {Mode: fs.ModePerm, Data: []byte("content\n")},
+				})
+			},
+			relativePaths:               []string{"repositories/deep-repo"},
+			expectedDirs:                8,
+			expectedFiles:               3,     // HEAD + file.txt + .keep
+			expectedMaxDepth:            5,     // ./deep/very/deeply/nested/file.txt is depth 5
+			expectedMaxFilesInSingleDir: 1,     // each directory has at most 1 file
+			expectedHasLogsDirectory:    false, // log directory is not in the repository root
+			expectedHasKeepFiles:        false, // .keep file is not under the /objects/pack/ directory.
+		},
+		{
+			desc: "directory with many files",
+			fsSetup: func(storageDir string) {
+				testhelper.CreateFS(t, storageDir, fstest.MapFS{
+					".":                                      {Mode: fs.ModeDir | fs.ModePerm},
+					"working-dir":                            {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories":                           {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/many-files-repo":           {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/many-files-repo/HEAD":      {Mode: fs.ModePerm, Data: []byte("ref: refs/heads/main\n")},
+					"repositories/many-files-repo/refs":      {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/many-files-repo/objects":   {Mode: fs.ModeDir | fs.ModePerm},
+					"repositories/many-files-repo/file1.txt": {Mode: fs.ModePerm, Data: []byte("file1\n")},
+					"repositories/many-files-repo/file2.txt": {Mode: fs.ModePerm, Data: []byte("file2\n")},
+					"repositories/many-files-repo/file3.txt": {Mode: fs.ModePerm, Data: []byte("file3\n")},
+					"repositories/many-files-repo/file4.txt": {Mode: fs.ModePerm, Data: []byte("file4\n")},
+					"repositories/many-files-repo/file5.txt": {Mode: fs.ModePerm, Data: []byte("file5\n")},
+				})
+			},
+			relativePaths:               []string{"repositories/many-files-repo"},
+			expectedDirs:                3,
+			expectedFiles:               6, // HEAD + 5 other files
+			expectedMaxDepth:            1, // refs and objects are depth 1
+			expectedMaxFilesInSingleDir: 6, // root directory has 6 files (HEAD + file1-5.txt)
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			tmpDir := t.TempDir()
+			storageDir := filepath.Join(tmpDir, "storage-dir")
+			workingDir := filepath.Join(storageDir, "working-dir")
+
+			tc.fsSetup(storageDir)
+
+			// Create a hook to capture log messages
+			logger := testhelper.SharedLogger(t)
+			hook := testhelper.AddLoggerHook(logger)
+			defer hook.Reset()
+
+			mgr, err := NewManager(logger, storageDir, workingDir, ManagerMetrics{})
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, mgr)
+
+			err = mgr.CollectDryRunStatistics(ctx, tc.relativePaths)
+			require.NoError(t, err)
+
+			// Verify that dry-run statistics collection logs appropriate messages
+			logEntries := hook.AllEntries()
+			var foundDryRunLog bool
+			for _, entry := range logEntries {
+				if entry.Message == "collected dry-run snapshot statistics" {
+					foundDryRunLog = true
+
+					// Verify the log contains expected fields
+					require.Contains(t, entry.Data, "dryrun_snapshot")
+					snapshotData := entry.Data["dryrun_snapshot"].(map[string]interface{})
+
+					// Verify we counted the expected files and directories
+					require.Equal(t, tc.expectedDirs, snapshotData["directory_count"], "should have counted directories")
+					require.Equal(t, tc.expectedFiles, snapshotData["file_count"], "should have counted files")
+					require.Equal(t, tc.expectedMaxDepth, snapshotData["max_directory_depth"], "should have calculated max directory depth")
+					require.Equal(t, tc.expectedMaxFilesInSingleDir, snapshotData["max_files_in_single_directory"], "should have calculated max files in single directory")
+					break
+				}
+			}
+			require.True(t, foundDryRunLog, "should have logged dry-run statistics collection")
+		})
+	}
+}
