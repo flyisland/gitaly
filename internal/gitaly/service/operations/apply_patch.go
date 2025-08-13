@@ -13,6 +13,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook/updateref"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -50,6 +51,17 @@ func (s *Server) UserApplyPatch(stream gitalypb.OperationService_UserApplyPatchS
 	}
 
 	if err := s.userApplyPatch(stream.Context(), header, stream); err != nil {
+		var customHookErr updateref.CustomHookError
+		if errors.As(err, &customHookErr) {
+			return structerr.NewPermissionDenied("denied by custom hooks").WithDetail(
+				&gitalypb.UserApplyPatchError{
+					Error: &gitalypb.UserApplyPatchError_CustomHook{
+						CustomHook: customHookErr.Proto(),
+					},
+				},
+			)
+		}
+
 		return structerr.NewInternal("%w", err)
 	}
 

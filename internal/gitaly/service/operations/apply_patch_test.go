@@ -486,6 +486,41 @@ func TestUserApplyPatch(t *testing.T) {
 				}
 			},
 		},
+		{
+			desc: "pre-receive hook fails",
+			baseTree: []gittest.TreeEntry{
+				{Path: "file", Mode: "100644", Content: "base-content"},
+			},
+			baseReference: "HEAD",
+			extraBranches: []string{git.DefaultRef.String(), "refs/heads/some-extra-branch"},
+			targetBranch:  "new-branch",
+			patches: []patchDescription{
+				{
+					newTree: []gittest.TreeEntry{
+						{Path: "file", Mode: "100644", Content: "patch 1"},
+					},
+				},
+			},
+			expected: func(t *testing.T, repoPath string) expected {
+				errorMessage := "Error Message"
+				gittest.WriteCustomHook(t, repoPath, "pre-receive", []byte(fmt.Sprintf(
+					`#!/bin/sh
+echo %q >&2
+exit 1
+`, errorMessage)))
+
+				return expected{
+					err: structerr.NewPermissionDenied("denied by custom hooks").WithDetail(&gitalypb.UserApplyPatchError{
+						Error: &gitalypb.UserApplyPatchError_CustomHook{
+							CustomHook: &gitalypb.CustomHookError{
+								HookType: gitalypb.CustomHookError_HOOK_TYPE_PRERECEIVE,
+								Stderr:   []byte(errorMessage),
+							},
+						},
+					}),
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()

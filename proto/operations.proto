@@ -1087,6 +1087,15 @@ message UserApplyPatchRequest {
   }
 }
 
+// UserApplyPatchError is an error returned by the UserApplyPatch RPC in some specific well
+// defined error cases.
+message UserApplyPatchError {
+  oneof error {
+    // custom_hook is set if any custom hook which has running as part of this RPC call has returned
+    // a non-zero exit code.
+    CustomHookError custom_hook = 1;
+  }
+}
 // UserApplyPatchResponse is a response for the UserApplyPatch RPC.
 message UserApplyPatchResponse {
   // branch_update contains information about the updated branch.
