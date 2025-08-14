@@ -329,7 +329,7 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Enable snapshot filter
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.SnapshotFilter, true)
 
-	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.GitMaster, rnd.Int()%2 == 0)
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.GitMaster, setGitMasterFlag(rnd))
 
 	// Disable leftover migration, it should be enabled explicitly for each test if needed.
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LeftoverMigration, false)
@@ -342,6 +342,16 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	}
 
 	return ctx
+}
+
+func setGitMasterFlag(rnd *rand.Rand) bool {
+	if _, ok := os.LookupEnv("GITALY_TEST_GIT_MASTER"); ok {
+		return true
+	}
+	if _, ok := os.LookupEnv("GITALY_TEST_GIT_PREV"); ok {
+		return false
+	}
+	return rnd.Int()%2 == 0
 }
 
 // CreateGlobalDirectory creates a directory in the test directory that is shared across all

@@ -269,7 +269,7 @@ test:
         TEST_TARGET: test
         USE_MESON: YesPlease
       - TEST_TARGET:
-          [test-with-praefect, race-go, test-wal, test-raft, test-with-praefect-wal]
+          [test-with-praefect, race-go, test-wal, test-raft, test-with-praefect-wal, test-with-git-master, test-with-git-prev]
       # Execute tests with our minimum required Postgres version, as well. If
       # the minimum version changes, please change this to the new minimum
       # version. Furthermore, please make sure to update the minimum required

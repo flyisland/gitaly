@@ -461,6 +461,16 @@ bench: ${BENCHMARK_REPO} prepare-tests
 test-with-reftable: export GITALY_TEST_REF_FORMAT = reftable
 test-with-reftable: test-go
 
+.PHONY: test-with-git-master
+## Run Go tests with git master.
+test-with-git-master: export GITALY_TEST_GIT_MASTER = YesPlease
+test-with-git-master: test-go
+
+.PHONY: test-with-git-prev
+## Run Go tests with git previous version.
+test-with-git-prev: export GITALY_TEST_GIT_PREV = YesPlease
+test-with-git-prev: test-go
+
 .PHONY: test-with-sha256
 ## Run Go tests with SHA256 repositories.
 test-with-sha256: export GITALY_TEST_WITH_SHA256 = YesPlease
