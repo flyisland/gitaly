@@ -101,6 +101,7 @@ service CommitService {
 
   // FindCommits lists all the commits which are associated with the provided revision
   // and paths.
+  // DEPRECATED: https://gitlab.com/gitlab-org/gitaly/-/issues/6845
   rpc FindCommits(FindCommitsRequest) returns (stream FindCommitsResponse) {
     option (op_type) = {
       op: ACCESSOR

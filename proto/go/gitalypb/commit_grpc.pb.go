@@ -84,6 +84,7 @@ type CommitServiceClient interface {
 	FindAllCommits(ctx context.Context, in *FindAllCommitsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FindAllCommitsResponse], error)
 	// FindCommits lists all the commits which are associated with the provided revision
 	// and paths.
+	// DEPRECATED: https://gitlab.com/gitlab-org/gitaly/-/issues/6845
 	FindCommits(ctx context.Context, in *FindCommitsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FindCommitsResponse], error)
 	// CommitLanguages detects the source code languages of the whole tree for a
 	// given commit. Returns an error in case no languages could be detected.
@@ -531,6 +532,7 @@ type CommitServiceServer interface {
 	FindAllCommits(*FindAllCommitsRequest, grpc.ServerStreamingServer[FindAllCommitsResponse]) error
 	// FindCommits lists all the commits which are associated with the provided revision
 	// and paths.
+	// DEPRECATED: https://gitlab.com/gitlab-org/gitaly/-/issues/6845
 	FindCommits(*FindCommitsRequest, grpc.ServerStreamingServer[FindCommitsResponse]) error
 	// CommitLanguages detects the source code languages of the whole tree for a
 	// given commit. Returns an error in case no languages could be detected.
