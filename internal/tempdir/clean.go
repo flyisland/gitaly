@@ -63,7 +63,7 @@ func clean(logger log.Logger, locator storage.Locator, storage config.Storage) e
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dir, err := locator.TempDir(storage.Name)
+	dir, err := locator.TempDir(ctx, storage.Name)
 	if err != nil {
 		return fmt.Errorf("temporary dir: %w", err)
 	}

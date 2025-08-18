@@ -92,7 +92,7 @@ type Locator interface {
 	// CacheDir returns the path to the cache dir for a storage.
 	CacheDir(storageName string) (string, error)
 	// TempDir returns the path to the temp dir for a storage.
-	TempDir(storageName string) (string, error)
+	TempDir(ctx context.Context, storageName string) (string, error)
 	// StateDir returns the path to the state dir for a storage.
 	StateDir(storageName string) (string, error)
 	// PartitionsDir returns the path to the partitions dir for a storage.

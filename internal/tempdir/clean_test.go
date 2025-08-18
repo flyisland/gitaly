@@ -1,6 +1,7 @@
 package tempdir
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,10 +17,11 @@ import (
 )
 
 func TestCleanSuccess(t *testing.T) {
+	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
 	locator := config.NewLocator(cfg)
 
-	cleanRoot, err := locator.TempDir(cfg.Storages[0].Name)
+	cleanRoot, err := locator.TempDir(ctx, cfg.Storages[0].Name)
 	require.NoError(t, err)
 
 	require.NoError(t, os.MkdirAll(cleanRoot, mode.Directory), "create clean root before setup")
@@ -90,7 +92,7 @@ type mockLocator struct {
 	storage.Locator
 }
 
-func (m mockLocator) TempDir(storageName string) (string, error) {
+func (m mockLocator) TempDir(ctx context.Context, storageName string) (string, error) {
 	return "something", nil
 }
 
@@ -129,19 +131,19 @@ func TestDedupStorages(t *testing.T) {
 }
 
 func chmod(t *testing.T, locator storage.Locator, storage config.Storage, p string, mode os.FileMode) {
-	root, err := locator.TempDir(storage.Name)
+	root, err := locator.TempDir(context.Background(), storage.Name)
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(filepath.Join(root, p), mode))
 }
 
 func chtimes(t *testing.T, locator storage.Locator, storage config.Storage, p string, date time.Time) {
-	root, err := locator.TempDir(storage.Name)
+	root, err := locator.TempDir(context.Background(), storage.Name)
 	require.NoError(t, err)
 	require.NoError(t, os.Chtimes(filepath.Join(root, p), date, date))
 }
 
 func assertEntries(t *testing.T, locator storage.Locator, storage config.Storage, entries ...string) {
-	root, err := locator.TempDir(storage.Name)
+	root, err := locator.TempDir(context.Background(), storage.Name)
 	require.NoError(t, err)
 
 	foundEntries, err := os.ReadDir(root)
@@ -155,7 +157,7 @@ func assertEntries(t *testing.T, locator storage.Locator, storage config.Storage
 }
 
 func makeFile(t *testing.T, locator storage.Locator, storage config.Storage, filePath string, mtime time.Time) {
-	root, err := locator.TempDir(storage.Name)
+	root, err := locator.TempDir(context.Background(), storage.Name)
 	require.NoError(t, err)
 
 	fullPath := filepath.Join(root, filePath)
@@ -164,7 +166,7 @@ func makeFile(t *testing.T, locator storage.Locator, storage config.Storage, fil
 }
 
 func makeDir(t *testing.T, locator storage.Locator, storage config.Storage, dirPath string, mtime time.Time) {
-	root, err := locator.TempDir(storage.Name)
+	root, err := locator.TempDir(context.Background(), storage.Name)
 	require.NoError(t, err)
 
 	fullPath := filepath.Join(root, dirPath)
