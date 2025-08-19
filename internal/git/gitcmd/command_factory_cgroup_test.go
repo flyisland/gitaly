@@ -9,7 +9,9 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/fsrecorder"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -33,6 +35,10 @@ func (m *mockCgroupsManager) SupportsCloneIntoCgroup() bool {
 func (m *mockCgroupsManager) CloneIntoCgroup(c *exec.Cmd, _ ...cgroups.AddCommandOption) (string, io.Closer, error) {
 	m.commands = append(m.commands, c)
 	return "", io.NopCloser(nil), nil
+}
+
+func (m *mockTransaction) FS() storage.FS {
+	return m.fs
 }
 
 func TestNewCommandAddsToCgroup(t *testing.T) {
@@ -65,6 +71,7 @@ func TestNewCommandAddsToCgroup(t *testing.T) {
 type mockTransaction struct {
 	storage.Transaction
 	originalRepo *gitalypb.Repository
+	fs           storage.FS
 }
 
 func (m *mockTransaction) OriginalRepository(storage.Repository) *gitalypb.Repository {
@@ -110,9 +117,12 @@ func TestNewCommandCgroupStable(t *testing.T) {
 		defer cleanup()
 
 		originalRepo := &gitalypb.Repository{StorageName: "default", RelativePath: "some/relative/path"}
-
+		locator := config.NewLocator(cfg)
+		storagePath, err := locator.GetStorageByName(ctx, "default")
+		require.NoError(t, err)
 		ctx = storage.ContextWithTransaction(ctx, &mockTransaction{
 			originalRepo: originalRepo,
+			fs:           fsrecorder.NewFS(storagePath, nil),
 		})
 
 		cmd, err := gitCmdFactory.New(ctx, repo, gitcmd.Command{

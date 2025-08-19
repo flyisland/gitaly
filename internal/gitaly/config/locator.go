@@ -165,12 +165,11 @@ func (l *configLocator) GetStorageByName(ctx context.Context, storageName string
 		return "", structerr.NewInvalidArgument("%w", storage.ErrStorageNotSet)
 	}
 
-	storagePath, ok := l.conf.StoragePath(storageName)
-	if !ok {
-		return "", storage.NewStorageNotFoundError(storageName)
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		return tx.FS().Root(), nil
 	}
 
-	return storagePath, nil
+	return l.GetRootStoragePathByName(storageName)
 }
 
 // GetRootStoragePathByName will return the path for the storage, which is fetched by

@@ -154,6 +154,9 @@ func (m *GitLabHookManager) PostReceiveHook(ctx context.Context, repo *gitalypb.
 			ReadOnly:     true,
 			RelativePath: originalRepo.GetRelativePath(),
 		})
+		// A new transaction is created and it should be put in the context to replace (or hide) the old closed
+		// one, so that `postReceiveHook` in the following logic can work on the correct transaction.
+		ctx = storage.ContextWithTransaction(ctx, tx)
 		if err != nil {
 			return fmt.Errorf("begin transaction: %w", err)
 		}
