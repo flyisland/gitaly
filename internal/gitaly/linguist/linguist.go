@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"math"
 
 	"github.com/go-enry/go-enry/v2"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
@@ -52,19 +51,14 @@ func Color(language string) string {
 }
 
 // LanguageID returns the unique ID for language from https://github.com/github-linguist/linguist/blob/main/lib/linguist/languages.yml
-func LanguageID(language string) int32 {
+func LanguageID(language string) (int, error) {
 	id, ok := enry.GetLanguageID(language)
 
 	if !ok {
-		return -1
+		return -1, fmt.Errorf("linguist language_id not found: %s", language)
 	}
 
-	// LanguageIDs can be large but still below Int32 threshold
-	if id > math.MaxInt32 {
-		return -1
-	}
-
-	return int32(id)
+	return id, nil
 }
 
 // Stats returns the repository's language statistics.
