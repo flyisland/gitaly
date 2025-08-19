@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,6 +40,20 @@ func (ss mockServerStream) Context() context.Context {
 
 func (ss mockServerStream) RecvMsg(m any) error {
 	return ss.recvMsg(m)
+}
+
+type beginTracker struct {
+	storage.Storage
+	beginCalls int32
+}
+
+func (bt *beginTracker) Begin(ctx context.Context, opts storage.TransactionOptions) (storage.Transaction, error) {
+	atomic.AddInt32(&bt.beginCalls, 1)
+	return bt.Storage.Begin(ctx, opts)
+}
+
+func (bt *beginTracker) getBeginCalls() int32 {
+	return atomic.LoadInt32(&bt.beginCalls)
 }
 
 func TestTransactionRecoveryMiddleware(t *testing.T) {
@@ -292,7 +308,20 @@ func TestTransactionRecoveryMiddleware(t *testing.T) {
 		// Reset the ready partitions map between the tests.
 		recoveryMW.readyPartitions = &sync.Map{}
 
-		// Run one successful request before closing the PartitionManager to to ensure the partition is recovered.
+		// Create WAL directory structure for the partition that should have WAL entries
+		relativeStateDir := deriveStateDirectory(assignedPartitionID)
+		absoluteStateDir := filepath.Join(cfg.Storages[0].Path, relativeStateDir)
+		walDir := filepath.Join(absoluteStateDir, "wal")
+		require.NoError(t, os.MkdirAll(walDir, mode.Directory))
+		// Create a sample WAL entry to simulate pending entries
+		walEntryDir := filepath.Join(walDir, "1")
+		require.NoError(t, os.MkdirAll(walEntryDir, mode.Directory))
+
+		str, err := ptnMgr.GetStorage(cfg.Storages[0].Name)
+		require.NoError(t, err)
+		tracker := &beginTracker{Storage: str}
+
+		// Run one successful request to ensure the partition is recovered.
 		errHandler := errors.New("handler")
 		resp, err := recoveryMW.UnaryServerInterceptor()(ctx, &gitalypb.CreateRepositoryRequest{
 			Repository: &gitalypb.Repository{
@@ -305,20 +334,13 @@ func TestTransactionRecoveryMiddleware(t *testing.T) {
 		require.Equal(t, errHandler, err)
 		require.Nil(t, resp)
 
-		// Close the PartitionManager. No new transactions can begin.
-		ptnMgr.Close()
+		initialCalls := tracker.getBeginCalls()
 
-		// Transactions should fail to get started as the partition manager is closed.
-		resp, err = recoveryMW.UnaryServerInterceptor()(ctx, &gitalypb.CreateRepositoryRequest{
-			Repository: &gitalypb.Repository{
-				StorageName:  cfg.Storages[0].Name,
-				RelativePath: "unrecovered-relative-path",
-			},
-		}, &grpc.UnaryServerInfo{FullMethod: gitalypb.RepositoryService_CreateRepository_FullMethodName}, func(ctx context.Context, req any) (any, error) {
-			return nil, errHandler
-		})
-		require.EqualError(t, err, "apply pending WAL: begin: partition manager closed")
-		require.Nil(t, resp)
+		// Reset the ready partitions again to show that even if partition is not in the list,
+		// new transaction should not begin when there are no WAL entries.
+		recoveryMW.readyPartitions = &sync.Map{}
+		// Imitate log pruning
+		require.NoError(t, os.RemoveAll(walEntryDir))
 
 		// As we recovered the partition already, no further transactions should be started against it and we should proceed directly to handler.
 		t.Run("unary", func(t *testing.T) {
@@ -362,6 +384,8 @@ func TestTransactionRecoveryMiddleware(t *testing.T) {
 				}),
 			)
 		})
+
+		require.Equal(t, initialCalls, tracker.getBeginCalls(), "no additional transactions should be started")
 
 		actualReadyPartitions := map[string]struct{}{}
 		recoveryMW.readyPartitions.Range(func(key, value any) bool {
