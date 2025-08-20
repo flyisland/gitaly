@@ -67,6 +67,9 @@ func (l *configLocator) ValidateRepository(ctx context.Context, repo storage.Rep
 	}
 
 	storagePath, err := l.GetStorageByName(ctx, repo.GetStorageName())
+	if cfg.UseRootStorage {
+		storagePath, err = l.GetRootStoragePathByName(repo.GetStorageName())
+	}
 	if err != nil {
 		return err
 	}
@@ -134,12 +137,19 @@ func (l *configLocator) GetRepoPath(ctx context.Context, repo storage.Repository
 			storage.WithSkipRepositoryExistenceCheck(),
 		}
 	}
+	if cfg.UseRootStorage {
+		validationOptions = append(validationOptions, storage.WithValidateUsingRootStorage())
+	}
 
 	if err := l.ValidateRepository(ctx, repo, validationOptions...); err != nil {
 		return "", err
 	}
 
 	storagePath, err := l.GetStorageByName(ctx, repo.GetStorageName())
+	if cfg.UseRootStorage {
+		storagePath, err = l.GetRootStoragePathByName(repo.GetStorageName())
+	}
+
 	if err != nil {
 		return "", err
 	}
@@ -151,6 +161,21 @@ func (l *configLocator) GetRepoPath(ctx context.Context, repo storage.Repository
 // GetStorageByName will return the path for the storage, which is fetched by
 // its key. An error is return if it cannot be found.
 func (l *configLocator) GetStorageByName(ctx context.Context, storageName string) (string, error) {
+	if storageName == "" {
+		return "", structerr.NewInvalidArgument("%w", storage.ErrStorageNotSet)
+	}
+
+	storagePath, ok := l.conf.StoragePath(storageName)
+	if !ok {
+		return "", storage.NewStorageNotFoundError(storageName)
+	}
+
+	return storagePath, nil
+}
+
+// GetRootStoragePathByName will return the path for the storage, which is fetched by
+// its key. An error is return if it cannot be found.
+func (l *configLocator) GetRootStoragePathByName(storageName string) (string, error) {
 	if storageName == "" {
 		return "", structerr.NewInvalidArgument("%w", storage.ErrStorageNotSet)
 	}
