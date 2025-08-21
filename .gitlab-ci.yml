@@ -7,7 +7,7 @@ stages:
 
 default:
   # This image is generated here: https://gitlab.com/gitlab-org/gitlab-build-images/-/blob/master/.gitlab/ci/gitaly.images.yml
-  image: registry.gitlab.com/gitlab-org/gitlab-build-images/debian-${DEBIAN_VERSION}-golang-${GO_VERSION}-rust-${RUST_VERSION}:git-2.49
+  image: registry.gitlab.com/gitlab-org/gitlab-build-images/debian-${DEBIAN_VERSION}-golang-${GO_VERSION}-rust-${RUST_VERSION}:git-${CI_GIT_VERSION}
   tags:
     - saas-linux-large-amd64
   interruptible: true
@@ -34,6 +34,7 @@ variables:
   DEBIAN_VERSION: !reference [.versions, debian]
   UBI_VERSION: !reference [.versions, ubi]
   CACHE_PREFIX: "debian-${DEBIAN_VERSION}"
+  CI_GIT_VERSION: "2.49"
   # We use Gitaly's Git version by default.
   GIT_VERSION: !reference [.versions, git_default]
   GO_VERSION: !reference [.versions, go_default]
@@ -346,7 +347,8 @@ test:sha256:
 
 test:fips:
   <<: *test_definition
-  image: registry.gitlab.com/gitlab-org/gitlab-build-images/ubi-${UBI_VERSION}-golang-${GO_VERSION}-rust-${RUST_VERSION}:git-2.45
+  # This image is generated here: https://gitlab.com/gitlab-org/gitlab-build-images/-/blob/master/.gitlab/ci/gitaly.images.yml
+  image: registry.gitlab.com/gitlab-org/gitlab-build-images/ubi-${UBI_VERSION}-golang-${GO_VERSION}-rust-${RUST_VERSION}:git-${CI_GIT_VERSION}
   tags:
     - fips
   cache:
