@@ -154,7 +154,9 @@ GIT_EXECUTABLES += git-http-backend
 GIT_VERSION ?=
 #
 # GIT_VERSION_MASTER is a commit hash from Git’s master branch, typically between 7–14 days old.
-# Do not modify the format, it's automatically updated by renovate-gitlab-bot.
+# Do not modify the format, it's automatically updated by renovate-gitlab-bot. The timestamp
+# is used for version comparison by renovate.
+# renovate: 1754054220
 GIT_VERSION_MASTER ?= 23466173824c0a0f835c0d790c2f38156ae6284a
 GIT_VERSION_PREV ?= 41d0310a83aba75a19585d8fbbf021938d8d2ace
 #
