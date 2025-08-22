@@ -64,29 +64,7 @@
   set_fact:
     ruby_version: "{{ ruby_version['stdout'] }}"
 
-- name: Install ghz
-  unarchive:
-    src: "https://github.com/bojand/ghz/releases/download/{{ ghz_version }}/ghz-linux-x86_64.tar.gz"
-    dest: /usr/local/bin
-    include:
-      - ghz
-    remote_src: true
-
-- name: Copy query files
-  copy:
-    src: queries
-    dest: /opt/ghz
-    owner: git
-    group: git
-    mode: '0755'
-
-- name: Copy benchmark-gitaly Go program
-  copy:
-    src: benchmark-gitaly
-    dest: /opt/
-    owner: git
-    group: git
-    mode: "0755"
+- include_tasks: setup-k6.yml
 
 - name: Generate SSH key
   shell: ssh-keygen -q -t ed25519 -f /root/.ssh/id_ed25519 -N ""
