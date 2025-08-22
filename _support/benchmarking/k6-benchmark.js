@@ -1,1 +1,46 @@
-export default function() {}
+import { Client, grpc } from 'k6/net/grpc';
+import encoding from 'k6/encoding';
+import { check } from 'k6';
+
+export const options = {
+    scenarios: {
+        findCommit: {
+            executor: 'constant-arrival-rate',
+            duration: '30s',
+            timeUnit: '1s',
+            rate: 100,
+            gracefulStop: '0s',
+            preAllocatedVUs: 10,
+            exec: "findCommit",
+        }
+    },
+    setupTimeout: '5m'
+}
+
+// Consume the environment variables we set in the Ansible task.
+const gitalyAddress = __ENV.GITALY_ADDRESS;
+const gitalyProtoDir = __ENV.GITALY_PROTO_DIR;
+const runName = __ENV.RUN_NAME;
+
+const client = new Client();
+// k6 provides no easy way to list directory contents.
+client.load([gitalyProtoDir], 'commit.proto');
+
+export function findCommit() {
+    client.connect(gitalyAddress, {
+        plaintext: true,
+    });
+
+    const data = {
+        "repository": {
+            "storageName": "default",
+            "relativePath": "git.git",
+            "gitAlternateObjectDirectories": [],
+            "glRepository": "git",
+            "glProjectPath": "gitlab-org/git"
+        },
+        "revision": encoding.b64encode("master")
+    }
+    const response = client.invoke('gitaly.CommitService/FindCommit', data);
+}
+
