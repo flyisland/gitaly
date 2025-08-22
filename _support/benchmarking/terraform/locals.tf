@@ -1,3 +1,3 @@
 locals {
-  config = try(yamldecode(file("../${path.root}/config-infrastructure.yml")), yamldecode(file("../${path.root}/config-infrastructure.yml.example")))
+  config = try(yamldecode(file("../${path.root}/config.yml")), yamldecode(file("../${path.root}/config.yml.example")))
 }

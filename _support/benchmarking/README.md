@@ -4,8 +4,6 @@
 
 An Ansible script for running RPC-level benchmarks against Gitaly.
 
-**Note**: You must be a member of the `gitaly-benchmark-0150d6cf` GCP group.
-
 ## Steps for use
 
 ### 1. Setup your environment
@@ -15,8 +13,8 @@ An Ansible script for running RPC-level benchmarks against Gitaly.
 1. Create a new Python virtualenv: `python3 -m venv env`
 1. Activate the virtualenv: `source env/bin/activate`
 1. Install Ansible: `python3 -m pip install -r requirements.txt`
-1. **Optional**: Copy `config-infrastructure.yml.example` to `config-infrastructure.yml` to customize the machine type uses for benchmarking
-1. **Optional**: Copy `config-workload.yml.example` to `config-workload.yml` to customize the benchmark workloads that will be executed
+1. Copy `config.yml.example` to `config.yml` to customize the machine types and repositories used for benchmarking. If
+   you don't have access to the default GCP project, you can point the configuration to your own.
 
 ### 2. Create instance
 
@@ -50,7 +48,7 @@ test repositories will be mounted to `/mnt/git-repositories` on the Gitaly node.
 ./run-benchmarks
 ```
 
-Run the benchmarks specified in `group_vars/all.yml`. By default Gitaly is
+Run the benchmarks specified in `k6-benchmark.js`. By default Gitaly is
 profiled with `perf` and `libbpf-tools` for flamegraphs and other metrics, which
 may add ~10% overhead. Set the `profile` variable to `false` to disable profiling:
 
