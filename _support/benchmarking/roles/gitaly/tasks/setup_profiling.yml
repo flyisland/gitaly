@@ -7,58 +7,17 @@
       - "linux-headers-{{ ansible_kernel }}"
     state: present
 
-- name: Install bcc dependencies
-  apt:
-    name:
-      - bison
-      - build-essential
-      - cmake
-      - clang
-      - flex
-      - git
-      - libedit-dev
-      - libllvm14
-      - llvm-14-dev
-      - libclang-14-dev
-      - python3
-      - zlib1g-dev
-      - libelf-dev
-      - libfl-dev
-      - python3-distutils
-    state: present
+- name: Install bpftrace
+  ansible.builtin.get_url:
+    url: https://github.com/bpftrace/bpftrace/releases/download/{{ bpftrace_version }}/bpftrace
+    dest: /usr/local/bin/bpftrace
+    mode: 0755
 
-- name: Clone bcc
-  git:
-    repo: https://github.com/iovisor/bcc.git
-    dest: /src/bcc
-    version: "{{ bcc_revision }}"
-  become_user: git
-
-# Required to build libbpf-tools
-- name: Symlink /usr/include/asm-generic to asm
+- name: Create /src directory
   file:
-    src: /usr/include/asm-generic
-    dest: /usr/include/asm
-    state: link
-
-# Required to build libbpf-tools
-- name: Symlink /usr/bin/llvm-strip-14 to llvm-strip
-  file:
-    src: /usr/bin/llvm-strip-14
-    dest: /usr/bin/llvm-strip
-    state: link
-
-- name: Make libbpf-tools
-  make:
-    jobs: "{{ ansible_processor_nproc }}"
-    chdir: /src/bcc/libbpf-tools
-  become_user: git
-
-- name: Install libbpf-tools
-  make:
-    target: install
-    jobs: "{{ ansible_processor_nproc }}"
-    chdir: /src/bcc/libbpf-tools
+    path: /src
+    state: directory
+    mode: 0755
 
 - name: Clone Flamegraph
   git:
