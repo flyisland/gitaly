@@ -25,7 +25,7 @@
 - name: Start Gitaly service
   systemd:
     name: gitaly
-    state: started
+    state: restarted
   notify: stop gitaly
 
 - name: Pause for Gitaly to start up
