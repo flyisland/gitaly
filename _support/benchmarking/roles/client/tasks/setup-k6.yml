@@ -1,0 +1,23 @@
+---
+- name: Install xk6
+  shell: go install go.k6.io/xk6/cmd/xk6@{{ xk6_version }}
+  become_user: gitaly_bench
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin"
+    GOPATH: /home/gitaly_bench/go
+
+- name: Build custom k6 binary with xk6-exec extension
+  shell: xk6 build --with github.com/grafana/xk6-exec@latest
+  become_user: gitaly_bench
+  args:
+    chdir: /home/gitaly_bench
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin:/home/gitaly_bench/go/bin"
+    GOPATH: /home/gitaly_bench/go
+
+- name: Install k6
+  copy:
+    src: /home/gitaly_bench/k6
+    dest: /usr/local/bin/k6
+    mode: "0755"
+    remote_src: yes

@@ -1,10 +1,11 @@
 ---
 project: "gitaly-benchmark-0150d6cf"
-gitaly_machine_type: "t2d-standard-4"
-client_machine_type: "n1-standard-1"
+gitaly_machine_type: "n2d-standard-16"
+client_machine_type: "n2d-standard-4"
 os_image: "ubuntu-os-cloud/ubuntu-2204-lts"
 repository_disk_type: "pd-balanced"
-boot_disk_size: 20
+boot_disk_size: 40
+repositories_disk_size: 100
 benchmark_region: "us-central1"
 benchmark_zone: "us-central1-a"
 

@@ -17,13 +17,13 @@ provider "google" {
 resource "google_compute_disk" "prepare_repos" {
   name = format("%s-prepare-repos-disk", var.gitaly_benchmarking_instance_name)
   type = "pd-standard"
-  size = 100
+  size = local.config.repositories_disk_size
 }
 
 # Temporary VM which clones and prepares the `git-repositories-<hash>` disk.
 resource "google_compute_instance" "prepare_repos" {
   name         = format("%s-prepare-repos-vm", var.gitaly_benchmarking_instance_name)
-  machine_type = "n2d-standard-2"
+  machine_type = "n2d-standard-8"
   zone         = local.config.benchmark_zone
 
   boot_disk {

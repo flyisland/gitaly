@@ -29,26 +29,7 @@ profile() {
 	perf record --freq=99 --call-graph=dwarf --all-cpus \
 		--output="${all_perf_data}" -- sleep "${seconds}" &
 
-	# Capture arguments of all processes forked by Gitaly.
-	timeout "${seconds}" execsnoop \
-		--uid=1999 --quote > "${out_dir}/gitaly-execs.txt" &
-
-	# Histogram of duration programs were scheduled by the kernel.
-	cpudist "${seconds}" 1 > "${out_dir}/cpu-dist-on.txt" &
-
-	# Histogram of duration programs were slept by the kernel.
-	cpudist --offcpu "${seconds}" 1 > "${out_dir}/cpu-dist-off.txt" &
-
-	# Histogram of latency to block I/O, separated by disk.
-	# `git-repositories` will be mounted as `/dev/sdb`.
-	biolatency --disk "${seconds}" 1 > "${out_dir}/biolatency.txt" &
-
-	# Details of processes performing the most block I/O.
-	biotop --noclear --rows 100 "${seconds}" 1 > "${out_dir}/biotop.txt" &
-
-	# Capture kernel page cache hit rate.
-	cachestat "${seconds}" 1 > "${out_dir}/page-cachestat.txt" &
-
+	# TODO add bpftrace scripts
 	wait
 }
 

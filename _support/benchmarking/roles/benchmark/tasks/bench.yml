@@ -25,17 +25,26 @@
 - name: Start Gitaly service
   systemd:
     name: gitaly
-    state: started
+    state: restarted
   notify: stop gitaly
 
 - name: Pause for Gitaly to start up
   pause:
     seconds: 5
 
+- name: Create benchmark-gitaly directory
+  file:
+    path: /opt/benchmark-gitaly
+    state: directory
+    mode: '0700'
+    owner: git
+    group: git
+  delegate_to: "{{ groups['client'][0] }}"
+
 - name: Copy workload configuration to client node
   copy:
-    src: "{{ playbook_dir }}/config-workload.yml"
-    dest: /opt/benchmark-gitaly/config-workload.yml
+    src: "{{ playbook_dir }}/k6-benchmark.js"
+    dest: /opt/benchmark-gitaly/k6-benchmark.js
     mode: "0644"
     owner: git
     group: git
@@ -44,16 +53,24 @@
 # We run this task as async and poll 0 to make it non-blocking.
 # It will be allowed to run up to `workload_wait_duration` before
 # being treated as failed.
-- name: Run Go workload generator
+- name: Run k6
   command:
     argv:
-      - /usr/local/go/bin/go
+      - k6
       - run
-      - main.go
-      - "{{ hostvars[groups['gitaly'][0]]['internal'] }}"
-      - "{{ run_name }}"
-      - config-workload.yml
+      - --verbose
+      - k6-benchmark.js
+      - --summary-mode
+      - full
+      - --summary-export
+      - /tmp/{{ run_name }}/k6-summary.json
+      - --console-output
+      - /tmp/{{ run_name }}/k6-console-logs.txt
     chdir: /opt/benchmark-gitaly
+  environment:
+    GITALY_ADDRESS: "{{ hostvars[groups['gitaly'][0]]['internal'] }}:8075"
+    GITALY_PROTO_DIR: "/src/gitaly/proto"
+    RUN_NAME: "{{ run_name }}"
   async: "{{ workload_wait_duration }}"
   poll: 0
   register: workload_wait
