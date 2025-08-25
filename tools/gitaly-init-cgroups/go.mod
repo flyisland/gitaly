@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/containerd/cgroups/v3 v3.0.5
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 )
 
 require (
