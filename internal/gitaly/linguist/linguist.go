@@ -50,6 +50,17 @@ func Color(language string) string {
 	return fmt.Sprintf("#%x", colorSha[0:3])
 }
 
+// LanguageID returns the unique ID for language from https://github.com/github-linguist/linguist/blob/main/lib/linguist/languages.yml
+func LanguageID(language string) (int, error) {
+	id, ok := enry.GetLanguageID(language)
+
+	if !ok {
+		return -1, fmt.Errorf("linguist language_id not found: %s", language)
+	}
+
+	return id, nil
+}
+
 // Stats returns the repository's language statistics.
 func (inst *Instance) Stats(ctx context.Context, commitID git.ObjectID) (ByteCountPerLanguage, error) {
 	stats, err := initLanguageStats(ctx, inst.repo)

@@ -739,6 +739,8 @@ message CommitLanguagesResponse {
     reserved "file_count";
     // bytes is the total amount of bytes written in this language
     uint64 bytes = 5;
+    // language_id is a unique ID of the language from https://github.com/github-linguist/linguist/blob/main/lib/linguist/languages.yml
+    int64 language_id = 6;
   }
 
   // languages is a set of all the detected languages and their statistics.

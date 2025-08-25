@@ -93,7 +93,7 @@ func TestCommitLanguages(t *testing.T) {
 					},
 					expectedResponse: &gitalypb.CommitLanguagesResponse{
 						Languages: []*gitalypb.CommitLanguagesResponse_Language{
-							{Name: "C", Color: "#555555", Share: 100, Bytes: uint64(len(cContent))},
+							{Name: "C", Color: "#555555", Share: 100, Bytes: uint64(len(cContent)), LanguageId: 41},
 						},
 					},
 				}
@@ -120,7 +120,7 @@ func TestCommitLanguages(t *testing.T) {
 					},
 					expectedResponse: &gitalypb.CommitLanguagesResponse{
 						Languages: []*gitalypb.CommitLanguagesResponse_Language{
-							{Name: "C", Color: "#555555", Share: 100, Bytes: uint64(len(cContent))},
+							{Name: "C", Color: "#555555", Share: 100, Bytes: uint64(len(cContent)), LanguageId: 41},
 						},
 					},
 				}
@@ -144,9 +144,9 @@ func TestCommitLanguages(t *testing.T) {
 					},
 					expectedResponse: &gitalypb.CommitLanguagesResponse{
 						Languages: []*gitalypb.CommitLanguagesResponse_Language{
-							{Name: "Java", Color: "#b07219", Share: 79.67145538330078, Bytes: uint64(len(javaContent))},
-							{Name: "C", Color: "#555555", Share: 16.221765518188477, Bytes: uint64(len(cContent))},
-							{Name: "Ruby", Color: "#701516", Share: 4.106776237487793, Bytes: uint64(len(rubyContent))},
+							{Name: "Java", Color: "#b07219", Share: 79.67145538330078, Bytes: uint64(len(javaContent)), LanguageId: 181},
+							{Name: "C", Color: "#555555", Share: 16.221765518188477, Bytes: uint64(len(cContent)), LanguageId: 41},
+							{Name: "Ruby", Color: "#701516", Share: 4.106776237487793, Bytes: uint64(len(rubyContent)), LanguageId: 326},
 						},
 					},
 				}
