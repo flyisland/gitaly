@@ -8,3 +8,4 @@
 /group_vars/all.yml
 /results/*
 config.yml
+/env/*
