@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
 
 // ReadMonitor monitors an io.Reader, waiting for a specified packet. If the
@@ -28,6 +29,7 @@ import (
 // fetch, for instance, so tighter limits can be placed on it, leading to a
 // better mitigation.
 type ReadMonitor struct {
+	logger     log.Logger
 	pr         *os.File
 	pw         *os.File
 	underlying io.Reader
@@ -42,13 +44,14 @@ type ReadMonitor struct {
 //
 // The returned function will release allocated resources. You must make sure to call this
 // function.
-func NewReadMonitor(ctx context.Context, r io.Reader) (*os.File, *ReadMonitor, func(), error) {
+func NewReadMonitor(ctx context.Context, r io.Reader, logger log.Logger) (*os.File, *ReadMonitor, func(), error) {
 	pr, pw, err := os.Pipe()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	return pr, &ReadMonitor{
+			logger:     logger,
 			pr:         pr,
 			pw:         pw,
 			underlying: r,
@@ -76,6 +79,11 @@ func (m *ReadMonitor) Monitor(ctx context.Context, pkt []byte, timeout helper.Ti
 	}()
 
 	teeReader := io.TeeReader(m.underlying, m.pw)
+	defer func() {
+		// Complete the read loop, then signal completion on pr by closing pw
+		_, _ = io.Copy(io.Discard, teeReader)
+		_ = m.pw.Close()
+	}()
 
 	scanner := NewScanner(teeReader)
 	for scanner.Scan() {
@@ -85,7 +93,8 @@ func (m *ReadMonitor) Monitor(ctx context.Context, pkt []byte, timeout helper.Ti
 		}
 	}
 
-	// Complete the read loop, then signal completion on pr by closing pw
-	_, _ = io.Copy(io.Discard, teeReader)
-	_ = m.pw.Close()
+	if err := scanner.Err(); err != nil && ctx.Err() != context.Canceled {
+		m.logger.WithError(err).ErrorContext(ctx, "failed scanning stream for specified packet")
+		stopOnce.Do(timeout.Stop)
+	}
 }
