@@ -84,7 +84,7 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 	limits.SafeMaxLines = int(in.GetSafeMaxLines())
 	limits.SafeMaxBytes = int(in.GetSafeMaxBytes())
 
-	return s.eachDiff(ctx, repo, cmd, limits, func(diff *diff.Diff) error {
+	return s.eachDiff(ctx, repo, objectHash, cmd, limits, func(diff *diff.Diff) error {
 		response := &gitalypb.CommitDiffResponse{
 			FromPath:       diff.FromPath,
 			ToPath:         diff.ToPath,
