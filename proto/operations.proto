@@ -1146,3 +1146,15 @@ message UserUpdateSubmoduleResponse {
   // commit_error contains an error message if committing the update fails.
   string commit_error = 4;
 }
+
+// UserUpdateSubmoduleError is a structured error for the UserUpdateSubmodule RPC.
+message UserUpdateSubmoduleError {
+  oneof error {
+    // custom_hook is set if any custom hook which has running as part of this RPC call has returned
+    // a non-zero exit code.
+    CustomHookError custom_hook = 1;
+    // reference_update is set if the RPC failed because updating the
+    // reference to the new object ID has failed (commiting the update).
+    ReferenceUpdateError reference_update = 2;
+  }
+}
