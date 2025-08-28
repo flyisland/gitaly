@@ -41,6 +41,11 @@ func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.D
 		return structerr.NewInvalidArgument("blob pairs and raw info both used in request")
 	}
 
+	// See https://gitlab.com/gitlab-org/gitaly/-/issues/6885
+	if request.GetWhitespaceChanges() != gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_UNSPECIFIED && len(request.GetBlobPairs()) > 0 {
+		return structerr.NewInvalidArgument("whitespace changes cannot be ignored when blob pairs are provided")
+	}
+
 	var cmdOpts []gitcmd.Option
 
 	switch request.GetWhitespaceChanges() {
