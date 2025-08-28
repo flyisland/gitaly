@@ -1,4 +1,4 @@
-variable "gitaly_benchmarking_instance_name" {}
+variable "gitaly_benchmarking_deployment_name" {}
 variable "ssh_pubkey" {}
 variable "startup_script" {
   default = <<EOF
@@ -15,14 +15,14 @@ provider "google" {
 
 # Temporary disk from which we create the `git-repositories-<hash>` disk image from.
 resource "google_compute_disk" "prepare_repos" {
-  name = format("%s-prepare-repos-disk", var.gitaly_benchmarking_instance_name)
+  name = format("%s-prepare-repos-disk", var.gitaly_benchmarking_deployment_name)
   type = "pd-standard"
-  size = local.config.repositories_disk_size
+  size = local.config.repository_disk_size
 }
 
 # Temporary VM which clones and prepares the `git-repositories-<hash>` disk.
 resource "google_compute_instance" "prepare_repos" {
-  name         = format("%s-prepare-repos-vm", var.gitaly_benchmarking_instance_name)
+  name         = format("%s-prepare-repos-vm", var.gitaly_benchmarking_deployment_name)
   machine_type = "n2d-standard-8"
   zone         = local.config.benchmark_zone
 
@@ -81,39 +81,46 @@ resource "google_compute_image" "repos" {
 }
 
 resource "google_compute_disk" "repository-disk" {
-  name  = format("%s-repository-disk", var.gitaly_benchmarking_instance_name)
+  for_each = { for idx, instance in local.config.gitaly_instances : instance.name => instance }
+
+  name  = format("%s-repository-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
   type  = local.config.repository_disk_type
   image = google_compute_image.repos.self_link
 }
 
 resource "google_compute_region_disk" "repository-region-disk" {
-  count         = local.config.use_regional_disk ? 1 : 0
-  name          = format("%s-repository-region-disk", var.gitaly_benchmarking_instance_name)
+  for_each = local.config.use_regional_disk ? {} : { for idx, instance in local.config.gitaly_instances : instance.name => instance }
+
+  name          = format("%s-repository-region-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
   type          = local.config.repository_disk_type
-  snapshot      = google_compute_snapshot.repository-disk[0].id
+  snapshot      = google_compute_snapshot.repository-disk[each.key].id
   replica_zones = local.config.regional_disk_replica_zones
 }
 
 resource "google_compute_snapshot" "repository-disk" {
-  count       = local.config.use_regional_disk ? 1 : 0
-  name        = format("%s-repository-snapshot", var.gitaly_benchmarking_instance_name)
-  source_disk = google_compute_disk.repository-disk.name
+  for_each = local.config.use_regional_disk ? {} : { for idx, instance in local.config.gitaly_instances : instance.name => instance }
+
+  name        = format("%s-repository-snapshot-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
+  source_disk = google_compute_disk.repository-disk[each.key].name
   zone        = local.config.benchmark_zone
 }
 
 resource "google_compute_instance" "gitaly" {
-  name         = format("%s-gitaly", var.gitaly_benchmarking_instance_name)
-  machine_type = local.config.gitaly_machine_type
+  for_each = { for idx, instance in local.config.gitaly_instances : instance.name => instance }
+
+  name         = format("%s-gitaly-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
+  machine_type = each.value.machine_type
 
   boot_disk {
     initialize_params {
       image = local.config.os_image
-      size  = local.config.boot_disk_size
+      size  = each.value.boot_disk_size
+      type  = each.value.boot_disk_type
     }
   }
 
   attached_disk {
-    source      = local.config.use_regional_disk ? google_compute_region_disk.repository-region-disk[0].self_link : google_compute_disk.repository-disk.self_link
+    source      = local.config.use_regional_disk ? google_compute_region_disk.repository-region-disk[0].self_link : google_compute_disk.repository-disk[each.key].self_link
     device_name = "repository-disk"
   }
 
@@ -134,13 +141,14 @@ resource "google_compute_instance" "gitaly" {
 }
 
 resource "google_compute_instance" "client" {
-  name         = format("%s-client", var.gitaly_benchmarking_instance_name)
-  machine_type = local.config.client_machine_type
+  name         = format("%s-client", var.gitaly_benchmarking_deployment_name)
+  machine_type = local.config.client.machine_type
 
   boot_disk {
     initialize_params {
       image = local.config.os_image
-      size  = local.config.boot_disk_size
+      size  = local.config.client.boot_disk_size
+      type  = local.config.client.boot_disk_type
     }
   }
 
@@ -157,11 +165,12 @@ resource "google_compute_instance" "client" {
   }
 }
 
-output "gitaly_internal_ip" {
-  value = google_compute_instance.gitaly.network_interface[0].network_ip
+output "gitaly_internal_ips" {
+  value = { for k, v in google_compute_instance.gitaly : k => v.network_interface[0].network_ip }
 }
-output "gitaly_ssh_ip" {
-  value = google_compute_instance.gitaly.network_interface[0].access_config[0].nat_ip
+
+output "gitaly_ssh_ips" {
+  value = { for k, v in google_compute_instance.gitaly : k => v.network_interface[0].access_config[0].nat_ip }
 }
 
 output "client_internal_ip" {

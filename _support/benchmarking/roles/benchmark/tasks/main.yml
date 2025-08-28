@@ -2,16 +2,20 @@
 - name: Set run_name
   set_fact: "run_name=benchmark-{{ gitaly_revision }}-{{ lookup('pipe', 'date +%s') }}"
 
-- include_tasks: bench.yml
+- name: Run benchmarks against each target machine
+  include_tasks: bench.yml
+  loop: "{{ groups['gitaly'] }}"
+  loop_control:
+    loop_var: current_gitaly
 
-- name: Archive results
+- name: Archive results on client
   archive:
     path:
       - "/tmp/{{ run_name }}"
     dest: "/tmp/{{ run_name }}.tar.gz"
-    owner: git
+    owner: gitaly_bench
 
-- name: Fetch results
+- name: Fetch results from client
   fetch:
     src: "/tmp/{{ run_name }}.tar.gz"
     dest: "{{ playbook_dir }}/results/"

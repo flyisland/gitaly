@@ -1,5 +1,7 @@
 [gitaly]
-{{ tfstate.outputs.gitaly_ssh_ip.value }} internal={{ tfstate.outputs.gitaly_internal_ip.value }} ansible_user=gitaly_bench
+{% for name, ssh_ip in tfstate.outputs.gitaly_ssh_ips.value.items() %}
+{{ ssh_ip }} internal={{ tfstate.outputs.gitaly_internal_ips.value[name] }} ansible_user=gitaly_bench gitaly_name={{ name }}
+{% endfor %}
 
 [client]
 {{ tfstate.outputs.client_ssh_ip.value }} internal={{ tfstate.outputs.client_internal_ip.value }} ansible_user=gitaly_bench
