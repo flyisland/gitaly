@@ -191,6 +191,12 @@ message PathError {
     ERROR_TYPE_ABSOLUTE_PATH = 3;
     // ERROR_TYPE_LONG_PATH is the error type when the path is too long.
     ERROR_TYPE_LONG_PATH = 4;
+    // ERROR_TYPE_INVALID_PATH is the error type when the path given is invalid
+    // and its contents can't be checked
+    ERROR_TYPE_INVALID_PATH = 5;
+    // ERROR_TYPE_PATH_EXISTS is the error type when an update to the path
+    // would result to the same value
+    ERROR_TYPE_PATH_EXISTS = 6;
   };
 
   // path is the file or directory path that triggered the error. The path may be

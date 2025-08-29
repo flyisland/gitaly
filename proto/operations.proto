@@ -1156,5 +1156,7 @@ message UserUpdateSubmoduleError {
     // reference_update is set if the RPC failed because updating the
     // reference to the new object ID has failed (commiting the update).
     ReferenceUpdateError reference_update = 2;
+    // path_error is set if there was a failure in reading or updatinggl the submodule path
+    PathError path_error = 3;
   }
 }
