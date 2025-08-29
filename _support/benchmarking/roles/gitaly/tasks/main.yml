@@ -1,4 +1,13 @@
 ---
+- name: Load config
+  include_vars:
+    file: "{{ playbook_dir }}/config.yml"
+    name: config
+
+- name: Get current instance configuration
+  set_fact:
+    target_instance: "{{ config['gitaly_instances'] | selectattr('name', 'equalto', gitaly_name) | first }}"
+
 - name: Show ref and commit being used
   debug:
     msg: "Building Gitaly at {{ gitaly_revision }} on {{ hostvars[groups['client'][0]]['gitaly_commit'] }}"

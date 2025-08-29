@@ -21,6 +21,8 @@ gitaly_instances:
     machine_type: "n2d-standard-16"
     boot_disk_type: "pd-balanced"
     boot_disk_size: 20
+    config:
+      transactions: true
 
 repository_disk_size: 100
 repository_disk_type: "pd-balanced"
