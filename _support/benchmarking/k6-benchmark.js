@@ -1,6 +1,7 @@
 import { Client, grpc } from 'k6/net/grpc';
 import encoding from 'k6/encoding';
 import { check } from 'k6';
+import exec from "k6/x/exec";
 
 // Consume the environment variables we set in the Ansible task.
 const gitalyAddress = __ENV.GITALY_ADDRESS;
@@ -21,6 +22,20 @@ export const options = {
         }
     },
     setupTimeout: '5m'
+}
+
+export function setup() {
+    const setupCompletionSentinel = `/tmp/${runName}-setup-complete`;
+    // Signal to Ansible that setup is complete, in a very hacky way.
+    exec.command("touch", [setupCompletionSentinel])
+
+    return {
+        setupCompletionSentinel
+    }
+}
+
+export function teardown(context) {
+    exec.command("rm", [context.setupCompletionSentinel]);
 }
 
 const client = new Client();

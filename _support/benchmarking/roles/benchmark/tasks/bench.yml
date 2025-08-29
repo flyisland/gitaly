@@ -81,6 +81,14 @@
   poll: 0
   register: workload_wait
 
+# The setup-complete file is created by the k6 setup() function as a hacky way to
+# synchronise this.
+- name: Wait until k6 setup completes
+  ansible.builtin.wait_for:
+    path: "/tmp/{{ run_name }}-setup-complete"
+    sleep: 5
+    timeout: 60
+
 - name: Profile system with perf and libbpf-tools
   command:
     argv:
