@@ -508,4 +508,72 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 			housekeepingManager.getOptimizeRepositoryInvocations(regularRepo.GetRelativePath()),
 			"Second regular mutator should trigger housekeeping after reaching interval")
 	})
+
+	t.Run("when snapshot stats indicate higher directory entry count than the threshold", func(t *testing.T) {
+		repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+		})
+
+		// Setting low threshold to easily pass it
+		housekeepingMiddleware.statThreshold = 1
+
+		initialCount := housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath())
+
+		_, err = gitalypb.NewRepositoryServiceClient(conn).RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
+			Repository: repo,
+		})
+		require.NoError(t, err)
+
+		// Wait for any async housekeeping to complete
+		housekeepingMiddleware.WaitForWorkers()
+
+		newCount := housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath())
+
+		// Verify that housekeeping was triggered
+		require.Equal(t,
+			testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, initialCount+1, initialCount),
+			newCount,
+			"snapshot stats should force immediate housekeeping",
+		)
+
+		// Next request should not trigger housekeeping as it is added to the stats cache
+		_, err = gitalypb.NewRepositoryServiceClient(conn).RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
+			Repository: repo,
+		})
+		require.NoError(t, err)
+		// Wait for any async housekeeping to complete
+		housekeepingMiddleware.WaitForWorkers()
+		// Verify that housekeeping was not triggered
+		require.Equal(t,
+			newCount,
+			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"snapshot stats should force immediate housekeeping",
+		)
+	})
+
+	t.Run("when snapshot stats indicate lower directory entry count than the threshold", func(t *testing.T) {
+		repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+		})
+
+		// Setting high threshold to stay below it
+		housekeepingMiddleware.statThreshold = 1000
+
+		initialCount := housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath())
+
+		_, err = gitalypb.NewRepositoryServiceClient(conn).RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
+			Repository: repo,
+		})
+		require.NoError(t, err)
+
+		// Wait for any async housekeeping to complete
+		housekeepingMiddleware.WaitForWorkers()
+
+		// Verify that housekeeping was not triggered.
+		require.Equal(t,
+			initialCount,
+			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"snapshot stats should not force immediate housekeeping",
+		)
+	})
 }

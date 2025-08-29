@@ -9,6 +9,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/manager"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
@@ -40,6 +41,8 @@ type Middleware struct {
 	registry         *protoregistry.Registry
 	manager          manager.Manager
 	localRepoFactory localrepo.Factory
+	statsCache       *sync.Map
+	statThreshold    int
 }
 
 // forceHousekeepingRPCs are all of the RPCs that we should force housekeeping right after.
@@ -56,6 +59,8 @@ func NewHousekeepingMiddleware(logger log.Logger, registry *protoregistry.Regist
 		localRepoFactory: factory,
 		manager:          manager,
 		repoActivity:     make(map[repoKey]*activity),
+		statsCache:       &sync.Map{},
+		statThreshold:    1500,
 	}
 }
 
@@ -86,7 +91,8 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 
 		key := m.getRepoKey(targetRepo)
 
-		if methodInfo.Operation == protoregistry.OpMaintenance {
+		switch methodInfo.Operation {
+		case protoregistry.OpMaintenance:
 			m.mu.Lock()
 
 			if m.isActive(key) {
@@ -102,9 +108,7 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 			m.markHousekeepingInactive(key)
 
 			return resp, err
-		}
-
-		if methodInfo.Operation == protoregistry.OpMutator {
+		case protoregistry.OpMutator:
 			// Execute the handler first so that housekeeping incorporates the latest writes. We also ensure that
 			// the scheduling logic doesn't run for invalid requests.
 			resp, err := handler(ctx, req)
@@ -115,6 +119,8 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 			_, forceHousekeeping := forceHousekeepingRPCs[methodInfo.FullMethodName()]
 			m.scheduleHousekeeping(ctx, targetRepo, forceHousekeeping)
 			return resp, err
+		case protoregistry.OpAccessor:
+			m.scheduleHousekeepingIfNeeded(ctx, key, targetRepo)
 		}
 
 		return handler(ctx, req)
@@ -148,7 +154,8 @@ func (m *Middleware) StreamServerInterceptor() grpc.StreamServerInterceptor {
 
 		key := m.getRepoKey(targetRepo)
 
-		if methodInfo.Operation == protoregistry.OpMaintenance {
+		switch methodInfo.Operation {
+		case protoregistry.OpMaintenance:
 			m.mu.Lock()
 			if m.isActive(key) {
 				m.mu.Unlock()
@@ -164,9 +171,7 @@ func (m *Middleware) StreamServerInterceptor() grpc.StreamServerInterceptor {
 			m.markHousekeepingInactive(key)
 
 			return err
-		}
-
-		if methodInfo.Operation == protoregistry.OpMutator {
+		case protoregistry.OpMutator:
 			// Execute the handler first so that housekeeping incorporates the latest writes. We also ensure that
 			// the scheduling logic doesn't run for invalid requests.
 			if err := handler(srv, middleware.NewPeekedStream(ss.Context(), req, nil, ss)); err != nil {
@@ -176,6 +181,8 @@ func (m *Middleware) StreamServerInterceptor() grpc.StreamServerInterceptor {
 			_, forceHousekeeping := forceHousekeepingRPCs[methodInfo.FullMethodName()]
 			m.scheduleHousekeeping(ss.Context(), targetRepo, forceHousekeeping)
 			return nil
+		case protoregistry.OpAccessor:
+			m.scheduleHousekeepingIfNeeded(ss.Context(), key, targetRepo)
 		}
 
 		// Ensure that the first message we consumed earlier is relayed to the client.
@@ -242,7 +249,7 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 		return
 	}
 
-	m.logger.InfoContext(ctx, "beginning scheduled housekeeping")
+	m.logger.WithField("forced", force).InfoContext(ctx, "beginning scheduled housekeeping")
 
 	m.markHousekeepingActive(key)
 
@@ -269,6 +276,41 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 			m.logger.WithError(err).ErrorContext(housekeepingCtx, "failed scheduled housekeeping")
 		}
 	}()
+}
+
+// scheduleHousekeepingIfNeeded walks the repository path to gather file and directory counts,
+// and schedules housekeeping if the total count exceeds the configured threshold.
+// Uses a sync.Map cache to track repositories where statistics have been calculated, ensuring
+// the calculation occurs only once per application restart. This targets accessor RPCs for
+// repositories that don't trigger housekeeping through write operations, where a single stats
+// check per restart is sufficient for low-activity repos.
+func (m *Middleware) scheduleHousekeepingIfNeeded(ctx context.Context, key repoKey, targetRepo *gitalypb.Repository) {
+	if _, statsChecked := m.statsCache.Load(key); !statsChecked {
+		localRepo := m.localRepoFactory.Build(targetRepo)
+		repositoryPath, err := localRepo.Path(ctx)
+		if err != nil {
+			m.logger.WithError(err).ErrorContext(ctx, "housekeeping: find repo path")
+			return
+		}
+
+		stats := snapshot.RepositoryStatistics{}
+		if err := snapshot.WalkPathForStats(ctx, repositoryPath, &stats); err != nil {
+			m.logger.WithError(err).ErrorContext(ctx, "calculate repository statistics")
+			return
+		}
+
+		m.logger.WithFields(log.Fields{
+			"repository_stats": map[string]any{
+				"directory_count": stats.DirectoryCount,
+				"file_count":      stats.FileCount,
+			},
+		}).InfoContext(ctx, "collected repository statistics")
+
+		m.statsCache.Store(key, struct{}{})
+		if stats.DirectoryCount+stats.FileCount > m.statThreshold {
+			m.scheduleHousekeeping(ctx, targetRepo, true)
+		}
+	}
 }
 
 func (m *Middleware) getRepoKey(repo *gitalypb.Repository) repoKey {
