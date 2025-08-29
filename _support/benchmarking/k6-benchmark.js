@@ -2,11 +2,17 @@ import { Client, grpc } from 'k6/net/grpc';
 import encoding from 'k6/encoding';
 import { check } from 'k6';
 
+// Consume the environment variables we set in the Ansible task.
+const gitalyAddress = __ENV.GITALY_ADDRESS;
+const gitalyProtoDir = __ENV.GITALY_PROTO_DIR;
+const runName = __ENV.RUN_NAME;
+const workloadDuration = __ENV.WORKLOAD_DURATION;
+
 export const options = {
     scenarios: {
         findCommit: {
             executor: 'constant-arrival-rate',
-            duration: '30s',
+            duration: workloadDuration,
             timeUnit: '1s',
             rate: 100,
             gracefulStop: '0s',
@@ -16,11 +22,6 @@ export const options = {
     },
     setupTimeout: '5m'
 }
-
-// Consume the environment variables we set in the Ansible task.
-const gitalyAddress = __ENV.GITALY_ADDRESS;
-const gitalyProtoDir = __ENV.GITALY_PROTO_DIR;
-const runName = __ENV.RUN_NAME;
 
 const client = new Client();
 // k6 provides no easy way to list directory contents.

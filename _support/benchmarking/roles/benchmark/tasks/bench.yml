@@ -76,6 +76,7 @@
     GITALY_ADDRESS: "{{ target_internal_ip }}:8075"
     GITALY_PROTO_DIR: "/src/gitaly/proto"
     RUN_NAME: "{{ run_name }}"
+    WORKLOAD_DURATION: "{{ workload_duration }}"
   async: "{{ workload_wait_duration }}"
   poll: 0
   register: workload_wait
