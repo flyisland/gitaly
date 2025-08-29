@@ -362,9 +362,12 @@ func (mgr *Manager) key(relativePaths []string) string {
 func (mgr *Manager) CollectDryRunStatistics(ctx context.Context, relativePaths []string) error {
 	defer trace.StartRegion(ctx, "CollectDryRunStatistics").End()
 
-	stats, err := mgr.collectDryRunStatistics(ctx, relativePaths)
-	if err != nil {
-		return fmt.Errorf("collect dry-run statistics: %w", err)
+	stats := RepositoryStatistics{}
+	for _, relativePath := range relativePaths {
+		repositoryPath := filepath.Join(mgr.storageDir, relativePath)
+		if err := WalkPathForStats(ctx, repositoryPath, &stats); err != nil {
+			return fmt.Errorf("walk path for stats: %w", err)
+		}
 	}
 
 	mgr.logDryRunStatistics(ctx, stats)
@@ -374,41 +377,23 @@ func (mgr *Manager) CollectDryRunStatistics(ctx context.Context, relativePaths [
 
 // logDryRunStatistics logs dry-run snapshot statistics with a specific message to distinguish
 // from regular snapshot creation logs.
-func (mgr *Manager) logDryRunStatistics(ctx context.Context, stats dryRunSnapshotStatistics) {
+func (mgr *Manager) logDryRunStatistics(ctx context.Context, stats RepositoryStatistics) {
 	mgr.logger.WithFields(log.Fields{
 		"dryrun_snapshot": map[string]any{
-			"directory_count":               stats.directoryCount,
-			"file_count":                    stats.fileCount,
-			"max_directory_depth":           stats.maxDirectoryDepth,
-			"max_files_in_single_directory": stats.maxFilesInSingleDirectory,
-			"has_keep_files":                stats.hasKeepFiles,
-			"has_logs_directory":            stats.hasLogsDirectory,
+			"directory_count":               stats.DirectoryCount,
+			"file_count":                    stats.FileCount,
+			"max_directory_depth":           stats.MaxDirectoryDepth,
+			"max_files_in_single_directory": stats.MaxFilesInSingleDirectory,
+			"has_keep_files":                stats.HasKeepFiles,
+			"has_logs_directory":            stats.HasLogsDirectory,
 		},
 	}).InfoContext(ctx, "collected dry-run snapshot statistics")
 }
 
-// collectDryRunStatistics performs lightweight filesystem walking to collect
-// snapshot statistics without creating actual snapshots. This is used when
-// transactions are disabled.
-func (mgr *Manager) collectDryRunStatistics(ctx context.Context, relativePaths []string) (dryRunSnapshotStatistics, error) {
-	defer trace.StartRegion(ctx, "collectDryRunStatistics").End()
-
-	stats := dryRunSnapshotStatistics{}
-	snapshotFilter := NewDefaultFilter(ctx)
-
-	for _, relativePath := range relativePaths {
-		if err := mgr.walkPathForStats(mgr.storageDir, relativePath, snapshotFilter, &stats); err != nil {
-			return dryRunSnapshotStatistics{}, fmt.Errorf("walk path for stats: %w", err)
-		}
-	}
-
-	return stats, nil
-}
-
-// walkPathForStats walks a repository path and counts files and directories
+// WalkPathForStats walks a repository path and counts files and directories
 // without creating any snapshots or hard links.
-func (mgr *Manager) walkPathForStats(storageRoot, relativePath string, filter Filter, stats *dryRunSnapshotStatistics) error {
-	repositoryPath := filepath.Join(storageRoot, relativePath)
+func WalkPathForStats(ctx context.Context, repositoryPath string, stats *RepositoryStatistics) error {
+	filter := NewDefaultFilter(ctx)
 
 	// Check if the repository exists
 	if _, err := os.Stat(repositoryPath); err != nil {
@@ -447,31 +432,31 @@ func (mgr *Manager) walkPathForStats(storageRoot, relativePath string, filter Fi
 
 		// Calculate directory depth for maxDirectoryDepth
 		depth := strings.Count(relPath, string(filepath.Separator)) + 1
-		if relPath != "." && depth > stats.maxDirectoryDepth {
-			stats.maxDirectoryDepth = depth
+		if relPath != "." && depth > stats.MaxDirectoryDepth {
+			stats.MaxDirectoryDepth = depth
 		}
 
 		// Check for logs directory
 		if info.IsDir() && relPath == "logs" {
-			stats.hasLogsDirectory = true
+			stats.HasLogsDirectory = true
 		}
 
 		// Count the entries
 		if info.IsDir() {
-			stats.directoryCount++
+			stats.DirectoryCount++
 		} else if info.Mode().IsRegular() {
-			stats.fileCount++
+			stats.FileCount++
 
 			// Check for .keep files in objects/pack/ directory
 			if strings.HasPrefix(relPath, "objects/pack/") && strings.HasSuffix(info.Name(), ".keep") {
-				stats.hasKeepFiles = true
+				stats.HasKeepFiles = true
 			}
 
 			// Track files in the parent directory for maxFilesInSingleDirectory calculation
 			parentDir := filepath.Dir(relPath)
 			filesPerDirectory[parentDir]++
-			if filesPerDirectory[parentDir] > stats.maxFilesInSingleDirectory {
-				stats.maxFilesInSingleDirectory = filesPerDirectory[parentDir]
+			if filesPerDirectory[parentDir] > stats.MaxFilesInSingleDirectory {
+				stats.MaxFilesInSingleDirectory = filesPerDirectory[parentDir]
 			}
 		} else {
 			return fmt.Errorf("unsupported file mode: %q", info.Mode())
