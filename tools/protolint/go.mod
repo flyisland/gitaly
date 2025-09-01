@@ -2,7 +2,7 @@ module gitlab.com/gitlab-org/gitaly/tools/protolint
 
 go 1.23.0
 
-require github.com/yoheimuta/protolint v0.54.0
+require github.com/yoheimuta/protolint v0.56.4
 
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
@@ -18,12 +18,12 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/oklog/run v1.1.0 // indirect
-	github.com/yoheimuta/go-protoparser/v4 v4.14.1 // indirect
-	golang.org/x/net v0.35.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	github.com/yoheimuta/go-protoparser/v4 v4.14.2 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
-	google.golang.org/grpc v1.72.0 // indirect
+	google.golang.org/grpc v1.72.1 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
