@@ -1,11 +1,22 @@
 package commit
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/node"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
@@ -163,4 +174,151 @@ func TestCommitLanguages(t *testing.T) {
 			testhelper.ProtoEqual(t, setup.expectedResponse, response)
 		})
 	}
+}
+
+func TestConcurrentCommitLanguages(t *testing.T) {
+	t.Parallel()
+
+	if testhelper.IsPraefectEnabled() {
+		t.Skip("usage of gittest.WriteCommit causes a race condition.")
+	}
+
+	ctx := testhelper.Context(t)
+	logger := testhelper.NewLogger(t)
+
+	t.Run("concurrent commit languages with transactions", func(t *testing.T) {
+		cfg := testcfg.Build(t)
+		cfg.SocketPath = startTestServices(t, cfg)
+		client := newCommitServiceClient(t, cfg.SocketPath)
+
+		// Create a repository with some content for language detection
+		repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+		})
+		repo := localrepo.NewTestRepo(t, cfg, repoProto)
+
+		_, dbMgr := dbSetup(t, ctx, cfg, testhelper.TempDir(t), cfg.Storages[0].Name, logger)
+
+		catfileCache := catfile.NewCache(cfg)
+		t.Cleanup(catfileCache.Stop)
+
+		cmdFactory := gittest.NewCommandFactory(t, cfg)
+		localRepoFactory := localrepo.NewFactory(logger, config.NewLocator(cfg), cmdFactory, catfileCache)
+
+		m := partition.NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))
+		raftNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+		require.NoError(t, err)
+
+		raftFactory := raftmgr.DefaultFactoryWithNode(cfg.Raft, raftNode)
+
+		partitionFactoryOptions := []partition.FactoryOption{
+			partition.WithCmdFactory(cmdFactory),
+			partition.WithRepoFactory(localRepoFactory),
+			partition.WithMetrics(m),
+			partition.WithRaftConfig(cfg.Raft),
+			partition.WithRaftFactory(raftFactory),
+		}
+		partitionFactory := partition.NewFactory(partitionFactoryOptions...)
+
+		ptnMgr, err := node.NewManager(cfg.Storages, storagemgr.NewFactory(
+			logger, dbMgr, partitionFactory, config.DefaultMaxInactivePartitions, storagemgr.NewMetrics(cfg.Prometheus),
+		))
+		require.NoError(t, err)
+		defer ptnMgr.Close()
+
+		commit := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch), gittest.WithTreeEntries(
+			gittest.TreeEntry{Path: "file.rb", Mode: "100644", Content: rubyContent},
+			gittest.TreeEntry{Path: "file.java", Mode: "100644", Content: javaContent},
+			gittest.TreeEntry{Path: "file.c", Mode: "100644", Content: cContent},
+		))
+
+		request := &gitalypb.CommitLanguagesRequest{
+			Repository: repoProto,
+			Revision:   []byte(commit),
+		}
+
+		expectedResponse := &gitalypb.CommitLanguagesResponse{
+			Languages: []*gitalypb.CommitLanguagesResponse_Language{
+				{Name: "Java", Color: "#b07219", Share: 79.67145538330078, Bytes: uint64(len(javaContent)), LanguageId: 181},
+				{Name: "C", Color: "#555555", Share: 16.221765518188477, Bytes: uint64(len(cContent)), LanguageId: 41},
+				{Name: "Ruby", Color: "#701516", Share: 4.106776237487793, Bytes: uint64(len(rubyContent)), LanguageId: 326},
+			},
+		}
+		storageHandle, err := ptnMgr.GetStorage(cfg.Storages[0].Name)
+		require.NoError(t, err)
+		// Test concurrent operations on the same commit with transactions
+		const numGoroutines = 3
+		var wg sync.WaitGroup
+		results := make(chan *gitalypb.CommitLanguagesResponse, numGoroutines)
+		errors := make(chan error, numGoroutines)
+
+		// Launch concurrent operations (mix of read-only and read-write transactions)
+		for range numGoroutines {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				tx, err := storageHandle.Begin(ctx, storage.TransactionOptions{
+					RelativePath: repo.GetRelativePath(),
+					ReadOnly:     false,
+				})
+				if err != nil {
+					errors <- err
+					return
+				}
+				ctxWithTx := storage.ContextWithTransaction(ctx, tx)
+				var committed bool
+				defer func() {
+					if !committed {
+						require.NoError(t, tx.Rollback(ctxWithTx))
+					}
+				}()
+
+				response, err := client.CommitLanguages(ctxWithTx, request)
+				if err != nil {
+					errors <- err
+					return
+				}
+
+				commitLSN, err := tx.Commit(ctxWithTx)
+				if err != nil {
+					errors <- err
+					return
+				}
+				committed = true
+				results <- response
+				storage.LogTransactionCommit(ctxWithTx, logger, commitLSN, fmt.Sprintf("CommitLanguages for commitID: %s", commit.String()))
+			}()
+		}
+
+		wg.Wait()
+		close(results)
+		close(errors)
+
+		// Count errors and successes
+		var errorCount int
+		var successCount int
+
+		// Count errors (expect transaction conflicts)
+		for err := range errors {
+			errorCount++
+			require.Error(t, err)
+		}
+
+		// Count successful responses
+		for response := range results {
+			successCount++
+			testhelper.ProtoEqual(t, expectedResponse, response)
+		}
+
+		// Assert that for transactions it is expected to cancel all but the first one
+		if testhelper.IsWALEnabled() {
+			require.Equal(t, 1, successCount, "expected exactly one successful operation total")
+			require.Equal(t, numGoroutines-1, errorCount, "expected all but one operation to fail")
+
+		} else {
+			require.Equal(t, numGoroutines, successCount, "expected exactly 3 successful operation total")
+			require.Equal(t, 0, errorCount, "expected no operations to fail")
+		}
+	})
 }

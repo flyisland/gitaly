@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,11 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/hook"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/repository"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
+	logrus "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
@@ -116,4 +121,23 @@ func writeCommit(
 	require.NoError(tb, err)
 
 	return commitID, commitProto
+}
+
+func dbSetup(t *testing.T, ctx context.Context, cfg config.Cfg, dbPath string, storageName string, logger logrus.Logger) (keyvalue.Store, *databasemgr.DBManager) {
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(log logrus.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(log, filepath.Join(dbPath, path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	db, err := dbMgr.GetDB(storageName)
+	require.NoError(t, err)
+
+	return db, dbMgr
 }
