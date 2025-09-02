@@ -218,8 +218,9 @@ size 12345`
 			setup: func(t *testing.T) setupData {
 				repo, _, _ := setupRepoWithLFS(t, ctx, cfg)
 
-				quarantineDir, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo), testhelper.NewLogger(t), config.NewLocator(cfg))
+				quarantineDir, cleanup, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo), testhelper.NewLogger(t), config.NewLocator(cfg))
 				require.NoError(t, err)
+				t.Cleanup(cleanup)
 
 				repo.GitObjectDirectory = quarantineDir.QuarantinedRepo().GetGitObjectDirectory()
 
@@ -241,8 +242,9 @@ size 12345`
 				// this case, LFS pointer checks may want to inspect all newly
 				// pushed objects, denoted by a repository proto message which only
 				// has its object directory set to the quarantine directory.
-				quarantineDir, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo), testhelper.NewLogger(t), config.NewLocator(cfg))
+				quarantineDir, cleanup, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo), testhelper.NewLogger(t), config.NewLocator(cfg))
 				require.NoError(t, err)
+				t.Cleanup(cleanup)
 
 				// Note that we need to continue using the non-rewritten repository
 				// here as `localrepo.NewTestRepo()` already will try to rewrite it

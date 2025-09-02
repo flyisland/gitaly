@@ -433,8 +433,9 @@ func TestCache_ObjectReader_quarantine(t *testing.T) {
 		})
 		gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
 
-		quarantineDir, err := quarantine.New(testhelper.Context(t), repo, logger, locator)
+		quarantineDir, cleanup, err := quarantine.New(testhelper.Context(t), repo, logger, locator)
 		require.NoError(t, err)
+		t.Cleanup(cleanup)
 
 		quarantineRepo := quarantineDir.QuarantinedRepo()
 

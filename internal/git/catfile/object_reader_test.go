@@ -720,8 +720,9 @@ func TestObjectReader_logging(t *testing.T) {
 			SkipCreationViaService: true,
 		})
 
-		quarantineDir, err := quarantine.New(ctx, repoProto, logger, locator)
+		quarantineDir, cleanup, err := quarantine.New(ctx, repoProto, logger, locator)
 		require.NoError(t, err)
+		t.Cleanup(cleanup)
 
 		reader, err := newObjectReader(ctx, newRepoExecutor(t, cfg, quarantineDir.QuarantinedRepo()), nil)
 		require.NoError(t, err)

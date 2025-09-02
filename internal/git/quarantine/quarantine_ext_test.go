@@ -28,8 +28,9 @@ func TestQuarantine_localrepo(t *testing.T) {
 
 	locator := config.NewLocator(cfg)
 
-	quarantine, err := quarantine.New(ctx, repoProto, testhelper.NewLogger(t), locator)
+	quarantine, cleanup, err := quarantine.New(ctx, repoProto, testhelper.NewLogger(t), locator)
 	require.NoError(t, err)
+	t.Cleanup(cleanup)
 
 	quarantined := localrepo.NewTestRepo(t, cfg, quarantine.QuarantinedRepo())
 

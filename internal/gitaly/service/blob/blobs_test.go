@@ -331,8 +331,9 @@ func TestListAllBlobs(t *testing.T) {
 
 	repo, _, _ := setupRepoWithLFS(t, ctx, cfg)
 
-	quarantine, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo), testhelper.NewLogger(t), config.NewLocator(cfg))
+	quarantine, cleanup, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo), testhelper.NewLogger(t), config.NewLocator(cfg))
 	require.NoError(t, err)
+	t.Cleanup(cleanup)
 
 	// quarantine.New in Gitaly would receive an already rewritten repository. Gitaly would then calculate
 	// the quarantine directories based on the rewritten relative path. That quarantine would then be looped

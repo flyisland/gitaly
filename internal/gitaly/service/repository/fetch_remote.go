@@ -76,11 +76,11 @@ func (s *server) fetchRemoteAtomic(ctx context.Context, req *gitalypb.FetchRemot
 		return false, false, err
 	}
 
-	sshCommand, cleanup, err := gitcmd.BuildSSHInvocation(ctx, s.logger, req.GetSshKey(), req.GetKnownHosts())
+	sshCommand, sshCleanup, err := gitcmd.BuildSSHInvocation(ctx, s.logger, req.GetSshKey(), req.GetKnownHosts())
 	if err != nil {
 		return false, false, err
 	}
-	defer cleanup()
+	defer sshCleanup()
 
 	opts.Env = append(opts.Env, "GIT_SSH_COMMAND="+sshCommand)
 
@@ -88,10 +88,13 @@ func (s *server) fetchRemoteAtomic(ctx context.Context, req *gitalypb.FetchRemot
 	// to be updated, unreachable objects could be left in the repository that would need to be
 	// garbage collected. To be more atomic, a quarantine directory is set up where objects will be
 	// fetched prior to being migrated to the main repository when reference updates are committed.
-	quarantineDir, err := quarantine.New(ctx, req.GetRepository(), s.logger, s.locator)
+	quarantineDir, quarantineCleanup, err := quarantine.New(ctx, req.GetRepository(), s.logger, s.locator)
 	if err != nil {
 		return false, false, fmt.Errorf("creating quarantine directory: %w", err)
 	}
+	defer func() {
+		quarantineCleanup() // Errors are logged by the tempdir package
+	}()
 
 	quarantineRepo := s.localRepoFactory.Build(quarantineDir.QuarantinedRepo())
 	if err := quarantineRepo.FetchRemote(ctx, "inmemory", opts); err != nil {
