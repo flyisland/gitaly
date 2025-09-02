@@ -253,8 +253,9 @@ func TestUpdate_quarantine(t *testing.T) {
 		SkipCreationViaService: true,
 	})
 
-	quarantine, err := quarantine.New(ctx, repoProto, testhelper.SharedLogger(t), config.NewLocator(cfg))
+	quarantine, cleanup, err := quarantine.New(ctx, repoProto, testhelper.SharedLogger(t), config.NewLocator(cfg))
 	require.NoError(t, err)
+	t.Cleanup(cleanup)
 
 	quarantinedRepo := localrepo.NewTestRepo(t, cfg, quarantine.QuarantinedRepo())
 	blobID, err := quarantinedRepo.WriteBlob(ctx, strings.NewReader("allyourbasearebelongtous"), localrepo.WriteBlobConfig{})

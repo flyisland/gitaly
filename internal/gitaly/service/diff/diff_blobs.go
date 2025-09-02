@@ -148,10 +148,11 @@ func (s *server) diffBlobs(ctx context.Context,
 	// of right blob pair. Unlike an empty tree object, an empty blob object is not special cased
 	// and must exist in the repository to be used. Since the DiffBlobs RPC is read-only, we create
 	// a quarantine directory to stage an empty blob object for use with diff generation only.
-	quarantineDir, err := quarantine.New(ctx, request.GetRepository(), s.logger, s.locator)
+	quarantineDir, cleanup, err := quarantine.New(ctx, request.GetRepository(), s.logger, s.locator)
 	if err != nil {
 		return structerr.NewInternal("creating quarantine directory: %w", err)
 	}
+	defer cleanup()
 
 	repo := s.localRepoFactory.Build(quarantineDir.QuarantinedRepo())
 

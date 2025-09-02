@@ -110,10 +110,11 @@ func (s *server) rewriteHistory(
 		return fmt.Errorf("finding HEAD reference: %w", err)
 	}
 
-	stagingRepo, stagingRepoPath, err := s.initStagingRepo(ctx, repoProto, defaultBranch)
+	stagingRepo, stagingRepoPath, cleanup, err := s.initStagingRepo(ctx, repoProto, defaultBranch)
 	if err != nil {
 		return fmt.Errorf("setting up staging repo: %w", err)
 	}
+	defer cleanup()
 
 	// Check state of source repository prior to running filter-repo.
 	initialChecksum, err := checksumRepo(ctx, repo)
@@ -185,11 +186,11 @@ func (s *server) rewriteHistory(
 }
 
 // initStagingRepo creates a new bare repository to write the rewritten history into
-// with default branch is set to match the source repo.
-func (s *server) initStagingRepo(ctx context.Context, repo *gitalypb.Repository, defaultBranch git.ReferenceName) (*localrepo.Repo, string, error) {
-	stagingRepoProto, stagingRepoDir, err := tempdir.NewRepository(ctx, repo.GetStorageName(), s.logger, s.locator)
+// with default branch is set to match the source repo. Returns the repo, path, and cleanup function.
+func (s *server) initStagingRepo(ctx context.Context, repo *gitalypb.Repository, defaultBranch git.ReferenceName) (*localrepo.Repo, string, func(), error) {
+	stagingRepoProto, stagingRepoDir, cleanup, err := tempdir.NewRepository(ctx, repo.GetStorageName(), s.logger, s.locator)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
 	var stderr strings.Builder
@@ -202,11 +203,13 @@ func (s *server) initStagingRepo(ctx context.Context, repo *gitalypb.Repository,
 		Args: []string{stagingRepoDir.Path()},
 	}, gitcmd.WithStderr(&stderr))
 	if err != nil {
-		return nil, "", fmt.Errorf("spawning git-init: %w", err)
+		cleanup()
+		return nil, "", nil, fmt.Errorf("spawning git-init: %w", err)
 	}
 
 	if err := cmd.Wait(); err != nil {
-		return nil, "", structerr.New("creating repository: %w", err).WithMetadata("stderr", &stderr)
+		cleanup()
+		return nil, "", nil, structerr.New("creating repository: %w", err).WithMetadata("stderr", &stderr)
 	}
 
 	stagingRepo := s.localRepoFactory.Build(stagingRepoProto)
@@ -214,10 +217,11 @@ func (s *server) initStagingRepo(ctx context.Context, repo *gitalypb.Repository,
 	// Ensure HEAD matches the source repository. In practice a mismatch doesn't cause problems,
 	// but out of an abundance of caution let's keep the two repos as similar as possible.
 	if err := stagingRepo.SetDefaultBranch(ctx, s.txManager, defaultBranch); err != nil {
-		return nil, "", fmt.Errorf("setting default branch: %w", err)
+		cleanup()
+		return nil, "", nil, fmt.Errorf("setting default branch: %w", err)
 	}
 
-	return stagingRepo, stagingRepoDir.Path(), nil
+	return stagingRepo, stagingRepoDir.Path(), cleanup, nil
 }
 
 func (s *server) runFilterRepo(
@@ -227,10 +231,11 @@ func (s *server) runFilterRepo(
 	redactions [][]byte,
 ) error {
 	// Place argument files in a tempdir so that cleanup is handled automatically.
-	tmpDir, err := tempdir.New(ctx, srcRepo.GetStorageName(), s.logger, s.locator)
+	tmpDir, cleanup, err := tempdir.New(ctx, srcRepo.GetStorageName(), s.logger, s.locator)
 	if err != nil {
 		return fmt.Errorf("create tempdir: %w", err)
 	}
+	defer cleanup()
 
 	flags := make([]gitcmd.Option, 0, 2)
 

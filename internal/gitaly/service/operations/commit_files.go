@@ -521,10 +521,11 @@ func (s *Server) userCommitFiles(
 	stream gitalypb.OperationService_UserCommitFilesServer,
 	objectHash git.ObjectHash,
 ) error {
-	quarantineDir, quarantineRepo, err := s.quarantinedRepo(ctx, header.GetRepository())
+	quarantineDir, quarantineRepo, cleanup, err := s.quarantinedRepo(ctx, header.GetRepository())
 	if err != nil {
 		return err
 	}
+	defer cleanup()
 
 	repoPath, err := quarantineRepo.Path(ctx)
 	if err != nil {

@@ -228,8 +228,9 @@ func TestGetObjectDirectorySize_quarantine(t *testing.T) {
 
 		requireObjectDirectorySize(t, ctx, client, repo, 16)
 
-		quarantine, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo), logger, locator)
+		quarantine, cleanup, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo), logger, locator)
 		require.NoError(t, err)
+		t.Cleanup(cleanup)
 
 		// quarantine.New in Gitaly would receive an already rewritten repository. Gitaly would then calculate
 		// the quarantine directories based on the rewritten relative path. That quarantine would then be looped
@@ -276,12 +277,14 @@ func TestGetObjectDirectorySize_quarantine(t *testing.T) {
 
 	t.Run("quarantined repo with different relative path", func(t *testing.T) {
 		repo1, _ := gittest.CreateRepository(t, ctx, cfg)
-		quarantine1, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo1), logger, locator)
+		quarantine1, cleanup1, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo1), logger, locator)
 		require.NoError(t, err)
+		t.Cleanup(cleanup1)
 
 		repo2, _ := gittest.CreateRepository(t, ctx, cfg)
-		quarantine2, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo2), logger, locator)
+		quarantine2, cleanup2, err := quarantine.New(ctx, gittest.RewrittenRepository(t, ctx, cfg, repo2), logger, locator)
 		require.NoError(t, err)
+		t.Cleanup(cleanup2)
 
 		// We swap out the the object directories of both quarantines. So while both are
 		// valid, we still expect that this RPC call fails because we detect that the
