@@ -8,8 +8,8 @@
       default: HEAD
       private: false
 
-    - name: gitaly_benchmarking_instance_name
-      prompt: "Enter a name for your benchmark instance"
+    - name: gitaly_benchmarking_deployment_name
+      prompt: "Enter a name for your benchmark deployment"
       default: "{{ lookup('env', 'USER') }}-{{ lookup('pipe', 'date +%Y-%m-%d') }}"
       private: false
 

@@ -1,6 +1,0 @@
----
-- name: Stop Gitaly service
-  systemd:
-    name: gitaly
-    state: stopped
-  listen: stop gitaly

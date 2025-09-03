@@ -1,11 +1,5 @@
 ---
 project: "gitaly-benchmark-0150d6cf"
-gitaly_machine_type: "n2d-standard-16"
-client_machine_type: "n2d-standard-4"
-os_image: "ubuntu-os-cloud/ubuntu-2204-lts"
-repository_disk_type: "pd-balanced"
-boot_disk_size: 40
-repositories_disk_size: 100
 benchmark_region: "us-central1"
 benchmark_zone: "us-central1-a"
 
@@ -15,6 +9,23 @@ use_regional_disk: false
 # One of these zones must be the zone for benchmark_zone
 regional_disk_replica_zones: ["us-central1-a", "us-central1-b"]
 
+os_image: "ubuntu-os-cloud/ubuntu-2204-lts"
+
+client:
+  machine_type: "n2d-standard-4"
+  boot_disk_size: 20
+  boot_disk_type: "pd-balanced"
+
+gitaly_instances:
+  - name: "large"
+    machine_type: "n2d-standard-16"
+    boot_disk_type: "pd-balanced"
+    boot_disk_size: 20
+    config:
+      transactions: true
+
+repository_disk_size: 100
+repository_disk_type: "pd-balanced"
 # The list of repositories which will be cloned into Gitaly's storage disk.
 repositories:
   - "https://gitlab.com/gitlab-org/git.git"

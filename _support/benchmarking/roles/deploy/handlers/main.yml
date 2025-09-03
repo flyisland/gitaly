@@ -2,7 +2,7 @@
 - name: scan SSH keys
   command: "ssh-keyscan {{ item }}"
   register: ssh_keys
-  loop: "{{ [tfstate.outputs.gitaly_ssh_ip.value] | list + [tfstate.outputs.client_ssh_ip.value] }}"
+  loop: "{{ tfstate.outputs.gitaly_ssh_ips.value.values() | list + [tfstate.outputs.client_ssh_ip.value] }}"
   listen: add hostkeys
   retries: 15
   until: ssh_keys is not failed

@@ -1,5 +1,7 @@
 ---
 profile: true
 clear_page_cache: true
+# Profiling and the workload will begin concurrently.
 profile_duration: 60
+workload_duration: "60s"
 workload_wait_duration: 120
