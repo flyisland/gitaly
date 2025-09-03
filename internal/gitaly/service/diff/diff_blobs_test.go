@@ -438,20 +438,9 @@ func TestDiffBlobs(t *testing.T) {
 							},
 						},
 					},
-					expectedResponses: []*gitalypb.DiffBlobsResponse{
-						{
-							LeftBlobId:  blobID1.String(),
-							RightBlobId: blobID2.String(),
-							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
-						},
-						{
-							LeftBlobId:  blobID1.String(),
-							RightBlobId: blobID3.String(),
-							Patch:       []byte("@@ -1 +1 @@\n-foo\n+ foo \n"),
-							PatchSize:   24,
-							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
-						},
-					},
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewInvalidArgument("whitespace changes cannot be ignored when blob pairs are provided"),
+					),
 				}
 			},
 		},
@@ -479,18 +468,9 @@ func TestDiffBlobs(t *testing.T) {
 							},
 						},
 					},
-					expectedResponses: []*gitalypb.DiffBlobsResponse{
-						{
-							LeftBlobId:  blobID1.String(),
-							RightBlobId: blobID2.String(),
-							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
-						},
-						{
-							LeftBlobId:  blobID1.String(),
-							RightBlobId: blobID3.String(),
-							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
-						},
-					},
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewInvalidArgument("whitespace changes cannot be ignored when blob pairs are provided"),
+					),
 				}
 			},
 		},
