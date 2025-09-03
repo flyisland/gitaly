@@ -406,6 +406,9 @@ message UserMergeBranchRequest {
   bytes branch = 4;
   // message is the message to use for the merge commit.
   bytes message = 5;
+  // apply is used in the second message. Setting it to true will proceed with
+  // the merge. Setting it to false will abort the merge.
+  bool apply = 6;
   // timestamp is the optional timestamp to use for the merge commit. If it's
   // not set, the current time will be used.
   google.protobuf.Timestamp timestamp = 7;
@@ -422,10 +425,6 @@ message UserMergeBranchRequest {
   // When set to `true`, it merges only the squash commit without creating
   // the merge commit.
   bool squash = 9;
-
-  // apply is used in the second message. Setting it to true will proceed with
-  // the merge. Setting it to false will abort the merge.
-  bool apply = 6;
 }
 
 // UserMergeBranchResponse is a response for the UserMergeBranch RPC.

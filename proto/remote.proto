@@ -68,10 +68,6 @@ message UpdateRemoteMirrorRequest {
 
   // repository is the repository whose mirror repository to update.
   Repository repository = 1 [(target_repository)=true];
-  // remote contains parameters required to connect to the remote repository.
-  // This allows Gitaly to use an in-memory remote and does not require any
-  // on-disk remote configuration.
-  Remote remote = 7;
   // only_branches_matching contains patterns to match branches against. Only the
   // matched branches are updated in the remote mirror. If no patterns are
   // specified, all branches are updated. The patterns should only contain the
@@ -88,6 +84,10 @@ message UpdateRemoteMirrorRequest {
   // keep_divergent_refs specifies whether or not to update diverged references
   // in the mirror repository.
   bool keep_divergent_refs = 6;
+  // remote contains parameters required to connect to the remote repository.
+  // This allows Gitaly to use an in-memory remote and does not require any
+  // on-disk remote configuration.
+  Remote remote = 7;
 
   reserved 2;
   reserved "ref_name";

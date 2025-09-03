@@ -144,11 +144,6 @@ message CommitDiffRequest {
   // max_bytes is the maximum number of bytes in a diff. Once reached, parsing is stopped
   // if enforce_limits is true.
   int32 max_bytes = 10;
-  // max_patch_bytes is the limitation of a single diff patch,
-  // patches surpassing this limit are pruned by default.
-  // If this is 0 you will get back empty patches.
-  int32 max_patch_bytes = 14;
-
   // safe_max_files is the maximum number of files in a diff. Once reached, patches are emptied if
   // collapse_diffs is true.
   int32 safe_max_files = 11;
@@ -158,7 +153,10 @@ message CommitDiffRequest {
   // safe_max_bytes is the maximum number of bytes in a diff. Once reached, patches are emptied if
   // collapse_diffs is true.
   int32 safe_max_bytes = 13;
-
+  // max_patch_bytes is the limitation of a single diff patch,
+  // patches surpassing this limit are pruned by default.
+  // If this is 0 you will get back empty patches.
+  int32 max_patch_bytes = 14;
   // diff_mode is the mode used for generating the diff. Please refer to the enum declaration for supported modes.
   DiffMode diff_mode = 15;
 
