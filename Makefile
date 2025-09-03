@@ -24,7 +24,7 @@ OS   := $(shell uname)
 ARCH := $(shell uname -m)
 
 # Directories
-SOURCE_DIR       := $(abspath $(dir $(lastword ${MAKEFILE_LIST})))
+SOURCE_DIR := $(shell realpath $(abspath $(dir $(lastword ${MAKEFILE_LIST}))))
 BUILD_DIR        := ${SOURCE_DIR}/_build
 PROTO_DEST_DIR   := ${SOURCE_DIR}/proto/go
 DEPENDENCY_DIR   := ${BUILD_DIR}/deps
@@ -245,7 +245,7 @@ GIT_FILTER_REPO_SOURCE_DIR           ?= ${DEPENDENCY_DIR}/git-filter-repo
 # These variables control test options and artifacts
 ## List of Go packages which shall be tested.
 ## Go packages to test when using the test-go target.
-TEST_PACKAGES     ?= ${SOURCE_DIR}/...
+TEST_PACKAGES     ?= ./...
 ## Test options passed to `go test`.
 TEST_OPTIONS      ?= -count=1 -p=4
 ## Specify the output format used to print tests ["standard-verbose", "standard-quiet", "short"]
