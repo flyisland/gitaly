@@ -14,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type revisionPath struct{ revision, path string }
@@ -37,9 +38,12 @@ func (tef *TreeEntryFinder) FindByRevisionAndPath(ctx context.Context, revision,
 	span, ctx := tracing.StartSpanIfHasParent(
 		ctx,
 		"catfile.FindByRevisionAndPatch",
-		tracing.Tags{"revision": revision, "path": path},
+		[]attribute.KeyValue{
+			attribute.String("revision", revision),
+			attribute.String("path", path),
+		},
 	)
-	defer span.Finish()
+	defer span.End()
 
 	dir := pathPkg.Dir(path)
 	cacheKey := revisionPath{revision: revision, path: dir}
@@ -121,9 +125,12 @@ func TreeEntries(
 	span, ctx := tracing.StartSpanIfHasParent(
 		ctx,
 		"catfile.TreeEntries",
-		tracing.Tags{"revision": revision, "path": path},
+		[]attribute.KeyValue{
+			attribute.String("revision", revision),
+			attribute.String("path", path),
+		},
 	)
-	defer span.Finish()
+	defer span.End()
 
 	if path == "." {
 		path = ""

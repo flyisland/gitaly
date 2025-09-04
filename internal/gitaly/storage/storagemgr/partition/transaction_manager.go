@@ -42,6 +42,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"gitlab.com/gitlab-org/labkit/correlation"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 )
@@ -248,9 +249,9 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 	}
 
 	span, _ := tracing.StartSpanIfHasParent(ctx, "transaction.Begin", nil)
-	span.SetTag("write", opts.Write)
-	span.SetTag("relativePath", relativePath)
-	defer span.Finish()
+	span.SetAttributes(attribute.Bool("write", opts.Write))
+	span.SetAttributes(attribute.String("relativePath", relativePath))
+	defer span.End()
 
 	mgr.mutex.Lock()
 
@@ -275,7 +276,7 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 
 	mgr.mutex.Unlock()
 
-	span.SetTag("snapshotLSN", txn.snapshotLSN)
+	span.SetAttributes(attribute.String("snapshotLSN", txn.snapshotLSN.String()))
 
 	txn.finish = func(admitted bool) error {
 		defer trace.StartRegion(ctx, "finish transaction").End()
@@ -1078,7 +1079,7 @@ type resultChannel chan commitResult
 // commit queues the transaction for processing and returns once the result has been determined.
 func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transaction) (storage.LSN, error) {
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.Commit", nil)
-	defer span.Finish()
+	defer span.End()
 
 	transaction.result = make(resultChannel, 1)
 
@@ -1229,7 +1230,7 @@ func (txn *Transaction) referenceUpdatesToProto() []*gitalypb.LogEntry_Reference
 // complete state and stages it into the transaction for committing.
 func (mgr *TransactionManager) stageRepositoryCreation(ctx context.Context, transaction *Transaction) error {
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.stageRepositoryCreation", nil)
-	defer span.Finish()
+	defer span.End()
 
 	objectHash, err := transaction.snapshotRepository.ObjectHash(ctx)
 	if err != nil {
@@ -1268,7 +1269,7 @@ func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, trans
 	defer trace.StartRegion(ctx, "setupStagingRepository").End()
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.setupStagingRepository", nil)
-	defer span.Finish()
+	defer span.End()
 
 	if transaction.stagingSnapshot != nil {
 		return nil, errors.New("staging snapshot already setup")
@@ -1318,7 +1319,7 @@ func (mgr *TransactionManager) packObjects(ctx context.Context, transaction *Tra
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.packObjects", nil)
-	defer span.Finish()
+	defer span.End()
 
 	// We want to only pack the objects that are present in the quarantine as they are potentially
 	// new. Disable the alternate, which is the repository's original object directory, so that we'll
@@ -1759,7 +1760,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.processTransaction", nil)
-	defer span.Finish()
+	defer span.End()
 
 	transaction.result <- func() commitResult {
 		var zeroOID git.ObjectID

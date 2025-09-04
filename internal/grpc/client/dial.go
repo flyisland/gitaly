@@ -12,7 +12,6 @@ import (
 	gitalyx509 "gitlab.com/gitlab-org/gitaly/v18/internal/x509"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	grpccorrelation "gitlab.com/gitlab-org/labkit/correlation/grpc"
-	grpctracing "gitlab.com/gitlab-org/labkit/tracing/grpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -98,7 +97,7 @@ func WithTransportCredentials(creds credentials.TransportCredentials) DialOption
 
 // New creates a dormant connection to a Gitaly node serving at the given address. New is used by the public 'client'
 // package and the expected behavior is mostly documented there.
-func New(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.ClientConn, error) {
+func New(_ context.Context, rawAddress string, opts ...DialOption) (*grpc.ClientConn, error) {
 	var dialCfg dialConfig
 	for _, opt := range opts {
 		opt(&dialCfg)
@@ -213,7 +212,6 @@ func New(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.Clie
 // StreamInterceptor returns the stream interceptors that should be configured for a client.
 func StreamInterceptor() grpc.DialOption {
 	return grpc.WithChainStreamInterceptor(
-		grpctracing.StreamClientTracingInterceptor(),
 		grpccorrelation.StreamClientCorrelationInterceptor(),
 	)
 }
@@ -221,7 +219,6 @@ func StreamInterceptor() grpc.DialOption {
 // UnaryInterceptor returns the unary interceptors that should be configured for a client.
 func UnaryInterceptor() grpc.DialOption {
 	return grpc.WithChainUnaryInterceptor(
-		grpctracing.UnaryClientTracingInterceptor(),
 		grpccorrelation.UnaryClientCorrelationInterceptor(),
 	)
 }

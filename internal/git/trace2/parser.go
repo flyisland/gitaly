@@ -37,7 +37,7 @@ import (
 // For more information, please visit Trace2 API: https://git-scm.com/docs/api-trace2
 func Parse(ctx context.Context, reader io.Reader) (*Trace, error) {
 	span, _ := tracing.StartSpanIfHasParent(ctx, "trace2.parse", nil)
-	defer span.Finish()
+	defer span.End()
 
 	decoder := json.NewDecoder(reader)
 	p := &parser{decoder: decoder}

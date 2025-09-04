@@ -72,7 +72,7 @@ GOLANGCI_LINT_CONFIG  ?= ${SOURCE_DIR}/.golangci.yml
 GITALY_PACKAGE    := $(shell go list -m 2>/dev/null || echo unknown)
 GITALY_VERSION    := $(shell ${GIT} describe --match v* 2>/dev/null | sed 's/^v//' || cat ${SOURCE_DIR}/VERSION 2>/dev/null || echo unknown)
 GO_LDFLAGS        := -X ${GITALY_PACKAGE}/internal/version.version=${GITALY_VERSION}
-SERVER_BUILD_TAGS := tracer_static,tracer_static_jaeger,tracer_static_stackdriver,continuous_profiler_stackdriver
+SERVER_BUILD_TAGS := continuous_profiler_stackdriver
 
 ## FIPS_MODE controls whether to build Gitaly and dependencies in FIPS mode.
 ## Set this to a non-empty value to enable it.

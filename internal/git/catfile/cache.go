@@ -15,6 +15,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	"gitlab.com/gitlab-org/labkit/correlation"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -239,7 +240,7 @@ func (c *ProcessCache) getOrCreateProcess(
 	defer c.reportCacheMembers()
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, spanName, nil)
-	defer span.Finish()
+	defer span.End()
 
 	cacheKey, isCacheable := newCacheKey(fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now())), repo)
 
@@ -252,14 +253,14 @@ func (c *ProcessCache) getOrCreateProcess(
 
 		if entry, ok := processes.Checkout(cacheKey); ok {
 			c.catfileCacheCounter.WithLabelValues("hit").Inc()
-			span.SetTag("hit", true)
+			span.SetAttributes(attribute.Bool("hit", true))
 			return entry.value, func() {
 				c.returnToCache(processes, cacheKey, entry.value, entry.cancel)
 			}, nil
 		}
 
 		c.catfileCacheCounter.WithLabelValues("miss").Inc()
-		span.SetTag("hit", false)
+		span.SetAttributes(attribute.Bool("hit", false))
 
 		// When cache misses, a new process is created. This process may be re-used later.
 		// In that case, the lifecycle of the process is stretched across multiple

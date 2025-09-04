@@ -3,146 +3,131 @@ package tracing
 import (
 	"testing"
 
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/log"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uber/jaeger-client-go"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestCreateSpan(t *testing.T) {
-	reporter, cleanup := testhelper.StubTracingReporter(t)
-	defer cleanup()
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer func() { _ = reporter.Close() }()
 
-	var span opentracing.Span
-	span, _ = StartSpan(testhelper.Context(t), "root", Tags{
-		"tagRoot1": "value1",
-		"tagRoot2": "value2",
-		"tagRoot3": "value3",
-	})
-	span.Finish()
+	ctx := testhelper.Context(t)
 
-	require.Equal(t, []string{"root"}, reportedSpans(t, reporter))
-	require.Equal(t, Tags{
-		"tagRoot1": "value1",
-		"tagRoot2": "value2",
-		"tagRoot3": "value3",
-	}, spanTags(span))
+	spanAttributes := []attribute.KeyValue{
+		attribute.String("tagRoot1", "value1"),
+		attribute.String("tagRoot2", "value2"),
+		attribute.String("tagRoot3", "value3"),
+	}
+
+	span, _ := StartSpan(ctx, "root", spanAttributes)
+	span.End()
+
+	generatedSpans := reporter.GetSpans()
+	require.Len(t, generatedSpans, 1)
+
+	require.Equal(t, "root", generatedSpans[0].Name)
+	require.Equal(t, spanAttributes, generatedSpans[0].Attributes)
 }
 
 func TestCreateSpanIfHasParent_emptyContext(t *testing.T) {
-	reporter, cleanup := testhelper.StubTracingReporter(t)
-	defer cleanup()
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer func() { _ = reporter.Close() }()
 
 	ctx := testhelper.Context(t)
-	var span, span2 opentracing.Span
+	var span, span2 trace.Span
 
 	span, ctx = StartSpanIfHasParent(ctx, "should-not-report-root", nil)
-	span.SetBaggageItem("baggage", "baggageValue")
-	span.SetTag("tag", "tagValue")
-	span.LogFields(log.String("log", "logValue"))
-	span.LogKV("log2", "logValue")
-	span.Finish()
+	span.SetAttributes(attribute.String("tag", "tagValue"))
+	span.End()
 
 	span2, _ = StartSpanIfHasParent(ctx, "should-not-report-child", nil)
-	span2.Finish()
+	span2.End()
 
-	require.Empty(t, reportedSpans(t, reporter))
+	require.Empty(t, reporter.GetSpans())
 }
 
 func TestCreateSpanIfHasParent_hasParent(t *testing.T) {
-	reporter, cleanup := testhelper.StubTracingReporter(t)
-	defer cleanup()
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer func() { _ = reporter.Close() }()
 
 	ctx := testhelper.Context(t)
 
-	var span1, span2 opentracing.Span
+	var span1, span2 trace.Span
 	span1, ctx = StartSpan(ctx, "root", nil)
 	span2, _ = StartSpanIfHasParent(ctx, "child", nil)
-	span2.Finish()
-	span1.Finish()
+	span2.End()
+	span1.End()
 
-	spans := reportedSpans(t, reporter)
+	spans := reportedSpanNames(t, reporter)
 	require.Equal(t, []string{"child", "root"}, spans)
+	require.Len(t, reporter.GetSpans(), 2)
 }
 
 func TestCreateSpanIfHasParent_hasParentWithTags(t *testing.T) {
-	reporter, cleanup := testhelper.StubTracingReporter(t)
-	defer cleanup()
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer func() { _ = reporter.Close() }()
 
 	ctx := testhelper.Context(t)
 
-	var span1, span2 opentracing.Span
-	span1, ctx = StartSpan(ctx, "root", Tags{
-		"tagRoot1": "value1",
-		"tagRoot2": "value2",
-		"tagRoot3": "value3",
-	})
-	span2, _ = StartSpanIfHasParent(ctx, "child", Tags{
-		"tagChild1": "value1",
-		"tagChild2": "value2",
-		"tagChild3": "value3",
-	})
-	span2.Finish()
-	span1.Finish()
+	var span1, span2 trace.Span
+	span1Attributes := []attribute.KeyValue{
+		attribute.String("tagRoot1", "value1"),
+		attribute.String("tagRoot2", "value2"),
+		attribute.String("tagRoot3", "value3"),
+	}
+	span1, ctx = StartSpan(ctx, "root", span1Attributes)
 
-	spans := reportedSpans(t, reporter)
-	require.Equal(t, []string{"child", "root"}, spans)
-	require.Equal(t, Tags{
-		"tagRoot1": "value1",
-		"tagRoot2": "value2",
-		"tagRoot3": "value3",
-	}, spanTags(span1))
-	require.Equal(t, Tags{
-		"tagChild1": "value1",
-		"tagChild2": "value2",
-		"tagChild3": "value3",
-	}, spanTags(span2))
+	span2Attributes := []attribute.KeyValue{
+		attribute.String("tagChild1", "value1"),
+		attribute.String("tagChild2", "value2"),
+		attribute.String("tagChild3", "value3"),
+	}
+	span2, _ = StartSpanIfHasParent(ctx, "child", span2Attributes)
+
+	span2.End()
+	span1.End()
+
+	require.Equal(t, []string{"child", "root"}, reportedSpanNames(t, reporter))
+
+	recordedSpans := reporter.GetSpans()
+	require.Len(t, recordedSpans, 2)
+
+	require.Equal(t, span1Attributes, recordedSpans[1].Attributes)
+	require.Equal(t, span2Attributes, recordedSpans[0].Attributes)
 }
 
 func TestDiscardSpanInContext_emptyContext(t *testing.T) {
 	ctx := DiscardSpanInContext(testhelper.Context(t))
-	require.Nil(t, opentracing.SpanFromContext(ctx))
+	span := trace.SpanFromContext(ctx)
+	require.False(t, span.IsRecording())
 }
 
 func TestDiscardSpanInContext_hasParent(t *testing.T) {
-	reporter, cleanup := testhelper.StubTracingReporter(t)
-	defer cleanup()
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer func() { _ = reporter.Close() }()
 
 	ctx := testhelper.Context(t)
 
-	var span1, span2, span3 opentracing.Span
+	var span1, span2, span3 trace.Span
 	span1, ctx = StartSpan(ctx, "root", nil)
 	span2, ctx = StartSpanIfHasParent(ctx, "child", nil)
 	ctx = DiscardSpanInContext(ctx)
 	span3, _ = StartSpanIfHasParent(ctx, "discarded", nil)
 
-	span3.Finish()
-	span2.Finish()
-	span1.Finish()
+	span3.End()
+	span2.End()
+	span1.End()
 
-	spans := reportedSpans(t, reporter)
+	spans := reportedSpanNames(t, reporter)
 	require.Equal(t, []string{"child", "root"}, spans)
 }
 
-func reportedSpans(t *testing.T, reporter *jaeger.InMemoryReporter) []string {
+func reportedSpanNames(_ *testing.T, reporter *testhelper.StubTracingReporter) []string {
 	var names []string
 	for _, span := range reporter.GetSpans() {
-		if !assert.IsType(t, span, &jaeger.Span{}) {
-			continue
-		}
-		jaegerSpan := span.(*jaeger.Span)
-		names = append(names, jaegerSpan.OperationName())
+		names = append(names, span.Name)
 	}
 	return names
-}
-
-func spanTags(span opentracing.Span) Tags {
-	tags := Tags{}
-	jaegerSpan := span.(*jaeger.Span)
-	for key, value := range jaegerSpan.Tags() {
-		tags[key] = value
-	}
-	return tags
 }

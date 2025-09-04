@@ -121,7 +121,7 @@ func InitializeTracerProvider(ctx context.Context, serviceName string) (trace.Tr
 	if resErr != nil {
 		// wrap the error but do not return, as this error is not critical
 		// for creating the tracer provider
-		warningError = fmt.Errorf("error creating resources: %w", err)
+		warningError = fmt.Errorf("error creating resources: %w", resErr)
 	}
 
 	// Create a new tracer provider with the exporter configured above

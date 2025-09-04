@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,20 +13,20 @@ import (
 	"testing"
 
 	"github.com/miekg/dns"
-	"github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uber/jaeger-client-go"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v18/auth"
 	internalclient "gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	gitalyx509 "gitlab.com/gitlab-org/gitaly/v18/internal/x509"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"gitlab.com/gitlab-org/labkit/correlation"
 	grpccorrelation "gitlab.com/gitlab-org/labkit/correlation/grpc"
-	grpctracing "gitlab.com/gitlab-org/labkit/tracing/grpc"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -359,59 +360,74 @@ func TestDial_Correlation(t *testing.T) {
 }
 
 func TestDial_Tracing(t *testing.T) {
-	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
+	const serviceBaggageKey = "service"
 
-	listener, err := net.Listen("unix", serverSocketPath)
-	require.NoError(t, err)
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer testhelper.MustClose(t, reporter)
 
-	clientSendClosed := make(chan struct{})
+	getSvc := func() *testSvc {
+		return &testSvc{
+			unaryCall: func(ctx context.Context, r *grpc_testing.SimpleRequest) (*grpc_testing.SimpleResponse, error) {
+				spanCtx, span := reporter.TracerProvider().Tracer("server").Start(ctx, "nested-span-unary")
+				defer span.End()
 
-	// This is our test service. All it does is to create additional spans
-	// which should in the end be visible when collecting all registered
-	// spans.
-	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(grpctracing.UnaryServerTracingInterceptor()),
-		grpc.StreamInterceptor(grpctracing.StreamServerTracingInterceptor()),
-	)
-	svc := &testSvc{
-		unaryCall: func(ctx context.Context, r *grpc_testing.SimpleRequest) (*grpc_testing.SimpleResponse, error) {
-			span, _ := tracing.StartSpan(ctx, "nested-span", nil)
-			defer span.Finish()
-			span.LogKV("was", "called")
-			return &grpc_testing.SimpleResponse{}, nil
-		},
-		fullDuplexCall: func(stream grpc_testing.TestService_FullDuplexCallServer) error {
-			// synchronize the client has returned from CloseSend as the client span finishing
-			// races with sending the stream close to the server
-			select {
-			case <-clientSendClosed:
-			case <-stream.Context().Done():
-				return stream.Context().Err()
-			}
+				b := baggage.FromContext(spanCtx)
+				serviceFromBaggage := b.Member(serviceBaggageKey)
+				attributeFromBaggage := attribute.String(serviceBaggageKey, serviceFromBaggage.Value())
+				span.SetAttributes(attributeFromBaggage)
+				return &grpc_testing.SimpleResponse{}, nil
+			},
+			fullDuplexCall: func(stream grpc_testing.TestService_FullDuplexCallServer) error {
+				spanCtx, span := reporter.TracerProvider().Tracer("server").Start(stream.Context(), "nested-span-full-duplex")
+				defer span.End()
 
-			span, _ := tracing.StartSpan(stream.Context(), "nested-span", nil)
-			defer span.Finish()
-			span.LogKV("was", "called")
-			return nil
-		},
+				// set attributes to span
+				b := baggage.FromContext(spanCtx)
+				serviceFromBaggage := b.Member(serviceBaggageKey)
+				attributeFromBaggage := attribute.String(serviceBaggageKey, serviceFromBaggage.Value())
+				span.SetAttributes(attributeFromBaggage)
+
+				// process message
+				for {
+					_, err := stream.Recv()
+					if errors.Is(err, io.EOF) {
+						break
+					}
+				}
+
+				return nil
+			},
+		}
 	}
-	grpc_testing.RegisterTestServiceServer(grpcServer, svc)
 
-	go testhelper.MustServe(t, grpcServer, listener)
-	defer grpcServer.Stop()
-	ctx := testhelper.Context(t)
+	propagator := propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
 
 	t.Run("unary", func(t *testing.T) {
-		reporter := jaeger.NewInMemoryReporter()
-		tracer, tracerCloser := jaeger.NewTracer("", jaeger.NewConstSampler(true), reporter)
-		defer testhelper.MustClose(t, tracerCloser)
+		reporter.Reset()
 
-		defer func(old opentracing.Tracer) { opentracing.SetGlobalTracer(old) }(opentracing.GlobalTracer())
-		opentracing.SetGlobalTracer(tracer)
+		grpcServer := grpc.NewServer(
+			grpc.StatsHandler(otelgrpc.NewServerHandler(
+				otelgrpc.WithPropagators(propagator),
+				otelgrpc.WithTracerProvider(reporter.TracerProvider()),
+			)),
+		)
+		grpc_testing.RegisterTestServiceServer(grpcServer, getSvc())
 
-		// This needs to be run after setting up the global tracer as it will cause us to
-		// create the span when executing the RPC call further down below.
+		serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
+
+		listener, err := net.Listen("unix", serverSocketPath)
+		require.NoError(t, err)
+		go testhelper.MustServe(t, grpcServer, listener)
+		defer grpcServer.Stop()
+		ctx := testhelper.Context(t)
+
 		cc, err := DialContext(ctx, "unix://"+serverSocketPath, []grpc.DialOption{
+			grpc.WithStatsHandler(otelgrpc.NewClientHandler(
+				otelgrpc.WithTracerProvider(reporter.TracerProvider()),
+				otelgrpc.WithPropagators(propagator))),
 			internalclient.UnaryInterceptor(),
 			internalclient.StreamInterceptor(),
 			WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()),
@@ -422,57 +438,84 @@ func TestDial_Tracing(t *testing.T) {
 		// We set up a "main" span here, which is going to be what the
 		// other spans inherit from. In order to check whether baggage
 		// works correctly, we also set up a "stub" baggage item which
-		// should be inherited to child contexts.
-		span := tracer.StartSpan("unary-check")
-		span = span.SetBaggageItem("service", "stub")
-		ctx := opentracing.ContextWithSpan(ctx, span)
+		// should be inherited to child contexts. It would be the
+		// responsibility of the other processes to inspect the baggage
+		// and add it as attribute to a child span.
+		globalTracer := reporter.TracerProvider().Tracer("test")
+		rootSpanCtx, rootSpan := globalTracer.Start(ctx, "root-span")
 
-		// We're now invoking the unary RPC with the span injected into
-		// the context. This should create a span that's nested into
-		// the "stream-check" span.
-		_, err = grpc_testing.NewTestServiceClient(cc).UnaryCall(ctx, &grpc_testing.SimpleRequest{})
+		m0, err := baggage.NewMember(serviceBaggageKey, "stub")
 		require.NoError(t, err)
 
-		span.Finish()
+		b, err := baggage.New(m0)
+		require.NoError(t, err)
 
-		spans := reporter.GetSpans()
-		require.Len(t, spans, 3)
+		rootSpanCtx = baggage.ContextWithBaggage(rootSpanCtx, b)
 
-		for i, expectedSpan := range []struct {
-			baggage   string
-			operation string
+		// We're now invoking the unary RPC with the span injected into the context.
+		_, err = grpc_testing.NewTestServiceClient(cc).UnaryCall(rootSpanCtx, &grpc_testing.SimpleRequest{})
+		require.NoError(t, err)
+
+		rootSpan.End()
+
+		recorderSpans := reporter.GetSpans()
+
+		require.Len(t, recorderSpans, 4)
+
+		for i, expectedSpanSpecs := range []struct {
+			operation      string
+			attributeValue string
 		}{
 			// This is the first span we expect, which is the
-			// "health" span which we've manually created inside of
-			// PingMethod.
-			{baggage: "", operation: "nested-span"},
-			// This span is the RPC call to TestService/Ping. It
-			// inherits the "unary-check" we set up and thus has
-			// baggage.
-			{baggage: "stub", operation: "/grpc.testing.TestService/UnaryCall"},
-			// And this finally is the outermost span which we
-			// manually set up before the RPC call.
-			{baggage: "stub", operation: "unary-check"},
+			// _operation_ span created inside the gRPC handler
+			{operation: "nested-span-unary", attributeValue: "stub"},
+			// The next two spans are the client span and the server span
+			// added automatically by otel instrumentation
+			{operation: "grpc.testing.TestService/UnaryCall", attributeValue: ""},
+			{operation: "grpc.testing.TestService/UnaryCall", attributeValue: ""},
+			// This is the root span, the first one we created at the beginning
+			// of the test.
+			{operation: "root-span", attributeValue: ""},
 		} {
-			assert.IsType(t, spans[i], &jaeger.Span{})
-			span := spans[i].(*jaeger.Span)
+			span := recorderSpans[i]
 
-			assert.Equal(t, expectedSpan.baggage, span.BaggageItem("service"), "wrong baggage item for span %d", i)
-			assert.Equal(t, expectedSpan.operation, span.OperationName(), "wrong operation name for span %d", i)
+			serviceAttribute := attribute.KeyValue{}
+			for _, attr := range span.Attributes {
+				if string(attr.Key) == serviceBaggageKey {
+					serviceAttribute = attr
+				}
+			}
+
+			require.Equal(t, serviceAttribute.Value.AsString(), expectedSpanSpecs.attributeValue)
+			assert.Equal(t, expectedSpanSpecs.operation, span.Name, "wrong operation name for span %d", i)
 		}
 	})
 
 	t.Run("stream", func(t *testing.T) {
-		reporter := jaeger.NewInMemoryReporter()
-		tracer, tracerCloser := jaeger.NewTracer("", jaeger.NewConstSampler(true), reporter)
-		defer testhelper.MustClose(t, tracerCloser)
+		reporter.Reset()
 
-		defer func(old opentracing.Tracer) { opentracing.SetGlobalTracer(old) }(opentracing.GlobalTracer())
-		opentracing.SetGlobalTracer(tracer)
+		grpcServer := grpc.NewServer(
+			grpc.StatsHandler(otelgrpc.NewServerHandler(
+				otelgrpc.WithTracerProvider(reporter.TracerProvider()),
+				otelgrpc.WithPropagators(propagator),
+			)),
+		)
+		grpc_testing.RegisterTestServiceServer(grpcServer, getSvc())
+
+		serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
+
+		listener, err := net.Listen("unix", serverSocketPath)
+		require.NoError(t, err)
+		go testhelper.MustServe(t, grpcServer, listener)
+		defer grpcServer.Stop()
+		ctx := testhelper.Context(t)
 
 		// This needs to be run after setting up the global tracer as it will cause us to
 		// create the span when executing the RPC call further down below.
 		cc, err := DialContext(ctx, "unix://"+serverSocketPath, []grpc.DialOption{
+			grpc.WithStatsHandler(otelgrpc.NewClientHandler(
+				otelgrpc.WithTracerProvider(reporter.TracerProvider()),
+				otelgrpc.WithPropagators(propagator))),
 			internalclient.UnaryInterceptor(),
 			internalclient.StreamInterceptor(),
 			WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()),
@@ -480,53 +523,65 @@ func TestDial_Tracing(t *testing.T) {
 		require.NoError(t, err)
 		defer testhelper.MustClose(t, cc)
 
-		// We set up a "main" span here, which is going to be what the other spans inherit
-		// from. In order to check whether baggage works correctly, we also set up a "stub"
-		// baggage item which should be inherited to child contexts.
-		span := tracer.StartSpan("stream-check")
-		span = span.SetBaggageItem("service", "stub")
-		ctx := opentracing.ContextWithSpan(ctx, span)
+		// We set up a "main" span here, which is going to be what the
+		// other spans inherit from. In order to check whether baggage
+		// works correctly, we also set up a "stub" baggage item which
+		// should be inherited to child contexts. It would be the
+		// responsibility of the other processes to inspect the baggage
+		// and add it as attribute to a child span.
+		globalTracer := reporter.TracerProvider().Tracer("test")
+		rootSpanCtx, rootSpan := globalTracer.Start(ctx, "root-span")
+
+		m0, err := baggage.NewMember(serviceBaggageKey, "stub")
+		require.NoError(t, err)
+
+		b, err := baggage.New(m0)
+		require.NoError(t, err)
+
+		rootSpanCtx = baggage.ContextWithBaggage(rootSpanCtx, b)
 
 		// We're now invoking the streaming RPC with the span injected into the context.
 		// This should create a span that's nested into the "stream-check" span.
-		stream, err := grpc_testing.NewTestServiceClient(cc).FullDuplexCall(ctx)
+		stream, err := grpc_testing.NewTestServiceClient(cc).FullDuplexCall(rootSpanCtx)
 		require.NoError(t, err)
 		require.NoError(t, stream.CloseSend())
-		close(clientSendClosed)
 
 		// wait for the server to finish its spans and close the stream
-		resp, err := stream.Recv()
+		_, err = stream.Recv()
 		require.Equal(t, err, io.EOF)
-		require.Nil(t, resp)
 
-		span.Finish()
+		rootSpan.End()
 
-		spans := reporter.GetSpans()
-		require.Len(t, spans, 3)
+		recorderSpans := reporter.GetSpans()
 
-		for i, expectedSpan := range []struct {
-			baggage   string
-			operation string
+		require.Len(t, recorderSpans, 4)
+
+		for i, expectedSpanSpecs := range []struct {
+			operation      string
+			attributeValue string
 		}{
-			// This span is the RPC call to TestService/Ping.
-			{baggage: "stub", operation: "/grpc.testing.TestService/FullDuplexCall"},
-			// This is the second span we expect, which is the "nested-span" span which
-			// we've manually created inside of PingMethod. This is different than for
-			// unary RPCs: given that one can send multiple messages to the RPC, we may
-			// see multiple such "nested-span"s being created. And the PingStream span
-			// will only be finalized last.
-			{baggage: "", operation: "nested-span"},
-			// And this finally is the outermost span which we
-			// manually set up before the RPC call.
-			{baggage: "stub", operation: "stream-check"},
+			// This is the first span we expect, which is the
+			// _operation_ span created inside the gRPC handler
+			{operation: "nested-span-full-duplex", attributeValue: "stub"},
+			// The next two spans are the client span and the server span
+			// added automatically by otel instrumentation
+			{operation: "grpc.testing.TestService/FullDuplexCall", attributeValue: ""},
+			{operation: "grpc.testing.TestService/FullDuplexCall", attributeValue: ""},
+			// This is the root span, the first one we created at the beginning
+			// of the test.
+			{operation: "root-span", attributeValue: ""},
 		} {
-			if !assert.IsType(t, spans[i], &jaeger.Span{}) {
-				continue
+			span := recorderSpans[i]
+
+			serviceAttribute := attribute.KeyValue{}
+			for _, attr := range span.Attributes {
+				if string(attr.Key) == serviceBaggageKey {
+					serviceAttribute = attr
+				}
 			}
 
-			span := spans[i].(*jaeger.Span)
-			assert.Equal(t, expectedSpan.baggage, span.BaggageItem("service"), "wrong baggage item for span %d", i)
-			assert.Equal(t, expectedSpan.operation, span.OperationName(), "wrong operation name for span %d", i)
+			require.Equal(t, serviceAttribute.Value.AsString(), expectedSpanSpecs.attributeValue)
+			assert.Equal(t, expectedSpanSpecs.operation, span.Name, "wrong operation name for span %d", i)
 		}
 	})
 }

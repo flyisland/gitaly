@@ -200,7 +200,7 @@ func parseConnectionString(connStr string) (cfg tracingConfig, err error) {
 
 		if f > 1.0 || f < 0.0 {
 			return tracingConfig{},
-				fmt.Errorf("%s is '%v' but must be a float value between 0.0 and 1.0", optSamplerParameter, samplerFloatValue)
+				fmt.Errorf("%s is '%v' but must be a float value between 0.0 and 1.0", optSamplerParameter, f)
 		}
 
 		samplerFloatValue = clampValue(f, 0.0, 1.0)

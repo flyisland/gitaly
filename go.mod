@@ -32,7 +32,6 @@ require (
 	github.com/miekg/dns v1.1.68
 	github.com/olekukonko/tablewriter v1.0.7
 	github.com/opencontainers/runtime-spec v1.2.1
-	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
@@ -40,7 +39,6 @@ require (
 	github.com/rubenv/sql-migrate v1.8.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
-	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/urfave/cli/v3 v3.3.3
 	gitlab.com/gitlab-org/labkit v1.31.2
 	go.etcd.io/raft/v3 v3.6.0
@@ -59,7 +57,6 @@ require (
 	gocloud.dev v0.40.1-0.20241107185025-56954848c3aa
 	golang.org/x/crypto v0.42.0
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
-	golang.org/x/net v0.44.0 // indirect
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.37.0
 	golang.org/x/text v0.30.0
@@ -197,6 +194,7 @@ require (
 	github.com/olekukonko/ll v0.0.8 // indirect
 	github.com/olekukonko/ts v0.0.0-20171002115256-78ecb04241c0 // indirect
 	github.com/onsi/gomega v1.35.1 // indirect
+	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
@@ -204,8 +202,8 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/prometheus/prometheus v0.303.1 // indirect
+	github.com/prometheus/procfs v0.16.1 // indirect
+	github.com/prometheus/prometheus v0.54.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rubyist/tracerx v0.0.0-20170927163412-787959303086 // indirect
@@ -220,6 +218,7 @@ require (
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
+	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
@@ -235,6 +234,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/mod v0.28.0 // indirect
+	golang.org/x/net v0.44.0 // indirect
 	golang.org/x/oauth2 v0.31.0 // indirect
 	golang.org/x/tools v0.37.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240716161551-93cc26a95ae9 // indirect

@@ -39,7 +39,7 @@ type RetryableError struct{ error }
 // extracted from the current peer connection.
 func OpenSidechannel(ctx context.Context) (_ *ServerConn, err error) {
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "sidechannel.OpenSidechannel", nil)
-	defer span.Finish()
+	defer span.End()
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {

@@ -10,14 +10,19 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // GetTag looks up a commit by tagID using an existing catfile.Batch instance. Note: we pass
 // in the tagName because the tag name from refs/tags may be different than the name found in the
 // actual tag object. We want to use the tagName found in refs/tags
 func GetTag(ctx context.Context, objectReader ObjectContentReader, tagID git.Revision, tagName string) (*gitalypb.Tag, error) {
-	span, ctx := tracing.StartSpanIfHasParent(ctx, "catfile.GetTag", tracing.Tags{"tagName": tagName})
-	defer span.Finish()
+	span, ctx := tracing.StartSpanIfHasParent(ctx,
+		"catfile.GetTag",
+		[]attribute.KeyValue{
+			attribute.String("tagName", tagName),
+		})
+	defer span.End()
 
 	object, err := objectReader.Object(ctx, tagID)
 	if err != nil {

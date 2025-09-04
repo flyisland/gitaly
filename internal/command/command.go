@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/command/commandcounter"
@@ -24,6 +23,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	labkittracing "gitlab.com/gitlab-org/labkit/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -153,7 +154,7 @@ type Command struct {
 
 	finalizers []func(context.Context, *Command)
 
-	span opentracing.Span
+	span trace.Span
 
 	metricsCmd    string
 	metricsSubCmd string
@@ -230,9 +231,9 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 	span, ctx := tracing.StartSpanIfHasParent(
 		ctx,
 		spanName,
-		tracing.Tags{
-			"path": nameAndArgs[0],
-			"args": strings.Join(nameAndArgs[1:], " "),
+		[]attribute.KeyValue{
+			attribute.String("path", nameAndArgs[0]),
+			attribute.String("args", strings.Join(nameAndArgs[1:], " ")),
 		},
 	)
 	cmd := exec.Command(nameAndArgs[0], nameAndArgs[1:]...)
@@ -701,22 +702,28 @@ func (c *Command) logProcessComplete() {
 		contextSwitchesTotal.WithLabelValues(service, method, cmdName, c.metricsSubCmd, "nonvoluntary", c.cmdGitVersion, c.refBackend).Add(float64(rusage.Nivcsw))
 	}
 
-	c.span.SetTag("pid", cmd.ProcessState.Pid())
-	c.span.SetTag("exit_code", exitCode)
-	c.span.SetTag("system_time_ms", systemTime.Milliseconds())
-	c.span.SetTag("user_time_ms", userTime.Milliseconds())
-	c.span.SetTag("real_time_ms", realTime.Milliseconds())
+	attributes := []attribute.KeyValue{
+		attribute.Int("pid", cmd.ProcessState.Pid()),
+		attribute.Int("exit_code", exitCode),
+		attribute.Int64("system_time_ms", systemTime.Milliseconds()),
+		attribute.Int64("user_time_ms", userTime.Milliseconds()),
+		attribute.Int64("real_time_ms", realTime.Milliseconds()),
+	}
+
 	if ok {
-		c.span.SetTag("maxrss", rusage.Maxrss)
-		c.span.SetTag("inblock", rusage.Inblock)
-		c.span.SetTag("oublock", rusage.Oublock)
-		c.span.SetTag("minflt", rusage.Minflt)
-		c.span.SetTag("majflt", rusage.Majflt)
+		attributes = append(attributes,
+			attribute.Int64("maxrss", rusage.Maxrss),
+			attribute.Int64("inblock", rusage.Inblock),
+			attribute.Int64("oublock", rusage.Oublock),
+			attribute.Int64("minflt", rusage.Minflt),
+			attribute.Int64("majflt", rusage.Majflt),
+		)
 	}
 	if c.cgroupPath != "" {
-		c.span.SetTag("cgroup_path", c.cgroupPath)
+		attributes = append(attributes, attribute.String("cgroup_path", c.cgroupPath))
 	}
-	c.span.Finish()
+	c.span.SetAttributes(attributes...)
+	c.span.End()
 }
 
 // Args is an accessor for the command arguments
