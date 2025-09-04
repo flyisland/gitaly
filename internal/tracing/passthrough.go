@@ -42,7 +42,7 @@ func StreamPassthroughInterceptor(spanContext opentracing.SpanContext) grpc.Stre
 func injectSpanContext(parentCtx context.Context, spanContext opentracing.SpanContext) context.Context {
 	tracer := opentracing.GlobalTracer()
 	md := grpcmwmetadata.ExtractOutgoing(parentCtx).Clone()
-	if err := tracer.Inject(spanContext, opentracing.HTTPHeaders, metadataTextMap(md)); err != nil {
+	if err := tracer.Inject(spanContext, opentracing.HTTPHeaders, grpcMetadataCarrier(md)); err != nil {
 		return parentCtx
 	}
 	ctxWithMetadata := md.ToOutgoing(parentCtx)
@@ -64,8 +64,24 @@ func environAsMap(env []string) map[string]string {
 // fields. gRPC header name format is:
 // > Header-Name → 1*( %x30-39 / %x61-7A / "_" / "-" / ".") ; 0-9 a-z _ - .
 // > Source: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
-type metadataTextMap metadata.MD
+type grpcMetadataCarrier metadata.MD
 
-func (m metadataTextMap) Set(key, val string) {
-	m[strings.ToLower(key)] = []string{val}
+func (g grpcMetadataCarrier) Get(key string) string {
+	values := metadata.MD(g).Get(key)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func (g grpcMetadataCarrier) Set(key string, value string) {
+	metadata.MD(g).Set(strings.ToLower(key), value)
+}
+
+func (g grpcMetadataCarrier) Keys() []string {
+	var keys []string
+	for k := range g {
+		keys = append(keys, k)
+	}
+	return keys
 }
