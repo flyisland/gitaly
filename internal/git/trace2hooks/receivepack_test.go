@@ -135,21 +135,46 @@ func TestReceivePackHook(t *testing.T) {
 	require.True(t, ok, "connectivity check value should be an integer")
 	require.Greater(t, value, 0, "connectivity check should have positive elapsed time")
 
+	childProcessCount := 0
 	foundUnpackObjects := false
 	foundIndexPack := false
+
 	for key, val := range logrusFields {
-		if strings.HasPrefix(key, "receive-pack.child-process.") {
+		// Check for indexed child process timing fields (should be like "receive-pack.child-process.0", "receive-pack.child-process.1", etc.)
+		if strings.HasPrefix(key, "receive-pack.child-process.") && !strings.HasSuffix(key, ".command") {
+			// Extract the index to verify it's numeric
+			suffix := strings.TrimPrefix(key, "receive-pack.child-process.")
+			if _, err := fmt.Sscanf(suffix, "%d", new(int)); err == nil {
+				intVal, ok := val.(int)
+				require.True(t, ok, "child process timing should be an integer for key %s", key)
+				require.Greater(t, intVal, 0, "child process should have positive elapsed time for key %s", key)
+				childProcessCount++
+			}
+		}
+
+		// Also check for the original non-indexed field name (during transition)
+		if key == "receive-pack.child-process" {
 			intVal, ok := val.(int)
 			require.True(t, ok, "child process timing should be an integer")
 			require.Greater(t, intVal, 0, "child process should have positive elapsed time")
+			childProcessCount++
+		}
 
-			if strings.Contains(key, "unpack-objects") {
+		// Check for corresponding command name fields
+		if strings.HasPrefix(key, "receive-pack.child-process.") && strings.HasSuffix(key, ".command") {
+			cmdName, ok := val.(string)
+			require.True(t, ok, "child process command should be a string")
+			require.NotEmpty(t, cmdName, "child process command should not be empty")
+
+			if strings.Contains(cmdName, "unpack-objects") {
 				foundUnpackObjects = true
-			} else if strings.Contains(key, "index-pack") {
+			} else if strings.Contains(cmdName, "index-pack") {
 				foundIndexPack = true
 			}
 		}
 	}
+
+	require.Greater(t, childProcessCount, 0, "Expected to find at least one child process timing metric")
 	require.True(t, foundUnpackObjects || foundIndexPack,
-		"Expected to find either unpack-objects or index-pack child process metrics")
+		"Expected to find either unpack-objects or index-pack child process command")
 }
