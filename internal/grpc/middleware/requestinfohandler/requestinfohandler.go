@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -56,6 +57,7 @@ type RequestInfo struct {
 	Repository  *gitalypb.Repository
 	objectPool  *gitalypb.ObjectPool
 	storageName string
+	partition   storage.PartitionID
 }
 
 type requestInfoKey struct{}
@@ -196,6 +198,9 @@ func (i *RequestInfo) extractRequestInfo(request any) {
 				if storage, err := mi.Storage(reqMsg); err == nil {
 					i.storageName = storage
 				}
+				if ptn, err := mi.Partition(reqMsg); err == nil {
+					i.partition = ptn
+				}
 			}
 		}
 	}
@@ -264,6 +269,11 @@ func (i *RequestInfo) Tags() map[string]string {
 		} {
 			tags[key] = value
 		}
+	}
+
+	// PartitionID is set as a tag for partition-scoped RPC methods.
+	if i.partition != 0 {
+		tags["grpc.request.partition_id"] = i.partition.String()
 	}
 
 	return tags

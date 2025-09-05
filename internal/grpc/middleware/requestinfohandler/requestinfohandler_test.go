@@ -12,6 +12,7 @@ import (
 	grpcmwtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	gitalylog "gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
@@ -770,6 +771,37 @@ func TestInterceptors(t *testing.T) {
 				"grpc.request.glRepository":  "glRepository",
 			},
 		},
+		{
+			desc: "partition-scoped call",
+			call: func(t *testing.T, client mockClient) {
+				_, err := client.BackupPartition(ctx, &gitalypb.BackupPartitionRequest{
+					StorageName: "storage",
+					PartitionId: "99",
+				})
+				require.NoError(t, err)
+			},
+			expectedInfo: &RequestInfo{
+				clientName:      "unknown",
+				callSite:        "unknown",
+				authVersion:     "unknown",
+				deadlineType:    "none",
+				methodOperation: "accessor",
+				methodScope:     "partition",
+				methodType:      "unary",
+				FullMethod:      "/gitaly.PartitionService/BackupPartition",
+				storageName:     "storage",
+				partition:       storage.PartitionID(99),
+			},
+			expectedTags: map[string]any{
+				"grpc.meta.deadline_type":    "none",
+				"grpc.meta.method_operation": "accessor",
+				"grpc.meta.method_scope":     "partition",
+				"grpc.meta.method_type":      "unary",
+				"grpc.request.fullMethod":    "/gitaly.PartitionService/BackupPartition",
+				"grpc.request.StorageName":   "storage",
+				"grpc.request.partition_id":  "99",
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			server, client := setupServer(t, ctx)
@@ -799,6 +831,7 @@ type mockServer struct {
 	gitalypb.RepositoryServiceServer
 	gitalypb.ObjectPoolServiceServer
 	gitalypb.OperationServiceServer
+	gitalypb.PartitionServiceServer
 	tags map[string]any
 	info *RequestInfo
 }
@@ -807,6 +840,7 @@ type mockClient struct {
 	gitalypb.RepositoryServiceClient
 	gitalypb.ObjectPoolServiceClient
 	gitalypb.OperationServiceClient
+	gitalypb.PartitionServiceClient
 }
 
 func setupServer(tb testing.TB, ctx context.Context) (*mockServer, mockClient) {
@@ -841,6 +875,7 @@ func setupServer(tb testing.TB, ctx context.Context) (*mockServer, mockClient) {
 	gitalypb.RegisterRepositoryServiceServer(server, &mockServer)
 	gitalypb.RegisterObjectPoolServiceServer(server, &mockServer)
 	gitalypb.RegisterOperationServiceServer(server, &mockServer)
+	gitalypb.RegisterPartitionServiceServer(server, &mockServer)
 
 	listener := bufconn.Listen(1)
 	go testhelper.MustServe(tb, server, listener)
@@ -858,6 +893,7 @@ func setupServer(tb testing.TB, ctx context.Context) (*mockServer, mockClient) {
 		RepositoryServiceClient: gitalypb.NewRepositoryServiceClient(conn),
 		ObjectPoolServiceClient: gitalypb.NewObjectPoolServiceClient(conn),
 		OperationServiceClient:  gitalypb.NewOperationServiceClient(conn),
+		PartitionServiceClient:  gitalypb.NewPartitionServiceClient(conn),
 	}
 }
 
@@ -877,4 +913,8 @@ func (s *mockServer) UserCommitFiles(stream gitalypb.OperationService_UserCommit
 func (s *mockServer) CreateBundleFromRefList(stream gitalypb.RepositoryService_CreateBundleFromRefListServer) error {
 	_, err := stream.Recv()
 	return err
+}
+
+func (s *mockServer) BackupPartition(ctx context.Context, _ *gitalypb.BackupPartitionRequest) (*gitalypb.BackupPartitionResponse, error) {
+	return &gitalypb.BackupPartitionResponse{}, nil
 }
