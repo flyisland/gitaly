@@ -194,6 +194,41 @@ func testObjectReaderObject(t *testing.T, ctx context.Context) {
 		require.EqualError(t, err, "current object has not been fully read")
 	})
 
+	t.Run("read submodule", func(t *testing.T) {
+		t.Parallel()
+		submoduleCommit := gittest.DefaultObjectHash.HashData([]byte("submodule commit"))
+		treeOID := gittest.WriteTree(t, cfg, repoPath, []gittest.TreeEntry{
+			{
+				Path:    ".gitmodules",
+				Mode:    "100644",
+				Content: fmt.Sprintf(`[submodule "sub"]\n\tpath = sub\n\turl = file://%s`, repoPath),
+			},
+			{
+				Path: "sub",
+				Mode: "160000",
+				OID:  submoduleCommit,
+			},
+		})
+
+		reader, err := newObjectReader(ctx, newRepoExecutor(t, cfg, repoProto), nil)
+		require.NoError(t, err)
+		defer reader.close()
+
+		commitID := gittest.WriteCommit(t, cfg, repoPath,
+			gittest.WithTree(treeOID),
+			gittest.WithMessage("Add submodule"),
+		)
+
+		submoduleRevision := fmt.Sprintf("%s:%s", commitID, "sub")
+
+		_, err = reader.Object(ctx, git.Revision(submoduleRevision))
+		if featureflag.GitMaster.IsEnabled(ctx) {
+			require.Equal(t, NotFoundError{Revision: submoduleCommit.String()}, err)
+		} else {
+			require.Equal(t, NotFoundError{Revision: commitID.String() + ":sub"}, err)
+		}
+	})
+
 	t.Run("read fails when partially consuming previous object", func(t *testing.T) {
 		reader, err := newObjectReader(ctx, newRepoExecutor(t, cfg, repoProto), nil)
 		require.NoError(t, err)
