@@ -180,12 +180,13 @@ func (m *migrator) Run() {
 						m.logger.WithError(err).WithFields(log.Fields{
 							"storage_name":       data.storageName,
 							"relative_path":      data.relativePath,
+							"migration_latency":  latency,
 							"migration_attempts": state.attempts,
 						}).ErrorContext(ctx, "migration failed for repository")
 						m.metrics.failsMetric.WithLabelValues(failMetricReason(err)).Add(1)
 
-						// Let's delay exponentially, but with a max of 2^5
-						delay := min(math.Pow(2, float64(state.attempts)), 32)
+						// Let's delay exponentially, but with a max of 6hrs
+						delay := min(math.Pow(2, float64(state.attempts)), 6)
 						state.coolDown = time.Now().Add(time.Duration(delay) * time.Hour)
 					} else {
 						m.logger.WithFields(log.Fields{
