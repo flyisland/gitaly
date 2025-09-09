@@ -1134,7 +1134,7 @@ func TestCommitDiff_nonexistentCommit(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	testhelper.RequireGrpcError(t, structerr.NewFailedPrecondition("exit status 128"), drainCommitDiffResponse(stream))
+	testhelper.RequireGrpcError(t, structerr.NewFailedPrecondition("eachDiff: exit status 128"), drainCommitDiffResponse(stream))
 }
 
 func getDiffsFromCommitDiffClient(t *testing.T, client gitalypb.DiffService_CommitDiffClient) []*diff.Diff {

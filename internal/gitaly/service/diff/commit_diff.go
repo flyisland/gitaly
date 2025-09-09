@@ -1,14 +1,39 @@
 package diff
 
 import (
+	"bufio"
+	"context"
 	"fmt"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/diff"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
+
+func execDiffTree(ctx context.Context, repo *localrepo.Repo, leftSha, rightSha string, flags []gitcmd.Option, postSepArgs []string) (*command.Command, error) {
+	// We purposely don't apply any whitespace ignoring flags here.
+	diffTree := gitcmd.Command{
+		Name: "diff-tree",
+		Flags: append([]gitcmd.Option{
+			gitcmd.Flag{Name: "-r"},
+			gitcmd.Flag{Name: "-z"},
+		}, flags...),
+		Args:        []string{leftSha, rightSha},
+		PostSepArgs: postSepArgs,
+	}
+
+	diffTreeExec, err := repo.Exec(ctx, diffTree,
+		gitcmd.WithSetupStdout())
+	if err != nil {
+		return nil, structerr.NewInternal("diff-tree: %w", err)
+	}
+
+	return diffTreeExec, nil
+}
 
 func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.DiffService_CommitDiffServer) error {
 	ctx := stream.Context()
@@ -67,6 +92,31 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 		cmd.Flags = append(cmd.Flags, gitcmd.Flag{Name: "--ignore-space-change"})
 	}
 
+	// diffManifestKey constructs the key for the diffManifest map. These three values
+	// are sufficient to compare a patch produced by git-diff-tree(1) against one produced
+	// by git-diff(1).
+	diffManifestKey := func(path []byte, oldBlobID, newBlobID string) string {
+		return string(path) + oldBlobID + newBlobID
+	}
+
+	// diffManifest stores patch metadata returned by git-diff-tree(1) without any whitespace
+	// ignoring in effect. We do this if the caller has asked to ignore whitespace in order to
+	// retain the previous behaviour of git-diff(1) before an upstream breaking change.
+	diffManifest := make(map[string]*gitalypb.ChangedPaths)
+	if whitespaceChanges != gitalypb.CommitDiffRequest_WHITESPACE_CHANGES_UNSPECIFIED {
+		diffTreeExec, err := execDiffTree(ctx, repo, leftSha, rightSha, commonFlags, commonPostSepArgs)
+		if err != nil {
+			return structerr.NewInternal("diff-tree: %w", err)
+		}
+
+		if err := parsePaths(bufio.NewReader(diffTreeExec), func(cp *gitalypb.ChangedPaths) error {
+			diffManifest[diffManifestKey(cp.GetPath(), cp.GetOldBlobId(), cp.GetNewBlobId())] = cp
+			return nil
+		}); err != nil {
+			return structerr.NewInternal("diff-tree parse: %w", err)
+		}
+	}
+
 	var limits diff.Limits
 	if in.GetEnforceLimits() {
 		limits.EnforceLimits = true
@@ -89,7 +139,12 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 	limits.SafeMaxLines = int(in.GetSafeMaxLines())
 	limits.SafeMaxBytes = int(in.GetSafeMaxBytes())
 
-	return s.eachDiff(ctx, repo, objectHash, cmd, limits, func(diff *diff.Diff) error {
+	if err := s.eachDiff(ctx, repo, objectHash, cmd, limits, func(diff *diff.Diff) error {
+		// As we process each diff from git-diff(1), we prune the equivalent entry
+		// from the diffManifest. The goal is for the diffManifest to contain only
+		// patch metadata for whitespace changes at the very end.
+		delete(diffManifest, diffManifestKey(diff.ToPath, diff.FromID, diff.ToID))
+
 		response := &gitalypb.CommitDiffResponse{
 			FromPath:       diff.FromPath,
 			ToPath:         diff.ToPath,
@@ -133,5 +188,28 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return structerr.NewInternal("eachDiff: %w", err)
+	}
+
+	// In order to retain the previous behaviour of git-diff(1), we iterate through the
+	// diffManifest (which now contains only patch metadata for whitespace-only changes),
+	// and send empty patch responses in the same way that eachDiff() above would've done.
+	for _, cp := range diffManifest {
+		response := &gitalypb.CommitDiffResponse{
+			FromPath:   cp.GetPath(),
+			ToPath:     cp.GetPath(),
+			FromId:     cp.GetOldBlobId(),
+			ToId:       cp.GetNewBlobId(),
+			OldMode:    cp.GetOldMode(),
+			NewMode:    cp.GetNewMode(),
+			EndOfPatch: true,
+		}
+
+		if err := stream.Send(response); err != nil {
+			return structerr.NewInternal("send: %w", err)
+		}
+	}
+
+	return nil
 }
