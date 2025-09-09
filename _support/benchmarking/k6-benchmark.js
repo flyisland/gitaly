@@ -69,31 +69,23 @@ const client = new Client()
 client.load([gitalyProtoDir], 'commit.proto', 'blob.proto', 'ref.proto', 'repository.proto')
 
 export function findCommit () {
-  try {
-    client.connect(gitalyAddress, {
-      plaintext: true
-    })
+  client.connect(gitalyAddress, {
+    plaintext: true
+  })
 
-    const testRepo = selectTestRepo();
+  const testRepo = selectTestRepo();
 
-    const data = {
-      repository: testRepo.repository,
-      revision: encoding.b64encode(testRepo.commit)
-    }
-
-    const response = client.invoke('gitaly.CommitService/FindCommit', data)
-    check(response, {
-      'findCommit status is OK': r => r && r.status === StatusOK
-    })
-
-    console.log(JSON.stringify(response.message))
-  } catch (error) {
-    console.log(`[FindCommit] ✗ Error: ${error.message || error}`)
-  } finally {
-    if (client) {
-      client.close()
-    }
+  const data = {
+    repository: testRepo.repository,
+    revision: encoding.b64encode(testRepo.commit)
   }
+
+  const response = client.invoke('gitaly.CommitService/FindCommit', data)
+  check(response, {
+    'findCommit status is OK': r => r && r.status === StatusOK
+  })
+
+  client.close()
 }
 
 export function getBlobs () {
@@ -115,7 +107,6 @@ export function getBlobs () {
   }
 
   const stream = new Stream(client, 'gitaly.BlobService/GetBlobs')
-
   stream.on('data', data => {
     check(data, {
       'type is BLOB': r => r && r.type === 'BLOB'
@@ -127,6 +118,10 @@ export function getBlobs () {
   stream.on('end', function () {
     // The server has finished sending
     client.close()
+  })
+
+  stream.on('error', function(err) {
+    console.error(err)
   })
 
   // send a message to the server
@@ -160,6 +155,10 @@ export function getTreeEntries () {
     client.close()
   })
 
+  stream.on('error', function(err) {
+    console.error(err)
+  })
+
   // send a message to the server
   stream.write(getTreeEntriesRequest)
 }
@@ -189,6 +188,10 @@ export function treeEntry () {
   stream.on('end', function () {
     // The server has finished sending
     client.close()
+  })
+
+  stream.on('error', function(err) {
+    console.error(err)
   })
 
   // send a message to the server
@@ -221,51 +224,49 @@ export function listCommitsByOid () {
     client.close()
   })
 
+  stream.on('error', function(err) {
+    console.error(err)
+  })
+
   // send a message to the server
   stream.write(listCommitsByOidRequest)
 }
 
 export function writeAndDeleteRefs () {
-  try {
-    client.connect(gitalyAddress, {
-      plaintext: true
-    })
+  client.connect(gitalyAddress, {
+    plaintext: true
+  })
 
-    const testRepo = selectTestRepo();
+  const testRepo = selectTestRepo();
 
-    const generatedRef = 'refs/test/' + generateRandom()
+  const generatedRef = 'refs/test/' + generateRandom()
 
-    const data = {
-      repository: testRepo.repository,
-      ref: encoding.b64encode(generatedRef),
-      revision: encoding.b64encode(testRepo.commit)
-    }
-    const response = client.invoke('gitaly.RepositoryService/WriteRef', data)
-    check(response, {
-      'WriteRef status is OK': r => r && r.status === StatusOK
-    })
-
-    console.log(JSON.stringify(response.message))
-
-    const deleteRefData = {
-      repository: testRepo.repository,
-      refs: [encoding.b64encode(generatedRef)]
-    }
-
-    const deleteRefResponse = client.invoke('gitaly.RefService/DeleteRefs', deleteRefData)
-    check(deleteRefResponse, {
-      'DeleteRefs status is OK': r => r && r.status === StatusOK
-    })
-
-    console.log(JSON.stringify(deleteRefResponse.message))
-    if (deleteRefResponse.status !== StatusOK) {
-      console.log('DeleteRefs failed with error: ', deleteRefResponse.error)
-    }
-  } catch (error) {
-    console.log(`[DeleteRefs] ✗ Error: ${error.message || error}`)
-  } finally {
-    if (client) {
-      client.close()
-    }
+  const data = {
+    repository: testRepo.repository,
+    ref: encoding.b64encode(generatedRef),
+    revision: encoding.b64encode(testRepo.commit)
   }
+  const response = client.invoke('gitaly.RepositoryService/WriteRef', data)
+  check(response, {
+    'WriteRef status is OK': r => r && r.status === StatusOK
+  })
+
+  console.log(JSON.stringify(response.message))
+
+  const deleteRefData = {
+    repository: testRepo.repository,
+    refs: [encoding.b64encode(generatedRef)]
+  }
+
+  const deleteRefResponse = client.invoke('gitaly.RefService/DeleteRefs', deleteRefData)
+  check(deleteRefResponse, {
+    'DeleteRefs status is OK': r => r && r.status === StatusOK
+  })
+
+  console.log(JSON.stringify(deleteRefResponse.message))
+  if (deleteRefResponse.status !== StatusOK) {
+    console.log('DeleteRefs failed with error: ', deleteRefResponse.error)
+  }
+
+  client.close()
 }
