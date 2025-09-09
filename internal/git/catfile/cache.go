@@ -58,6 +58,7 @@ type ProcessCache struct {
 	monitorTicker helper.Ticker
 	monitorDone   chan struct{}
 
+	locator                     storage.Locator
 	objectReaders               processes
 	objectReadersWithoutMailmap processes
 
@@ -70,16 +71,18 @@ type ProcessCache struct {
 
 // NewCache creates a new catfile process cache.
 func NewCache(cfg config.Cfg) *ProcessCache {
-	return newCache(defaultBatchfileTTL, cfg.Git.CatfileCacheSize, helper.NewTimerTicker(defaultEvictionInterval))
+	return newCache(defaultBatchfileTTL, cfg.Git.CatfileCacheSize, helper.NewTimerTicker(defaultEvictionInterval),
+		config.NewLocator(cfg))
 }
 
-func newCache(ttl time.Duration, maxLen int, monitorTicker helper.Ticker) *ProcessCache {
+func newCache(ttl time.Duration, maxLen int, monitorTicker helper.Ticker, locator storage.Locator) *ProcessCache {
 	if maxLen <= 0 {
 		maxLen = defaultMaxLen
 	}
 
 	processCache := &ProcessCache{
-		ttl: ttl,
+		ttl:     ttl,
+		locator: locator,
 		objectReaders: processes{
 			maxLen: maxLen,
 		},
@@ -241,7 +244,16 @@ func (c *ProcessCache) getOrCreateProcess(
 	span, ctx := tracing.StartSpanIfHasParent(ctx, spanName, nil)
 	defer span.Finish()
 
-	cacheKey, isCacheable := newCacheKey(fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now())), repo)
+	// The storagePath is included in the cache key because
+	// snapshot repositories and their corresponding original repositories share the
+	// same relative path. To differentiate between them and ensure each has a unique
+	// cache key, we incorporate the storage path as part of the key.
+	storagePath, err := c.locator.GetStorageByName(ctx, repo.GetStorageName())
+	if err != nil {
+		return nil, nil, fmt.Errorf("storage path: %w", err)
+	}
+	cacheKey, isCacheable := newCacheKey(fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now())),
+		storagePath, repo)
 
 	if isCacheable {
 		// We only try to look up cached processes in case it is cacheable, which requires a
@@ -363,24 +375,26 @@ func (c *ProcessCache) returnToCache(p *processes, cacheKey key, value cacheable
 }
 
 type key struct {
-	sessionID   string
-	repoStorage string
-	repoRelPath string
-	repoObjDir  string
-	repoAltDir  string
+	sessionID       string
+	repoStorageName string
+	repoStoragePath string
+	repoRelPath     string
+	repoObjDir      string
+	repoAltDir      string
 }
 
-func newCacheKey(sessionID string, repo storage.Repository) (key, bool) {
+func newCacheKey(sessionID string, storagePath string, repo storage.Repository) (key, bool) {
 	if sessionID == "" {
 		return key{}, false
 	}
 
 	return key{
-		sessionID:   sessionID,
-		repoStorage: repo.GetStorageName(),
-		repoRelPath: repo.GetRelativePath(),
-		repoObjDir:  repo.GetGitObjectDirectory(),
-		repoAltDir:  strings.Join(repo.GetGitAlternateObjectDirectories(), ","),
+		sessionID:       sessionID,
+		repoStorageName: repo.GetStorageName(),
+		repoStoragePath: storagePath,
+		repoRelPath:     repo.GetRelativePath(),
+		repoObjDir:      repo.GetGitObjectDirectory(),
+		repoAltDir:      strings.Join(repo.GetGitAlternateObjectDirectories(), ","),
 	}, true
 }
 
