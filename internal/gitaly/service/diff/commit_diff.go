@@ -35,31 +35,36 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 		return fmt.Errorf("detecting object format: %w", err)
 	}
 
+	commonFlags := []gitcmd.Option{
+		gitcmd.Flag{Name: "--find-renames=30%"},
+		gitcmd.Flag{Name: fmt.Sprintf("--abbrev=%d", objectHash.EncodedLen())},
+		gitcmd.Flag{Name: "--full-index"},
+	}
+	if in.GetDiffMode() == gitalypb.CommitDiffRequest_WORDDIFF {
+		commonFlags = append(commonFlags, gitcmd.Flag{Name: "--word-diff=porcelain"})
+	}
+
+	var commonPostSepArgs []string
+	if len(paths) > 0 {
+		for _, path := range paths {
+			commonPostSepArgs = append(commonPostSepArgs, string(path))
+		}
+	}
+
 	cmd := gitcmd.Command{
 		Name: "diff",
-		Flags: []gitcmd.Option{
+		Flags: append([]gitcmd.Option{
 			gitcmd.Flag{Name: "--patch"},
 			gitcmd.Flag{Name: "--raw"},
-			gitcmd.Flag{Name: fmt.Sprintf("--abbrev=%d", objectHash.EncodedLen())},
-			gitcmd.Flag{Name: "--full-index"},
-			gitcmd.Flag{Name: "--find-renames=30%"},
-		},
-		Args: []string{leftSha, rightSha},
+		}, commonFlags...),
+		Args:        []string{leftSha, rightSha},
+		PostSepArgs: commonPostSepArgs,
 	}
 
 	if whitespaceChanges == gitalypb.CommitDiffRequest_WHITESPACE_CHANGES_IGNORE_ALL {
 		cmd.Flags = append(cmd.Flags, gitcmd.Flag{Name: "--ignore-all-space"})
 	} else if whitespaceChanges == gitalypb.CommitDiffRequest_WHITESPACE_CHANGES_IGNORE {
 		cmd.Flags = append(cmd.Flags, gitcmd.Flag{Name: "--ignore-space-change"})
-	}
-
-	if in.GetDiffMode() == gitalypb.CommitDiffRequest_WORDDIFF {
-		cmd.Flags = append(cmd.Flags, gitcmd.Flag{Name: "--word-diff=porcelain"})
-	}
-	if len(paths) > 0 {
-		for _, path := range paths {
-			cmd.PostSepArgs = append(cmd.PostSepArgs, string(path))
-		}
 	}
 
 	var limits diff.Limits
