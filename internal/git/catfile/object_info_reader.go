@@ -92,6 +92,12 @@ func ParseObjectInfo(objectHash git.ObjectHash, stdout *bufio.Reader, nulTermina
 	}
 
 	info := strings.Split(infoLine, " ")
+	if len(info) == 2 && info[1] == "submodule" {
+		return nil, NotFoundError{
+			Revision: info[0],
+		}
+	}
+
 	if len(info) != 3 {
 		return nil, fmt.Errorf("invalid info line: %q", infoLine)
 	}
