@@ -29,13 +29,23 @@ export const options = {
   setupTimeout: '5m'
 }
 
-// Test repository configuration
-const testRepo = {
-  storageName: 'default',
-  relativePath: 'git.git',
-  gitAlternateObjectDirectories: [],
-  glRepository: 'git',
-  glProjectPath: 'gitlab-org/git'
+const repos = JSON.parse(open("/opt/benchmark-gitaly/repositories.json"));
+
+const selectTestRepo = () => {
+  const repo = repos[Math.floor(Math.random() * repos.length)];
+
+  return {
+    repository: {
+      storageName: 'default',
+      relativePath: `${repo.name}.git`,
+      glRepository: repo.name,                // irrelevant but mandatory
+      glProjectPath: `foo/bar/${repo.name}`,  // irrelevant but mandatory
+    },
+    commit: repo.testdata.commits[Math.floor(Math.random() * repo.testdata.commits.length)],
+    ref: repo.testdata.refs[Math.floor(Math.random() * repo.testdata.refs.length)],
+    file: repo.testdata.files[Math.floor(Math.random() * repo.testdata.files.length)],
+    directory: repo.testdata.directories[Math.floor(Math.random() * repo.testdata.directories.length)],
+  }
 }
 
 const generateRandom = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(23).substring(2, 5)
@@ -64,10 +74,13 @@ export function findCommit () {
       plaintext: true
     })
 
+    const testRepo = selectTestRepo();
+
     const data = {
-      repository: testRepo,
-      revision: encoding.b64encode('master')
+      repository: testRepo.repository,
+      revision: encoding.b64encode(testRepo.commit)
     }
+
     const response = client.invoke('gitaly.CommitService/FindCommit', data)
     check(response, {
       'findCommit status is OK': r => r && r.status === StatusOK
@@ -88,18 +101,21 @@ export function getBlobs () {
     plaintext: true
   })
 
+  const testRepo = selectTestRepo();
+
   const getBlobsRequest = {
-    repository: testRepo,
+    repository: testRepo.repository,
     revision_paths: [
       {
-        revision: 'master',
-        path: encoding.b64encode('README.md')
+        revision: testRepo.commit,
+        path: encoding.b64encode(testRepo.file)
       }
     ],
     limit: -1
   }
 
   const stream = new Stream(client, 'gitaly.BlobService/GetBlobs')
+
   stream.on('data', data => {
     check(data, {
       'type is BLOB': r => r && r.type === 'BLOB'
@@ -122,10 +138,12 @@ export function getTreeEntries () {
     plaintext: true
   })
 
+  const testRepo = selectTestRepo();
+
   const getTreeEntriesRequest = {
-    repository: testRepo,
-    revision: encoding.b64encode('master'),
-    path: encoding.b64encode('Documentation')
+    repository: testRepo.repository,
+    revision: encoding.b64encode(testRepo.commit),
+    path: encoding.b64encode(testRepo.directory)
   }
 
   const stream = new Stream(client, 'gitaly.CommitService/GetTreeEntries')
@@ -150,10 +168,13 @@ export function treeEntry () {
   client.connect(gitalyAddress, {
     plaintext: true
   })
+
+  const testRepo = selectTestRepo();
+
   const treeEntryRequest = {
-    repository: testRepo,
-    revision: encoding.b64encode('master'),
-    path: encoding.b64encode('templates/Makefile')
+    repository: testRepo.repository,
+    revision: encoding.b64encode(testRepo.ref),
+    path: encoding.b64encode(testRepo.file)
   }
 
   const stream = new Stream(client, 'gitaly.CommitService/TreeEntry')
@@ -178,9 +199,12 @@ export function listCommitsByOid () {
   client.connect(gitalyAddress, {
     plaintext: true
   })
+
+  const testRepo = selectTestRepo();
+
   const listCommitsByOidRequest = {
-    repository: testRepo,
-    oid: ['4ff55cf24f68ee90e73de04f823c36bf536882bd']
+    repository: testRepo.repository,
+    oid: [testRepo.commit]
   }
 
   const stream = new Stream(client, 'gitaly.CommitService/ListCommitsByOid')
@@ -207,12 +231,14 @@ export function writeAndDeleteRefs () {
       plaintext: true
     })
 
+    const testRepo = selectTestRepo();
+
     const generatedRef = 'refs/test/' + generateRandom()
 
     const data = {
-      repository: testRepo,
+      repository: testRepo.repository,
       ref: encoding.b64encode(generatedRef),
-      revision: encoding.b64encode('8b6f19ccfc3aefbd0f22f6b7d56ad6a3fc5e4f37')
+      revision: encoding.b64encode(testRepo.commit)
     }
     const response = client.invoke('gitaly.RepositoryService/WriteRef', data)
     check(response, {
@@ -222,7 +248,7 @@ export function writeAndDeleteRefs () {
     console.log(JSON.stringify(response.message))
 
     const deleteRefData = {
-      repository: testRepo,
+      repository: testRepo.repository,
       refs: [encoding.b64encode(generatedRef)]
     }
 
