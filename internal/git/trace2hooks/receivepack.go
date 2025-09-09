@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
+	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/trace2"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -17,7 +17,12 @@ var receivePackTrace2ToLogFieldMapping = map[string]string{
 
 // ReceivePack is a trace2 hook that export receive-pack events to log
 // fields. This information is extracted by traversing the trace2 event tree.
-type ReceivePack struct{}
+type ReceivePack struct {
+	// childStartCounter tracks the number of child_start events encountered
+	childStartCounter int
+	// mutex protects childStartCounter for concurrent access
+	mutex sync.Mutex
+}
 
 // NewReceivePack is the initializer for ReceivePack
 func NewReceivePack() *ReceivePack {
@@ -47,7 +52,9 @@ func (p *ReceivePack) Handle(rootCtx context.Context, trace *trace2.Trace) error
 
 		// Handle child process events specially
 		if trace.Name == "child_start" {
-			field = buildChildProcessField(field, trace.Metadata["argv"])
+			field, cmdName := p.buildIndexedChildProcessField(field, trace.Metadata["argv"])
+			// Add the full command name as a separate log field
+			customFields.RecordMetadata(fmt.Sprintf("%s.command", field), cmdName)
 		}
 
 		// Record the elapsed time
@@ -59,22 +66,24 @@ func (p *ReceivePack) Handle(rootCtx context.Context, trace *trace2.Trace) error
 	return nil
 }
 
-// buildChildProcessField creates a metric field name for child processes
-func buildChildProcessField(baseField, argv string) string {
-	subField := argv
+// buildIndexedChildProcessField creates a low-cardinality indexed field name for child processes
+// and returns both the indexed field name and the original command name for separate logging
+func (p *ReceivePack) buildIndexedChildProcessField(baseField, argv string) (string, string) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
-	// Extract executable name from absolute paths
+	// Get the current index and increment counter
+	currentIndex := p.childStartCounter
+	p.childStartCounter++
+
+	// Extract command name for the metadata field
+	cmdName := argv
 	if filepath.IsAbs(argv) {
-		_, subField = filepath.Split(subField)
-	} else if strings.HasPrefix(subField, "git") {
-		// For git commands, extract the subcommand name
-		parts := strings.Split(subField, " ")
-		if len(parts) > 1 {
-			subField = parts[1]
-		}
+		_, cmdName = filepath.Split(argv)
 	}
 
-	// Replace spaces with underscores for metric naming
-	subField = strings.Replace(subField, " ", "_", -1)
-	return fmt.Sprintf("%s.%s-us", baseField, subField)
+	// Create indexed field name with low cardinality
+	indexedField := fmt.Sprintf("%s.%d.time_us", baseField, currentIndex)
+
+	return indexedField, cmdName
 }
