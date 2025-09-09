@@ -46,7 +46,7 @@ resource "google_compute_instance" "prepare_repos" {
   # https://cloud.google.com/compute/docs/instances/startup-scripts/linux
   metadata = {
     startup-script = templatefile("${path.module}/../setup-repositories.sh", {
-      repositories = local.config.repositories
+      repositories = local.repository_urls
     })
   }
 }

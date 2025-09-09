@@ -26,10 +26,46 @@ gitaly_instances:
 
 repository_disk_size: 100
 repository_disk_type: "pd-balanced"
-# The list of repositories which will be cloned into Gitaly's storage disk.
 repositories:
-  - "https://gitlab.com/gitlab-org/git.git"
-  - "https://gitlab.com/gitlab-org/gitlab"
-  - "https://gitlab.com/linux-kernel/linux.git"
-  - "https://github.com/Homebrew/homebrew-core.git"
-  - "https://chromium.googlesource.com/chromium/src"
+  - name: git
+    include_in_test: true
+    remote: "https://gitlab.com/gitlab-org/git.git"
+    revision: "2462961280690837670d997bde64bd4ebf8ae66d"
+    testdata:
+      commits:
+        - "fea9d18c534a445ef6e488d8ee711fa92fa0e6bd"
+        - "0a15bb634cf005a0266ee1108ac31aa75649a61c"
+        - "217e4a23d76fe95a0f6ab0f6159de2460db6fcd9"
+      refs:
+        - "refs/heads/master"
+        - "refs/heads/next"
+        - "refs/tags/v2.50.0"
+      files:
+        - "README.md"
+        - "t/t4013/diff.log_--cc_-m_-p_master"
+        - "packfile.c"
+      directories:
+        - "t"
+        - "Documentation"
+        - "git-gui"
+  - name: gitlab
+    include_in_test: true
+    remote: "https://gitlab.com/gitlab-org/gitlab.git"
+    revision: "8f3978675aa4df643cff5a01a8e1896ae754685a"
+    testdata:
+      commits:
+        - "875ffb690e25eb8c98797b5641c6c16c71454b73"
+        - "3074e43761003e2566ea604053fe4988774d2896"
+        - "9ace97496c56335c5739c226853b468afd962830"
+      refs:
+        - "refs/heads/master"
+        - "refs/tags/v18.1.5-ee"
+        - "refs/tags/v17.11.6-ee"
+      files:
+        - "README.md"
+        - "lib/gitaly/server.rb"
+        - "ee/app/graphql/resolvers/epics_resolver.rb"
+      directories:
+        - "app"
+        - "rubocop"
+        - "qa"

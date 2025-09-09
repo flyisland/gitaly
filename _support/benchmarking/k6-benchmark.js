@@ -29,13 +29,23 @@ export const options = {
   setupTimeout: '5m'
 }
 
-// Test repository configuration
-const testRepo = {
-  storageName: 'default',
-  relativePath: 'git.git',
-  gitAlternateObjectDirectories: [],
-  glRepository: 'git',
-  glProjectPath: 'gitlab-org/git'
+const repos = JSON.parse(open("/opt/benchmark-gitaly/repositories.json"));
+
+const selectTestRepo = () => {
+  const repo = repos[Math.floor(Math.random() * repos.length)];
+
+  return {
+    repository: {
+      storageName: 'default',
+      relativePath: `${repo.name}.git`,
+      glRepository: repo.name,                // irrelevant but mandatory
+      glProjectPath: `foo/bar/${repo.name}`,  // irrelevant but mandatory
+    },
+    commit: repo.testdata.commits[Math.floor(Math.random() * repo.testdata.commits.length)],
+    ref: repo.testdata.refs[Math.floor(Math.random() * repo.testdata.refs.length)],
+    file: repo.testdata.files[Math.floor(Math.random() * repo.testdata.files.length)],
+    directory: repo.testdata.directories[Math.floor(Math.random() * repo.testdata.directories.length)],
+  }
 }
 
 const generateRandom = () => Math.random().toString(36).substring(2, 15) + Math.random().toString(23).substring(2, 5)
@@ -59,28 +69,22 @@ const client = new Client()
 client.load([gitalyProtoDir], 'commit.proto', 'blob.proto', 'ref.proto', 'repository.proto')
 
 export function findCommit () {
-  try {
-    client.connect(gitalyAddress, {
-      plaintext: true
-    })
+  client.connect(gitalyAddress, {
+    plaintext: true
+  })
 
-    const data = {
-      repository: testRepo,
-      revision: encoding.b64encode('master')
-    }
-    const response = client.invoke('gitaly.CommitService/FindCommit', data)
-    check(response, {
-      'findCommit status is OK': r => r && r.status === StatusOK
-    })
-
-    console.log(JSON.stringify(response.message))
-  } catch (error) {
-    console.log(`[FindCommit] ✗ Error: ${error.message || error}`)
-  } finally {
-    if (client) {
-      client.close()
-    }
+  const testRepo = selectTestRepo();
+  const req = {
+    repository: testRepo.repository,
+    revision: encoding.b64encode(testRepo.commit)
   }
+
+  const res = client.invoke('gitaly.CommitService/FindCommit', req)
+  check(res, {
+    'FindCommit - StatusOK': r => r && r.status === StatusOK
+  })
+
+  client.close()
 }
 
 export function getBlobs () {
@@ -88,12 +92,13 @@ export function getBlobs () {
     plaintext: true
   })
 
-  const getBlobsRequest = {
-    repository: testRepo,
+  const testRepo = selectTestRepo();
+  const req = {
+    repository: testRepo.repository,
     revision_paths: [
       {
-        revision: 'master',
-        path: encoding.b64encode('README.md')
+        revision: testRepo.commit,
+        path: encoding.b64encode(testRepo.file)
       }
     ],
     limit: -1
@@ -102,19 +107,19 @@ export function getBlobs () {
   const stream = new Stream(client, 'gitaly.BlobService/GetBlobs')
   stream.on('data', data => {
     check(data, {
-      'type is BLOB': r => r && r.type === 'BLOB'
+      'GetBlobs - data present in response': r => r && r.data
     })
-
-    console.log('Received message from GetBlobs: ', JSON.stringify(data))
   })
 
   stream.on('end', function () {
-    // The server has finished sending
     client.close()
   })
 
-  // send a message to the server
-  stream.write(getBlobsRequest)
+  stream.on('error', function(err) {
+    console.error(err)
+  })
+
+  stream.write(req)
 }
 
 export function getTreeEntries () {
@@ -122,124 +127,118 @@ export function getTreeEntries () {
     plaintext: true
   })
 
-  const getTreeEntriesRequest = {
-    repository: testRepo,
-    revision: encoding.b64encode('master'),
-    path: encoding.b64encode('Documentation')
+  const testRepo = selectTestRepo();
+  const req = {
+    repository: testRepo.repository,
+    revision: encoding.b64encode(testRepo.commit),
+    path: encoding.b64encode(testRepo.directory)
   }
 
   const stream = new Stream(client, 'gitaly.CommitService/GetTreeEntries')
   stream.on('data', data => {
     check(data, {
-      'entries exists in GetTreeEntriesResponse': r => r && r.entries
+      'GetTreeEntries - entries present in response': r => r && r.entries
     })
-
-    console.log('Received message from GetTreeEntries: ', JSON.stringify(data))
   })
 
   stream.on('end', function () {
-    // The server has finished sending
     client.close()
   })
 
-  // send a message to the server
-  stream.write(getTreeEntriesRequest)
+  stream.on('error', function(err) {
+    console.error(err)
+  })
+
+  stream.write(req)
 }
 
 export function treeEntry () {
   client.connect(gitalyAddress, {
     plaintext: true
   })
-  const treeEntryRequest = {
-    repository: testRepo,
-    revision: encoding.b64encode('master'),
-    path: encoding.b64encode('templates/Makefile')
+
+  const testRepo = selectTestRepo();
+  const req = {
+    repository: testRepo.repository,
+    revision: encoding.b64encode(testRepo.ref),
+    path: encoding.b64encode(testRepo.file)
   }
 
   const stream = new Stream(client, 'gitaly.CommitService/TreeEntry')
   stream.on('data', data => {
     check(data, {
-      'data exists in TreeEntryResponse': r => r && r.data
+      'TreeEntry - data present in response': r => r && r.data
     })
-
-    console.log('Received message from TreeEntry: ', JSON.stringify(data))
   })
 
   stream.on('end', function () {
-    // The server has finished sending
     client.close()
   })
 
-  // send a message to the server
-  stream.write(treeEntryRequest)
+  stream.on('error', function(err) {
+    console.error(err)
+  })
+
+  stream.write(req)
 }
 
 export function listCommitsByOid () {
   client.connect(gitalyAddress, {
     plaintext: true
   })
-  const listCommitsByOidRequest = {
-    repository: testRepo,
-    oid: ['4ff55cf24f68ee90e73de04f823c36bf536882bd']
+
+  const testRepo = selectTestRepo();
+  const req = {
+    repository: testRepo.repository,
+    oid: [testRepo.commit]
   }
 
   const stream = new Stream(client, 'gitaly.CommitService/ListCommitsByOid')
   stream.on('data', data => {
     check(data, {
-      'commits exists in listCommitsByOid': r => r && r.commits
+      'ListCommitsByOid - commits present in response': r => r && r.commits
     })
-
-    console.log('Received message from listCommitsByOid: ', JSON.stringify(data))
   })
 
   stream.on('end', function () {
-    // The server has finished sending
     client.close()
   })
 
-  // send a message to the server
-  stream.write(listCommitsByOidRequest)
+  stream.on('error', function(err) {
+    console.error(err)
+  })
+
+  stream.write(req)
 }
 
 export function writeAndDeleteRefs () {
-  try {
-    client.connect(gitalyAddress, {
-      plaintext: true
-    })
+  client.connect(gitalyAddress, {
+    plaintext: true
+  })
 
-    const generatedRef = 'refs/test/' + generateRandom()
+  const testRepo = selectTestRepo();
+  const generatedRef = 'refs/test/' + generateRandom()
 
-    const data = {
-      repository: testRepo,
-      ref: encoding.b64encode(generatedRef),
-      revision: encoding.b64encode('8b6f19ccfc3aefbd0f22f6b7d56ad6a3fc5e4f37')
-    }
-    const response = client.invoke('gitaly.RepositoryService/WriteRef', data)
-    check(response, {
-      'WriteRef status is OK': r => r && r.status === StatusOK
-    })
-
-    console.log(JSON.stringify(response.message))
-
-    const deleteRefData = {
-      repository: testRepo,
-      refs: [encoding.b64encode(generatedRef)]
-    }
-
-    const deleteRefResponse = client.invoke('gitaly.RefService/DeleteRefs', deleteRefData)
-    check(deleteRefResponse, {
-      'DeleteRefs status is OK': r => r && r.status === StatusOK
-    })
-
-    console.log(JSON.stringify(deleteRefResponse.message))
-    if (deleteRefResponse.status !== StatusOK) {
-      console.log('DeleteRefs failed with error: ', deleteRefResponse.error)
-    }
-  } catch (error) {
-    console.log(`[DeleteRefs] ✗ Error: ${error.message || error}`)
-  } finally {
-    if (client) {
-      client.close()
-    }
+  const writeRefReq = {
+    repository: testRepo.repository,
+    ref: encoding.b64encode(generatedRef),
+    revision: encoding.b64encode(testRepo.commit)
   }
+
+  const writeRefRes = client.invoke('gitaly.RepositoryService/WriteRef', writeRefReq)
+  check(writeRefRes, {
+    'WriteRef - StatusOK': r => r && r.status === StatusOK
+  })
+
+  const deleteRefsReq = {
+    repository: testRepo.repository,
+    refs: [encoding.b64encode(generatedRef)]
+  }
+
+  const deleteRefsRes = client.invoke('gitaly.RefService/DeleteRefs', deleteRefsReq)
+  check(deleteRefsRes, {
+    'DeleteRefs - StatusOK': r => r && r.status === StatusOK
+  })
+
+  client.close()
 }

@@ -39,6 +39,19 @@
   pause:
     seconds: 5
 
+- name: Load repositories config
+  include_vars:
+    file: "{{ playbook_dir }}/config.yml"
+    name: config
+
+- name: Copy repositories config
+  copy:
+    content: "{{ config['repositories'] | to_nice_json }}"
+    dest: /opt/benchmark-gitaly/repositories.json
+    mode: "0644"
+    owner: git
+    group: git
+
 - name: Create benchmark-gitaly directory
   file:
     path: /opt/benchmark-gitaly
@@ -64,13 +77,11 @@
       - k6
       - run
       - --verbose
+      - --summary-mode=full
+      - --summary-export=/tmp/{{ run_name }}/k6-summary-{{ target_name }}.json
+      - --console-output=/tmp/{{ run_name }}/k6-console-{{ target_name }}.txt
+      - --log-output=file=/tmp/{{ run_name }}/k6-log-{{ target_name }}.txt
       - k6-benchmark.js
-      - --summary-mode
-      - full
-      - --summary-export
-      - /tmp/{{ run_name }}/k6-summary-{{ target_name }}.json
-      - --console-output
-      - /tmp/{{ run_name }}/k6-console-logs-{{ target_name }}.txt
     chdir: /opt/benchmark-gitaly
   environment:
     GITALY_ADDRESS: "{{ target_internal_ip }}:8075"
