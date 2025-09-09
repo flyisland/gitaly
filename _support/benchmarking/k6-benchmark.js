@@ -111,12 +111,9 @@ export function getBlobs () {
     check(data, {
       'type is BLOB': r => r && r.type === 'BLOB'
     })
-
-    console.log('Received message from GetBlobs: ', JSON.stringify(data))
   })
 
   stream.on('end', function () {
-    // The server has finished sending
     client.close()
   })
 
@@ -124,7 +121,6 @@ export function getBlobs () {
     console.error(err)
   })
 
-  // send a message to the server
   stream.write(getBlobsRequest)
 }
 
@@ -146,12 +142,9 @@ export function getTreeEntries () {
     check(data, {
       'entries exists in GetTreeEntriesResponse': r => r && r.entries
     })
-
-    console.log('Received message from GetTreeEntries: ', JSON.stringify(data))
   })
 
   stream.on('end', function () {
-    // The server has finished sending
     client.close()
   })
 
@@ -159,7 +152,6 @@ export function getTreeEntries () {
     console.error(err)
   })
 
-  // send a message to the server
   stream.write(getTreeEntriesRequest)
 }
 
@@ -181,12 +173,9 @@ export function treeEntry () {
     check(data, {
       'data exists in TreeEntryResponse': r => r && r.data
     })
-
-    console.log('Received message from TreeEntry: ', JSON.stringify(data))
   })
 
   stream.on('end', function () {
-    // The server has finished sending
     client.close()
   })
 
@@ -194,7 +183,6 @@ export function treeEntry () {
     console.error(err)
   })
 
-  // send a message to the server
   stream.write(treeEntryRequest)
 }
 
@@ -215,12 +203,9 @@ export function listCommitsByOid () {
     check(data, {
       'commits exists in listCommitsByOid': r => r && r.commits
     })
-
-    console.log('Received message from listCommitsByOid: ', JSON.stringify(data))
   })
 
   stream.on('end', function () {
-    // The server has finished sending
     client.close()
   })
 
@@ -228,7 +213,6 @@ export function listCommitsByOid () {
     console.error(err)
   })
 
-  // send a message to the server
   stream.write(listCommitsByOidRequest)
 }
 
@@ -251,8 +235,6 @@ export function writeAndDeleteRefs () {
     'WriteRef status is OK': r => r && r.status === StatusOK
   })
 
-  console.log(JSON.stringify(response.message))
-
   const deleteRefData = {
     repository: testRepo.repository,
     refs: [encoding.b64encode(generatedRef)]
@@ -262,11 +244,6 @@ export function writeAndDeleteRefs () {
   check(deleteRefResponse, {
     'DeleteRefs status is OK': r => r && r.status === StatusOK
   })
-
-  console.log(JSON.stringify(deleteRefResponse.message))
-  if (deleteRefResponse.status !== StatusOK) {
-    console.log('DeleteRefs failed with error: ', deleteRefResponse.error)
-  }
 
   client.close()
 }
