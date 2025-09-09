@@ -74,14 +74,13 @@ export function findCommit () {
   })
 
   const testRepo = selectTestRepo();
-
-  const data = {
+  const req = {
     repository: testRepo.repository,
     revision: encoding.b64encode(testRepo.commit)
   }
 
-  const response = client.invoke('gitaly.CommitService/FindCommit', data)
-  check(response, {
+  const res = client.invoke('gitaly.CommitService/FindCommit', req)
+  check(res, {
     'findCommit status is OK': r => r && r.status === StatusOK
   })
 
@@ -94,8 +93,7 @@ export function getBlobs () {
   })
 
   const testRepo = selectTestRepo();
-
-  const getBlobsRequest = {
+  const req = {
     repository: testRepo.repository,
     revision_paths: [
       {
@@ -121,7 +119,7 @@ export function getBlobs () {
     console.error(err)
   })
 
-  stream.write(getBlobsRequest)
+  stream.write(req)
 }
 
 export function getTreeEntries () {
@@ -130,8 +128,7 @@ export function getTreeEntries () {
   })
 
   const testRepo = selectTestRepo();
-
-  const getTreeEntriesRequest = {
+  const req = {
     repository: testRepo.repository,
     revision: encoding.b64encode(testRepo.commit),
     path: encoding.b64encode(testRepo.directory)
@@ -152,7 +149,7 @@ export function getTreeEntries () {
     console.error(err)
   })
 
-  stream.write(getTreeEntriesRequest)
+  stream.write(req)
 }
 
 export function treeEntry () {
@@ -161,8 +158,7 @@ export function treeEntry () {
   })
 
   const testRepo = selectTestRepo();
-
-  const treeEntryRequest = {
+  const req = {
     repository: testRepo.repository,
     revision: encoding.b64encode(testRepo.ref),
     path: encoding.b64encode(testRepo.file)
@@ -183,7 +179,7 @@ export function treeEntry () {
     console.error(err)
   })
 
-  stream.write(treeEntryRequest)
+  stream.write(req)
 }
 
 export function listCommitsByOid () {
@@ -192,8 +188,7 @@ export function listCommitsByOid () {
   })
 
   const testRepo = selectTestRepo();
-
-  const listCommitsByOidRequest = {
+  const req = {
     repository: testRepo.repository,
     oid: [testRepo.commit]
   }
@@ -213,7 +208,7 @@ export function listCommitsByOid () {
     console.error(err)
   })
 
-  stream.write(listCommitsByOidRequest)
+  stream.write(req)
 }
 
 export function writeAndDeleteRefs () {
@@ -222,26 +217,26 @@ export function writeAndDeleteRefs () {
   })
 
   const testRepo = selectTestRepo();
-
   const generatedRef = 'refs/test/' + generateRandom()
 
-  const data = {
+  const writeRefReq = {
     repository: testRepo.repository,
     ref: encoding.b64encode(generatedRef),
     revision: encoding.b64encode(testRepo.commit)
   }
-  const response = client.invoke('gitaly.RepositoryService/WriteRef', data)
-  check(response, {
+
+  const writeRefRes = client.invoke('gitaly.RepositoryService/WriteRef', writeRefReq)
+  check(writeRefRes, {
     'WriteRef status is OK': r => r && r.status === StatusOK
   })
 
-  const deleteRefData = {
+  const deleteRefsReq = {
     repository: testRepo.repository,
     refs: [encoding.b64encode(generatedRef)]
   }
 
-  const deleteRefResponse = client.invoke('gitaly.RefService/DeleteRefs', deleteRefData)
-  check(deleteRefResponse, {
+  const deleteRefsRes = client.invoke('gitaly.RefService/DeleteRefs', deleteRefsReq)
+  check(deleteRefsRes, {
     'DeleteRefs status is OK': r => r && r.status === StatusOK
   })
 
