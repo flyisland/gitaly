@@ -81,7 +81,7 @@ export function findCommit () {
 
   const res = client.invoke('gitaly.CommitService/FindCommit', req)
   check(res, {
-    'findCommit status is OK': r => r && r.status === StatusOK
+    'FindCommit - StatusOK': r => r && r.status === StatusOK
   })
 
   client.close()
@@ -107,7 +107,7 @@ export function getBlobs () {
   const stream = new Stream(client, 'gitaly.BlobService/GetBlobs')
   stream.on('data', data => {
     check(data, {
-      'type is BLOB': r => r && r.type === 'BLOB'
+      'GetBlobs - data present in response': r => r && r.data
     })
   })
 
@@ -137,7 +137,7 @@ export function getTreeEntries () {
   const stream = new Stream(client, 'gitaly.CommitService/GetTreeEntries')
   stream.on('data', data => {
     check(data, {
-      'entries exists in GetTreeEntriesResponse': r => r && r.entries
+      'GetTreeEntries - entries present in response': r => r && r.entries
     })
   })
 
@@ -167,7 +167,7 @@ export function treeEntry () {
   const stream = new Stream(client, 'gitaly.CommitService/TreeEntry')
   stream.on('data', data => {
     check(data, {
-      'data exists in TreeEntryResponse': r => r && r.data
+      'TreeEntry - data present in response': r => r && r.data
     })
   })
 
@@ -196,7 +196,7 @@ export function listCommitsByOid () {
   const stream = new Stream(client, 'gitaly.CommitService/ListCommitsByOid')
   stream.on('data', data => {
     check(data, {
-      'commits exists in listCommitsByOid': r => r && r.commits
+      'ListCommitsByOid - commits present in response': r => r && r.commits
     })
   })
 
@@ -227,7 +227,7 @@ export function writeAndDeleteRefs () {
 
   const writeRefRes = client.invoke('gitaly.RepositoryService/WriteRef', writeRefReq)
   check(writeRefRes, {
-    'WriteRef status is OK': r => r && r.status === StatusOK
+    'WriteRef - StatusOK': r => r && r.status === StatusOK
   })
 
   const deleteRefsReq = {
@@ -237,7 +237,7 @@ export function writeAndDeleteRefs () {
 
   const deleteRefsRes = client.invoke('gitaly.RefService/DeleteRefs', deleteRefsReq)
   check(deleteRefsRes, {
-    'DeleteRefs status is OK': r => r && r.status === StatusOK
+    'DeleteRefs - StatusOK': r => r && r.status === StatusOK
   })
 
   client.close()
