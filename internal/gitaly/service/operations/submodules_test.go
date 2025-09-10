@@ -545,6 +545,38 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 			},
 		},
 		{
+			desc:    "failure due to traversal submodule path",
+			subPath: "sub",
+			branch:  "master",
+			setup: func(repoPath, subRepoPath string, repoProto, subRepoProto *gitalypb.Repository) setupData {
+				subCommitID := gittest.WriteCommit(t, cfg, subRepoPath)
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("master"), gittest.WithTreeEntries(
+					gittest.TreeEntry{
+						Mode:    "100644",
+						Path:    ".gitmodules",
+						Content: fmt.Sprintf(`[submodule %q]\n\tpath = %s\n\turl = file://%s`, "sub", "sub", subRepoPath),
+					},
+					gittest.TreeEntry{OID: subCommitID, Mode: "160000", Path: "sub"},
+				))
+				commitID := gittest.WriteCommit(t, cfg, subRepoPath, gittest.WithParents(subCommitID))
+
+				return setupData{
+					request: &gitalypb.UserUpdateSubmoduleRequest{
+						User:          gittest.TestUser,
+						CommitSha:     string(commitID),
+						Branch:        []byte("master"),
+						Repository:    repoProto,
+						Submodule:     []byte("../traversal"),
+						CommitMessage: []byte("Updating Submodule: sub"),
+					},
+					requireResponse: equalResponse(&gitalypb.UserUpdateSubmoduleResponse{
+						CommitError: "Invalid submodule path",
+					}),
+					verify: func(t *testing.T) {},
+				}
+			},
+		},
+		{
 			desc:    "failure due to same submodule reference",
 			subPath: "sub",
 			branch:  "master",

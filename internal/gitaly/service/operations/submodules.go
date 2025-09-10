@@ -227,6 +227,10 @@ func (s *Server) updateSubmodule(ctx context.Context, quarantineRepo *localrepo.
 			return "", fmt.Errorf("submodule: %s", legacyErrPrefixInvalidSubmodulePath)
 		}
 
+		if errors.Is(err, localrepo.ErrPathTraversal) {
+			return "", fmt.Errorf("submodule: %s", legacyErrPrefixInvalidSubmodulePath)
+		}
+
 		var git2GoErr *legacyGit2GoSubmoduleAlreadyAtShaError
 		if errors.As(err, &git2GoErr) {
 			return "", err
