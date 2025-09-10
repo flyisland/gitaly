@@ -1,10 +1,18 @@
 # Gitaly changelog
 
+## 18.3.2 (2025-09-09)
+
+No changes.
+
 ## 18.3.1 (2025-08-26)
 
 No changes.
 
 ## 18.3.0 (2025-08-20)
+
+No changes.
+
+## 18.2.6 (2025-09-09)
 
 No changes.
 
@@ -42,6 +50,10 @@ No changes.
 ### Changed (1 change)
 
 - [Detect next page presence for paginated requests](gitlab-org/gitaly@7f72195b67f3ec94b66669bf977958eae7fcbc83) ([merge request](gitlab-org/gitaly!7979))
+
+## 18.1.6 (2025-09-09)
+
+No changes.
 
 ## 18.1.5 (2025-08-26)
 
