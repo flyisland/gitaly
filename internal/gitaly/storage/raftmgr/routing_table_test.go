@@ -1,9 +1,12 @@
 package raftmgr
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -12,7 +15,7 @@ import (
 func TestPersistentRoutingTable(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	dir := testhelper.TempDir(t)
 	kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 	require.NoError(t, err)
 	defer func() {
@@ -98,7 +101,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 	t.Run("add node", func(t *testing.T) {
 		t.Parallel()
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -127,7 +130,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	t.Run("remove node", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -182,7 +185,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	t.Run("add learner node", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -209,7 +212,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	t.Run("if member ID is zero, it should not be added to the routing table", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -231,7 +234,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	t.Run("should not add duplicate member ID", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -261,7 +264,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	t.Run("should error when updating non-existent member ID", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -291,7 +294,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	t.Run("fails if the last remaining node is removed", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -329,7 +332,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	t.Run("update node", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -374,7 +377,7 @@ func TestApplyReplicaConfChange(t *testing.T) {
 	t.Run("apply multiple changes", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		dir := testhelper.TempDir(t)
 		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
 		require.NoError(t, err)
 		defer func() {
@@ -422,5 +425,321 @@ func TestApplyReplicaConfChange(t *testing.T) {
 			}
 		}
 		require.True(t, node2Found, "Node 2 not found in updated replicas")
+	})
+}
+
+func TestPersistentRoutingTable_ListEntries(t *testing.T) {
+	t.Parallel()
+
+	// Helper function to create test metadata
+	createMetadata := func(address string) *gitalypb.ReplicaID_Metadata {
+		return &gitalypb.ReplicaID_Metadata{Address: address}
+	}
+
+	// Helper function to create test partition key
+	createPartitionKey := func(authority string, partitionID uint64) *gitalypb.RaftPartitionKey {
+		return NewPartitionKey(authority, storage.PartitionID(partitionID))
+	}
+
+	t.Run("empty routing table", func(t *testing.T) {
+		rt := createRoutingTable(t)
+
+		entries, err := rt.ListEntries()
+		require.NoError(t, err)
+		require.Empty(t, entries)
+	})
+
+	t.Run("single partition entry", func(t *testing.T) {
+		rt := createRoutingTable(t)
+		partitionKey := createPartitionKey("test-authority", 1)
+
+		entry := RoutingTableEntry{
+			RelativePath: "@hashed/test/repo.git",
+			Replicas: []*gitalypb.ReplicaID{
+				{
+					PartitionKey: partitionKey,
+					MemberId:     1,
+					StorageName:  "test-storage",
+					Metadata:     createMetadata("localhost:8075"),
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				},
+			},
+			LeaderID: 1,
+			Term:     5,
+			Index:    100,
+		}
+
+		require.NoError(t, rt.UpsertEntry(entry))
+
+		entries, err := rt.ListEntries()
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+
+		// Keys are opaque hashes, so we get the single entry
+		actualEntry := entries["raft/"+partitionKey.GetValue()]
+		require.NotNil(t, actualEntry)
+
+		// Verify all fields match
+		testhelper.ProtoEqual(t, &entry, actualEntry)
+	})
+
+	t.Run("multiple partition entries across different authorities", func(t *testing.T) {
+		rt := createRoutingTable(t)
+
+		// Create test entries
+		entries := []struct {
+			key   *gitalypb.RaftPartitionKey
+			entry RoutingTableEntry
+		}{
+			{
+				key: createPartitionKey("authority-1", 1),
+				entry: RoutingTableEntry{
+					RelativePath: "@hashed/repo1.git",
+					Replicas: []*gitalypb.ReplicaID{
+						{
+							PartitionKey: createPartitionKey("authority-1", 1),
+							MemberId:     1,
+							StorageName:  "storage-1",
+							Metadata:     createMetadata("localhost:8075"),
+							Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+						},
+					},
+					LeaderID: 1,
+					Term:     2,
+					Index:    10,
+				},
+			},
+			{
+				key: createPartitionKey("authority-1", 2),
+				entry: RoutingTableEntry{
+					RelativePath: "@hashed/repo2.git",
+					Replicas: []*gitalypb.ReplicaID{
+						{
+							PartitionKey: createPartitionKey("authority-1", 2),
+							MemberId:     2,
+							StorageName:  "storage-2",
+							Metadata:     createMetadata("localhost:8076"),
+							Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+						},
+						{
+							PartitionKey: createPartitionKey("authority-1", 2),
+							MemberId:     3,
+							StorageName:  "storage-3",
+							Metadata:     createMetadata("localhost:8077"),
+							Type:         gitalypb.ReplicaID_REPLICA_TYPE_LEARNER,
+						},
+					},
+					LeaderID: 2,
+					Term:     3,
+					Index:    25,
+				},
+			},
+			{
+				key: createPartitionKey("authority-2", 1),
+				entry: RoutingTableEntry{
+					RelativePath: "@hashed/repo3.git",
+					Replicas: []*gitalypb.ReplicaID{
+						{
+							PartitionKey: createPartitionKey("authority-2", 1),
+							MemberId:     1,
+							StorageName:  "storage-4",
+							Metadata:     createMetadata("localhost:9000"),
+							Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+						},
+					},
+					LeaderID: 1,
+					Term:     1,
+					Index:    5,
+				},
+			},
+		}
+
+		// Insert all entries
+		for _, e := range entries {
+			require.NoError(t, rt.UpsertEntry(e.entry))
+		}
+
+		// Verify all entries are listed
+		listedEntries, err := rt.ListEntries()
+		require.NoError(t, err)
+		require.Len(t, listedEntries, len(entries))
+
+		// Verify each entry
+		for _, e := range entries {
+			expectedKey := fmt.Sprintf("raft/%s", e.key.GetValue())
+			actualEntry, exists := listedEntries[expectedKey]
+			require.True(t, exists, "Entry %s should exist", expectedKey)
+
+			testhelper.ProtoEqual(t, e.entry, *actualEntry)
+		}
+	})
+
+	t.Run("list entries after updates", func(t *testing.T) {
+		rt := createRoutingTable(t)
+		partitionKey := createPartitionKey("test-authority", 1)
+
+		// Insert initial entry
+		initialEntry := RoutingTableEntry{
+			Replicas: []*gitalypb.ReplicaID{
+				{
+					PartitionKey: partitionKey,
+					MemberId:     1,
+					StorageName:  "test-storage",
+					Metadata:     createMetadata("localhost:8000"),
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				},
+			},
+			LeaderID: 1,
+			Term:     1,
+			Index:    1,
+		}
+		require.NoError(t, rt.UpsertEntry(initialEntry))
+
+		// Verify initial listing
+		entries, err := rt.ListEntries()
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+
+		// Keys are opaque hashes, so we get the single entry
+		var entry *RoutingTableEntry
+		for _, e := range entries {
+			entry = e
+			break
+		}
+		require.NotNil(t, entry)
+		require.Equal(t, uint64(1), entry.Term)
+		require.Equal(t, uint64(1), entry.Index)
+
+		// Update with higher term/index
+		updatedEntry := initialEntry
+		updatedEntry.Term = 3
+		updatedEntry.Index = 15
+		require.NoError(t, rt.UpsertEntry(updatedEntry))
+
+		// Verify updated listing
+		entries, err = rt.ListEntries()
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+
+		// Keys are opaque hashes, so we get the single entry
+		var updatedEntryFromList *RoutingTableEntry
+		for _, e := range entries {
+			updatedEntryFromList = e
+			break
+		}
+		require.NotNil(t, updatedEntryFromList)
+		require.Equal(t, uint64(3), updatedEntryFromList.Term)
+		require.Equal(t, uint64(15), updatedEntryFromList.Index)
+	})
+
+	t.Run("concurrent access to ListEntries", func(t *testing.T) {
+		rt := createRoutingTable(t)
+		partitionKey := createPartitionKey("concurrent-authority", 1)
+
+		entry := RoutingTableEntry{
+			Replicas: []*gitalypb.ReplicaID{
+				{
+					PartitionKey: partitionKey,
+					MemberId:     1,
+					StorageName:  "concurrent-storage",
+					Metadata:     createMetadata("localhost:8080"),
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				},
+			},
+			LeaderID: 1,
+			Term:     1,
+			Index:    1,
+		}
+		require.NoError(t, rt.UpsertEntry(entry))
+
+		// Test concurrent reads
+		const numConcurrent = 10
+		var wg sync.WaitGroup
+		wg.Add(numConcurrent)
+
+		for i := 0; i < numConcurrent; i++ {
+			go func() {
+				defer wg.Done()
+				entries, err := rt.ListEntries()
+				require.NoError(t, err)
+				require.Len(t, entries, 1)
+			}()
+		}
+
+		wg.Wait()
+	})
+
+	t.Run("returns all entries", func(t *testing.T) {
+		rt := createRoutingTable(t)
+
+		// Create entries for multiple authorities
+		entries := []struct {
+			key   *gitalypb.RaftPartitionKey
+			entry RoutingTableEntry
+		}{
+			{
+				key: createPartitionKey("authority-1", 1),
+				entry: RoutingTableEntry{
+					RelativePath: "@hashed/repo1.git",
+					Replicas: []*gitalypb.ReplicaID{
+						{
+							PartitionKey: createPartitionKey("authority-1", 1),
+							MemberId:     1,
+							StorageName:  "storage-1",
+							Metadata:     createMetadata("localhost:8075"),
+							Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+						},
+					},
+					LeaderID: 1,
+					Term:     2,
+					Index:    10,
+				},
+			},
+			{
+				key: createPartitionKey("authority-1", 2),
+				entry: RoutingTableEntry{
+					RelativePath: "@hashed/repo2.git",
+					Replicas: []*gitalypb.ReplicaID{
+						{
+							PartitionKey: createPartitionKey("authority-1", 2),
+							MemberId:     2,
+							StorageName:  "storage-1",
+							Metadata:     createMetadata("localhost:8076"),
+							Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+						},
+					},
+					LeaderID: 2,
+					Term:     3,
+					Index:    25,
+				},
+			},
+			{
+				key: createPartitionKey("authority-2", 1),
+				entry: RoutingTableEntry{
+					RelativePath: "@hashed/repo3.git",
+					Replicas: []*gitalypb.ReplicaID{
+						{
+							PartitionKey: createPartitionKey("authority-2", 1),
+							MemberId:     1,
+							StorageName:  "storage-2",
+							Metadata:     createMetadata("localhost:9000"),
+							Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+						},
+					},
+					LeaderID: 1,
+					Term:     1,
+					Index:    5,
+				},
+			},
+		}
+
+		// Insert all entries
+		for _, e := range entries {
+			require.NoError(t, rt.UpsertEntry(e.entry))
+		}
+
+		allEntries, err := rt.ListEntries()
+		require.NoError(t, err)
+		require.Len(t, allEntries, 3) // All entries returned
 	})
 }

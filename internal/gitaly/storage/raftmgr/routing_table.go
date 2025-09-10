@@ -39,6 +39,7 @@ type RoutingTable interface {
 	GetEntry(partitionKey *gitalypb.RaftPartitionKey) (*RoutingTableEntry, error)
 	UpsertEntry(entry RoutingTableEntry) error
 	ApplyReplicaConfChange(storageName string, partitionKey *gitalypb.RaftPartitionKey, changes *ReplicaConfChanges) error
+	ListEntries() (map[string]*RoutingTableEntry, error)
 }
 
 // PersistentRoutingTable implements the RoutingTable interface with KV storage
@@ -233,4 +234,41 @@ func (r *kvRoutingTable) ApplyReplicaConfChange(storageName string, partitionKey
 	}
 
 	return nil
+}
+
+// ListEntries returns routing table entries.
+func (r *kvRoutingTable) ListEntries() (map[string]*RoutingTableEntry, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	entries := make(map[string]*RoutingTableEntry)
+
+	// With opaque partition keys, we return all entries.
+	prefix := "raft/"
+
+	if err := r.kvStore.View(func(txn keyvalue.ReadWriter) error {
+		iter := txn.NewIterator(keyvalue.IteratorOptions{
+			Prefix: []byte(prefix),
+		})
+		defer iter.Close()
+
+		for iter.Seek([]byte(prefix)); iter.Valid(); iter.Next() {
+			var entry RoutingTableEntry
+			if err := iter.Item().Value(func(value []byte) error {
+				return json.Unmarshal(value, &entry)
+			}); err != nil {
+				return fmt.Errorf("unmarshal entry: %w", err)
+			}
+
+			// Use the key as the map key for easy lookup
+			keyStr := string(iter.Item().Key())
+			entries[keyStr] = &entry
+		}
+
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("view: %w", err)
+	}
+
+	return entries, nil
 }

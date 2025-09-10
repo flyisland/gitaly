@@ -163,3 +163,14 @@ func createTempServer(t *testing.T, transport *GrpcTransport) (string, *grpc.Ser
 
 	return socketPath, srv
 }
+
+func createRoutingTable(t *testing.T) *kvRoutingTable {
+	t.Helper()
+	dir := testhelper.TempDir(t)
+	kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, kvStore.Close())
+	})
+	return NewKVRoutingTable(kvStore)
+}
