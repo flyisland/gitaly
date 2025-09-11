@@ -159,11 +159,6 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 		unaryServerInterceptors = append(unaryServerInterceptors, limitHandler.UnaryInterceptor())
 	}
 
-	if s.housekeepingMiddleware != nil {
-		streamServerInterceptors = append(streamServerInterceptors, s.housekeepingMiddleware.StreamServerInterceptor())
-		unaryServerInterceptors = append(unaryServerInterceptors, s.housekeepingMiddleware.UnaryServerInterceptor())
-	}
-
 	streamServerInterceptors = append(streamServerInterceptors,
 		grpctracing.StreamServerTracingInterceptor(),
 		cache.StreamInvalidator(s.cacheInvalidator, protoregistry.GitalyProtoPreregistered, s.logger),
@@ -188,6 +183,16 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 	// transaction as the external request that led to the internal socket call would have been transactionalized
 	// already.
 	if external {
+		// When transactions are enabled, it overrides the relative path of the repository to point to the
+		// snapshot directory. Which would make the housekeeping related caches unusable. We should use the
+		// original relative path when transaction is enabled, but when request is routed through hook back
+		// to gitaly, the original repository is not in the context anymore. Therefore, housekeeping should
+		// not be configured in the internal gRPC server used for hooks
+		if s.housekeepingMiddleware != nil {
+			streamServerInterceptors = append(streamServerInterceptors, s.housekeepingMiddleware.StreamServerInterceptor())
+			unaryServerInterceptors = append(unaryServerInterceptors, s.housekeepingMiddleware.UnaryServerInterceptor())
+		}
+
 		if len(s.txMiddleware.UnaryInterceptors) > 0 {
 			unaryServerInterceptors = append(unaryServerInterceptors, s.txMiddleware.UnaryInterceptors...)
 		}
