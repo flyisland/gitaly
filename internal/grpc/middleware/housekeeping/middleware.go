@@ -9,6 +9,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/manager"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -89,7 +90,7 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 			return handler(ctx, req)
 		}
 
-		key := m.getRepoKey(targetRepo)
+		key := m.getRepoKey(ctx, targetRepo)
 
 		switch methodInfo.Operation {
 		case protoregistry.OpMaintenance:
@@ -152,7 +153,7 @@ func (m *Middleware) StreamServerInterceptor() grpc.StreamServerInterceptor {
 			return handler(srv, middleware.NewPeekedStream(ss.Context(), req, nil, ss))
 		}
 
-		key := m.getRepoKey(targetRepo)
+		key := m.getRepoKey(ss.Context(), targetRepo)
 
 		switch methodInfo.Operation {
 		case protoregistry.OpMaintenance:
@@ -236,7 +237,7 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := m.getRepoKey(repo)
+	key := m.getRepoKey(ctx, repo)
 
 	a, ok := m.repoActivity[key]
 	if !ok {
@@ -313,6 +314,10 @@ func (m *Middleware) scheduleHousekeepingIfNeeded(ctx context.Context, key repoK
 	}
 }
 
-func (m *Middleware) getRepoKey(repo *gitalypb.Repository) repoKey {
-	return repoKey{storage: repo.GetStorageName(), relativePath: repo.GetRelativePath()}
+func (m *Middleware) getRepoKey(ctx context.Context, repo *gitalypb.Repository) repoKey {
+	relativePath := repo.GetRelativePath()
+	if txn := storage.ExtractTransaction(ctx); txn != nil {
+		relativePath = txn.OriginalRepository(repo).GetRelativePath()
+	}
+	return repoKey{storage: repo.GetStorageName(), relativePath: relativePath}
 }
