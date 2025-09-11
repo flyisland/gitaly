@@ -182,7 +182,7 @@ func (m *migrator) Run() {
 							"relative_path":      data.relativePath,
 							"migration_latency":  latency,
 							"migration_attempts": state.attempts,
-						}).ErrorContext(ctx, "migration failed for repository")
+						}).ErrorContext(ctx, "reftable migration failed for repository")
 						m.metrics.failsMetric.WithLabelValues(failMetricReason(err)).Add(1)
 
 						// Let's delay exponentially, but with a max of 6hrs
@@ -194,7 +194,7 @@ func (m *migrator) Run() {
 							"relative_path":      data.relativePath,
 							"migration_latency":  latency,
 							"migration_attempts": state.attempts,
-						}).InfoContext(ctx, "migration successful for repository")
+						}).InfoContext(ctx, "reftable migration successful for repository")
 						m.metrics.latencyMetric.WithLabelValues().Observe(latency.Seconds())
 
 						state.completed = true

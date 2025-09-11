@@ -261,7 +261,7 @@ func TestMigrator(t *testing.T) {
 			},
 			completed:      false,
 			attempts:       1,
-			expectedLogMsg: "migration failed for repository",
+			expectedLogMsg: "reftable migration failed for repository",
 		},
 		{
 			desc: "existing state, cancelled migration",
@@ -285,7 +285,7 @@ func TestMigrator(t *testing.T) {
 			},
 			completed:      false,
 			attempts:       4,
-			expectedLogMsg: "migration failed for repository",
+			expectedLogMsg: "reftable migration failed for repository",
 		},
 		{
 			desc: "repository not found error",
@@ -320,7 +320,7 @@ func TestMigrator(t *testing.T) {
 			},
 			completed:      true,
 			attempts:       1,
-			expectedLogMsg: "migration successful for repository",
+			expectedLogMsg: "reftable migration successful for repository",
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
