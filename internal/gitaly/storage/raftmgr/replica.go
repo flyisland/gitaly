@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,6 +63,32 @@ type RaftReplica interface {
 	// This is typically used to bring new nodes up to speed before promoting them to voters.
 	// This operation can only be performed by the leader.
 	AddLearner(ctx context.Context, address string) error
+
+	// GetCurrentState returns comprehensive current state information including term, index, and Raft state.
+	// This provides an efficient way to get multiple state values with consistent locking.
+	GetCurrentState() *ReplicaState
+}
+
+// StateString returns the normalized state string (removes "State" prefix and converts to lowercase).
+func StateString(state raft.StateType) string {
+	stateStr := state.String()
+	if strings.HasPrefix(stateStr, "State") {
+		return strings.ToLower(stateStr[5:])
+	}
+	return strings.ToLower(stateStr)
+}
+
+// ReplicaState holds comprehensive state information for a Raft replica.
+// This struct provides a consolidated view of the replica's current state,
+// including term, index, and Raft state, allowing for efficient querying
+// with consistent locking behavior.
+type ReplicaState struct {
+	// Term is the current Raft term from the live state machine
+	Term uint64
+	// Index is the current committed log index, equivalent to AppendedLSN
+	Index uint64
+	// State is the current Raft state (follower, candidate, leader, pre-candidate)
+	State raft.StateType
 }
 
 var (
@@ -566,6 +593,28 @@ func (replica *Replica) AcknowledgePosition(t storage.PositionType, lsn storage.
 // AppendedLSN returns the LSN of the most recently appended log entry.
 func (replica *Replica) AppendedLSN() storage.LSN {
 	return replica.logStore.readCommittedLSN()
+}
+
+// GetCurrentState returns comprehensive current state information including term, index, and Raft state.
+// This provides a more efficient way to get multiple state values with consistent locking.
+func (replica *Replica) GetCurrentState() *ReplicaState {
+	replica.mutex.Lock()
+	defer replica.mutex.Unlock()
+
+	if replica.node == nil {
+		return &ReplicaState{
+			Term:  0,
+			Index: uint64(replica.logStore.readCommittedLSN()),
+			State: raft.StateFollower,
+		}
+	}
+
+	status := replica.node.Status()
+	return &ReplicaState{
+		Term:  status.Term,
+		Index: uint64(replica.logStore.readCommittedLSN()),
+		State: status.RaftState,
+	}
 }
 
 // LowWaterMark returns the earliest LSN that should be retained.

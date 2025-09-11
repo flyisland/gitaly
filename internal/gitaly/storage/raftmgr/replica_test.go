@@ -23,6 +23,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
@@ -2044,5 +2045,210 @@ func TestReplica_AddNode(t *testing.T) {
 			# TYPE gitaly_raft_membership_errors_total counter
 			gitaly_raft_membership_errors_total{change_type="add_voter",reason="not_leader"} 1
 		`)
+	})
+}
+
+func TestReplica_GetCurrentState(t *testing.T) {
+	t.Parallel()
+
+	t.Run("before initialization", func(t *testing.T) {
+		ctx := testhelper.Context(t)
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+
+		// Create an uninitialized replica (node will be nil until Initialize is called)
+		replica, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, metrics)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, replica.Close())
+		}()
+
+		// Before initialization, node should be nil, term should be 0,
+		// index should come from logStore, and state should be follower
+		state := replica.GetCurrentState()
+		require.NotNil(t, state, "state should not be nil")
+		require.Equal(t, uint64(0), state.Term, "should return 0 term when node is nil")
+		require.GreaterOrEqual(t, state.Index, uint64(0), "should return non-negative index from logStore")
+		require.Equal(t, raft.StateFollower, state.State, "should return StateFollower when node is nil")
+	})
+
+	t.Run("after initialization", func(t *testing.T) {
+		ctx := testhelper.Context(t)
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+
+		replica, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, metrics)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, replica.Close())
+		}()
+
+		require.NoError(t, replica.Initialize(ctx, 1))
+
+		// Wait for replica to be ready and process initial entries
+		waitTimeout := 10 * time.Second
+		require.Eventually(t, func() bool {
+			return replica.AppendedLSN() > 1
+		}, waitTimeout, 5*time.Millisecond, "replica should process initial entries")
+
+		state := replica.GetCurrentState()
+		require.NotNil(t, state, "state should not be nil")
+		require.Greater(t, state.Term, uint64(0), "should return positive term after initialization")
+		require.Greater(t, state.Index, uint64(0), "should return positive index after initialization")
+
+		// In a single-node cluster, the replica should become leader
+		require.Equal(t, raft.StateLeader, state.State, "single-node replica should become leader")
+
+		// Index should be equivalent to AppendedLSN
+		require.Equal(t, uint64(replica.AppendedLSN()), state.Index, "state.Index should equal AppendedLSN")
+
+		// Term should be consistent with what the Raft node reports
+		require.Equal(t, replica.node.Status().Term, state.Term, "state.Term should match node status")
+		require.Equal(t, replica.node.Status().RaftState, state.State, "state.State should match node status")
+	})
+
+	t.Run("consistency across multiple calls", func(t *testing.T) {
+		ctx := testhelper.Context(t)
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+
+		replica, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, metrics)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, replica.Close())
+		}()
+
+		require.NoError(t, replica.Initialize(ctx, 1))
+
+		// Wait for replica to be ready and process initial entries
+		waitTimeout := 10 * time.Second
+		require.Eventually(t, func() bool {
+			return replica.AppendedLSN() > 1
+		}, waitTimeout, 5*time.Millisecond, "replica should process initial entries")
+
+		// Test multiple times to ensure consistency
+		for i := 0; i < 5; i++ {
+			state := replica.GetCurrentState()
+			require.NotNil(t, state, "state should not be nil (iteration %d)", i)
+
+			// Verify consistency with AppendedLSN and node status
+			require.Equal(t, uint64(replica.AppendedLSN()), state.Index,
+				"state.Index should equal AppendedLSN (iteration %d)", i)
+			require.Equal(t, replica.node.Status().Term, state.Term,
+				"state.Term should match node status (iteration %d)", i)
+			require.Equal(t, replica.node.Status().RaftState, state.State,
+				"state.State should match node status (iteration %d)", i)
+
+			// Add some delay to allow for any background processing
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+
+	t.Run("advances after log entries", func(t *testing.T) {
+		ctx := testhelper.Context(t)
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+
+		replica, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, metrics)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, replica.Close())
+		}()
+
+		require.NoError(t, replica.Initialize(ctx, 0))
+
+		// Wait for leadership
+		waitTimeout := 10 * time.Second
+		require.Eventually(t, func() bool {
+			return replica.AppendedLSN() > 1 && replica.leadership.IsLeader()
+		}, waitTimeout, 5*time.Millisecond)
+
+		initialState := replica.GetCurrentState()
+		require.NotNil(t, initialState)
+
+		// Append a log entry
+		logEntryPath := createTestLogEntry(t, ctx, "test-content")
+		_, err = replica.AppendLogEntry(logEntryPath)
+		require.NoError(t, err)
+
+		// Index should have advanced
+		newState := replica.GetCurrentState()
+		require.NotNil(t, newState)
+		require.Greater(t, newState.Index, initialState.Index, "index should advance after appending entry")
+		require.GreaterOrEqual(t, newState.Term, initialState.Term, "term should not decrease")
+	})
+
+	t.Run("concurrent access", func(t *testing.T) {
+		ctx := testhelper.Context(t)
+		raftCfg := raftConfigsForTest(t)
+		metrics := NewMetrics()
+		partitionID := storage.PartitionID(1)
+
+		replica, err := createRaftReplica(t, ctx, 1, "", raftCfg, partitionID, metrics)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, replica.Close())
+		}()
+
+		require.NoError(t, replica.Initialize(ctx, 1))
+
+		// Wait for replica to be ready and process initial entries
+		waitTimeout := 10 * time.Second
+		require.Eventually(t, func() bool {
+			return replica.AppendedLSN() > 1
+		}, waitTimeout, 5*time.Millisecond)
+
+		// Test concurrent access to GetCurrentState
+		const numGoroutines = 100
+		results := make([]*ReplicaState, numGoroutines)
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+
+		for i := 0; i < numGoroutines; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				results[idx] = replica.GetCurrentState()
+			}(i)
+		}
+
+		wg.Wait()
+
+		// All results should be consistent with current state
+		for i, result := range results {
+			require.NotNil(t, result, "result %d should not be nil", i)
+			// Results should have consistent term and index (they may vary slightly due to timing)
+			// But they should all be positive values for an active replica
+			require.Greater(t, result.Term, uint64(0), "result %d term should be positive", i)
+			require.Greater(t, result.Index, uint64(0), "result %d index should be positive", i)
+			require.NotEqual(t, raft.StateType(0), result.State, "result %d state should be valid", i)
+		}
+	})
+
+	t.Run("StateString method", func(t *testing.T) {
+		testCases := []struct {
+			state    raft.StateType
+			expected string
+		}{
+			{raft.StateFollower, "follower"},
+			{raft.StateCandidate, "candidate"},
+			{raft.StateLeader, "leader"},
+			{raft.StatePreCandidate, "precandidate"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.expected, func(t *testing.T) {
+				replicaState := &ReplicaState{
+					Term:  1,
+					Index: 1,
+					State: tc.state,
+				}
+				result := StateString(replicaState.State)
+				require.Equal(t, tc.expected, result)
+			})
+		}
 	})
 }
