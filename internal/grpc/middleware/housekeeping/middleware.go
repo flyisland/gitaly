@@ -61,7 +61,7 @@ func NewHousekeepingMiddleware(logger log.Logger, registry *protoregistry.Regist
 		manager:          manager,
 		repoActivity:     make(map[repoKey]*activity),
 		statsCache:       &sync.Map{},
-		statThreshold:    1500,
+		statThreshold:    1000,
 	}
 }
 
