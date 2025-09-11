@@ -373,7 +373,10 @@ func TestMigrator(t *testing.T) {
 
 			if tc.expectedLogMsg != "" {
 				entries := hook.AllEntries()
-				require.Equal(t, tc.expectedLogMsg, entries[len(entries)-1].Message)
+				entry := entries[len(entries)-1]
+				require.Equal(t, tc.expectedLogMsg, entry.Message)
+				require.Greater(t, entry.Data["migration_latency"].(time.Duration), time.Duration(0))
+				require.Greater(t, entry.Data["migration_attempts"].(uint), uint(0))
 			}
 		})
 	}

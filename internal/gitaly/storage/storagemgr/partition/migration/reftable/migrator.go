@@ -98,7 +98,7 @@ func (m *migrator) migrate(ctx context.Context, storageName, relativePath string
 
 	tx, err := storageHandle.Begin(ctx, storage.TransactionOptions{RelativePath: relativePath})
 	if err != nil {
-		return 0, fmt.Errorf("start transaction: %w", err)
+		return time.Since(t), fmt.Errorf("start transaction: %w", err)
 	}
 	defer func() {
 		if returnedErr != nil {
@@ -117,7 +117,7 @@ func (m *migrator) migrate(ctx context.Context, storageName, relativePath string
 	}()
 
 	if err := m.migrationHandler.Migrate(ctx, tx, storageName, relativePath); err != nil {
-		return 0, fmt.Errorf("run migration: %w", err)
+		return time.Since(t), fmt.Errorf("run migration: %w", err)
 	}
 
 	return time.Since(t), nil
