@@ -45,9 +45,7 @@ func (s *Server) UserUpdateSubmodule(ctx context.Context, req *gitalypb.UserUpda
 		return nil, structerr.NewInternal("get branches: %w", err)
 	}
 	if len(branches) == 0 {
-		return &gitalypb.UserUpdateSubmoduleResponse{
-			CommitError: "Repository is empty",
-		}, nil
+		return nil, structerr.NewFailedPrecondition("Repository is empty")
 	}
 
 	referenceName := git.NewReferenceNameFromBranchName(string(req.GetBranch()))
@@ -83,22 +81,32 @@ func (s *Server) UserUpdateSubmodule(ctx context.Context, req *gitalypb.UserUpda
 	if err != nil {
 		errStr := strings.TrimSpace(err.Error())
 
-		var resp *gitalypb.UserUpdateSubmoduleResponse
 		if strings.Contains(errStr, legacyErrPrefixInvalidSubmodulePath) {
-			resp = &gitalypb.UserUpdateSubmoduleResponse{
-				CommitError: legacyErrPrefixInvalidSubmodulePath,
-			}
 			s.logger.
 				WithError(err).
 				ErrorContext(ctx, "UserUpdateSubmodule: git2go subcommand failure")
+			return nil, structerr.NewInvalidArgument(legacyErrPrefixInvalidSubmodulePath).WithDetail(
+				&gitalypb.UserUpdateSubmoduleError{
+					Error: &gitalypb.UserUpdateSubmoduleError_PathError{
+						PathError: &gitalypb.PathError{
+							Path:      req.GetSubmodule(),
+							ErrorType: gitalypb.PathError_ERROR_TYPE_INVALID_PATH,
+						},
+					},
+				},
+			)
 		}
 		if strings.Contains(errStr, "is already at") {
-			resp = &gitalypb.UserUpdateSubmoduleResponse{
-				CommitError: errStr,
-			}
-		}
-		if resp != nil {
-			return resp, nil
+			return nil, structerr.NewInvalidArgument(errStr).WithDetail(
+				&gitalypb.UserUpdateSubmoduleError{
+					Error: &gitalypb.UserUpdateSubmoduleError_PathError{
+						PathError: &gitalypb.PathError{
+							Path:      req.GetSubmodule(),
+							ErrorType: gitalypb.PathError_ERROR_TYPE_PATH_EXISTS,
+						},
+					},
+				},
+			)
 		}
 
 		return nil, structerr.NewInternal("submodule subcommand: %w", err)
@@ -120,19 +128,25 @@ func (s *Server) UserUpdateSubmodule(ctx context.Context, req *gitalypb.UserUpda
 	); err != nil {
 		var customHookErr updateref.CustomHookError
 		if errors.As(err, &customHookErr) {
-			return &gitalypb.UserUpdateSubmoduleResponse{
-				PreReceiveError: customHookErr.Error(),
-			}, nil
+			return nil, structerr.NewPermissionDenied(customHookErr.Error()).WithDetail(
+				&gitalypb.UserUpdateSubmoduleError{
+					Error: &gitalypb.UserUpdateSubmoduleError_CustomHook{
+						CustomHook: customHookErr.Proto(),
+					},
+				},
+			)
 		}
 
 		var updateRefError updateref.Error
 		if errors.As(err, &updateRefError) {
-			return &gitalypb.UserUpdateSubmoduleResponse{
-				// TODO: this needs to be converted to a structured error, and once done we should stop
-				// returning this Ruby-esque error message in favor of the actual error that was
-				// returned by `updateReferenceWithHooks()`.
-				CommitError: fmt.Sprintf("Could not update %s. Please refresh and try again.", updateRefError.Reference),
-			}, nil
+			message := updateRefError.Error()
+			return nil, structerr.NewFailedPrecondition(message).WithDetail(
+				&gitalypb.UserUpdateSubmoduleError{
+					Error: &gitalypb.UserUpdateSubmoduleError_ReferenceUpdate{
+						ReferenceUpdate: updateRefError.Proto(),
+					},
+				},
+			)
 		}
 
 		return nil, structerr.NewInternal("updating ref with hooks: %w", err)
