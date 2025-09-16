@@ -9,7 +9,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
@@ -24,13 +23,8 @@ import (
 )
 
 func TestDryRunMiddleware(t *testing.T) {
-	t.Parallel()
-
-	testhelper.NewFeatureSets(featureflag.SnapshotDryRunStats).Run(t, testDryRunMiddleware)
-}
-
-func testDryRunMiddleware(t *testing.T, ctx context.Context) {
 	cfg := testcfg.Build(t)
+	ctx := testhelper.Context(t)
 	logger := testhelper.SharedLogger(t)
 	locator := config.NewLocator(cfg)
 	cache, err := storagemgr.NewDryRunLogCache(time.Minute, 10)
@@ -107,11 +101,7 @@ func testDryRunMiddleware(t *testing.T, ctx context.Context) {
 				}
 				require.NoError(t, err)
 				require.True(t, handlerCalled, "handler should be called")
-
-				// Verify that dry-run statistics collection produces logs
-				if featureflag.SnapshotDryRunStats.IsEnabled(ctx) && tc.shouldRun {
-					require.True(t, verifyDryRunLog(t, hook.AllEntries()), "should have logged dry-run statistics collection")
-				}
+				require.Equal(t, tc.shouldRun, verifyDryRunLog(t, hook.AllEntries()))
 			})
 		}
 	})
@@ -207,11 +197,7 @@ func testDryRunMiddleware(t *testing.T, ctx context.Context) {
 				}
 				require.NoError(t, err)
 				require.True(t, handlerCalled, "handler should be called")
-
-				// Verify that dry-run statistics collection produces logs
-				if featureflag.SnapshotDryRunStats.IsEnabled(ctx) && tc.shouldRun {
-					require.True(t, verifyDryRunLog(t, hook.AllEntries()), "should have logged dry-run statistics collection")
-				}
+				require.Equal(t, tc.shouldRun, verifyDryRunLog(t, hook.AllEntries()))
 			})
 		}
 	})
@@ -221,7 +207,6 @@ func TestDryRunMiddleware_cache(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
-	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.SnapshotDryRunStats, true)
 	cfg := testcfg.Build(t)
 	locator := config.NewLocator(cfg)
 	logger := testhelper.SharedLogger(t)

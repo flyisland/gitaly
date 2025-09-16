@@ -561,7 +561,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 
 		// When transactions are disabled, set up dry-run statistics middleware
 		// to collect snapshot statistics without creating actual snapshots
-		dryRunLogCache, err := storagemgr.NewDryRunLogCache(30*time.Minute, 15000)
+		dryRunLogCache, err := storagemgr.NewDryRunLogCache(60*time.Minute, 15000)
 		if err != nil {
 			return fmt.Errorf("create dry-run log cache: %w", err)
 		}
