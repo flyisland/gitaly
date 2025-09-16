@@ -65,7 +65,7 @@ func (s *server) CommitDelta(in *gitalypb.CommitDeltaRequest, stream gitalypb.Di
 		return nil
 	}
 
-	if err := s.eachDiff(ctx, repo, cmd, diff.Limits{}, func(diff *diff.Diff) error {
+	if err := s.eachDiff(ctx, repo, objectHash, cmd, diff.Limits{}, func(diff *diff.Diff) error {
 		delta := &gitalypb.CommitDelta{
 			FromPath: diff.FromPath,
 			ToPath:   diff.ToPath,

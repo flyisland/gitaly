@@ -136,7 +136,12 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 		return structerr.NewInternal("cmd err: %w", err)
 	}
 
-	if err := parsePaths(bufio.NewReader(cmd), diffChunker); err != nil {
+	if err := parsePaths(bufio.NewReader(cmd), func(cp *gitalypb.ChangedPaths) error {
+		if err := diffChunker.Send(cp); err != nil {
+			return fmt.Errorf("send diff chunk: %w", err)
+		}
+		return nil
+	}); err != nil {
 		return fmt.Errorf("parsing err: %w", err)
 	}
 
@@ -147,7 +152,7 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 	return diffChunker.Flush()
 }
 
-func parsePaths(reader *bufio.Reader, chunker *chunk.Chunker) error {
+func parsePaths(reader *bufio.Reader, callback func(cp *gitalypb.ChangedPaths) error) error {
 	for {
 		paths, err := nextPath(reader)
 		if err != nil {
@@ -159,8 +164,8 @@ func parsePaths(reader *bufio.Reader, chunker *chunk.Chunker) error {
 		}
 
 		for _, path := range paths {
-			if err := chunker.Send(path); err != nil {
-				return fmt.Errorf("err sending to chunker: %w", err)
+			if err := callback(path); err != nil {
+				return fmt.Errorf("err executing callback: %w", err)
 			}
 		}
 	}
