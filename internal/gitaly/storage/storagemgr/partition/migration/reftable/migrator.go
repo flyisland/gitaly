@@ -98,7 +98,7 @@ func (m *migrator) migrate(ctx context.Context, storageName, relativePath string
 
 	tx, err := storageHandle.Begin(ctx, storage.TransactionOptions{RelativePath: relativePath})
 	if err != nil {
-		return 0, fmt.Errorf("start transaction: %w", err)
+		return time.Since(t), fmt.Errorf("start transaction: %w", err)
 	}
 	defer func() {
 		if returnedErr != nil {
@@ -117,7 +117,7 @@ func (m *migrator) migrate(ctx context.Context, storageName, relativePath string
 	}()
 
 	if err := m.migrationHandler.Migrate(ctx, tx, storageName, relativePath); err != nil {
-		return 0, fmt.Errorf("run migration: %w", err)
+		return time.Since(t), fmt.Errorf("run migration: %w", err)
 	}
 
 	return time.Since(t), nil
@@ -182,7 +182,7 @@ func (m *migrator) Run() {
 							"relative_path":      data.relativePath,
 							"migration_latency":  latency,
 							"migration_attempts": state.attempts,
-						}).ErrorContext(ctx, "migration failed for repository")
+						}).ErrorContext(ctx, "reftable migration failed for repository")
 						m.metrics.failsMetric.WithLabelValues(failMetricReason(err)).Add(1)
 
 						// Let's delay exponentially, but with a max of 6hrs
@@ -194,7 +194,7 @@ func (m *migrator) Run() {
 							"relative_path":      data.relativePath,
 							"migration_latency":  latency,
 							"migration_attempts": state.attempts,
-						}).InfoContext(ctx, "migration successful for repository")
+						}).InfoContext(ctx, "reftable migration successful for repository")
 						m.metrics.latencyMetric.WithLabelValues().Observe(latency.Seconds())
 
 						state.completed = true

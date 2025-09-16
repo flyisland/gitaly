@@ -261,7 +261,7 @@ func TestMigrator(t *testing.T) {
 			},
 			completed:      false,
 			attempts:       1,
-			expectedLogMsg: "migration failed for repository",
+			expectedLogMsg: "reftable migration failed for repository",
 		},
 		{
 			desc: "existing state, cancelled migration",
@@ -285,7 +285,7 @@ func TestMigrator(t *testing.T) {
 			},
 			completed:      false,
 			attempts:       4,
-			expectedLogMsg: "migration failed for repository",
+			expectedLogMsg: "reftable migration failed for repository",
 		},
 		{
 			desc: "repository not found error",
@@ -320,7 +320,7 @@ func TestMigrator(t *testing.T) {
 			},
 			completed:      true,
 			attempts:       1,
-			expectedLogMsg: "migration successful for repository",
+			expectedLogMsg: "reftable migration successful for repository",
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -373,7 +373,10 @@ func TestMigrator(t *testing.T) {
 
 			if tc.expectedLogMsg != "" {
 				entries := hook.AllEntries()
-				require.Equal(t, tc.expectedLogMsg, entries[len(entries)-1].Message)
+				entry := entries[len(entries)-1]
+				require.Equal(t, tc.expectedLogMsg, entry.Message)
+				require.Greater(t, entry.Data["migration_latency"].(time.Duration), time.Duration(0))
+				require.Greater(t, entry.Data["migration_attempts"].(uint), uint(0))
 			}
 		})
 	}
