@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/trace2"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
@@ -17,12 +16,7 @@ var receivePackTrace2ToLogFieldMapping = map[string]string{
 
 // ReceivePack is a trace2 hook that export receive-pack events to log
 // fields. This information is extracted by traversing the trace2 event tree.
-type ReceivePack struct {
-	// childStartCounter tracks the number of child_start events encountered
-	childStartCounter int
-	// mutex protects childStartCounter for concurrent access
-	mutex sync.Mutex
-}
+type ReceivePack struct{}
 
 // NewReceivePack is the initializer for ReceivePack
 func NewReceivePack() *ReceivePack {
@@ -38,6 +32,8 @@ func (p *ReceivePack) Name() string {
 // When it finds one, it updates Prometheus objects and log fields accordingly.
 // Handle processes trace events and records timing metrics for relevant pack operations
 func (p *ReceivePack) Handle(rootCtx context.Context, trace *trace2.Trace) error {
+	var childIndex int
+
 	trace.Walk(rootCtx, func(ctx context.Context, trace *trace2.Trace) context.Context {
 		customFields := log.CustomFieldsFromContext(ctx)
 		if customFields == nil {
@@ -52,9 +48,11 @@ func (p *ReceivePack) Handle(rootCtx context.Context, trace *trace2.Trace) error
 
 		// Handle child process events specially
 		if trace.Name == "child_start" {
-			field, cmdName := p.buildIndexedChildProcessField(field, trace.Metadata["argv"])
+			cmdName := getCommandName(trace.Metadata["argv"])
 			// Add the full command name as a separate log field
-			customFields.RecordMetadata(fmt.Sprintf("%s.command", field), cmdName)
+			customFields.RecordMetadata(fmt.Sprintf("receive-pack.child-process.%d.command", childIndex), cmdName)
+			field = fmt.Sprintf("receive-pack.child-process.%d.time-us", childIndex)
+			childIndex++
 		}
 
 		// Record the elapsed time
@@ -63,27 +61,16 @@ func (p *ReceivePack) Handle(rootCtx context.Context, trace *trace2.Trace) error
 
 		return ctx
 	})
+
 	return nil
 }
 
-// buildIndexedChildProcessField creates a low-cardinality indexed field name for child processes
-// and returns both the indexed field name and the original command name for separate logging
-func (p *ReceivePack) buildIndexedChildProcessField(baseField, argv string) (string, string) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	// Get the current index and increment counter
-	currentIndex := p.childStartCounter
-	p.childStartCounter++
-
+func getCommandName(argv string) string {
 	// Extract command name for the metadata field
 	cmdName := argv
 	if filepath.IsAbs(argv) {
 		_, cmdName = filepath.Split(argv)
 	}
 
-	// Create indexed field name with low cardinality
-	indexedField := fmt.Sprintf("%s.%d.time_us", baseField, currentIndex)
-
-	return indexedField, cmdName
+	return cmdName
 }
