@@ -131,6 +131,15 @@ func (e Error) Error() string {
 	return fmt.Sprintf("reference update: %v", e.Cause.Error())
 }
 
+// Proto returns the Protobuf representation of this error.
+func (e Error) Proto() *gitalypb.ReferenceUpdateError {
+	return &gitalypb.ReferenceUpdateError{
+		ReferenceName: []byte(e.Reference),
+		OldOid:        string(e.OldOID),
+		NewOid:        string(e.NewOID),
+	}
+}
+
 // NewUpdaterWithHooks creates a new instance of a struct that will update a Git reference.
 func NewUpdaterWithHooks(
 	cfg config.Cfg,

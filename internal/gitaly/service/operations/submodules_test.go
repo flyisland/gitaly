@@ -16,6 +16,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/grpc/status"
 )
 
 func TestUserUpdateSubmodule(t *testing.T) {
@@ -36,6 +37,7 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 		verify          func(t *testing.T)
 		commitID        string
 		expectedErr     error
+		errFunc         func(tb testing.TB, expected, actual error)
 	}
 
 	equalResponse := func(expected *gitalypb.UserUpdateSubmoduleResponse) func(testing.TB, string, *gitalypb.UserUpdateSubmoduleResponse) {
@@ -227,11 +229,16 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 						Submodule:     []byte("sub"),
 						CommitMessage: []byte("Updating Submodule: sub"),
 					},
-					requireResponse: func(tb testing.TB, expectedCommitID string, response *gitalypb.UserUpdateSubmoduleResponse) {
-						require.Regexp(tb, `^executing custom hooks: error executing ".+/custom_hooks/pre-receive": exit status 1$`, response.GetPreReceiveError())
-						response.PreReceiveError = ""
-						testhelper.ProtoEqual(tb, &gitalypb.UserUpdateSubmoduleResponse{}, response)
-					},
+					expectedErr: structerr.NewPermissionDenied("executing custom hooks: error executing").WithDetail(
+						&gitalypb.UserUpdateSubmoduleError{
+							Error: &gitalypb.UserUpdateSubmoduleError_CustomHook{
+								CustomHook: &gitalypb.CustomHookError{
+									HookType: gitalypb.CustomHookError_HOOK_TYPE_PRERECEIVE,
+								},
+							},
+						},
+					),
+					errFunc:  testhelper.RequireGrpcErrorContains,
 					commitID: commitID.String(),
 					verify: func(t *testing.T) {
 						hookOutput := testhelper.MustReadFile(t, outputPath)
@@ -505,9 +512,16 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 						Submodule:     []byte("foobar"),
 						CommitMessage: []byte("Updating Submodule: sub"),
 					},
-					requireResponse: equalResponse(&gitalypb.UserUpdateSubmoduleResponse{
-						CommitError: "Invalid submodule path",
-					}),
+					expectedErr: structerr.NewInvalidArgument("Invalid submodule path").WithDetail(
+						&gitalypb.UserUpdateSubmoduleError{
+							Error: &gitalypb.UserUpdateSubmoduleError_PathError{
+								PathError: &gitalypb.PathError{
+									Path:      []byte("foobar"),
+									ErrorType: gitalypb.PathError_ERROR_TYPE_INVALID_PATH,
+								},
+							},
+						},
+					),
 					verify: func(t *testing.T) {},
 				}
 			},
@@ -537,9 +551,16 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 						Submodule:     []byte("foobar/does/not/exist"),
 						CommitMessage: []byte("Updating Submodule: sub"),
 					},
-					requireResponse: equalResponse(&gitalypb.UserUpdateSubmoduleResponse{
-						CommitError: "Invalid submodule path",
-					}),
+					expectedErr: structerr.NewInvalidArgument("Invalid submodule path").WithDetail(
+						&gitalypb.UserUpdateSubmoduleError{
+							Error: &gitalypb.UserUpdateSubmoduleError_PathError{
+								PathError: &gitalypb.PathError{
+									Path:      []byte("foobar/does/not/exist"),
+									ErrorType: gitalypb.PathError_ERROR_TYPE_INVALID_PATH,
+								},
+							},
+						},
+					),
 					verify: func(t *testing.T) {},
 				}
 			},
@@ -569,9 +590,16 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 						Submodule:     []byte("../traversal"),
 						CommitMessage: []byte("Updating Submodule: sub"),
 					},
-					requireResponse: equalResponse(&gitalypb.UserUpdateSubmoduleResponse{
-						CommitError: "Invalid submodule path",
-					}),
+					expectedErr: structerr.NewInvalidArgument("Invalid submodule path").WithDetail(
+						&gitalypb.UserUpdateSubmoduleError{
+							Error: &gitalypb.UserUpdateSubmoduleError_PathError{
+								PathError: &gitalypb.PathError{
+									Path:      []byte("../traversal"),
+									ErrorType: gitalypb.PathError_ERROR_TYPE_INVALID_PATH,
+								},
+							},
+						},
+					),
 					verify: func(t *testing.T) {},
 				}
 			},
@@ -600,9 +628,16 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 						Submodule:     []byte("sub"),
 						CommitMessage: []byte("Updating Submodule: sub"),
 					},
-					requireResponse: equalResponse(&gitalypb.UserUpdateSubmoduleResponse{
-						CommitError: fmt.Sprintf("The submodule sub is already at %s", subCommitID),
-					}),
+					expectedErr: structerr.NewInvalidArgument("The submodule sub is already at %s", subCommitID).WithDetail(
+						&gitalypb.UserUpdateSubmoduleError{
+							Error: &gitalypb.UserUpdateSubmoduleError_PathError{
+								PathError: &gitalypb.PathError{
+									Path:      []byte("sub"),
+									ErrorType: gitalypb.PathError_ERROR_TYPE_PATH_EXISTS,
+								},
+							},
+						},
+					),
 					verify: func(t *testing.T) {},
 				}
 			},
@@ -629,9 +664,16 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 						Submodule:     []byte("VERSION"),
 						CommitMessage: []byte("Updating Submodule: sub"),
 					},
-					requireResponse: equalResponse(&gitalypb.UserUpdateSubmoduleResponse{
-						CommitError: "Invalid submodule path",
-					}),
+					expectedErr: structerr.NewInvalidArgument("Invalid submodule path").WithDetail(
+						&gitalypb.UserUpdateSubmoduleError{
+							Error: &gitalypb.UserUpdateSubmoduleError_PathError{
+								PathError: &gitalypb.PathError{
+									Path:      []byte("VERSION"),
+									ErrorType: gitalypb.PathError_ERROR_TYPE_INVALID_PATH,
+								},
+							},
+						},
+					),
 					verify: func(t *testing.T) {},
 				}
 			},
@@ -652,10 +694,8 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 						Submodule:     []byte("foobar"),
 						CommitMessage: []byte("Updating Submodule: sub"),
 					},
-					requireResponse: equalResponse(&gitalypb.UserUpdateSubmoduleResponse{
-						CommitError: "Repository is empty",
-					}),
-					verify: func(t *testing.T) {},
+					expectedErr: structerr.NewFailedPrecondition("Repository is empty"),
+					verify:      func(t *testing.T) {},
 				}
 			},
 		},
@@ -788,9 +828,34 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 						CommitMessage:  []byte("Updating Submodule: sub"),
 						ExpectedOldOid: firstCommit.String(),
 					},
-					requireResponse: equalResponse(&gitalypb.UserUpdateSubmoduleResponse{
-						CommitError: "Could not update refs/heads/master. Please refresh and try again.",
-					}),
+					errFunc: func(tb testing.TB, expected, actual error) {
+						// We're extracting NewOid from the actual Error first since we
+						// can't know its value until UserUpdateSubmodule has finished
+						tb.Helper()
+
+						actualStatus, ok := status.FromError(actual)
+						require.True(tb, ok)
+						require.Len(tb, actualStatus.Details(), 1)
+
+						actualDetail := actualStatus.Details()[0].(*gitalypb.UserUpdateSubmoduleError)
+						refUpdate := actualDetail.GetReferenceUpdate()
+						require.NotNil(tb, refUpdate)
+
+						// Build expected error with the actual NewOid
+						expectedErr := structerr.NewFailedPrecondition("reference update: reference does not point to expected object").WithDetail(
+							&gitalypb.UserUpdateSubmoduleError{
+								Error: &gitalypb.UserUpdateSubmoduleError_ReferenceUpdate{
+									ReferenceUpdate: &gitalypb.ReferenceUpdateError{
+										ReferenceName: []byte("refs/heads/master"),
+										OldOid:        firstCommit.String(),
+										NewOid:        refUpdate.GetNewOid(),
+									},
+								},
+							},
+						)
+
+						testhelper.RequireGrpcError(tb, expectedErr, actual)
+					},
 					commitID: commitID.String(),
 					verify:   func(t *testing.T) {},
 				}
@@ -808,7 +873,12 @@ func testUserUpdateSubmodule(t *testing.T, ctx context.Context) {
 			setupData := tc.setup(repoPath, subRepoPath, repoProto, subRepoProto)
 
 			response, err := client.UserUpdateSubmodule(ctx, setupData.request)
-			testhelper.RequireGrpcError(t, setupData.expectedErr, err)
+
+			if setupData.errFunc != nil {
+				setupData.errFunc(t, setupData.expectedErr, err)
+			} else {
+				testhelper.RequireGrpcError(t, setupData.expectedErr, err)
+			}
 
 			// If there is no verification function, lets do the default verification of
 			// checking if the submodule was updated correctly in the main repo.
