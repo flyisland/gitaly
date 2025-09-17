@@ -92,6 +92,14 @@ func (s *server) ListCommits(
 		revlistOptions = append(revlistOptions, gitpipe.WithSkip(uint(request.GetSkip())))
 	}
 
+	if len(request.GetPaths()) > 0 {
+		paths := make([]string, len(request.GetPaths()))
+		for i, path := range request.GetPaths() {
+			paths[i] = string(path)
+		}
+		revlistOptions = append(revlistOptions, gitpipe.WithPaths(paths...))
+	}
+
 	if len(request.GetCommitMessagePatterns()) > 0 {
 		revlistOptions = append(revlistOptions, gitpipe.WithCommitMessagePatterns(request.GetCommitMessagePatterns()))
 	}
