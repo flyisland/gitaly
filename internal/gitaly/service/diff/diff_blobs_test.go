@@ -93,15 +93,7 @@ func TestDiffBlobs(t *testing.T) {
 							},
 						},
 					},
-					// This is a bug. Request validation should catch this
-					// before sending input to git-diff-pairs(1).
-					expectedErr: structerr.NewInternal("waiting for git-diff-pairs: exit status 128"),
-					expectedResponses: []*gitalypb.DiffBlobsResponse{
-						{
-							RightBlobId: blobID.String(),
-							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
-						},
-					},
+					expectedErr: structerr.NewInvalidArgument("raw info entry missing blob IDs"),
 				}
 			},
 		},
@@ -124,15 +116,7 @@ func TestDiffBlobs(t *testing.T) {
 							},
 						},
 					},
-					// This is a bug. Request validation should catch this
-					// before sending input to git-diff-pairs(1).
-					expectedErr: structerr.NewInternal("waiting for git-diff-pairs: exit status 128"),
-					expectedResponses: []*gitalypb.DiffBlobsResponse{
-						{
-							LeftBlobId: blobID.String(),
-							Status:     gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
-						},
-					},
+					expectedErr: structerr.NewInvalidArgument("raw info entry missing blob IDs"),
 				}
 			},
 		},
@@ -157,16 +141,7 @@ func TestDiffBlobs(t *testing.T) {
 							},
 						},
 					},
-					// This is a bug. Request validation should catch this
-					// before sending input to git-diff-pairs(1).
-					expectedErr: structerr.NewInternal("waiting for git-diff-pairs: exit status 128"),
-					expectedResponses: []*gitalypb.DiffBlobsResponse{
-						{
-							LeftBlobId:  blobID1.String(),
-							RightBlobId: blobID2.String(),
-							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
-						},
-					},
+					expectedErr: structerr.NewInvalidArgument("raw info entry missing path"),
 				}
 			},
 		},
@@ -191,16 +166,7 @@ func TestDiffBlobs(t *testing.T) {
 							},
 						},
 					},
-					// This is a bug. Request validation should catch this
-					// before sending input to git-diff-pairs(1).
-					expectedErr: structerr.NewInternal("waiting for git-diff-pairs: exit status 128"),
-					expectedResponses: []*gitalypb.DiffBlobsResponse{
-						{
-							LeftBlobId:  blobID1.String(),
-							RightBlobId: blobID2.String(),
-							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
-						},
-					},
+					expectedErr: structerr.NewInvalidArgument("rename/copy raw info entry missing old path"),
 				}
 			},
 		},

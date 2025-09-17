@@ -41,6 +41,10 @@ func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.D
 		return structerr.NewInvalidArgument("blob pairs and raw info both used in request")
 	}
 
+	if err := validateRawInfo(request.GetRawInfo()); err != nil {
+		return err
+	}
+
 	// See https://gitlab.com/gitlab-org/gitaly/-/issues/6885
 	if request.GetWhitespaceChanges() != gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_UNSPECIFIED && len(request.GetBlobPairs()) > 0 {
 		return structerr.NewInvalidArgument("whitespace changes cannot be ignored when blob pairs are provided")
@@ -125,6 +129,26 @@ func (s *server) diffPairs(ctx context.Context,
 
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("waiting for git-diff-pairs: %w", err)
+	}
+
+	return nil
+}
+
+func validateRawInfo(rawInfo []*gitalypb.ChangedPaths) error {
+	for _, entry := range rawInfo {
+		if len(entry.GetOldBlobId()) == 0 || len(entry.GetNewBlobId()) == 0 {
+			return structerr.NewInvalidArgument("raw info entry missing blob IDs")
+		}
+
+		if len(entry.GetPath()) == 0 {
+			return structerr.NewInvalidArgument("raw info entry missing path")
+		}
+
+		if entry.GetStatus() == gitalypb.ChangedPaths_RENAMED || entry.GetStatus() == gitalypb.ChangedPaths_COPIED {
+			if len(entry.GetOldPath()) == 0 {
+				return structerr.NewInvalidArgument("rename/copy raw info entry missing old path")
+			}
+		}
 	}
 
 	return nil
