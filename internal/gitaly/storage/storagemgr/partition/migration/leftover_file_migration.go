@@ -16,7 +16,7 @@ import (
 )
 
 // LostFoundPrefix is the directory prefix where we put leftover files.
-var LostFoundPrefix = filepath.Join(config.GitalyDataPrefix, "lost+found")
+var LostFoundPrefix = filepath.Join(config.GitalyDataPrefix, "leftover-migration-trash")
 
 // NewLeftoverFileMigration returns a migration task that moves leftover files
 // from the repository to a lost-and-found directory. These files exist before the
