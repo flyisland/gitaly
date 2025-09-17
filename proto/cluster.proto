@@ -113,6 +113,37 @@ message RaftSnapshotMessageResponse {
   uint64 snapshot_size = 2;
 }
 
+// JoinClusterRequest is sent by the leader to a new node to join a specific partition.
+message JoinClusterRequest {
+  // partition_key identifies which partition the new node should join.
+  RaftPartitionKey partition_key = 1;
+
+  // leader_id is the Member ID of the current Raft group leader
+  uint64 leader_id = 2;
+
+  // member_id is the unique Raft member ID assigned by the leader for this replica.
+  uint64 member_id = 3;
+
+  // term is logical time in the Raft cluster
+  uint64 term = 4;
+
+  // index refers to the position of a log entry
+  uint64 index = 5;
+
+  // storage_name is the name of the storage where the replica should be created.
+  string storage_name = 6 [(gitaly.storage) = true];
+
+  // relative_path is the path within the storage where the partition data is located.
+  string relative_path = 7;
+
+  // replicas contains the current list of all cluster members for routing table initialization.
+  repeated ReplicaID replicas = 8;
+}
+
+// JoinClusterResponse indicates the result of the join operation.
+message JoinClusterResponse {
+}
+
 // RaftService manages the sending of Raft messages to peers.
 service RaftService {
   // SendMessage processes Raft messages and ensures they are handled by
@@ -126,6 +157,14 @@ service RaftService {
   // SendSnapshot sends raft snapshots from the leader to the follower node. Typically it
   // would be useful for nodes to catch up to the latest state.
   rpc SendSnapshot(stream RaftSnapshotMessageRequest) returns (RaftSnapshotMessageResponse) {
+    option (op_type) = {
+      op: MUTATOR
+      scope_level: STORAGE
+    };
+  }
+
+  // JoinCluster is called by the leader to instruct a new node to join an existing cluster.
+  rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse) {
     option (op_type) = {
       op: MUTATOR
       scope_level: STORAGE

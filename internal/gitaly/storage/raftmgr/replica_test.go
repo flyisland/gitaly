@@ -239,7 +239,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
+		mgr, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
@@ -317,7 +317,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
+		mgr, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
@@ -362,7 +362,7 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr1, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore1, logger, metrics)
+		mgr1, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore1, logger, metrics)
 		require.NoError(t, err)
 
 		// Initialize the raft replica
@@ -424,7 +424,7 @@ func TestReplica_Initialize(t *testing.T) {
 		logStore2, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr2, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore2, logger, metrics)
+		mgr2, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore2, logger, metrics)
 		require.NoError(t, err)
 
 		// Re-initialize Raft with the highest LSN
@@ -709,6 +709,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 
 		// Create replica with very short operation timeout
 		mgr, err := raftFactory(
+			ctx,
 			1,
 			storageName,
 			NewPartitionKey(storageName, partitionID),
@@ -829,7 +830,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
 		// Configure replica
-		mgr, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
+		mgr, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
 		require.NoError(t, err)
 
 		for _, f := range setupFuncs {
@@ -882,7 +883,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(env.recorder))
 
-		recoveryMgr, err := raftFactory(1, env.storageName, NewPartitionKey(env.storageName, env.partitionID), logStore, logger, env.metrics)
+		recoveryMgr, err := raftFactory(ctx, 1, env.storageName, NewPartitionKey(env.storageName, env.partitionID), logStore, logger, env.metrics)
 		require.NoError(t, err)
 
 		// Initialize with the last known LSN
@@ -1663,7 +1664,7 @@ func TestReplica_StorageConnection(t *testing.T) {
 	// Create factory that connects replicas to storage
 	raftFactory := DefaultFactoryWithNode(cfg.Raft, raftNode)
 
-	replica, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
+	replica, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, replica.Close()) })
 
@@ -1694,14 +1695,14 @@ func TestReplica_StorageConnection(t *testing.T) {
 	})
 
 	t.Run("multiple replicas for same partition key", func(t *testing.T) {
-		duplicateReplica, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
+		duplicateReplica, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
 		require.NoError(t, err)
 		require.NotNil(t, duplicateReplica)
 	})
 
 	t.Run("Register different replicas for different partition keys", func(t *testing.T) {
 		partitionID := storage.PartitionID(2)
-		replicaTwo, err := raftFactory(1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
+		replicaTwo, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
 		require.NoError(t, err)
 		require.NotNil(t, replicaTwo)
 	})
@@ -1817,8 +1818,9 @@ func TestReplica_AddNode(t *testing.T) {
 		})
 
 		require.NoError(t, err)
+		destination := "default"
 
-		err = replica.AddNode(ctx, replicaTwoAddress)
+		err = replica.AddNode(ctx, replicaTwoAddress, destination)
 		require.NoError(t, err, "adding node should succeed when leader")
 
 		require.Eventually(t, func() bool {
@@ -1859,11 +1861,13 @@ func TestReplica_AddNode(t *testing.T) {
 		metrics := NewMetrics()
 		partitionID := storage.PartitionID(1)
 
-		replica, _, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		replica, socketPath, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
 		defer func() {
 			srv.Stop()
 			require.NoError(t, replica.Close())
 		}()
+
+		replicaOneAdress := "unix://" + socketPath
 
 		waitForLeadership(t, replica, waitTimeout)
 
@@ -1890,18 +1894,38 @@ func TestReplica_AddNode(t *testing.T) {
 		lastMemberID := uint64(3)
 
 		for i := uint64(2); i <= lastMemberID; i++ {
+			// create multiple replicas with new addresses
 			replica, socketPath, srv := createTestNode(t, ctx, i, partitionID, raftCfg, metrics)
 
 			servers = append(servers, srv)
 			address := "unix://" + socketPath
 			destinationAddresses = append(destinationAddresses, address)
 			addressesToReplicas[address] = replica
+
+			routingTableTwo := replica.raftEnabledStorage.GetRoutingTable()
+			err := routingTableTwo.UpsertEntry(RoutingTableEntry{
+				Replicas: []*gitalypb.ReplicaID{
+					{
+						PartitionKey: partitionKey,
+						Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+						MemberId:     1,
+						Metadata: &gitalypb.ReplicaID_Metadata{
+							Address: replicaOneAdress,
+						},
+					},
+				},
+				Term:  1,
+				Index: 2,
+			})
+			require.NoError(t, err)
 		}
+
+		destination := "default"
 
 		// Propose concurrent membership changes. Same member ID but different address.
 		var errs []error
 		for i := 0; i < 2; i++ {
-			err := replica.proposeMembershipChange(ctx, string(addVoter), lastMemberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
+			err := replica.proposeMembershipChange(ctx, string(addVoter), destination, lastMemberID, ConfChangeAddNode, &gitalypb.ReplicaID_Metadata{
 				Address: destinationAddresses[i],
 			})
 			errs = append(errs, err)
@@ -1917,7 +1941,7 @@ func TestReplica_AddNode(t *testing.T) {
 			require.ErrorContains(t, err, "configuration change timed out after")
 		}
 
-		require.Equal(t, successfulProposals, 1, "only one of the proposals should succeed")
+		require.Equal(t, 1, successfulProposals, "only one of the proposals should succeed")
 
 		var addedAddress string
 		require.Eventually(t, func() bool {
@@ -1989,7 +2013,7 @@ func TestReplica_AddNode(t *testing.T) {
 		waitForLeadership(t, replica, waitTimeout)
 
 		err := replica.RemoveNode(ctx, 999)
-		require.EqualError(t, err, "checking member ID: translating member ID: no address found for memberID 999")
+		require.EqualError(t, err, "translating member ID: no address found for memberID 999")
 	})
 
 	t.Run("fails when node is not leader", func(t *testing.T) {
@@ -2010,7 +2034,9 @@ func TestReplica_AddNode(t *testing.T) {
 		// Set a random leader ID to simulate a non-leader
 		replica.leadership.SetLeader(999, false)
 
-		err := replica.AddNode(ctx, "gitaly-node-2:8075")
+		destination := "default"
+
+		err := replica.AddNode(ctx, "gitaly-node-2:8075", destination)
 		require.EqualError(t, err, "replica is not the leader", "adding node should fail when not leader")
 
 		testhelper.RequirePromMetrics(t, metrics, `

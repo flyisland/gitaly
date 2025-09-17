@@ -18,6 +18,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	logger "gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -111,6 +112,32 @@ func (s *mockRaftServer) SendSnapshot(stream gitalypb.RaftService_SendSnapshotSe
 	}
 
 	return stream.SendAndClose(&gitalypb.RaftSnapshotMessageResponse{})
+}
+
+func (s *mockRaftServer) JoinCluster(ctx context.Context, req *gitalypb.JoinClusterRequest) (*gitalypb.JoinClusterResponse, error) {
+	if req.GetPartitionKey() == nil {
+		return nil, structerr.NewInvalidArgument("partition_key is required")
+	}
+
+	if req.GetMemberId() == 0 {
+		return nil, structerr.NewInvalidArgument("member_id is required")
+	}
+
+	if req.GetStorageName() == "" {
+		return nil, structerr.NewInvalidArgument("storage_name is required")
+	}
+
+	if len(req.GetReplicas()) == 0 {
+		return nil, structerr.NewInvalidArgument("cluster_members is required")
+	}
+	if req.GetTerm() == 0 {
+		return nil, structerr.NewInvalidArgument("term is required")
+	}
+	if req.GetIndex() == 0 {
+		return nil, structerr.NewInvalidArgument("index is required")
+	}
+
+	return nil, nil
 }
 
 func TestGrpcTransport_SendAndReceive(t *testing.T) {

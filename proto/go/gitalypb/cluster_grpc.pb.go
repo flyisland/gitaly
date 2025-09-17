@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	RaftService_SendMessage_FullMethodName  = "/gitaly.RaftService/SendMessage"
 	RaftService_SendSnapshot_FullMethodName = "/gitaly.RaftService/SendSnapshot"
+	RaftService_JoinCluster_FullMethodName  = "/gitaly.RaftService/JoinCluster"
 )
 
 // RaftServiceClient is the client API for RaftService service.
@@ -35,6 +36,8 @@ type RaftServiceClient interface {
 	// SendSnapshot sends raft snapshots from the leader to the follower node. Typically it
 	// would be useful for nodes to catch up to the latest state.
 	SendSnapshot(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse], error)
+	// JoinCluster is called by the leader to instruct a new node to join an existing cluster.
+	JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error)
 }
 
 type raftServiceClient struct {
@@ -71,6 +74,16 @@ func (c *raftServiceClient) SendSnapshot(ctx context.Context, opts ...grpc.CallO
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RaftService_SendSnapshotClient = grpc.ClientStreamingClient[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]
 
+func (c *raftServiceClient) JoinCluster(ctx context.Context, in *JoinClusterRequest, opts ...grpc.CallOption) (*JoinClusterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinClusterResponse)
+	err := c.cc.Invoke(ctx, RaftService_JoinCluster_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RaftServiceServer is the server API for RaftService service.
 // All implementations must embed UnimplementedRaftServiceServer
 // for forward compatibility.
@@ -83,6 +96,8 @@ type RaftServiceServer interface {
 	// SendSnapshot sends raft snapshots from the leader to the follower node. Typically it
 	// would be useful for nodes to catch up to the latest state.
 	SendSnapshot(grpc.ClientStreamingServer[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]) error
+	// JoinCluster is called by the leader to instruct a new node to join an existing cluster.
+	JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error)
 	mustEmbedUnimplementedRaftServiceServer()
 }
 
@@ -98,6 +113,9 @@ func (UnimplementedRaftServiceServer) SendMessage(grpc.ClientStreamingServer[Raf
 }
 func (UnimplementedRaftServiceServer) SendSnapshot(grpc.ClientStreamingServer[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method SendSnapshot not implemented")
+}
+func (UnimplementedRaftServiceServer) JoinCluster(context.Context, *JoinClusterRequest) (*JoinClusterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method JoinCluster not implemented")
 }
 func (UnimplementedRaftServiceServer) mustEmbedUnimplementedRaftServiceServer() {}
 func (UnimplementedRaftServiceServer) testEmbeddedByValue()                     {}
@@ -134,13 +152,36 @@ func _RaftService_SendSnapshot_Handler(srv interface{}, stream grpc.ServerStream
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RaftService_SendSnapshotServer = grpc.ClientStreamingServer[RaftSnapshotMessageRequest, RaftSnapshotMessageResponse]
 
+func _RaftService_JoinCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinClusterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RaftServiceServer).JoinCluster(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RaftService_JoinCluster_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RaftServiceServer).JoinCluster(ctx, req.(*JoinClusterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RaftService_ServiceDesc is the grpc.ServiceDesc for RaftService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var RaftService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "gitaly.RaftService",
 	HandlerType: (*RaftServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "JoinCluster",
+			Handler:    _RaftService_JoinCluster_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "SendMessage",

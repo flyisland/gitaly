@@ -195,7 +195,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 				partition.WithRaftFactory(raftFactory),
 			}
 			factory := partition.NewFactory(partitionFactoryOptions...)
-			tm := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
+			tm := factory.New(ctx, logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
 
 			ctx, cancel := context.WithCancel(ctx)
 

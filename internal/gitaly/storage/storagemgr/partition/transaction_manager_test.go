@@ -2193,7 +2193,7 @@ func BenchmarkTransactionManager(b *testing.B) {
 				}
 				factory := NewFactory(partitionFactoryOptions...)
 				// transactionManager is the current TransactionManager instance.
-				manager := factory.New(logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
+				manager := factory.New(ctx, logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
 
 				managers = append(managers, manager)
 
