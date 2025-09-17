@@ -285,7 +285,7 @@ test:pgbouncer:
     - name: postgres:${POSTGRES_VERSION}
       alias: postgres
       command: ["postgres", "-c", "max_connections=500", "-c", "shared_buffers=1GB"]
-    - name: bitnami/pgbouncer:${PGBOUNCER_VERSION}
+    - name: bitnamilegacy/pgbouncer:${PGBOUNCER_VERSION}
       alias: pgbouncer
   variables:
     <<: *test_variables
