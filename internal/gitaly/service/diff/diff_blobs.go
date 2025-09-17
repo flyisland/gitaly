@@ -73,17 +73,6 @@ func (s *server) diffPairs(ctx context.Context,
 ) error {
 	repo := s.localRepoFactory.Build(request.GetRepository())
 
-	gitVersion, err := repo.GitVersion(ctx)
-	if err != nil {
-		return fmt.Errorf("git version: %w", err)
-	}
-
-	// The git-diff-pairs(1) command was backported to Git 2.49 and thus the GitLab Git version is
-	// required until Git 2.50 is released and rolled out.
-	if gitVersion.LessThan(git.NewVersion(2, 49, 0, 1)) {
-		return structerr.NewInvalidArgument("git version: %s, doesn't support git-diff-pairs(1)", gitVersion)
-	}
-
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {
 		return structerr.NewInternal("detecting object format: %w", err)
@@ -98,7 +87,6 @@ func (s *server) diffPairs(ctx context.Context,
 			SrcOID:  entry.GetOldBlobId(),
 			DstOID:  entry.GetNewBlobId(),
 			Status:  statusLookup[entry.GetStatus()],
-			// Score:   entry.GetScore(),
 			SrcPath: entry.GetPath(),
 		}
 
