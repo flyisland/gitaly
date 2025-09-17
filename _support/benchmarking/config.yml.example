@@ -16,6 +16,7 @@ client:
   boot_disk_size: 20
   boot_disk_type: "pd-balanced"
 
+gitaly_revision: HEAD
 gitaly_instances:
   - name: "large"
     machine_type: "n2d-standard-16"
