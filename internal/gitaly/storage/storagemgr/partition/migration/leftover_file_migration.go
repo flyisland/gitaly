@@ -14,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
 	migrationid "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration/id"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 )
 
 // LostFoundPrefix is the garbage directory prefix where we put leftover files.
@@ -128,4 +129,23 @@ func linkToGarbageFolder(srcAbsPath, targetAbsPath string, isDir bool) error {
 		}
 	}
 	return nil
+}
+
+// ReportLostFoundDirectoryExistence checks for a leftover migration garbage directory that may need cleanup.
+func ReportLostFoundDirectoryExistence(logger log.Logger, cfg config.Cfg) {
+	for _, s := range cfg.Storages {
+		garbageDirectory := filepath.Join(s.Path, LostFoundPrefix)
+		_, err := os.Stat(garbageDirectory)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				logger.WithError(err).WithField("storageName", s.Name).
+					WithField("storagePath", s.Path).
+					Error("leftover migration garbage dir statistics")
+			}
+			continue
+		}
+		logger.WithError(err).WithField("storageName", s.Name).
+			WithField("storagePath", s.Path).
+			Warn("The leftover migration garbage dir is detected. Ask admin to clean up.")
+	}
 }
