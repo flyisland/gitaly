@@ -1,5 +1,15 @@
 # Gitaly changelog
 
+## 18.4.0 (2025-09-17)
+
+### Added (1 change)
+
+- [Extend CommitLanguages to return LanguageId](gitlab-org/gitaly@f1b88969401baee869bcf7dba61b214787c48fc1) ([merge request](gitlab-org/gitaly!8068))
+
+### Fixed (1 change)
+
+- [Handle ErrPathTraversal error](gitlab-org/gitaly@6749c86ccfe5fc53f0a5ce4a3c7549d6d491609e) ([merge request](gitlab-org/gitaly!8119))
+
 ## 18.3.2 (2025-09-09)
 
 No changes.
