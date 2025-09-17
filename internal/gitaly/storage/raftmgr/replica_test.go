@@ -1868,7 +1868,7 @@ func TestReplica_AddNode(t *testing.T) {
 			require.NoError(t, replica.Close())
 		}()
 
-		replicaOneAdress := "unix://" + socketPath
+		replicaOneAddress := "unix://" + socketPath
 
 		waitForLeadership(t, replica, waitTimeout)
 
@@ -1911,7 +1911,7 @@ func TestReplica_AddNode(t *testing.T) {
 						Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 						MemberId:     1,
 						Metadata: &gitalypb.ReplicaID_Metadata{
-							Address: replicaOneAdress,
+							Address: replicaOneAddress,
 						},
 					},
 				},
