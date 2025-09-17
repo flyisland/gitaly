@@ -53,9 +53,14 @@ func AssignmentWorker(ctx context.Context, cfg config.Cfg, mgr storage.Node, dbM
 		}
 
 		if err := walk.FindRepositories(ctx, locator, s.Name, func(relPath string, gitDirInfo fs.FileInfo) error {
-			_, err := storageMgr.MaybeAssignToPartition(ctx, relPath)
+			ptnID, err := storageMgr.MaybeAssignToPartition(ctx, relPath)
 			if err != nil {
 				return fmt.Errorf("maybe assign to partition: %w", err)
+			}
+
+			err = storageMgr.MaybeUpdateRepositoryKey(relPath, ptnID)
+			if err != nil {
+				return fmt.Errorf("maybe update repository key: %w", err)
 			}
 
 			return nil

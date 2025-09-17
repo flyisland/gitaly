@@ -290,6 +290,8 @@ type Storage interface {
 	// GetAssignedPartitionID returns the assigned ID of the partition the relative path
 	// has been assigned to.
 	GetAssignedPartitionID(relativePath string) (PartitionID, error)
+	// MaybeUpdateRepositoryKey ensures that the repositoryKey is added to partition KV.
+	MaybeUpdateRepositoryKey(relativePath string, ptnID PartitionID) error
 	// Begin begins a transaction against a partition.
 	Begin(context.Context, TransactionOptions) (Transaction, error)
 	// GetPartition returns a new handle to a given partition. The caller must call

@@ -145,15 +145,18 @@ func setupMockNode(t *testing.T, ctx context.Context, cfg config.Cfg, dbMgr *dat
 
 func validateSuccessfulMigration(t *testing.T, ctx context.Context, db keyvalue.Store, repo *localrepo.Repo, pool *objectpool.ObjectPool, ptnID storage.PartitionID) {
 	actualAssignments := getPartitionAssignments(t, db)
-
 	expectedAssignments := partitionAssignments{
 		repo.GetRelativePath(): 3,
 		pool.GetRelativePath(): 3,
 		"repository-2":         ptnID,
 		"repository-3":         4,
 	}
-
 	require.Equal(t, expectedAssignments, actualAssignments)
+
+	for relativePath, ptnID := range expectedAssignments {
+		validateRepositoryKey(t, db, relativePath, ptnID)
+	}
+
 	validateRepoAssignedKey(t, db)
 }
 
@@ -164,6 +167,19 @@ func validateEmptyAssignments(t *testing.T, ctx context.Context, db keyvalue.Sto
 	require.NoError(t, db.View(func(txn keyvalue.ReadWriter) error {
 		_, err := txn.Get(repoAssignedKey)
 		require.ErrorIs(t, err, badger.ErrKeyNotFound)
+		return nil
+	}))
+}
+
+func validateRepositoryKey(t *testing.T, db keyvalue.Store, relativePath string, ptnID storage.PartitionID) {
+	require.NoError(t, db.View(func(txn keyvalue.ReadWriter) error {
+		key := fmt.Appendf(nil, "%skv/%s%s", KeyPrefixPartition(ptnID), storage.RepositoryKeyPrefix, relativePath)
+		item, err := txn.Get(key)
+		require.NoError(t, err)
+		require.NoError(t, item.Value(func(value []byte) error {
+			require.Nil(t, value)
+			return nil
+		}))
 		return nil
 	}))
 }
