@@ -75,6 +75,136 @@ func TestDiffBlobs(t *testing.T) {
 			},
 		},
 		{
+			desc: "rawInfo entry missing old blob ID",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository: repoProto,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Status:    gitalypb.ChangedPaths_RENAMED,
+								OldBlobId: "",
+								NewBlobId: blobID.String(),
+								Path:      []byte("foo"),
+							},
+						},
+					},
+					// This is a bug. Request validation should catch this
+					// before sending input to git-diff-pairs(1).
+					expectedErr: structerr.NewInternal("waiting for git-diff-pairs: exit status 128"),
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							RightBlobId: blobID.String(),
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "rawInfo entry missing new blob ID",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository: repoProto,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Status:    gitalypb.ChangedPaths_RENAMED,
+								OldBlobId: blobID.String(),
+								NewBlobId: "",
+								Path:      []byte("foo"),
+							},
+						},
+					},
+					// This is a bug. Request validation should catch this
+					// before sending input to git-diff-pairs(1).
+					expectedErr: structerr.NewInternal("waiting for git-diff-pairs: exit status 128"),
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							LeftBlobId: blobID.String(),
+							Status:     gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "rawInfo rename entry missing path",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				blobID2 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository: repoProto,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Status:    gitalypb.ChangedPaths_RENAMED,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+								Path:      nil,
+								OldPath:   []byte("bar"),
+							},
+						},
+					},
+					// This is a bug. Request validation should catch this
+					// before sending input to git-diff-pairs(1).
+					expectedErr: structerr.NewInternal("waiting for git-diff-pairs: exit status 128"),
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "rawInfo rename entry missing old path",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blobID1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				blobID2 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+
+				return setupData{
+					request: &gitalypb.DiffBlobsRequest{
+						Repository: repoProto,
+						RawInfo: []*gitalypb.ChangedPaths{
+							{
+								Status:    gitalypb.ChangedPaths_RENAMED,
+								OldBlobId: blobID1.String(),
+								NewBlobId: blobID2.String(),
+								Path:      []byte("foo"),
+								OldPath:   nil,
+							},
+						},
+					},
+					// This is a bug. Request validation should catch this
+					// before sending input to git-diff-pairs(1).
+					expectedErr: structerr.NewInternal("waiting for git-diff-pairs: exit status 128"),
+					expectedResponses: []*gitalypb.DiffBlobsResponse{
+						{
+							LeftBlobId:  blobID1.String(),
+							RightBlobId: blobID2.String(),
+							Status:      gitalypb.DiffBlobsResponse_STATUS_END_OF_PATCH,
+						},
+					},
+				}
+			},
+		},
+		{
 			desc: "commit ID in request",
 			setup: func() setupData {
 				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
@@ -1110,19 +1240,20 @@ func TestDiffBlobs(t *testing.T) {
 
 			var actualResp []*gitalypb.DiffBlobsResponse
 			for {
-				resp, err := stream.Recv()
-				if errors.Is(err, io.EOF) {
-					break
-				}
+				var resp *gitalypb.DiffBlobsResponse
 
-				testhelper.RequireGrpcError(t, data.expectedErr, err)
+				resp, err = stream.Recv()
 				if err != nil {
+					if errors.Is(err, io.EOF) {
+						err = nil
+					}
 					break
 				}
 
 				actualResp = append(actualResp, resp)
 			}
 
+			testhelper.RequireGrpcError(t, data.expectedErr, err)
 			testhelper.ProtoEqual(t, data.expectedResponses, actualResp)
 		})
 	}
