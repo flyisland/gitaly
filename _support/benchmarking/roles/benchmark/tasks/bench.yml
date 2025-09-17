@@ -119,8 +119,11 @@
   retries: 100
   delay: 10
 
-- name: Capture Gitaly logs
-  shell: journalctl --output=cat _PID=$(pidof -s gitaly) > "/tmp/{{ run_name }}/gitaly.log"
+- name: Process Gitaly logs
+  command:
+    argv:
+      - /usr/local/bin/process-gitaly-logs
+      - "/tmp/{{ run_name }}"
   delegate_to: "{{ target_host }}"
 
 - name: Copy Gitaly logs and profiles

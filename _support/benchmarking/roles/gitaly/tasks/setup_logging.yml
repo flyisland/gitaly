@@ -1,0 +1,19 @@
+---
+- name: Install process-gitaly-logs.sh as proces-gitaly-logs
+  copy:
+    src: process-gitaly-logs.sh
+    dest: /usr/local/bin/process-gitaly-logs
+    mode: '0755'
+- name: Copy plot.py script
+  copy:
+    src: plot.py
+    dest: /src/plot.py
+- name: Install pip3
+  apt:
+    name:
+      - python3-pip
+- name: Install log aggregation and graphing packages
+  ansible.builtin.pip:
+    name:
+      - pandas
+      - plotnine
