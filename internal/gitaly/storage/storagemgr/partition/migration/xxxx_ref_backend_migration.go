@@ -112,6 +112,7 @@ func NewReferenceBackendMigration(
 				Action: "migrate",
 				Flags: []gitcmd.Option{
 					gitcmd.Flag{Name: fmt.Sprintf("--ref-format=%s", targetBackend.Name)},
+					gitcmd.Flag{Name: "--no-reflog"},
 				},
 			}, gitcmd.WithStderr(stderr))
 			if err != nil {

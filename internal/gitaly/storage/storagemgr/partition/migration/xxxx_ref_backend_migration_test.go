@@ -3,6 +3,7 @@ package migration
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,6 +118,29 @@ func TestReftableMigration(t *testing.T) {
 				}
 			},
 		},
+		{
+			desc: "with reflogs",
+			setup: func(cfg config.Cfg) setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				repo := localrepo.NewTestRepo(t, cfg, repoProto)
+				require.NoError(t, repo.SetConfig(ctx, "core.logAllRefUpdates", "always", nil))
+
+				gittest.WriteCommit(t, cfg, repoPath)
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("master"))
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("branch"))
+
+				reflogs := strings.Split(text.ChompBytes(gittest.Exec(t, cfg, "-C", repoPath, "reflog", "list")), "\n")
+				require.Len(t, reflogs, 2)
+
+				return setupData{
+					repo:     repoProto,
+					repoPath: repoPath,
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			cfg := testcfg.Build(t)
@@ -205,12 +229,12 @@ func TestReftableMigration(t *testing.T) {
 			}()
 
 			repo := localrepo.NewTestRepo(t, cfg, data.repo)
-			backend, err := repo.ReferenceBackend(ctx)
+			oldBackend, err := repo.ReferenceBackend(ctx)
 			require.NoError(t, err)
 			require.Equal(t, gittest.FilesOrReftables(
 				git.ReferenceBackendFiles,
 				git.ReferenceBackendReftables,
-			), backend)
+			), oldBackend)
 
 			oldRefs := text.ChompBytes(gittest.Exec(t, cfg, "-C", data.repoPath, "for-each-ref",
 				"--format=%(refname) %(objectname) %(symref)", "--include-root-refs"))
@@ -227,15 +251,21 @@ func TestReftableMigration(t *testing.T) {
 			)
 
 			repo = localrepo.NewTestRepo(t, cfg, data.repo)
-			backend, err = repo.ReferenceBackend(ctx)
+			newBackend, err := repo.ReferenceBackend(ctx)
 			require.NoError(t, err)
-			require.Equal(t, expectedBackend, backend)
+			require.Equal(t, expectedBackend, newBackend)
 
 			repoPath, err := repo.Path(ctx)
 			require.NoError(t, err)
 			refs := text.ChompBytes(gittest.Exec(t, cfg, "-C", repoPath, "for-each-ref",
 				"--format=%(refname) %(objectname) %(symref)", "--include-root-refs"))
 			require.Equal(t, oldRefs, refs)
+
+			/* If there was no migration, then the reflogs would remain */
+			if oldBackend != expectedBackend {
+				reflogs := string(gittest.Exec(t, cfg, "-C", repoPath, "reflog", "list"))
+				require.Empty(t, reflogs)
+			}
 		})
 	}
 }
