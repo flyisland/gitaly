@@ -14,6 +14,87 @@ def load(fname):
     return df
 
 
+def stats_rpc_count(df, outdir):
+    df = df[df["grpc.request.glRepository"].str.len() > 0]
+    df = df[df["grpc.method"].str.len() > 0]
+    df = df[df["grpc.code"] == "OK"]
+
+    df = df.groupby(["time_interval", "grpc.request.glRepository", "grpc.method"]).size().reset_index(name='request_count')
+
+    with open(f"{outdir}/rpc_count_by_repo.txt", "w") as f:
+        f.write(df.to_string(index=False))
+
+    p = (
+        ggplot(
+            df,
+            aes(
+                x="time_interval",
+                y="request_count",
+                color="grpc.method",
+                shape="grpc.request.glRepository"
+            ),
+        )
+        + geom_line()
+        + scale_x_datetime(date_labels="%H:%M:%S", date_breaks="5 seconds")
+        + theme(
+            axis_text_x=element_text(rotation=45, hjust=1), figure_size=(12, 8), dpi=200
+        )
+        + labs(
+            title="gRPC Request Count",
+            x="Time",
+            y="Count",
+            color="Method",
+            shape="Repository"
+        )
+        + facet_wrap("grpc.request.glRepository", ncol=1)
+    )
+
+    p.save(f"{outdir}/rpc_count_by_repo.png")
+
+
+def stats_rpc_latency(df, outdir):
+    df = df[df["grpc.request.glRepository"].str.len() > 0]
+    df = df[df["grpc.method"].str.len() > 0]
+    df = df[df["grpc.time_ms"].notna()]
+
+    df = (
+        df.groupby(["time_interval", "grpc.request.glRepository", "grpc.method"])[
+            "grpc.time_ms"
+        ]
+        .quantile(0.95)
+        .reset_index()
+    )
+    with open(f"{outdir}/rpc_latency_by_repo.txt", "w") as f:
+        f.write(df.to_string(index=False))
+
+    p = (
+        ggplot(
+            df,
+            aes(
+                x="time_interval",
+                y="grpc.time_ms",
+                color="grpc.method",
+                shape="grpc.request.glRepository"
+            ),
+        )
+        + geom_line()
+        + scale_x_datetime(date_labels="%H:%M:%S", date_breaks="5 seconds")
+        + theme(
+            axis_text_x=element_text(rotation=45, hjust=1), figure_size=(12, 16), dpi=200
+        )
+        + labs(
+            title="gRPC Response Latency",
+            x="Time",
+            y="Latency (ms, p95)",
+            color="Method",
+            shape="Repository"
+        )
+        + facet_wrap("grpc.request.glRepository", ncol=1)
+    )
+
+    p.save(f"{outdir}/rpc_latency_by_repo.png")
+
+
 def stats_snapshot(df, outdir):
     df = df[df["snapshot.duration_ms"].notna()]
     if len(df) == 0:
@@ -130,4 +211,6 @@ if __name__ == "__main__":
 
     with_interval(df, "1s")
     stats_snapshot(df, output_directory)
+    stats_rpc_latency(df, output_directory)
+    stats_rpc_count(df, output_directory)
     analyze_snapshot_creation_rate(df, output_directory)
