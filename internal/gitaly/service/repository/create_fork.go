@@ -111,7 +111,7 @@ func (s *server) CreateFork(ctx context.Context, req *gitalypb.CreateForkRequest
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		if err := s.migrationStateManager.RecordKeyCreation(
 			tx,
-			tx.OriginalRepository(targetRepository).GetRelativePath(),
+			targetRepository.GetRelativePath(),
 		); err != nil {
 			return nil, structerr.NewInternal("recording migration key: %w", err)
 		}

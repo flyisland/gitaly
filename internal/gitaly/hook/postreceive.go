@@ -130,9 +130,6 @@ func (m *GitLabHookManager) PostReceiveHook(ctx context.Context, repo *gitalypb.
 		if err != nil {
 			return fmt.Errorf("get transaction: %w", err)
 		}
-
-		originalRepo := tx.OriginalRepository(repo)
-
 		// The transaction may already be committed if the RPC invokes git-receive-pack(1) with the
 		// proc-receive hook enabled. Ignore the error indicating that here.
 		if commitLSN, err := tx.Commit(ctx); err != nil {
@@ -145,14 +142,14 @@ func (m *GitLabHookManager) PostReceiveHook(ctx context.Context, repo *gitalypb.
 			storage.LogTransactionCommit(ctx, m.logger.WithFields(payload.LogFields), commitLSN, "post-receive")
 		}
 
-		storageHandle, err := m.node.GetStorage(originalRepo.GetStorageName())
+		storageHandle, err := m.node.GetStorage(repo.GetStorageName())
 		if err != nil {
 			return fmt.Errorf("get storage: %w", err)
 		}
 
 		tx, err = storageHandle.Begin(ctx, storage.TransactionOptions{
 			ReadOnly:     true,
-			RelativePath: originalRepo.GetRelativePath(),
+			RelativePath: repo.GetRelativePath(),
 		})
 		// A new transaction is created and it should be put in the context to replace (or hide) the old closed
 		// one, so that `postReceiveHook` in the following logic can work on the correct transaction.
@@ -166,8 +163,7 @@ func (m *GitLabHookManager) PostReceiveHook(ctx context.Context, repo *gitalypb.
 				m.logger.WithError(err).Error("failed committing post-receive transaction")
 			}
 		}()
-
-		repo = tx.RewriteRepository(originalRepo)
+		repo = tx.RewriteRepository(repo)
 	}
 
 	changes, err := io.ReadAll(stdin)

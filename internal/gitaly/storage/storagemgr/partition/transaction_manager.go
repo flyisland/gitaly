@@ -524,21 +524,6 @@ func (txn *Transaction) RewriteRepository(repo *gitalypb.Repository) *gitalypb.R
 	return rewritten
 }
 
-// OriginalRepository returns the repository as it was before rewriting it to point to the snapshot.
-func (txn *Transaction) OriginalRepository(repo storage.Repository) *gitalypb.Repository {
-	original := &gitalypb.Repository{
-		StorageName:   repo.GetStorageName(),
-		GlRepository:  repo.GetGlRepository(),
-		GlProjectPath: repo.GetGlProjectPath(),
-	}
-
-	original.RelativePath = strings.TrimPrefix(repo.GetRelativePath(), txn.snapshot.Prefix()+string(os.PathSeparator))
-	original.GitObjectDirectory = ""
-	original.GitAlternateObjectDirectories = nil
-
-	return original
-}
-
 func (txn *Transaction) updateState(newState transactionState) error {
 	txn.stateLatch.Lock()
 	defer txn.stateLatch.Unlock()

@@ -30,7 +30,7 @@ func (s *server) DeleteObjectPool(ctx context.Context, in *gitalypb.DeleteObject
 
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		poolRepo := in.GetObjectPool().GetRepository()
-		if err := s.migrationStateManager.RecordKeyDeletion(tx, tx.OriginalRepository(poolRepo).GetRelativePath()); err != nil {
+		if err := s.migrationStateManager.RecordKeyDeletion(tx, poolRepo.GetRelativePath()); err != nil {
 			return nil, structerr.NewInternal("recording migration key: %w", err)
 		}
 	}

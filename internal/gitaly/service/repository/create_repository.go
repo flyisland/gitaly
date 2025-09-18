@@ -44,7 +44,7 @@ func (s *server) CreateRepository(ctx context.Context, req *gitalypb.CreateRepos
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		if err := s.migrationStateManager.RecordKeyCreation(
 			tx,
-			tx.OriginalRepository(repository).GetRelativePath(),
+			repository.GetRelativePath(),
 		); err != nil {
 			return nil, structerr.NewInternal("recording migration key: %w", err)
 		}

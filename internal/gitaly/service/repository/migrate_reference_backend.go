@@ -43,7 +43,7 @@ func (s *server) MigrateReferenceBackend(
 	if err := migrator.Fn(ctx,
 		tx,
 		in.GetRepository().GetStorageName(),
-		tx.OriginalRepository(in.GetRepository()).GetRelativePath(),
+		in.GetRepository().GetRelativePath(),
 	); err != nil {
 		return nil, structerr.NewInternal("migration failed: %w", err)
 	}

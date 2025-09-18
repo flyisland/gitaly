@@ -125,8 +125,6 @@ type Transaction interface {
 	WriteCommitGraphs(housekeepingcfg.WriteCommitGraphConfig)
 	// RewriteRepository rewrites the repository to point to the transaction's snapshot.
 	RewriteRepository(*gitalypb.Repository) *gitalypb.Repository
-	// OriginalRepository returns the repository as it was before rewriting it to point to the snapshot.
-	OriginalRepository(Repository) *gitalypb.Repository
 	// PartitionRelativePaths returns all known repository relative paths for
 	// the transactions partition.
 	PartitionRelativePaths() []string

@@ -848,21 +848,13 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 	// workingRepoPath is the current repository path which we are performing operations on.
 	// In the context of transaction, workingRepoPath is a snapshot repository.
 	workingRepoPath := mgr.getAbsolutePath(ctx, workingRepository.GetRelativePath())
-	// Find the original repository's absolute path. In the context of transaction, originalRepo is the repo
-	// which we are taking a snapshot of.
-	originalRepo := &gitalypb.Repository{
-		StorageName:  workingRepository.GetStorageName(),
-		RelativePath: workingRepository.GetRelativePath(),
-	}
-	originalRepo = transaction.OriginalRepository(originalRepo)
-	// originalRepoAbsPath := mgr.getAbsolutePath(originalRepo.GetRelativePath())
 
 	// cfg.Prefix should be empty in production, which triggers automatic UUID generation.
 	// Non-empty prefix values are only used in test environments.
 	if cfg.Prefix == "" {
 		offloadingID := uuid.New().String()
 		// When uploading to offloading storage, use [original repo's relative path + UUID] as prefix
-		cfg.Prefix = filepath.Join(originalRepo.GetRelativePath(), offloadingID)
+		cfg.Prefix = filepath.Join(workingRepository.GetRelativePath(), offloadingID)
 	}
 
 	// Capture the list of pack-files before repacking.

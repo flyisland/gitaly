@@ -60,19 +60,11 @@ func (m *RepositoryManager) OptimizeRepository(
 	defer span.Finish()
 
 	if err := m.maybeStartTransaction(ctx, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
-		originalRepo := &gitalypb.Repository{
-			StorageName:  repo.GetStorageName(),
-			RelativePath: repo.GetRelativePath(),
-		}
-		if tx != nil {
-			originalRepo = tx.OriginalRepository(originalRepo)
-		}
-
 		// tryRunningHousekeeping acquires a lock on the repository to prevent other concurrent housekeeping calls on the repository.
 		// As we may be in a transaction, the repository's relative path may have been rewritten. We use the original unrewritten relative
 		// path here to ensure we hit the same key regardless if we run in different transactions where the snapshot prefixes in the
 		// relative paths may differ.
-		ok, cleanup := m.repositoryStates.tryRunningHousekeeping(originalRepo)
+		ok, cleanup := m.repositoryStates.tryRunningHousekeeping(repo)
 		// If we didn't succeed to set the state to "running" because of a concurrent housekeeping run
 		// we exit early.
 		if !ok {
@@ -109,14 +101,6 @@ func (m *RepositoryManager) maybeStartTransaction(ctx context.Context, repo *loc
 }
 
 func (m *RepositoryManager) runInTransaction(ctx context.Context, transactionName string, readOnly bool, repo *localrepo.Repo, run func(context.Context, storage.Transaction, *localrepo.Repo) error) (returnedErr error) {
-	originalRepo := &gitalypb.Repository{
-		StorageName:  repo.GetStorageName(),
-		RelativePath: repo.GetRelativePath(),
-	}
-	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		originalRepo = tx.OriginalRepository(originalRepo)
-	}
-
 	storageHandle, err := m.node.GetStorage(repo.GetStorageName())
 	if err != nil {
 		return fmt.Errorf("get storage: %w", err)
@@ -124,7 +108,7 @@ func (m *RepositoryManager) runInTransaction(ctx context.Context, transactionNam
 
 	tx, err := storageHandle.Begin(ctx, storage.TransactionOptions{
 		ReadOnly:     readOnly,
-		RelativePath: originalRepo.GetRelativePath(),
+		RelativePath: repo.GetRelativePath(),
 	})
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
@@ -133,7 +117,12 @@ func (m *RepositoryManager) runInTransaction(ctx context.Context, transactionNam
 	if err := run(
 		storage.ContextWithTransaction(ctx, tx),
 		tx,
-		localrepo.NewFrom(repo, tx.RewriteRepository(originalRepo)),
+		localrepo.NewFrom(repo, tx.RewriteRepository(&gitalypb.Repository{
+			StorageName:   repo.GetStorageName(),
+			GlRepository:  repo.GetGlRepository(),
+			GlProjectPath: repo.GetGlProjectPath(),
+			RelativePath:  repo.GetRelativePath(),
+		})),
 	); err != nil {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 			err = errors.Join(err, fmt.Errorf("rollback: %w", rollbackErr))

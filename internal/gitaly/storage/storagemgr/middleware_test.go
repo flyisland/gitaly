@@ -353,7 +353,7 @@ messages and behavior by erroring out the requests before they even hit this int
 				expected := validAdditionalRepository()
 				require.Equal(t, expected.GetRelativePath(), actual.GetRelativePath())
 				// But the restored non-snapshotted repository should match the original.
-				testhelper.ProtoEqual(t, expected, storage.ExtractTransaction(ctx).OriginalRepository(actual))
+				testhelper.ProtoEqual(t, expected, actual)
 			},
 			expectHandlerInvoked: true,
 		},
@@ -385,7 +385,7 @@ messages and behavior by erroring out the requests before they even hit this int
 				expected := validAdditionalRepository()
 				require.Equal(t, expected.GetRelativePath(), actual.GetRelativePath())
 				// But the restored non-snapshotted repository should match the original.
-				testhelper.ProtoEqual(t, expected, storage.ExtractTransaction(ctx).OriginalRepository(actual))
+				testhelper.ProtoEqual(t, expected, actual)
 			},
 			expectHandlerInvoked: true,
 		},
