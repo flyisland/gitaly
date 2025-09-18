@@ -85,15 +85,16 @@ func NewReferenceBackendMigration(
 				return fmt.Errorf("removing refs directory: %w", err)
 			}
 
-			if targetBackend == git.ReferenceBackendReftables {
+			switch targetBackend {
+			case git.ReferenceBackendReftables:
 				if err := tx.FS().RecordRemoval(filepath.Join(relPath, "packed-refs")); err != nil {
 					return fmt.Errorf("removing packed-refs: %w", err)
 				}
-			} else if targetBackend == git.ReferenceBackendFiles {
+			case git.ReferenceBackendFiles:
 				if err := storage.RecordDirectoryRemoval(tx.FS(), tx.FS().Root(), filepath.Join(relPath, "reftable")); err != nil {
 					return fmt.Errorf("removing reftable directory: %w", err)
 				}
-			} else {
+			default:
 				return fmt.Errorf("unknown backend provided: %s", targetBackend.Name)
 			}
 
@@ -157,7 +158,8 @@ func NewReferenceBackendMigration(
 				return fmt.Errorf("recording HEAD: %w", err)
 			}
 
-			if targetBackend == git.ReferenceBackendReftables {
+			switch targetBackend {
+			case git.ReferenceBackendReftables:
 				if err := tx.FS().RecordDirectory(filepath.Join(relPath, "refs")); err != nil {
 					return fmt.Errorf("recording refs: %w", err)
 				}
@@ -169,7 +171,7 @@ func NewReferenceBackendMigration(
 				if err := storage.RecordDirectoryCreation(tx.FS(), filepath.Join(relPath, "reftable")); err != nil {
 					return fmt.Errorf("recording reftable dir: %w", err)
 				}
-			} else if targetBackend == git.ReferenceBackendFiles {
+			case git.ReferenceBackendFiles:
 				if err := tx.FS().RecordFile(filepath.Join(relPath, "packed-refs")); err != nil {
 					return fmt.Errorf("recording packed-refs: %w", err)
 				}
@@ -177,7 +179,7 @@ func NewReferenceBackendMigration(
 				if err := storage.RecordDirectoryCreation(tx.FS(), filepath.Join(relPath, "refs")); err != nil {
 					return fmt.Errorf("recording refs dir: %w", err)
 				}
-			} else {
+			default:
 				return fmt.Errorf("unknown backend provided: %s", targetBackend.Name)
 			}
 
