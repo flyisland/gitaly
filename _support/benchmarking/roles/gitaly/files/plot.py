@@ -6,8 +6,8 @@ import json
 # Define custom color palette
 custom_colors = [
     "#ffd700",
-    "#ffb14e",
     "#fa8775",
+    "#ffb14e",
     "#ea5f94",
     "#cd34b5",
     "#9d02d7",
@@ -165,46 +165,58 @@ def analyze_snapshot_creation_rate(df, outdir):
 
     metrics = []
 
+    # Group by both time_interval AND snapshot.exclusive
     for time_window in snapshots["time_interval"].unique():
-        window_data = snapshots[snapshots["time_interval"] == time_window]
+        for exclusive_value in snapshots["snapshot.exclusive"].unique():
+            window_data = snapshots[
+                (snapshots["time_interval"] == time_window) & 
+                (snapshots["snapshot.exclusive"] == exclusive_value)
+            ]
 
-        count = len(window_data)
-        print(f"There are { count} snapshots in this window {time_window}")
+            count = len(window_data)
+            print(f"There are {count} snapshots (exclusive={exclusive_value}) in window {time_window}")
 
-        if count > 0:
-            creation_rate = count / pd.Timedelta(interval).total_seconds()
-        else:
-            creation_rate = 0
+            if count > 0:
+                creation_rate = count / pd.Timedelta(interval).total_seconds()
+                p95_latency = window_data["snapshot.duration_ms"].quantile(0.95)
+            else:
+                creation_rate = 0
+                p95_latency = None
 
-        # Calculate latency percentiles
-        metrics.append(
-            {
-                "time_interval": time_window,
-                "count": count,
-                "creation_rate_per_sec": creation_rate,
-                "p95_latency_ms": window_data["snapshot.duration_ms"].quantile(0.95),
-            }
-        )
+            # Calculate latency percentiles
+            metrics.append(
+                {
+                    "time_interval": time_window,
+                    "exclusive": exclusive_value,
+                    "count": count,
+                    "creation_rate_per_sec": creation_rate,
+                    "p95_latency_ms": p95_latency,
+                }
+            )
 
     metrics_df = pd.DataFrame(metrics)
+    
+    # Remove rows with no data for cleaner plotting
+    plot_data = metrics_df[metrics_df["p95_latency_ms"].notna()]
 
-    # Plot :: Latency vs Creation Rate (Throughput)
-    p1 = (
-        ggplot(metrics_df, aes(x="creation_rate_per_sec"))
-        + geom_point(aes(y="p95_latency_ms"), color="#0000ff", size=3, alpha=0.7)
+    # Plot :: Latency vs Creation Rate (Throughput) grouped by exclusive flag
+    p = (
+        ggplot(plot_data, aes(x="creation_rate_per_sec", color="exclusive"))
+        + geom_point(aes(y="p95_latency_ms"), size=3, alpha=0.7)
         + geom_smooth(
-            aes(y="p95_latency_ms"), color="#0000ff", method="lm", se=False, size=1
+            aes(y="p95_latency_ms"), method="lm", se=False, size=1
         )
+        + scale_color_manual(values=custom_colors, name="Exclusive")
         + theme_minimal()
         + theme(figure_size=(12, 7), dpi=200)
         + labs(
-            title="Impact of Creation Rate (Throughput) on Snapshot Creation Speed",
-            subtitle="P95 (blue) latencies vs actual snapshot throughput",
+            title="Impact of Creation Rate on Snapshot P95 Duration",
+            subtitle="P95 latencies vs actual snapshot throughput, grouped by exclusive flag",
             x="Creation Rate - Throughput (snapshots completed/second)",
-            y="Snapshot Creation Latency (ms)",
+            y="Snapshot P95 Duration Latency (ms)",
         )
     )
-    p1.save(f"{outdir}/latency_vs_creation_rate.png")
+    p.save(f"{outdir}/latency_vs_creation_rate.png")
     print(f"Saved: {outdir}/latency_vs_creation_rate.png")
 
 
