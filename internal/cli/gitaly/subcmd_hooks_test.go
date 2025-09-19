@@ -214,6 +214,32 @@ func TestSetHooksSubcommand(t *testing.T) {
 	}
 }
 
+func TestSetRepoHooks_HandleEOF(t *testing.T) {
+	t.Parallel()
+	cfg := testcfg.Build(t)
+	testcfg.BuildGitalyHooks(t, cfg)
+	cfg.SocketPath = testserver.RunGitalyServer(t, cfg, setup.RegisterAll)
+	ctx := testhelper.Context(t)
+
+	conn, err := client.New(ctx, cfg.SocketPath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, conn)
+
+	// Create a very large hooks payload that will require multiple Send() calls
+	// This increases the chance that one of the Send() calls will encounter EOF
+	// when the server returns an error during processing
+	largeHooksData := strings.Repeat("#!/bin/bash\necho 'large hook data'\n", 10000)
+	reader := strings.NewReader(largeHooksData)
+
+	// Use an invalid repository path to trigger a server error during processing
+	// This should cause one of the Send() calls in the streamWriter to return EOF
+	err = setRepoHooks(ctx, conn, reader, "default", "non-existent-repo")
+	require.Error(t, err)
+
+	// The error should not be EOF but the actual error discovered from CloseAndRecv call.
+	require.Equal(t, err.Error(), "copying hooks archive: EOF\nclosing hooks archive stream: rpc error: code = NotFound desc = repository not found")
+}
+
 func newRepositoryClient(tb testing.TB, ctx context.Context, cfg config.Cfg, serverSocketPath string) gitalypb.RepositoryServiceClient {
 	tb.Helper()
 

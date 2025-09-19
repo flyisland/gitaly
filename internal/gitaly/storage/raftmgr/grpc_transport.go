@@ -166,7 +166,7 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 	return messagesByAddress, nil
 }
 
-func (t *GrpcTransport) sendToNode(ctx context.Context, addr string, reqs []*gitalypb.RaftMessageRequest) error {
+func (t *GrpcTransport) sendToNode(ctx context.Context, addr string, reqs []*gitalypb.RaftMessageRequest) (returnErr error) {
 	// get the connection to the node
 	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.Token)
 	if err != nil {
@@ -179,14 +179,16 @@ func (t *GrpcTransport) sendToNode(ctx context.Context, addr string, reqs []*git
 		return fmt.Errorf("create stream to address %s: %w", addr, err)
 	}
 
+	defer func() {
+		if _, err := stream.CloseAndRecv(); err != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("close stream to address %s: %w", addr, err))
+		}
+	}()
+
 	for _, req := range reqs {
 		if err := stream.Send(req); err != nil {
 			return fmt.Errorf("send request to address %s: %w", addr, err)
 		}
-	}
-
-	if _, err := stream.CloseAndRecv(); err != nil {
-		return fmt.Errorf("close stream to address %s: %w", addr, err)
 	}
 
 	return nil

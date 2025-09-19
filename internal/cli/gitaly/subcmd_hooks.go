@@ -96,12 +96,18 @@ func setHooksAction(ctx context.Context, cmd *cli.Command) error {
 
 // setRepoHooks sets custom hooks for the specified repository. The specified reader is expected to
 // provide a tarball containing custom git hooks within a `custom_hooks` directory.
-func setRepoHooks(ctx context.Context, conn *grpc.ClientConn, reader io.Reader, storage, relativePath string) error {
+func setRepoHooks(ctx context.Context, conn *grpc.ClientConn, reader io.Reader, storage, relativePath string) (returnErr error) {
 	repoClient := gitalypb.NewRepositoryServiceClient(conn)
 	stream, err := repoClient.SetCustomHooks(ctx)
 	if err != nil {
 		return fmt.Errorf("create repository client: %w", err)
 	}
+
+	defer func() {
+		if _, err := stream.CloseAndRecv(); err != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("closing hooks archive stream: %w", err))
+		}
+	}()
 
 	// Send first request containing only repository information.
 	if err := stream.Send(&gitalypb.SetCustomHooksRequest{
@@ -115,20 +121,14 @@ func setRepoHooks(ctx context.Context, conn *grpc.ClientConn, reader io.Reader, 
 
 	// Configure streamWriter to transmit tarball data to stream.
 	streamWriter := streamio.NewWriter(func(p []byte) error {
-		return stream.Send(&gitalypb.SetCustomHooksRequest{Data: p})
+		if err := stream.Send(&gitalypb.SetCustomHooksRequest{Data: p}); err != nil {
+			return err
+		}
+		return nil
 	})
 
 	if _, err := io.Copy(streamWriter, reader); err != nil {
-		// Ignore EOF errors to avoid race caused by server closing stream
-		// prematurely. This allows us to get an accurate error message as to
-		// why the stream was closed.
-		if !errors.Is(err, io.EOF) {
-			return fmt.Errorf("copying hooks archive: %w", err)
-		}
-	}
-
-	if _, err := stream.CloseAndRecv(); err != nil {
-		return fmt.Errorf("closing hooks archive stream: %w", err)
+		return fmt.Errorf("copying hooks archive: %w", err)
 	}
 
 	return nil
