@@ -3,6 +3,16 @@ from plotnine import *
 import sys
 import json
 
+# Define custom color palette
+custom_colors = [
+    "#ffd700",
+    "#ffb14e",
+    "#fa8775",
+    "#ea5f94",
+    "#cd34b5",
+    "#9d02d7",
+    "#0000ff",
+]
 
 def load(fname):
     # The log file is a newline-separated collection of JSON objects, each of which can
@@ -212,17 +222,6 @@ def analyze_snapshot_duration_by_repository(df, outdir):
     # Get repository counts
     repo_counts = snapshots["grpc.request.glProjectPath"].value_counts()
 
-    # Define custom color palette
-    custom_colors = [
-        "#ffd700",
-        "#ffb14e",
-        "#fa8775",
-        "#ea5f94",
-        "#cd34b5",
-        "#9d02d7",
-        "#0000ff",
-    ]
-
     # Plot :: Overlapping histograms of snapshot duration by repository, log scale on X axis
     p = (
         ggplot(
@@ -251,6 +250,43 @@ def analyze_snapshot_duration_by_repository(df, outdir):
     p.save(f"{outdir}/snapshot_duration_by_repository.png")
     print(f"\nSaved: {outdir}/snapshot_duration_by_repository.png")
 
+def analyze_snapshot_by_files_dirs(df, outdir):
+    # Filter for snapshot creation events
+    snapshots = df[df['snapshot.duration_ms'].notna()]
+    
+    if len(snapshots) == 0:
+        print("No snapshot creation events found")
+        return
+    
+    relevant_cols = ['snapshot.directory_count', 'snapshot.file_count', 'snapshot.duration_ms']
+    
+    # Plot :: Scatter plot: dirs (x) vs files (y), colored by duration
+    p = (
+        ggplot(snapshots, aes(x='snapshot.directory_count', y='snapshot.file_count', color='snapshot.duration_ms'))
+        + geom_point(size=3, alpha=0.6)
+        + scale_color_gradient2(
+            low=custom_colors[0],   # yellow for fast
+            mid=custom_colors[3],   # pink for medium
+            high=custom_colors[-1],  # indigo for slow
+            midpoint=snapshots['snapshot.duration_ms'].median(),
+            name='Duration (ms)'
+        )
+        + theme_minimal()
+        + theme(
+            figure_size=(12, 10),
+            dpi=200,
+            legend_position='right'
+        )
+        + labs(
+            title="Snapshot Duration By Files X Directories",
+            subtitle="Each dot represents a snapshot operation",
+            x="Directory Count",
+            y="File Count"
+        )
+    )
+    
+    p.save(f"{outdir}/snapshot_files_dirs_duration.png")
+    print(f"\nSaved: {outdir}/snapshot_files_dirs_duration.png")
 
 def with_interval(df, interval):
     df["time_interval"] = df["time"].dt.floor(interval)
@@ -273,3 +309,4 @@ if __name__ == "__main__":
     stats_rpc_count(df, output_directory)
     analyze_snapshot_creation_rate(df, output_directory)
     analyze_snapshot_duration_by_repository(df, output_directory)
+    analyze_snapshot_by_files_dirs(df, output_directory)
