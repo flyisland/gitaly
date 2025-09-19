@@ -9,25 +9,80 @@ const gitalyProtoDir = __ENV.GITALY_PROTO_DIR
 const runName = __ENV.RUN_NAME
 const workloadDuration = __ENV.WORKLOAD_DURATION
 
-const SCENARIO_DEFAULTS = {
-  executor: 'constant-arrival-rate',
-  duration: workloadDuration,
-  timeUnit: '1s',
-  gracefulStop: '0s',
-  preAllocatedVUs: 40
+
+// optionsStatic returns a test scenario where constant load is offered to Gitaly
+const optionsStatic = () => {
+  const SCENARIO_DEFAULTS = {
+    executor: 'constant-arrival-rate',
+    duration: workloadDuration,
+    timeUnit: '1s',
+    gracefulStop: '0s',
+    preAllocatedVUs: 40
+  }
+
+  return {
+    scenarios: {
+      findCommit: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'findCommit' },
+      getBlobs: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'getBlobs' },
+      getTreeEntries: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'getTreeEntries' },
+      treeEntry: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'treeEntry' },
+      listCommitsByOid: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'listCommitsByOid' },
+      writeAndDeleteRefs: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'writeAndDeleteRefs' }
+    },
+    setupTimeout: '5m'
+  }
 }
 
-export const options = {
-  scenarios: {
-    findCommit: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'findCommit' },
-    getBlobs: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'getBlobs' },
-    getTreeEntries: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'getTreeEntries' },
-    treeEntry: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'treeEntry' },
-    listCommitsByOid: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'listCommitsByOid' },
-    writeAndDeleteRefs: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'writeAndDeleteRefs' }
-  },
-  setupTimeout: '5m'
+// optionsRamping returns a test scenario where a ramping workload is offered to Gitaly
+const optionsRamping = () => {
+  const SCENARIO_DEFAULTS = {
+    executor: 'ramping-arrival-rate',
+    timeUnit: '1s',
+    preAllocatedVUs: 40
+  }
+
+  const stages_read = [{target: 50, duration: '20s'}, {target: 100, duration: '10s'}, {target: 200, duration: '20s'}, {target: 50, duration: '10s'}]
+  const stages_write = [{target: 25, duration: '20s'}, {target: 50, duration: '10s'}, {target: 100, duration: '20s'}, {target: 25, duration: '10s'}]
+
+  return {
+    scenarios: {
+      findCommit: {
+        ...SCENARIO_DEFAULTS,
+        stages: stages_read,
+        exec: 'findCommit'
+      },
+      getBlobs: {
+        ...SCENARIO_DEFAULTS,
+        stages: stages_read,
+        exec: 'getBlobs'
+      },
+      getTreeEntries: {
+        ...SCENARIO_DEFAULTS,
+        stages: stages_read,
+        exec: 'getTreeEntries'
+      },
+      treeEntry: {
+        ...SCENARIO_DEFAULTS,
+        stages: stages_read,
+        exec: 'treeEntry'
+      },
+      listCommitsByOid: {
+        ...SCENARIO_DEFAULTS,
+        stages: stages_read,
+        exec: 'listCommitsByOid'
+      },
+      writeAndDeleteRefs: {
+        ...SCENARIO_DEFAULTS,
+        stages: stages_write,
+        exec: 'writeAndDeleteRefs'
+      }
+    },
+    setupTimeout: '5m'
+  }
+
 }
+
+export const options = optionsRamping()
 
 const repos = JSON.parse(open("/opt/benchmark-gitaly/repositories.json"));
 
