@@ -17,13 +17,6 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-const (
-	clusterID      = "test-cluster"
-	authorityName  = "test-authority"
-	storageNameOne = "default"
-	storageNameTwo = "default-two"
-)
-
 func TestServer_SendMessage(t *testing.T) {
 	t.Parallel()
 

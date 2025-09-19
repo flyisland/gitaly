@@ -144,6 +144,52 @@ message JoinClusterRequest {
 message JoinClusterResponse {
 }
 
+// RaftClusterInfoRequest is the request for the GetClusterInfo RPC.
+message RaftClusterInfoRequest {
+  // cluster_id is the identifier of the Raft cluster to query.
+  string cluster_id = 1;
+  // partition_key is an optional filter to get information about a specific partition.
+  // If not provided, returns information about all partitions.
+  RaftPartitionKey partition_key = 2;
+  // include_replica_details determines whether to include detailed replica state information.
+  bool include_replica_details = 3;
+}
+
+// RaftClusterInfoResponse is the response for the GetClusterInfo streaming RPC.
+// Each response message contains information about a single partition.
+message RaftClusterInfoResponse {
+  // ReplicaStatus contains status information about a single replica.
+  message ReplicaStatus {
+    // replica_id uniquely identifies the replica.
+    ReplicaID replica_id = 1;
+    // is_leader indicates whether this replica is currently the leader.
+    bool is_leader = 2;
+    // is_healthy indicates whether the replica is reachable and functioning.
+    bool is_healthy = 3;
+    // last_index is the index of the last log entry this replica has.
+    uint64 last_index = 4;
+    // match_index is the highest log index known to be replicated on this replica.
+    uint64 match_index = 5;
+    // state represents the Raft state of this replica (follower, candidate, leader).
+    string state = 6;
+  }
+
+  // cluster_id is the identifier of the Raft cluster.
+  string cluster_id = 1;
+  // partition_key identifies the partition this response describes.
+  RaftPartitionKey partition_key = 2;
+  // replicas contains information about all replicas in this partition.
+  repeated ReplicaStatus replicas = 3;
+  // leader_id is the member ID of the current leader, 0 if no leader.
+  uint64 leader_id = 4;
+  // term is the current Raft term for this partition.
+  uint64 term = 5;
+  // index is the current Raft log index for this partition.
+  uint64 index = 6;
+  // relative_path is the repository path for backward compatibility.
+  string relative_path = 7;
+}
+
 // RaftService manages the sending of Raft messages to peers.
 service RaftService {
   // SendMessage processes Raft messages and ensures they are handled by
@@ -167,6 +213,16 @@ service RaftService {
   rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse) {
     option (op_type) = {
       op: MUTATOR
+      scope_level: STORAGE
+    };
+  }
+
+  // GetClusterInfo retrieves comprehensive information about the Raft cluster topology,
+  // partition states, and replica health. This is useful for monitoring and debugging.
+  // Returns a stream of partition information, one response per partition.
+  rpc GetClusterInfo(RaftClusterInfoRequest) returns (stream RaftClusterInfoResponse) {
+    option (op_type) = {
+      op: ACCESSOR
       scope_level: STORAGE
     };
   }
