@@ -50,6 +50,8 @@ def stats_rpc_count(df, outdir):
         )
         + geom_line()
         + scale_x_datetime(date_labels="%H:%M:%S", date_breaks="5 seconds")
+        + theme_seaborn(
+        style="darkgrid", context="notebook", font="sans-serif", font_scale=1)
         + theme(
             axis_text_x=element_text(rotation=45, hjust=1), figure_size=(12, 8), dpi=200
         )
@@ -93,6 +95,9 @@ def stats_rpc_latency(df, outdir):
         )
         + geom_line()
         + scale_x_datetime(date_labels="%H:%M:%S", date_breaks="5 seconds")
+        + scale_y_continuous(limits=(0, 12000))
+        + theme_seaborn(
+        style="darkgrid", context="notebook", font="sans-serif", font_scale=1)
         + theme(
             axis_text_x=element_text(rotation=45, hjust=1), figure_size=(12, 16), dpi=200
         )
@@ -138,6 +143,8 @@ def stats_snapshot(df, outdir):
         )
         + geom_line()
         + scale_x_datetime(date_labels="%H:%M:%S", date_breaks="5 seconds")
+        + theme_seaborn(
+        style="darkgrid", context="notebook", font="sans-serif", font_scale=1)
         + theme(
             axis_text_x=element_text(rotation=45, hjust=1), figure_size=(12, 8), dpi=200
         )
@@ -160,7 +167,7 @@ def analyze_snapshot_creation_rate(df, outdir):
     # Filter for snapshot creation events only
     snapshots = df[df["snapshot.duration_ms"].notna()]
 
-    interval = "10s"  # 10-second windows
+    interval = "1s"  # 1 second windows
     snapshots = with_interval(snapshots, interval)
 
     metrics = []
@@ -207,10 +214,11 @@ def analyze_snapshot_creation_rate(df, outdir):
             aes(y="p95_latency_ms"), method="lm", se=False, size=1
         )
         + scale_color_manual(values=custom_colors, name="Exclusive")
-        + theme_minimal()
+        + theme_seaborn(
+        style="darkgrid", context="notebook", font="sans-serif", font_scale=1)
         + theme(figure_size=(12, 7), dpi=200)
         + labs(
-            title="Impact of Creation Rate on Snapshot P95 Duration",
+            title="Impact of Creation Rate on Snapshot P95 Duration in 1s interval",
             subtitle="P95 latencies vs actual snapshot throughput, grouped by exclusive flag",
             x="Creation Rate - Throughput (snapshots completed/second)",
             y="Snapshot P95 Duration Latency (ms)",
@@ -240,7 +248,8 @@ def analyze_snapshot_duration_by_repository(df, outdir):
             snapshots, aes(x="snapshot.duration_ms", fill="grpc.request.glProjectPath")
         )
         + geom_histogram(bins=30, alpha=0.5, position="identity")
-        + theme_minimal()
+        + theme_seaborn(
+        style="darkgrid", context="notebook", font="sans-serif", font_scale=1)
         + theme(
             figure_size=(16, 10),
             dpi=200,
@@ -267,8 +276,11 @@ def analyze_snapshot_by_files_dirs(df, outdir):
         print("No snapshot creation events found in the log")
         return
 
-    # Filter for snapshot creation events
-    snapshots = df[df['snapshot.duration_ms'].notna()]
+    # Filter for snapshot events AND valid repository paths
+    snapshots = df[
+        (df["snapshot.duration_ms"].notna())
+        & (df["grpc.request.glProjectPath"].notna())
+    ]
     
     relevant_cols = ['snapshot.directory_count', 'snapshot.file_count', 'snapshot.duration_ms']
     
@@ -283,7 +295,8 @@ def analyze_snapshot_by_files_dirs(df, outdir):
             midpoint=snapshots['snapshot.duration_ms'].median(),
             name='Duration (ms)'
         )
-        + theme_minimal()
+        + theme_seaborn(
+        style="darkgrid", context="notebook", font="sans-serif", font_scale=1)
         + theme(
             figure_size=(12, 10),
             dpi=200,
@@ -295,6 +308,7 @@ def analyze_snapshot_by_files_dirs(df, outdir):
             x="Directory Count",
             y="File Count"
         )
+        + facet_wrap("grpc.request.glRepository", ncol=1)
     )
     
     p.save(f"{outdir}/snapshot_files_dirs_duration.png")
