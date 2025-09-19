@@ -110,11 +110,11 @@ def stats_rpc_latency(df, outdir):
 
 
 def stats_snapshot(df, outdir):
-    df = df[df["snapshot.duration_ms"].notna()]
-    if len(df) == 0:
+    if "snapshot.duration_ms" not in df.columns:
         print("No snapshot creation events found in the log")
         return
 
+    df = df[df["snapshot.duration_ms"].notna()]
     df = df[df["grpc.request.glRepository"].notna()]
 
     df = (
@@ -153,12 +153,12 @@ def stats_snapshot(df, outdir):
 
 
 def analyze_snapshot_creation_rate(df, outdir):
-    # Filter for snapshot creation events only
-    snapshots = df[df["snapshot.duration_ms"].notna()]
-
-    if len(snapshots) == 0:
+    if "snapshot.duration_ms" not in df.columns:
         print("No snapshot creation events found in the log")
         return
+
+    # Filter for snapshot creation events only
+    snapshots = df[df["snapshot.duration_ms"].notna()]
 
     interval = "10s"  # 10-second windows
     snapshots = with_interval(snapshots, interval)
@@ -221,15 +221,15 @@ def analyze_snapshot_creation_rate(df, outdir):
 
 
 def analyze_snapshot_duration_by_repository(df, outdir):
+    if "snapshot.duration_ms" not in df.columns:
+        print("No snapshot creation events found in the log")
+        return
+
     # Filter for snapshot events AND valid repository paths
     snapshots = df[
         (df["snapshot.duration_ms"].notna())
         & (df["grpc.request.glProjectPath"].notna())
     ]
-
-    if len(snapshots) == 0:
-        print("No snapshot events with valid repository paths found")
-        return
 
     # Get repository counts
     repo_counts = snapshots["grpc.request.glProjectPath"].value_counts()
@@ -263,12 +263,12 @@ def analyze_snapshot_duration_by_repository(df, outdir):
     print(f"\nSaved: {outdir}/snapshot_duration_by_repository.png")
 
 def analyze_snapshot_by_files_dirs(df, outdir):
+    if "snapshot.duration_ms" not in df.columns:
+        print("No snapshot creation events found in the log")
+        return
+
     # Filter for snapshot creation events
     snapshots = df[df['snapshot.duration_ms'].notna()]
-    
-    if len(snapshots) == 0:
-        print("No snapshot creation events found")
-        return
     
     relevant_cols = ['snapshot.directory_count', 'snapshot.file_count', 'snapshot.duration_ms']
     
