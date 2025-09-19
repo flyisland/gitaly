@@ -97,7 +97,7 @@ func (s *Server) UserUpdateSubmodule(ctx context.Context, req *gitalypb.UserUpda
 			)
 		}
 		if strings.Contains(errStr, "is already at") {
-			return nil, structerr.NewInvalidArgument("%s", errStr).WithDetail(
+			return nil, structerr.NewInvalidArgument(errStr).WithDetail(
 				&gitalypb.UserUpdateSubmoduleError{
 					Error: &gitalypb.UserUpdateSubmoduleError_PathError{
 						PathError: &gitalypb.PathError{
@@ -128,7 +128,7 @@ func (s *Server) UserUpdateSubmodule(ctx context.Context, req *gitalypb.UserUpda
 	); err != nil {
 		var customHookErr updateref.CustomHookError
 		if errors.As(err, &customHookErr) {
-			return nil, structerr.NewPermissionDenied("%s", customHookErr.Error()).WithDetail(
+			return nil, structerr.NewPermissionDenied(customHookErr.Error()).WithDetail(
 				&gitalypb.UserUpdateSubmoduleError{
 					Error: &gitalypb.UserUpdateSubmoduleError_CustomHook{
 						CustomHook: customHookErr.Proto(),
@@ -140,7 +140,7 @@ func (s *Server) UserUpdateSubmodule(ctx context.Context, req *gitalypb.UserUpda
 		var updateRefError updateref.Error
 		if errors.As(err, &updateRefError) {
 			message := updateRefError.Error()
-			return nil, structerr.NewFailedPrecondition("%s", message).WithDetail(
+			return nil, structerr.NewFailedPrecondition(message).WithDetail(
 				&gitalypb.UserUpdateSubmoduleError{
 					Error: &gitalypb.UserUpdateSubmoduleError_ReferenceUpdate{
 						ReferenceUpdate: updateRefError.Proto(),
