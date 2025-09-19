@@ -74,10 +74,29 @@ func (s *server) listLastCommitsForTree(in *gitalypb.ListLastCommitsForTreeReque
 		paths = append(paths, e.Path)
 	}
 
+	// GitLab rails expects the paths in order. This is the case since
+	// gitlab-org/gitlab@66052c17a9cba2bf72bc342d7823565b501a479
+	// Here a limit of `limit + 1` is taken, but later they call
+	// #first(limit) on the results.
+	// log.EachPathLastCommit uses git-last-modified(1), which returns paths
+	// in reverse-chronological order. This means the oldest entry gets
+	// dropped, leaving the tree behind with missing data.
+	commitsForPaths := make(map[string]*gitalypb.GitCommit, len(paths))
 	err = gitlog.EachPathLastCommit(ctx, objectReader, repo, git.Revision(in.GetRevision()), paths, in.GetGlobalOptions(), func(path string, commit *catfile.Commit) error {
+		commitsForPaths[path] = commit.GitCommit
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		commit, ok := commitsForPaths[path]
+		if !ok {
+			return fmt.Errorf("commit not resolved for %q", path)
+		}
 		commitForTree := &gitalypb.ListLastCommitsForTreeResponse_CommitForTree{
 			PathBytes: []byte(path),
-			Commit:    commit.GitCommit,
+			Commit:    commit,
 		}
 
 		batch = append(batch, commitForTree)
@@ -88,10 +107,6 @@ func (s *server) listLastCommitsForTree(in *gitalypb.ListLastCommitsForTreeReque
 
 			batch = batch[0:0]
 		}
-		return nil
-	})
-	if err != nil {
-		return err
 	}
 
 	if err := cmd.Wait(); err != nil {
