@@ -87,7 +87,8 @@ export const options = optionsRamping()
 const repos = JSON.parse(open("/opt/benchmark-gitaly/repositories.json"));
 
 const selectTestRepo = () => {
-  const repo = repos[Math.floor(Math.random() * repos.length)];
+  const active = repos.filter(r => r.include_in_test);
+  const repo = active[Math.floor(Math.random() * active.length)];
 
   return {
     repository: {
