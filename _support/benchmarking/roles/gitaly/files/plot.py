@@ -19,7 +19,11 @@ def stats_rpc_count(df, outdir):
     df = df[df["grpc.method"].str.len() > 0]
     df = df[df["grpc.code"] == "OK"]
 
-    df = df.groupby(["time_interval", "grpc.request.glRepository", "grpc.method"]).size().reset_index(name='request_count')
+    df = (
+        df.groupby(["time_interval", "grpc.request.glRepository", "grpc.method"])
+        .size()
+        .reset_index(name="request_count")
+    )
 
     with open(f"{outdir}/rpc_count_by_repo.txt", "w") as f:
         f.write(df.to_string(index=False))
@@ -31,7 +35,7 @@ def stats_rpc_count(df, outdir):
                 x="time_interval",
                 y="request_count",
                 color="grpc.method",
-                shape="grpc.request.glRepository"
+                shape="grpc.request.glRepository",
             ),
         )
         + geom_line()
@@ -44,7 +48,7 @@ def stats_rpc_count(df, outdir):
             x="Time",
             y="Count",
             color="Method",
-            shape="Repository"
+            shape="Repository",
         )
         + facet_wrap("grpc.request.glRepository", ncol=1)
     )
@@ -74,7 +78,7 @@ def stats_rpc_latency(df, outdir):
                 x="time_interval",
                 y="grpc.time_ms",
                 color="grpc.method",
-                shape="grpc.request.glRepository"
+                shape="grpc.request.glRepository",
             ),
         )
         + geom_line()
@@ -87,7 +91,7 @@ def stats_rpc_latency(df, outdir):
             x="Time",
             y="Latency (ms, p95)",
             color="Method",
-            shape="Repository"
+            shape="Repository",
         )
         + facet_wrap("grpc.request.glRepository", ncol=1)
     )
@@ -194,6 +198,60 @@ def analyze_snapshot_creation_rate(df, outdir):
     print(f"Saved: {outdir}/latency_vs_creation_rate.png")
 
 
+def analyze_snapshot_duration_by_repository(df, outdir):
+    # Filter for snapshot events AND valid repository paths
+    snapshots = df[
+        (df["snapshot.duration_ms"].notna())
+        & (df["grpc.request.glProjectPath"].notna())
+    ]
+
+    if len(snapshots) == 0:
+        print("No snapshot events with valid repository paths found")
+        return
+
+    # Get repository counts
+    repo_counts = snapshots["grpc.request.glProjectPath"].value_counts()
+
+    # Define custom color palette
+    custom_colors = [
+        "#ffd700",
+        "#ffb14e",
+        "#fa8775",
+        "#ea5f94",
+        "#cd34b5",
+        "#9d02d7",
+        "#0000ff",
+    ]
+
+    # Plot :: Overlapping histograms of snapshot duration by repository, log scale on X axis
+    p = (
+        ggplot(
+            snapshots, aes(x="snapshot.duration_ms", fill="grpc.request.glProjectPath")
+        )
+        + geom_histogram(bins=30, alpha=0.5, position="identity")
+        + theme_minimal()
+        + theme(
+            figure_size=(16, 10),
+            dpi=200,
+            legend_position="right",
+            legend_title=element_text(size=10, weight="bold"),
+            legend_text=element_text(size=8),
+        )
+        + labs(
+            title="Snapshot Duration Distribution by Repository",
+            subtitle="Overlapping histograms show how snapshot duration varies across repositories",
+            x="Duration (ms) - Log Scale",
+            y="Count",
+        )
+        + scale_x_log10()
+        + scale_fill_manual(
+            values=custom_colors * 3, name="Repository"
+        )  # *3 to ensure enough colors, however they will start repetiting
+    )
+    p.save(f"{outdir}/snapshot_duration_by_repository.png")
+    print(f"\nSaved: {outdir}/snapshot_duration_by_repository.png")
+
+
 def with_interval(df, interval):
     df["time_interval"] = df["time"].dt.floor(interval)
     return df
@@ -214,3 +272,4 @@ if __name__ == "__main__":
     stats_rpc_latency(df, output_directory)
     stats_rpc_count(df, output_directory)
     analyze_snapshot_creation_rate(df, output_directory)
+    analyze_snapshot_duration_by_repository(df, output_directory)
