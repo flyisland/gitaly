@@ -13,7 +13,7 @@ import (
 )
 
 func validateReferenceTransactionHookRequest(ctx context.Context, locator storage.Locator, in *gitalypb.ReferenceTransactionHookRequest) error {
-	return locator.ValidateRepository(ctx, in.GetRepository())
+	return locator.ValidateRepository(ctx, in.GetRepository(), storage.WithSkipRepositoryExistenceCheck())
 }
 
 func (s *server) ReferenceTransactionHook(stream gitalypb.HookService_ReferenceTransactionHookServer) error {

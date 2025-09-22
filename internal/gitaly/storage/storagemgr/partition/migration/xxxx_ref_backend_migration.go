@@ -29,6 +29,8 @@ func NewReferenceBackendMigration(
 		ID:   id,
 		Name: name,
 		Fn: func(ctx context.Context, tx storage.Transaction, storageName string, relativePath string) error {
+			ctx = storage.ContextWithTransaction(ctx, tx)
+
 			scopedFactory, err := localRepoFactory.ScopeByStorage(ctx, storageName)
 			if err != nil {
 				return fmt.Errorf("creating storage scoped factory: %w", err)

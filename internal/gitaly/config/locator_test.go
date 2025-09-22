@@ -238,24 +238,25 @@ func TestConfigLocator_StateDir(t *testing.T) {
 func TestConfigLocator_TempDir(t *testing.T) {
 	t.Parallel()
 	const storageName = "exists"
+	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t, testcfg.WithStorages(storageName, "removed"))
 	locator := config.NewLocator(cfg)
 
 	t.Run("storage exists", func(t *testing.T) {
-		path, err := locator.TempDir(storageName)
+		path, err := locator.TempDir(ctx, storageName)
 		require.NoError(t, err)
 		require.Equal(t, path, filepath.Join(cfg.Storages[0].Path, "+gitaly/tmp"))
 	})
 
 	t.Run("storage doesn't exist on disk", func(t *testing.T) {
 		require.NoError(t, os.RemoveAll(cfg.Storages[1].Path))
-		path, err := locator.TempDir(cfg.Storages[1].Name)
+		path, err := locator.TempDir(ctx, cfg.Storages[1].Name)
 		require.NoError(t, err)
 		require.Equal(t, filepath.Join(cfg.Storages[1].Path, "+gitaly/tmp"), path)
 	})
 
 	t.Run("unknown storage", func(t *testing.T) {
-		_, err := locator.TempDir("unknown")
+		_, err := locator.TempDir(ctx, "unknown")
 		require.Equal(t, structerr.NewInvalidArgument(`tmp dir: no such storage: "unknown"`), err)
 	})
 }

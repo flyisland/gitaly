@@ -1062,17 +1062,16 @@ func runMockMaintenanceServer(t *testing.T, cfg gconfig.Cfg) (*mockMaintenanceSe
 }
 
 func (m *mockMaintenanceServer) OptimizeRepository(ctx context.Context, in *gitalypb.OptimizeRepositoryRequest) (*gitalypb.OptimizeRepositoryResponse, error) {
-	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		in.Repository = tx.OriginalRepository(in.GetRepository())
-	}
-
 	m.requestCh <- in
 	return &gitalypb.OptimizeRepositoryResponse{}, nil
 }
 
 func (m *mockMaintenanceServer) PruneUnreachableObjects(ctx context.Context, in *gitalypb.PruneUnreachableObjectsRequest) (*gitalypb.PruneUnreachableObjectsResponse, error) {
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		in.Repository = tx.OriginalRepository(in.GetRepository())
+		in.Repository = &gitalypb.Repository{
+			StorageName:  in.GetRepository().GetStorageName(),
+			RelativePath: in.GetRepository().GetRelativePath(),
+		}
 	}
 
 	m.requestCh <- in

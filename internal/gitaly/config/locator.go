@@ -67,6 +67,9 @@ func (l *configLocator) ValidateRepository(ctx context.Context, repo storage.Rep
 	}
 
 	storagePath, err := l.GetStorageByName(ctx, repo.GetStorageName())
+	if cfg.UseRootStorage {
+		storagePath, err = l.GetRootStoragePathByName(repo.GetStorageName())
+	}
 	if err != nil {
 		return err
 	}
@@ -134,12 +137,19 @@ func (l *configLocator) GetRepoPath(ctx context.Context, repo storage.Repository
 			storage.WithSkipRepositoryExistenceCheck(),
 		}
 	}
+	if cfg.UseRootStorage {
+		validationOptions = append(validationOptions, storage.WithValidateUsingRootStorage())
+	}
 
 	if err := l.ValidateRepository(ctx, repo, validationOptions...); err != nil {
 		return "", err
 	}
 
 	storagePath, err := l.GetStorageByName(ctx, repo.GetStorageName())
+	if cfg.UseRootStorage {
+		storagePath, err = l.GetRootStoragePathByName(repo.GetStorageName())
+	}
+
 	if err != nil {
 		return "", err
 	}
@@ -155,6 +165,20 @@ func (l *configLocator) GetStorageByName(ctx context.Context, storageName string
 		return "", structerr.NewInvalidArgument("%w", storage.ErrStorageNotSet)
 	}
 
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		return tx.FS().Root(), nil
+	}
+
+	return l.GetRootStoragePathByName(storageName)
+}
+
+// GetRootStoragePathByName will return the path for the storage, which is fetched by
+// its key. An error is return if it cannot be found.
+func (l *configLocator) GetRootStoragePathByName(storageName string) (string, error) {
+	if storageName == "" {
+		return "", structerr.NewInvalidArgument("%w", storage.ErrStorageNotSet)
+	}
+
 	storagePath, ok := l.conf.StoragePath(storageName)
 	if !ok {
 		return "", storage.NewStorageNotFoundError(storageName)
@@ -165,30 +189,42 @@ func (l *configLocator) GetStorageByName(ctx context.Context, storageName string
 
 // CacheDir returns the path to the cache dir for a storage.
 func (l *configLocator) CacheDir(storageName string) (string, error) {
-	return l.getPath(storageName, cachePrefix)
+	return l.getPath(context.Background(), storageName, cachePrefix)
 }
 
 // StateDir returns the path to the state dir for a storage.
 func (l *configLocator) StateDir(storageName string) (string, error) {
-	return l.getPath(storageName, statePrefix)
+	return l.getPath(context.Background(), storageName, statePrefix)
 }
 
 // TempDir returns the path to the temp dir for a storage.
-func (l *configLocator) TempDir(storageName string) (string, error) {
-	return l.getPath(storageName, tmpRootPrefix)
+func (l *configLocator) TempDir(ctx context.Context, storageName string) (string, error) {
+	return l.getPath(ctx, storageName, tmpRootPrefix)
 }
 
 // PartitionsDir returns the path to the partitions dir for a storage.
 func (l *configLocator) PartitionsDir(storageName string) (string, error) {
-	return l.getPath(storageName, partitionsPrefix)
+	return l.getPath(context.Background(), storageName, partitionsPrefix)
 }
 
-func (l *configLocator) getPath(storageName, prefix string) (string, error) {
-	storagePath, ok := l.conf.StoragePath(storageName)
-	if !ok {
-		return "", structerr.NewInvalidArgument("%s dir: no such storage: %q",
-			filepath.Base(prefix), storageName)
+// getPath retrieves the storage path and returns a path by joining it with the given prefix.
+// If there is a transaction in the context, the transaction’s filesystem root will be used as
+// the storage path, e.g. `private/tmp/gitaly-xx/yy/storages.d/default/staging/snapshots/1`.
+// If there is no transaction in the context, the root storage path (as defined in the Gitaly
+// TOML config) will be used, e.g. `private/tmp/gitaly-xx/yy/storages.d/default`.
+// If the root storage path is required explicitly, an empty context (e.g. context.Background())
+// can be passed on purpose.
+func (l *configLocator) getPath(ctx context.Context, storageName, prefix string) (string, error) {
+	var storagePath string
+	if txn := storage.ExtractTransaction(ctx); txn != nil {
+		storagePath = txn.FS().Root()
+	} else {
+		var ok bool
+		storagePath, ok = l.conf.StoragePath(storageName)
+		if !ok {
+			return "", structerr.NewInvalidArgument("%s dir: no such storage: %q",
+				filepath.Base(prefix), storageName)
+		}
 	}
-
 	return filepath.Join(storagePath, prefix), nil
 }

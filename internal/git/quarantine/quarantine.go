@@ -40,7 +40,13 @@ func New(ctx context.Context, repo *gitalypb.Repository, logger log.Logger, loca
 		return nil, nil, structerr.NewInternal("getting repo path: %w", err)
 	}
 
-	quarantineDir, cleanup, err := tempdir.NewWithPrefix(ctx, repo.GetStorageName(),
+	// Use context.Background() so that the quarantineDir is always created in the
+	// root storage path (e.g., `some/path/storages.d/default/`), and not in the
+	// snapshot storage path (e.g., `some/path/storages.d/default/staging/snapshots/1`).
+	// The reason is that certain read-only endpoints, such as ListConflictFiles() and CommitDelta(),
+	// need to create a quarantine directory, but their snapshot storage path is read-only.
+	// Creating quarantineDir in the snapshot storage path will cause permission errors.
+	quarantineDir, cleanup, err := tempdir.NewWithPrefix(context.Background(), repo.GetStorageName(),
 		storage.QuarantineDirectoryPrefix(repo), logger, locator)
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating quarantine: %w", err)

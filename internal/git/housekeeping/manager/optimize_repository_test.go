@@ -32,7 +32,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"google.golang.org/grpc/peer"
 )
 
@@ -1210,13 +1209,6 @@ func TestOptimizeRepository_ConcurrencyLimit(t *testing.T) {
 		manager := New(gitalycfgprom.Config{}, testhelper.SharedLogger(t), nil, node)
 		manager.optimizeFunc = func(ctx context.Context, repo *localrepo.Repo, _ housekeeping.OptimizationStrategy) error {
 			relativePath := repo.GetRelativePath()
-			if tx := storage.ExtractTransaction(ctx); tx != nil {
-				relativePath = tx.OriginalRepository(&gitalypb.Repository{
-					StorageName:  repo.GetStorageName(),
-					RelativePath: repo.GetRelativePath(),
-				}).GetRelativePath()
-			}
-
 			reposOptimized[relativePath] = struct{}{}
 
 			if relativePath == repoFirst.GetRelativePath() {

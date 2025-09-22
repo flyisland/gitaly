@@ -117,16 +117,8 @@ func (s *server) packObjectsHook(ctx context.Context, req *gitalypb.PackObjectsH
 func (s *server) computeCacheKey(ctx context.Context, req *gitalypb.PackObjectsHookWithSidechannelRequest, stdinReader io.Reader) (string, io.ReadCloser, error) {
 	cacheHash := sha256.New()
 
-	repository := req.GetRepository()
-	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		// The cache uses the requests as the keys. As the request's repository in the RPC handler has been rewritten
-		// to point to the transaction's repository, the handler sees each request as different even if they point to
-		// the same repository. Restore the original request to ensure identical requests get the same key.
-		repository = tx.OriginalRepository(req.GetRepository())
-	}
-
 	cacheKeyPrefix, err := protojson.Marshal(&gitalypb.PackObjectsHookWithSidechannelRequest{
-		Repository:  repository,
+		Repository:  req.GetRepository(),
 		Args:        req.GetArgs(),
 		GitProtocol: req.GetGitProtocol(),
 	})

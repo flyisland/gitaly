@@ -1368,6 +1368,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.Contains(t, openTransactions, step.TransactionID, "test error: transaction committed before beginning it")
 
 			transaction := openTransactions[step.TransactionID]
+			ctxWithTxn := storage.ContextWithTransaction(ctx, transaction)
 			if transaction.relativePath != "" {
 				rewrittenRepo := setup.RepositoryFactory.Build(
 					transaction.RewriteRepository(&gitalypb.Repository{
@@ -1378,7 +1379,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 
 				if step.UpdateAlternate != nil {
 					require.NoError(t, objectpool.Disconnect(
-						storage.ContextWithTransaction(ctx, transaction),
+						ctxWithTxn,
 						transaction.FS(),
 						rewrittenRepo,
 						logger,
@@ -1387,7 +1388,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 
 					if step.UpdateAlternate.RelativePath != "" {
 						require.NoError(t, objectpool.Link(
-							storage.ContextWithTransaction(ctx, transaction),
+							ctxWithTxn,
 							setup.RepositoryFactory.Build(transaction.RewriteRepository(&gitalypb.Repository{
 								StorageName:  setup.Config.Storages[0].Name,
 								RelativePath: step.UpdateAlternate.RelativePath,
@@ -1399,7 +1400,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 				}
 
 				if step.UpdateGitConfig != nil {
-					updateGitConfig(t, ctx, rewrittenRepo, step.UpdateGitConfig, transaction)
+					updateGitConfig(t, ctxWithTxn, rewrittenRepo, step.UpdateGitConfig, transaction)
 				}
 
 				if step.QuarantinedPacks != nil {
@@ -1415,24 +1416,24 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 					}
 
 					for _, pack := range step.QuarantinedPacks {
-						require.NoError(t, rewrittenRepo.UnpackObjects(ctx, bytes.NewReader(pack)))
+						require.NoError(t, rewrittenRepo.UnpackObjects(ctxWithTxn, bytes.NewReader(pack)))
 					}
 				}
 
 				if step.ReferenceUpdates != nil {
-					require.NoError(t, performReferenceUpdates(t, ctx, transaction, rewrittenRepo, step.ReferenceUpdates))
+					require.NoError(t, performReferenceUpdates(t, ctxWithTxn, transaction, rewrittenRepo, step.ReferenceUpdates))
 				}
 
 				if step.DefaultBranchUpdate != nil {
-					require.NoError(t, rewrittenRepo.SetDefaultBranch(storage.ContextWithTransaction(ctx, transaction), nil, step.DefaultBranchUpdate.Reference))
-					require.NoError(t, transaction.UpdateReferences(ctx, map[git.ReferenceName]git.ReferenceUpdate{
+					require.NoError(t, rewrittenRepo.SetDefaultBranch(ctxWithTxn, nil, step.DefaultBranchUpdate.Reference))
+					require.NoError(t, transaction.UpdateReferences(ctxWithTxn, map[git.ReferenceName]git.ReferenceUpdate{
 						"HEAD": {NewTarget: step.DefaultBranchUpdate.Reference},
 					}))
 				}
 
 				if step.CustomHooksUpdate != nil {
 					require.NoError(t, repoutil.SetCustomHooks(
-						storage.ContextWithTransaction(ctx, transaction),
+						ctxWithTxn,
 						logger,
 						config.NewLocator(setup.Config),
 						nil,
@@ -1443,7 +1444,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 
 				if step.DeleteRepository {
 					require.NoError(t, repoutil.Remove(
-						storage.ContextWithTransaction(ctx, transaction),
+						ctxWithTxn,
 						logger,
 						config.NewLocator(setup.Config),
 						nil,
@@ -1475,7 +1476,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.Contains(t, openTransactions, step.TransactionID, "test error: record initial reference value on transaction before beginning it")
 
 			transaction := openTransactions[step.TransactionID]
-			require.NoError(t, transaction.RecordInitialReferenceValues(ctx, step.InitialValues))
+			require.NoError(t, transaction.RecordInitialReferenceValues(storage.ContextWithTransaction(ctx, transaction), step.InitialValues))
 		case UpdateReferences:
 			require.Contains(t, openTransactions, step.TransactionID, "test error: reference updates aborted on committed before beginning it")
 
@@ -1488,7 +1489,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 				}),
 			)
 
-			require.Equal(t, step.ExpectedError, performReferenceUpdates(t, ctx, transaction, rewrittenRepo, step.ReferenceUpdates))
+			require.Equal(t, step.ExpectedError, performReferenceUpdates(t, storage.ContextWithTransaction(ctx, transaction), transaction, rewrittenRepo, step.ReferenceUpdates))
 		case ReadKey:
 			require.Contains(t, openTransactions, step.TransactionID, "test error: read key called on transaction before beginning it")
 
@@ -1554,6 +1555,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.Contains(t, openTransactions, step.TransactionID, "test error: repository created in transaction before beginning it")
 
 			transaction := openTransactions[step.TransactionID]
+			ctxWithTxn := storage.ContextWithTransaction(ctx, transaction)
 
 			rewrittenRepository := transaction.RewriteRepository(&gitalypb.Repository{
 				StorageName:  setup.Config.Storages[0].Name,
@@ -1563,7 +1565,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			locator := config.NewLocator(setup.Config)
 
 			require.NoError(t, repoutil.Create(
-				storage.ContextWithTransaction(ctx, transaction),
+				ctxWithTxn,
 				logger,
 				locator,
 				setup.CommandFactory,
@@ -1575,25 +1577,26 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 					repo := setup.RepositoryFactory.Build(repoProto)
 
 					if step.DefaultBranch != "" {
-						require.NoError(t, repo.SetDefaultBranch(ctx, nil, step.DefaultBranch))
+						require.NoError(t, repo.SetDefaultBranch(ctxWithTxn, nil, step.DefaultBranch))
 					}
 
 					for _, pack := range step.Packs {
-						require.NoError(t, repo.UnpackObjects(ctx, bytes.NewReader(pack)))
+						require.NoError(t, repo.UnpackObjects(ctxWithTxn, bytes.NewReader(pack)))
 					}
 
 					for name, oid := range step.References {
-						require.NoError(t, repo.UpdateRef(ctx, name, oid, setup.ObjectHash.ZeroOID))
+						require.NoError(t, repo.UpdateRef(ctxWithTxn, name, oid, setup.ObjectHash.ZeroOID))
 					}
 
 					if step.CustomHooks != nil {
-						require.NoError(t,
-							repoutil.SetCustomHooks(ctx, logger, config.NewLocator(setup.Config), nil, bytes.NewReader(step.CustomHooks), repo),
-						)
+						repoPath, err := repo.Path(ctxWithTxn)
+						require.NoError(t, err)
+						require.NoError(t, repoutil.ExtractHooks(ctxWithTxn, logger,
+							bytes.NewReader(step.CustomHooks), repoPath, false))
 					}
 
 					if step.Alternate != "" {
-						repoPath, err := repo.Path(ctx)
+						repoPath, err := repo.Path(ctxWithTxn)
 						require.NoError(t, err)
 
 						alternatesPath := stats.AlternatesFilePath(repoPath)
@@ -1636,7 +1639,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.Contains(t, openTransactions, step.TransactionID, "test error: transaction's snapshot asserted before beginning it")
 			transaction := openTransactions[step.TransactionID]
 
-			RequireRepositories(t, ctx, setup.Config,
+			RequireRepositories(t, storage.ContextWithTransaction(ctx, transaction), setup.Config,
 				// Assert the contents of the transaction's snapshot.
 				filepath.Join(setup.Config.Storages[0].Path, transaction.snapshot.Prefix()),
 				// Rewrite all of the repositories to point to their snapshots.

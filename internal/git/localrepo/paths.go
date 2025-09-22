@@ -59,7 +59,7 @@ func (repo *Repo) ObjectDirectoryPath(ctx context.Context) (string, error) {
 		// have a repository-specific prefix which we must check in order to determine whether the
 		// quarantine directory does in fact belong to the repo at hand.
 		if _, origError := storage.ValidateRelativePath(repoPath, objectDirectoryPath); origError != nil {
-			tempDir, err := repo.locator.TempDir(repo.GetStorageName())
+			tempDir, err := repo.locator.TempDir(ctx, repo.GetStorageName())
 			if err != nil {
 				return "", structerr.NewInvalidArgument("getting storage's temporary directory: %w", err)
 			}

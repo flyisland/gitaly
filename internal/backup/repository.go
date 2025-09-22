@@ -764,7 +764,7 @@ func (r *localRepository) Create(ctx context.Context, hash git.ObjectHash, defau
 
 		if err := r.migrationStateManager.RecordKeyCreation(
 			tx,
-			tx.OriginalRepository(repo).GetRelativePath(),
+			repo.GetRelativePath(),
 		); err != nil {
 			return fmt.Errorf("recording migration key: %w", err)
 		}

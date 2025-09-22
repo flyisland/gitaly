@@ -143,7 +143,7 @@ func (s *server) ReplicateRepository(ctx context.Context, in *gitalypb.Replicate
 			if err := migrator.Fn(ctx,
 				tx,
 				in.GetRepository().GetStorageName(),
-				tx.OriginalRepository(in.GetRepository()).GetRelativePath(),
+				in.GetRepository().GetRelativePath(),
 			); err != nil {
 				return nil, structerr.NewInternal("migration failed: %w", err)
 			}
@@ -283,7 +283,7 @@ func (s *server) createFromSnapshot(
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		if err := s.migrationStateManager.RecordKeyCreation(
 			tx,
-			tx.OriginalRepository(target).GetRelativePath(),
+			target.GetRelativePath(),
 		); err != nil {
 			return fmt.Errorf("recording migration key: %w", err)
 		}
