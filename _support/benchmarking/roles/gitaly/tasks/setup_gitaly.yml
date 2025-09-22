@@ -92,8 +92,8 @@
     mode: '0600'
 
 - name: Install Gitaly systemd service
-  copy:
-    src: gitaly.service
+  template:
+    src: gitaly.service.j2
     dest: /etc/systemd/system/gitaly.service
     owner: root
     group: root

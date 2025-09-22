@@ -28,6 +28,8 @@ gitaly_instances:
     gitaly_revision: HEAD
     config:
       transactions: true
+    environment:
+      SNAPSHOT_DRIVER: deepclone
 
 repository_disk_size: 100
 repository_disk_type: "pd-balanced"

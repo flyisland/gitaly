@@ -26,5 +26,9 @@ LimitRTPRIO=0
 LimitSIGPENDING=62793
 LimitSTACK=10485760
 
+{% for key, val in target_instance['environment'].items() %}
+Environment="{{ key }}={{ val }}"
+{% endfor %}
+
 [Install]
 WantedBy=
