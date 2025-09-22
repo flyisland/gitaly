@@ -8,10 +8,11 @@ GitLab projects, see [Managing Go versions](https://docs.gitlab.com/development/
 Before upgrading the version of Go that is used by Gitaly to a specific version, the version must be already supported in these projects:
 
 - [`gitlab-build-images`](https://gitlab.com/gitlab-org/gitlab-build-images): The build infrastructure must support the target Go version.
-  For an example, see [`gitlab-build-images` merge request 910](https://gitlab.com/gitlab-org/gitlab-build-images/-/merge_requests/910).
+  For an example, see [`gitlab-build-images` merge request #910](https://gitlab.com/gitlab-org/gitlab-build-images/-/merge_requests/910).
 - [`CNG`](https://gitlab.com/gitlab-org/build/CNG): Cloud Native GitLab container images (CNG) must provide the required Go version runtime
   environment before Gitaly containers can use it. For an example, see
-  [`CNG` merge request 2360](https://gitlab.com/gitlab-org/build/CNG/-/merge_requests/2360).
+  [`CNG` merge request #2360](https://gitlab.com/gitlab-org/build/CNG/-/merge_requests/2360).
+- [`GitLab CI`](https://gitlab.com/gitlab-org/gitlab/-/blob/master/.gitlab/ci/version.yml): CI version must support the target Go version. For an example, see [merge request #205683](https://gitlab.com/gitlab-org/gitlab/-/merge_requests/205683)
 
 ## Upgrade Go for Gitaly
 
