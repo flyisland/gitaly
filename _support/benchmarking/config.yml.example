@@ -15,13 +15,17 @@ client:
   machine_type: "n2d-standard-4"
   boot_disk_size: 20
   boot_disk_type: "pd-balanced"
+  # The client clones Gitaly in order to consume the protobuf definitions.
+  # This revision should be set to the latest of the gitaly_revision values
+  # specified for the gitaly_instances below.
+  gitaly_revision: HEAD
 
-gitaly_revision: HEAD
 gitaly_instances:
   - name: "large"
     machine_type: "n2d-standard-16"
     boot_disk_type: "pd-balanced"
     boot_disk_size: 20
+    gitaly_revision: HEAD
     config:
       transactions: true
 

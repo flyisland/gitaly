@@ -1,4 +1,8 @@
 ---
+- name: Load config
+  include_vars:
+    file: "{{ playbook_dir }}/config.yml"
+    name: config
 # needed for Ansible > 4.0 https://github.com/ansible/ansible/issues/74830
 - name: Install acl
   apt:
@@ -25,11 +29,11 @@
   git:
     repo: https://gitlab.com/gitlab-org/gitaly.git
     dest: /src/gitaly
-    version: "{{ gitaly_revision }}"
+    version: "{{ config.client.gitaly_revision }}"
   become_user: git
 
 - name: Peel gitaly_revision
-  command: "git rev-parse --verify {{ gitaly_revision }}^{commit}"
+  command: "git rev-parse --verify {{ config.client.gitaly_revision }}^{commit}"
   register: gitaly_commit
   args:
     chdir: /src/gitaly
@@ -41,10 +45,6 @@
     dest: /src/gitaly
     version: "{{ gitaly_commit['stdout'] }}"
   become_user: git
-
-- name: Persist Gitaly commit as fact
-  set_fact:
-    gitaly_commit: "{{ gitaly_commit['stdout'] }}"
 
 - name: Find Gitaly's Golang version
   shell: "awk '/^golang /{ print $2 }' /src/gitaly/.tool-versions"

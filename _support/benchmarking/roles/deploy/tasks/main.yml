@@ -26,22 +26,3 @@
   template:
     src: hosts.ini.j2
     dest: "{{ playbook_dir }}/hosts.ini"
-
-- name: Create group_vars directory
-  file:
-    path: "{{ playbook_dir }}/group_vars"
-    state: directory
-
-- name: Load config
-  include_vars:
-    file: "{{ playbook_dir }}/config.yml"
-    name: config
-
-- name: Get gitaly_revision
-  set_fact:
-    gitay_revision: "{{ config['gitaly_revision'] }}"
-
-- name: all.yml
-  template:
-    src: all.yml.j2
-    dest: "{{ playbook_dir }}/group_vars/all.yml"

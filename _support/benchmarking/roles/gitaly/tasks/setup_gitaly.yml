@@ -60,7 +60,7 @@
   git:
     repo: https://gitlab.com/gitlab-org/gitaly.git
     dest: /src/gitaly
-    version: "{{ hostvars[groups['client'][0]]['gitaly_commit'] }}"
+    version: "{{ target_instance.gitaly_revision }}"
   become_user: git
 
 - name: Build Gitaly

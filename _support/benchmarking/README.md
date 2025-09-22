@@ -57,7 +57,7 @@ may add ~10% overhead. Set the `profile` variable to `false` to disable profilin
 ```
 
 On completion a tarball of the benchmark output will be written to
-`results/benchmark-<GITALY_REVISION>-<BENCH_TIMESTAMP>.tar.gz`. The root directory
+`results/benchmark-<BENCH_TIMESTAMP>.tar.gz`. The root directory
 contains the k6 test summary and associated logs. Each subdirectory is named after
 the target Gitaly instance (i.e. `gitaly_instances[*].name` from the `config.yml`
 file) and contains instance-specific output:
