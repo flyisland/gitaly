@@ -1,6 +1,6 @@
 module gitlab.com/gitlab-org/gitaly/tools/golangci-lint
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/golangci/golangci-lint/v2 v2.0.2

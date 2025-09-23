@@ -15,11 +15,12 @@ default:
 .versions:
   debian: "bookworm"
   git_default: "default"
-  go_default: "1.23"
+  go_default: "1.24"
   # Follow the following process to upgrade Go version:
   # - https://gitlab.com/gitlab-org/gitlab-build-images/-/tree/master#note-regarding-golang-and-fips
   # - https://docs.gitlab.com/development/go_guide/go_upgrade/#supporting-multiple-go-versions
-  go_supported: ["1.23", "1.24"]
+  # - https://gitlab.com/gitlab-org/gitaly/-/blob/master/doc/go_upgrade_gitaly.md
+  go_supported: ["1.24"]
   macos: "macos-14-xcode-15"
   pgbouncer: "1.24.0"
   postgres_default: "16-alpine"
