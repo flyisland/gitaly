@@ -27,10 +27,9 @@ def load(fname):
 def stats_rpc_count(df, outdir):
     df = df[df["grpc.request.glRepository"].str.len() > 0]
     df = df[df["grpc.method"].str.len() > 0]
-    df = df[df["grpc.code"] == "OK"]
 
     df = (
-        df.groupby(["time_interval", "grpc.request.glRepository", "grpc.method"])
+        df.groupby(["time_interval", "grpc.request.glRepository", "grpc.method", "grpc.code"])
         .size()
         .reset_index(name="request_count")
     )
@@ -62,7 +61,7 @@ def stats_rpc_count(df, outdir):
             color="Method",
             shape="Repository",
         )
-        + facet_wrap("grpc.request.glRepository", ncol=1)
+        + facet_grid("grpc.request.glRepository", "grpc.code")
     )
 
     p.save(f"{outdir}/rpc_count_by_repo.png")
@@ -74,7 +73,7 @@ def stats_rpc_latency(df, outdir):
     df = df[df["grpc.time_ms"].notna()]
 
     df = (
-        df.groupby(["time_interval", "grpc.request.glRepository", "grpc.method"])[
+        df.groupby(["time_interval", "grpc.request.glRepository", "grpc.method", "grpc.code"])[
             "grpc.time_ms"
         ]
         .quantile(0.95)
@@ -108,7 +107,7 @@ def stats_rpc_latency(df, outdir):
             color="Method",
             shape="Repository",
         )
-        + facet_wrap("grpc.request.glRepository", ncol=1)
+        + facet_grid("grpc.request.glRepository", "grpc.code")
     )
 
     p.save(f"{outdir}/rpc_latency_by_repo.png")
