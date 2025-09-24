@@ -26,7 +26,7 @@ profile() {
 	# --call-graph=dwarf - Use DWARF debug info for call stack, works well with
 	#                      C programs but is much larger than fp, causing
 	#                      flamegraph generation to be proportionately slower.
-	perf record --freq=99 --call-graph=dwarf --all-cpus \
+	perf record --freq=97 --call-graph=dwarf --all-cpus \
 		--output="${all_perf_data}" -- sleep "${seconds}" &
 
 	# TODO add bpftrace scripts
@@ -34,17 +34,21 @@ profile() {
 }
 
 generate_flamegraphs() {
+	gitaly_perf_txt="${out_dir}/gitaly-perf.txt.gz"
 	gitaly_perf_svg="${out_dir}/gitaly-perf.svg"
 	perf script --header --input="${gitaly_perf_data}" \
-	  | stackcollapse \
-	  | flamegraph > "${gitaly_perf_svg}" &
+	  | gzip > "${gitaly_perf_txt}"
+    zcat "${gitaly_perf_txt}" \
+	  | stackcollapse --kernel \
+	  | flamegraph --hash --colors=perl > "${gitaly_perf_svg}"
 
+	all_perf_txt="${out_dir}/all-perf.txt.gz"
 	all_perf_svg="${out_dir}/all-perf.svg"
 	perf script --header --input="${all_perf_data}" \
-		| stackcollapse \
-		| flamegraph > "${all_perf_svg}" &
-
-	wait
+		| gzip > "${all_perf_txt}"
+    zcat "${all_perf_txt}" \
+		| stackcollapse --kernel \
+		| flamegraph --hash --colors=perl > "${all_perf_svg}"
 }
 
 main() {
