@@ -36,6 +36,29 @@ repository_disk_type: "pd-balanced"
 repositories:
   - name: git
     include_in_test: true
+    reference_backend: files
+    remote: "https://gitlab.com/gitlab-org/git.git"
+    revision: "2462961280690837670d997bde64bd4ebf8ae66d"
+    testdata:
+      commits:
+        - "fea9d18c534a445ef6e488d8ee711fa92fa0e6bd"
+        - "0a15bb634cf005a0266ee1108ac31aa75649a61c"
+        - "217e4a23d76fe95a0f6ab0f6159de2460db6fcd9"
+      refs:
+        - "refs/heads/master"
+        - "refs/heads/next"
+        - "refs/tags/v2.50.0"
+      files:
+        - "README.md"
+        - "t/t4013/diff.log_--cc_-m_-p_master"
+        - "packfile.c"
+      directories:
+        - "t"
+        - "Documentation"
+        - "git-gui"
+  - name: git-reftable
+    include_in_test: true
+    reference_backend: reftable
     remote: "https://gitlab.com/gitlab-org/git.git"
     revision: "2462961280690837670d997bde64bd4ebf8ae66d"
     testdata:
@@ -57,6 +80,7 @@ repositories:
         - "git-gui"
   - name: gitlab
     include_in_test: true
+    reference_backend: files
     remote: "https://gitlab.com/gitlab-org/gitlab.git"
     revision: "8f3978675aa4df643cff5a01a8e1896ae754685a"
     testdata:
@@ -78,6 +102,7 @@ repositories:
         - "qa"
   - name: gitaly
     include_in_test: true
+    reference_backend: files
     remote: "https://gitlab.com/gitlab-org/gitaly.git"
     revision: "4d78df8cb5c6b3abfef5530830dba6c67d9d4c53"
     testdata:
