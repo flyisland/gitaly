@@ -41,6 +41,10 @@ func (s *server) DiffBlobs(request *gitalypb.DiffBlobsRequest, stream gitalypb.D
 		return structerr.NewInvalidArgument("blob pairs and raw info both used in request")
 	}
 
+	if err := validateRawInfo(request.GetRawInfo()); err != nil {
+		return err
+	}
+
 	// See https://gitlab.com/gitlab-org/gitaly/-/issues/6885
 	if request.GetWhitespaceChanges() != gitalypb.DiffBlobsRequest_WHITESPACE_CHANGES_UNSPECIFIED && len(request.GetBlobPairs()) > 0 {
 		return structerr.NewInvalidArgument("whitespace changes cannot be ignored when blob pairs are provided")
@@ -73,17 +77,6 @@ func (s *server) diffPairs(ctx context.Context,
 ) error {
 	repo := s.localRepoFactory.Build(request.GetRepository())
 
-	gitVersion, err := repo.GitVersion(ctx)
-	if err != nil {
-		return fmt.Errorf("git version: %w", err)
-	}
-
-	// The git-diff-pairs(1) command was backported to Git 2.49 and thus the GitLab Git version is
-	// required until Git 2.50 is released and rolled out.
-	if gitVersion.LessThan(git.NewVersion(2, 49, 0, 1)) {
-		return structerr.NewInvalidArgument("git version: %s, doesn't support git-diff-pairs(1)", gitVersion)
-	}
-
 	objectHash, err := repo.ObjectHash(ctx)
 	if err != nil {
 		return structerr.NewInternal("detecting object format: %w", err)
@@ -98,7 +91,6 @@ func (s *server) diffPairs(ctx context.Context,
 			SrcOID:  entry.GetOldBlobId(),
 			DstOID:  entry.GetNewBlobId(),
 			Status:  statusLookup[entry.GetStatus()],
-			// Score:   entry.GetScore(),
 			SrcPath: entry.GetPath(),
 		}
 
@@ -137,6 +129,26 @@ func (s *server) diffPairs(ctx context.Context,
 
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("waiting for git-diff-pairs: %w", err)
+	}
+
+	return nil
+}
+
+func validateRawInfo(rawInfo []*gitalypb.ChangedPaths) error {
+	for _, entry := range rawInfo {
+		if len(entry.GetOldBlobId()) == 0 || len(entry.GetNewBlobId()) == 0 {
+			return structerr.NewInvalidArgument("raw info entry missing blob IDs")
+		}
+
+		if len(entry.GetPath()) == 0 {
+			return structerr.NewInvalidArgument("raw info entry missing path")
+		}
+
+		if entry.GetStatus() == gitalypb.ChangedPaths_RENAMED || entry.GetStatus() == gitalypb.ChangedPaths_COPIED {
+			if len(entry.GetOldPath()) == 0 {
+				return structerr.NewInvalidArgument("rename/copy raw info entry missing old path")
+			}
+		}
 	}
 
 	return nil
