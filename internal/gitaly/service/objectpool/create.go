@@ -63,7 +63,7 @@ func (s *server) CreateObjectPool(ctx context.Context, in *gitalypb.CreateObject
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		if err := s.migrationStateManager.RecordKeyCreation(
 			tx,
-			poolRepo.GetRelativePath(),
+			tx.OriginalRepository(poolRepo).GetRelativePath(),
 		); err != nil {
 			return nil, structerr.NewInternal("recording migration key: %w", err)
 		}

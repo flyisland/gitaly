@@ -138,17 +138,14 @@ func (c *languageStats) save(ctx context.Context, repo *localrepo.Repo, commitID
 		if err != nil {
 			return fmt.Errorf("getting relative path: %w", err)
 		}
-		tempDir, err = repo.StorageTempDir(ctx)
-		if err != nil {
-			return fmt.Errorf("locating temp dir: %w", err)
-		}
+		tempDir = tx.FS().Root()
 		finalPath = filepath.Join(tx.FS().Root(), relPath, languageStatsFilename)
 		recordFunc = func() error {
 			return tx.FS().RecordFile(filepath.Join(relPath, languageStatsFilename))
 		}
 	} else {
 		// Non-transaction path
-		tempDir, err = repo.StorageTempDir(context.Background())
+		tempDir, err = repo.StorageTempDir()
 		if err != nil {
 			return fmt.Errorf("locating temp dir: %w", err)
 		}

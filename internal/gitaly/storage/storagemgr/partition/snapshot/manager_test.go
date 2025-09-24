@@ -148,7 +148,7 @@ func TestManager(t *testing.T) {
 				require.Equal(t, fs1.Root(), fs2.Root())
 
 				// Writing into shared snapshots is not allowed.
-				require.ErrorIs(t, os.WriteFile(filepath.Join(fs1.Root(), "repositories", "some file"), nil, fs.ModePerm), os.ErrPermission)
+				require.ErrorIs(t, os.WriteFile(filepath.Join(fs1.Root(), "some file"), nil, fs.ModePerm), os.ErrPermission)
 
 				expectedDirectoryState := testhelper.DirectoryState{
 					"/":                       {Mode: ModeReadOnlyDirectory},

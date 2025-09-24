@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -29,6 +30,15 @@ func newEvaluateRequest(ctx context.Context, repo *localrepo.Repo, t time.Time, 
 	if !ok {
 		return evaluateRequest{}, errors.New("expecting repo.Repository to be of type *gitalypb.Repository")
 	}
+
+	// A transaction re-writes the relative path to include the
+	// snapshot path. Using the snapshot path will not work here
+	// because we need a common key for each repository, not for
+	// each snapshot.
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		repoProto = tx.OriginalRepository(repoProto)
+	}
+
 	return evaluateRequest{
 		ctx:  ctx,
 		repo: repo,

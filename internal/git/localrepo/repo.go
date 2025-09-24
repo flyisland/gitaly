@@ -222,8 +222,8 @@ func errorWithStderr(err error, stderr []byte) error {
 
 // StorageTempDir returns the temporary dir for the storage where the repo is on.
 // When this directory does not exist yet, it's being created.
-func (repo *Repo) StorageTempDir(ctx context.Context) (string, error) {
-	tempPath, err := repo.locator.TempDir(ctx, repo.GetStorageName())
+func (repo *Repo) StorageTempDir() (string, error) {
+	tempPath, err := repo.locator.TempDir(repo.GetStorageName())
 	if err != nil {
 		return "", err
 	}

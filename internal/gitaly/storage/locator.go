@@ -85,18 +85,14 @@ type Locator interface {
 	// will be skipped. The errors returned are gRPC errors with relevant error codes and should be
 	// passed back to gRPC without further decoration.
 	GetRepoPath(ctx context.Context, repo Repository, opts ...GetRepoPathOption) (string, error)
-	// GetStorageByName returns the storage path for the given name.
-	// If running inside a transaction, it returns the snapshot filesystem root.
-	// Otherwise, it looks up the storage by key in the Gitaly config.
-	// An error is returned if the key cannot be found.
+	// GetStorageByName will return the path for the storage, which is fetched by
+	// its key. An error is return if it cannot be found.
 	GetStorageByName(ctx context.Context, storageName string) (string, error)
-	// GetRootStoragePathByName always return the storage path configured in gitaly toml
-	GetRootStoragePathByName(storageName string) (string, error)
 
 	// CacheDir returns the path to the cache dir for a storage.
 	CacheDir(storageName string) (string, error)
 	// TempDir returns the path to the temp dir for a storage.
-	TempDir(ctx context.Context, storageName string) (string, error)
+	TempDir(storageName string) (string, error)
 	// StateDir returns the path to the state dir for a storage.
 	StateDir(storageName string) (string, error)
 	// PartitionsDir returns the path to the partitions dir for a storage.
@@ -116,9 +112,6 @@ type ValidateRepositoryConfig struct {
 	// verify that whether the repository _would_ be valid if it existed, but not verify actual
 	// existence.
 	SkipRepositoryExistenceCheck bool
-	// UseStorageRoot forces using the root storage path defined in the config,
-	// instead of the transaction’s snapshot root, when a transaction is present.
-	UseRootStorage bool
 }
 
 // ValidateRepositoryOption is an option that can be passed to ValidateRepository.
@@ -140,23 +133,11 @@ func WithSkipStorageExistenceCheck() ValidateRepositoryOption {
 	}
 }
 
-// WithValidateUsingRootStorage causes ValidateRepository to always use the storage path
-// as defined in the Gitaly config, even when running inside a transaction.
-func WithValidateUsingRootStorage() ValidateRepositoryOption {
-	return func(cfg *ValidateRepositoryConfig) {
-		cfg.UseRootStorage = true
-	}
-}
-
 // GetRepoPathConfig is used to configure GetRepoPath.
 type GetRepoPathConfig struct {
 	// SkipRepositoryVerification will cause GetRepoPath to skip verification the verification whether the
 	// computed path is an actual Git repository or not.
 	SkipRepositoryVerification bool
-
-	// UseRootStorage forces GetRepoPath to use the root storage path from the config
-	// instead of the transaction’s snapshot root when a transaction is active.
-	UseRootStorage bool
 }
 
 // GetRepoPathOption can be passed to GetRepoPath to change its default behavior.
@@ -167,14 +148,6 @@ type GetRepoPathOption func(*GetRepoPathConfig)
 func WithRepositoryVerificationSkipped() GetRepoPathOption {
 	return func(cfg *GetRepoPathConfig) {
 		cfg.SkipRepositoryVerification = true
-	}
-}
-
-// WithRootStorage causes GetRepoPath to always return the repository path from the
-// root storage, i.e., the storage path defined in the config.
-func WithRootStorage() GetRepoPathOption {
-	return func(cfg *GetRepoPathConfig) {
-		cfg.UseRootStorage = true
 	}
 }
 

@@ -260,11 +260,11 @@ func TestRepo_StorageTempDir(t *testing.T) {
 	})
 	repo := New(testhelper.NewLogger(t), locator, gitCmdFactory, catfileCache, repoProto)
 
-	expected, err := locator.TempDir(ctx, cfg.Storages[0].Name)
+	expected, err := locator.TempDir(cfg.Storages[0].Name)
 	require.NoError(t, err)
 	require.NoDirExists(t, expected)
 
-	tempPath, err := repo.StorageTempDir(ctx)
+	tempPath, err := repo.StorageTempDir()
 	require.NoError(t, err)
 	require.DirExists(t, expected)
 	require.Equal(t, expected, tempPath)

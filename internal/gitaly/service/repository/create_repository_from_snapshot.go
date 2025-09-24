@@ -151,7 +151,7 @@ func (s *server) CreateRepositoryFromSnapshot(ctx context.Context, in *gitalypb.
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		if err := s.migrationStateManager.RecordKeyCreation(
 			tx,
-			repository.GetRelativePath(),
+			tx.OriginalRepository(repository).GetRelativePath(),
 		); err != nil {
 			return nil, structerr.NewInternal("recording migration key: %w", err)
 		}

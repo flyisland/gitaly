@@ -64,7 +64,7 @@ func FromProto(
 		// When creating repositories in the ObjectPool service we will first create the
 		// repository in a temporary directory. So we need to check whether the path we see
 		// here is in such a temporary directory and let it pass.
-		tempDir, err := locator.TempDir(ctx, proto.GetRepository().GetStorageName())
+		tempDir, err := locator.TempDir(proto.GetRepository().GetStorageName())
 		if err != nil {
 			return nil, fmt.Errorf("getting temporary storage directory: %w", err)
 		}

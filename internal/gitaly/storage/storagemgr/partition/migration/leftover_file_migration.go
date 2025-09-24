@@ -31,7 +31,7 @@ func NewLeftoverFileMigration(locator storage.Locator) Migration {
 		Fn: func(ctx context.Context, tx storage.Transaction, storageName string, relativePath string) error {
 			// Use snapshotFilter to match entry paths that must be kept in the repo.
 			snapshotFilter := snapshot.NewRegexSnapshotFilter()
-			storagePath, err := locator.GetRootStoragePathByName(storageName)
+			storagePath, err := locator.GetStorageByName(ctx, storageName)
 			if err != nil {
 				return fmt.Errorf("resolve storage path: %w", err)
 			}

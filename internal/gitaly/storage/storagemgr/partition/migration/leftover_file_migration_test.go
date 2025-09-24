@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,15 @@ func TestNewLeftoverFileMigration_WithOrWithoutFeatureFlag(t *testing.T) {
 }
 
 func testNewLeftoverFileMigration(t *testing.T, ctx context.Context) {
+	var mu sync.RWMutex
 	t.Parallel()
+	cfg := testcfg.Build(t)
+
+	var migrationPtr *[]migration.Migration
+	var migrations []migration.Migration
+	migrationPtr = &migrations
+	repoClient, socket := runGitalyServer(t, cfg, testserver.WithMigrations(migrationPtr))
+	cfg.SocketPath = socket
 
 	for _, tc := range []struct {
 		desc                 string
@@ -50,14 +59,6 @@ func testNewLeftoverFileMigration(t *testing.T, ctx context.Context) {
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
-
-			cfg := testcfg.Build(t)
-
-			var migrationPtr *[]migration.Migration
-			var migrations []migration.Migration
-			migrationPtr = &migrations
-			repoClient, socket := runGitalyServer(t, cfg, testserver.WithMigrations(migrationPtr))
-			cfg.SocketPath = socket
 
 			poolSetup := createLeftoverMigrationRepo(t, ctx, cfg, true, "")
 			repoSetup := createLeftoverMigrationRepo(t, ctx, cfg, false, poolSetup.repoPath)
@@ -91,11 +92,14 @@ func testNewLeftoverFileMigration(t *testing.T, ctx context.Context) {
 				}
 			}
 
+			// Avoid racing if other test also change the migration slice.
+			mu.Lock()
 			migrations = []migration.Migration{migration.NewLeftoverFileMigration(config.NewLocator(cfg))}
 
 			_, err = repoClient.RepositorySize(ctx, &gitalypb.RepositorySizeRequest{
 				Repository: repoSetup.repo,
 			})
+			mu.Unlock()
 			require.NoError(t, err)
 
 			// Force WAL sync to ensure migration transaction effects are applied to disk

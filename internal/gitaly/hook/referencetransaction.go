@@ -48,9 +48,6 @@ func (m *GitLabHookManager) ReferenceTransactionHook(ctx context.Context, state 
 		if err != nil {
 			return fmt.Errorf("get transaction: %w", err)
 		}
-		if tx != nil {
-			ctx = storage.ContextWithTransaction(ctx, tx)
-		}
 	}
 
 	var phase voting.Phase

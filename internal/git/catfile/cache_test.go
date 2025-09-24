@@ -173,12 +173,10 @@ func TestCache_autoExpiry(t *testing.T) {
 
 	monitorTicker := helper.NewManualTicker()
 
-	cfg := testcfg.Build(t)
-	locator := config.NewLocator(cfg)
-
-	c := newCache(time.Hour, 10, monitorTicker, locator)
+	c := newCache(time.Hour, 10, monitorTicker)
 	defer c.Stop()
 
+	cfg := testcfg.Build(t)
 	repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 		SkipCreationViaService: true,
 	})
@@ -271,10 +269,7 @@ func TestCache_ObjectReader(t *testing.T) {
 
 	repoExecutor := newRepoExecutor(t, cfg, repo)
 
-	locator := config.NewLocator(cfg)
-	storagePath, err := locator.GetStorageByName(ctx, repo.GetStorageName())
-	require.NoError(t, err)
-	cache := newCache(time.Hour, 10, helper.NewManualTicker(), locator)
+	cache := newCache(time.Hour, 10, helper.NewManualTicker())
 	defer cache.Stop()
 
 	t.Run("cached", func(t *testing.T) {
@@ -291,10 +286,9 @@ func TestCache_ObjectReader(t *testing.T) {
 
 		expectedSessionID := fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now()))
 		require.Equal(t, []key{{
-			sessionID:       expectedSessionID,
-			repoStorageName: repo.GetStorageName(),
-			repoRelPath:     repo.GetRelativePath(),
-			repoStoragePath: storagePath,
+			sessionID:   expectedSessionID,
+			repoStorage: repo.GetStorageName(),
+			repoRelPath: repo.GetRelativePath(),
 		}}, allKeys)
 
 		// Assert that we can still read from the cached process.
@@ -352,10 +346,8 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
 
 	repoExecutor := newRepoExecutor(t, cfg, repo)
-	locator := config.NewLocator(cfg)
-	storagePath, err := locator.GetStorageByName(ctx, repo.GetStorageName())
-	require.NoError(t, err)
-	cache := newCache(time.Hour, 10, helper.NewManualTicker(), locator)
+
+	cache := newCache(time.Hour, 10, helper.NewManualTicker())
 	defer cache.Stop()
 
 	t.Run("cached", func(t *testing.T) {
@@ -373,10 +365,9 @@ func TestCache_ObjectReaderWithoutMailmap(t *testing.T) {
 		expectedSessionID := fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now()))
 
 		require.Equal(t, []key{{
-			sessionID:       expectedSessionID,
-			repoStorageName: repo.GetStorageName(),
-			repoRelPath:     repo.GetRelativePath(),
-			repoStoragePath: storagePath,
+			sessionID:   expectedSessionID,
+			repoStorage: repo.GetStorageName(),
+			repoRelPath: repo.GetRelativePath(),
 		}}, allKeys)
 
 		// Assert that we can still read from the cached process.
@@ -431,7 +422,7 @@ func TestCache_ObjectReader_quarantine(t *testing.T) {
 	locator := config.NewLocator(cfg)
 	logger := testhelper.NewLogger(t)
 
-	cache := newCache(time.Hour, 10, helper.NewManualTicker(), locator)
+	cache := newCache(time.Hour, 10, helper.NewManualTicker())
 	defer cache.Stop()
 
 	t.Run("with active quarantine", func(t *testing.T) {
@@ -459,15 +450,12 @@ func TestCache_ObjectReader_quarantine(t *testing.T) {
 
 		expectedSessionID := fmt.Sprintf("%d", roundToNearestFiveMinute(time.Now()))
 
-		storagePath, err := locator.GetStorageByName(ctx, repo.GetStorageName())
-		require.NoError(t, err)
 		require.Equal(t, []key{{
-			sessionID:       expectedSessionID,
-			repoStorageName: repo.GetStorageName(),
-			repoRelPath:     repo.GetRelativePath(),
-			repoObjDir:      quarantineRepo.GetGitObjectDirectory(),
-			repoAltDir:      "objects",
-			repoStoragePath: storagePath,
+			sessionID:   expectedSessionID,
+			repoStorage: repo.GetStorageName(),
+			repoRelPath: repo.GetRelativePath(),
+			repoObjDir:  quarantineRepo.GetGitObjectDirectory(),
+			repoAltDir:  "objects",
 		}}, allKeys)
 
 		// Assert that we can still read from the cached process.
@@ -500,7 +488,7 @@ func mustCreateCacheable(t *testing.T, cfg config.Cfg, repo storage.Repository) 
 func mustCreateKey(t *testing.T, sessionID string, repo storage.Repository) key {
 	t.Helper()
 
-	key, cacheable := newCacheKey(sessionID, "some/path", repo)
+	key, cacheable := newCacheKey(sessionID, repo)
 	require.True(t, cacheable)
 
 	return key
