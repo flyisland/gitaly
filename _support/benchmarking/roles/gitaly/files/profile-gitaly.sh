@@ -23,10 +23,7 @@ profile() {
 	    --output="${gitaly_perf_data}" -- sleep "${seconds}" &
 
 	# Profile whole system
-	# --call-graph=dwarf - Use DWARF debug info for call stack, works well with
-	#                      C programs but is much larger than fp, causing
-	#                      flamegraph generation to be proportionately slower.
-	perf record --freq=97 --call-graph=dwarf --all-cpus \
+	perf record --freq=97 -g --all-cpus \
 		--output="${all_perf_data}" -- sleep "${seconds}" &
 
 	# TODO add bpftrace scripts
