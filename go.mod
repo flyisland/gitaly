@@ -13,7 +13,7 @@ require (
 	github.com/cloudflare/tableflip v1.2.3
 	github.com/containerd/cgroups/v3 v3.0.5
 	github.com/dgraph-io/badger/v4 v4.7.0
-	github.com/getsentry/sentry-go v0.35.1
+	github.com/getsentry/sentry-go v0.35.3
 	github.com/git-lfs/git-lfs/v3 v3.7.0
 	github.com/go-enry/go-enry/v2 v2.9.2
 	github.com/go-enry/go-license-detector/v4 v4.3.0
