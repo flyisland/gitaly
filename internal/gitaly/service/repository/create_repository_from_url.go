@@ -132,7 +132,7 @@ func (s *server) CreateRepositoryFromURL(ctx context.Context, req *gitalypb.Crea
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		if err := s.migrationStateManager.RecordKeyCreation(
 			tx,
-			req.GetRepository().GetRelativePath(),
+			tx.OriginalRepository(req.GetRepository()).GetRelativePath(),
 		); err != nil {
 			return nil, structerr.NewInternal("recording migration key: %w", err)
 		}

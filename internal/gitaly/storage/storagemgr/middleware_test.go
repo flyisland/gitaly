@@ -351,9 +351,10 @@ messages and behavior by erroring out the requests before they even hit this int
 			},
 			assertAdditionalRepository: func(t *testing.T, ctx context.Context, actual *gitalypb.Repository) {
 				expected := validAdditionalRepository()
-				require.Equal(t, expected.GetRelativePath(), actual.GetRelativePath())
+				// The additional repository's relative path should have been rewritten.
+				require.NotEqual(t, expected.GetRelativePath(), actual.GetRelativePath())
 				// But the restored non-snapshotted repository should match the original.
-				testhelper.ProtoEqual(t, expected, actual)
+				testhelper.ProtoEqual(t, expected, storage.ExtractTransaction(ctx).OriginalRepository(actual))
 			},
 			expectHandlerInvoked: true,
 		},
@@ -383,9 +384,10 @@ messages and behavior by erroring out the requests before they even hit this int
 			},
 			assertAdditionalRepository: func(t *testing.T, ctx context.Context, actual *gitalypb.Repository) {
 				expected := validAdditionalRepository()
-				require.Equal(t, expected.GetRelativePath(), actual.GetRelativePath())
+				// The additional repository's relative path should have been rewritten.
+				require.NotEqual(t, expected.GetRelativePath(), actual.GetRelativePath())
 				// But the restored non-snapshotted repository should match the original.
-				testhelper.ProtoEqual(t, expected, actual)
+				testhelper.ProtoEqual(t, expected, storage.ExtractTransaction(ctx).OriginalRepository(actual))
 			},
 			expectHandlerInvoked: true,
 		},
@@ -533,12 +535,8 @@ messages and behavior by erroring out the requests before they even hit this int
 					expectedRepo := validRepository()
 					actualRepo := repo
 
-					// When run in a transaction, the relative path will be the same, but the
-					// transaction should be included in the ctx
-					tx := storage.ExtractTransaction(ctx)
-					assert.NotNil(t, tx, "transaction not in the context")
-					assert.Equal(t, expectedRepo.GetRelativePath(), repo.GetRelativePath(),
-						"relative path should be the same even when in transaction")
+					// When run in a transaction, the relative path will be pointed to the snapshot.
+					assert.NotEqual(t, expectedRepo.GetRelativePath(), repo.GetRelativePath())
 					expectedRepo.RelativePath = ""
 					actualRepo.RelativePath = ""
 

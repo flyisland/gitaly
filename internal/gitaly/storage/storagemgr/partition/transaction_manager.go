@@ -413,21 +413,20 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 		txn.fs = fsrecorder.NewFS(txn.snapshot.Root(), txn.walEntry)
 
 		if txn.repositoryTarget() {
-			txn.repositoryExists, err = mgr.doesRepositoryExist(ctx, txn.relativePath)
+			txn.repositoryExists, err = mgr.doesRepositoryExist(ctx, txn.snapshot.RelativePath(txn.relativePath))
 			if err != nil {
 				return nil, fmt.Errorf("does repository exist: %w", err)
 			}
 
-			txn.snapshotRepository = mgr.repositoryFactory.Build(txn.relativePath)
+			txn.snapshotRepository = mgr.repositoryFactory.Build(txn.snapshot.RelativePath(txn.relativePath))
 			if txn.write {
 				if txn.repositoryExists {
-					ctxWithTxn := storage.ContextWithTransaction(ctx, txn)
 					txn.quarantineDirectory = filepath.Join(txn.stagingDirectory, "quarantine")
 					if err := os.MkdirAll(filepath.Join(txn.quarantineDirectory, "pack"), mode.Directory); err != nil {
 						return nil, fmt.Errorf("create quarantine directory: %w", err)
 					}
 
-					txn.snapshotRepository, err = txn.snapshotRepository.Quarantine(ctxWithTxn, txn.quarantineDirectory)
+					txn.snapshotRepository, err = txn.snapshotRepository.Quarantine(ctx, txn.quarantineDirectory)
 					if err != nil {
 						return nil, fmt.Errorf("quarantine: %w", err)
 					}
@@ -437,13 +436,13 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 						return nil, fmt.Errorf("create reference recorder tmp dir: %w", err)
 					}
 
-					refBackend, err := txn.snapshotRepository.ReferenceBackend(ctxWithTxn)
+					refBackend, err := txn.snapshotRepository.ReferenceBackend(ctx)
 					if err != nil {
 						return nil, fmt.Errorf("reference backend: %w", err)
 					}
 
 					if refBackend == git.ReferenceBackendFiles {
-						objectHash, err := txn.snapshotRepository.ObjectHash(ctxWithTxn)
+						objectHash, err := txn.snapshotRepository.ObjectHash(ctx)
 						if err != nil {
 							return nil, fmt.Errorf("object hash: %w", err)
 						}
@@ -454,7 +453,7 @@ func (mgr *TransactionManager) Begin(ctx context.Context, opts storage.BeginOpti
 					}
 
 					if refBackend == git.ReferenceBackendReftables {
-						snapshotRepositoryPath, err := txn.snapshotRepository.Path(ctxWithTxn)
+						snapshotRepositoryPath, err := txn.snapshotRepository.Path(ctx)
 						if err != nil {
 							return nil, fmt.Errorf("snapshot repository path: %w", err)
 						}
@@ -517,11 +516,29 @@ func (txn *Transaction) PartitionRelativePaths() []string {
 // the repository in the transaction's snapshot.
 func (txn *Transaction) RewriteRepository(repo *gitalypb.Repository) *gitalypb.Repository {
 	rewritten := proto.Clone(repo).(*gitalypb.Repository)
+	rewritten.RelativePath = txn.snapshot.RelativePath(repo.GetRelativePath())
+
 	if repo.GetRelativePath() == txn.relativePath {
 		rewritten.GitObjectDirectory = txn.snapshotRepository.GetGitObjectDirectory()
 		rewritten.GitAlternateObjectDirectories = txn.snapshotRepository.GetGitAlternateObjectDirectories()
 	}
+
 	return rewritten
+}
+
+// OriginalRepository returns the repository as it was before rewriting it to point to the snapshot.
+func (txn *Transaction) OriginalRepository(repo storage.Repository) *gitalypb.Repository {
+	original := &gitalypb.Repository{
+		StorageName:   repo.GetStorageName(),
+		GlRepository:  repo.GetGlRepository(),
+		GlProjectPath: repo.GetGlProjectPath(),
+	}
+
+	original.RelativePath = strings.TrimPrefix(repo.GetRelativePath(), txn.snapshot.Prefix()+string(os.PathSeparator))
+	original.GitObjectDirectory = ""
+	original.GitAlternateObjectDirectories = nil
+
+	return original
 }
 
 func (txn *Transaction) updateState(newState transactionState) error {
@@ -1061,7 +1078,6 @@ type resultChannel chan commitResult
 // commit queues the transaction for processing and returns once the result has been determined.
 func (mgr *TransactionManager) commit(ctx context.Context, transaction *Transaction) (storage.LSN, error) {
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.Commit", nil)
-	ctx = storage.ContextWithTransaction(ctx, transaction)
 	defer span.Finish()
 
 	transaction.result = make(resultChannel, 1)
@@ -1248,28 +1264,23 @@ func (mgr *TransactionManager) stageRepositoryCreation(ctx context.Context, tran
 
 // setupStagingRepository sets up a snapshot that is used for verifying and staging changes. It contains up to
 // date state of the partition. It does not have the quarantine configured.
-func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, transaction *Transaction) (context.Context, *localrepo.Repo, error) {
+func (mgr *TransactionManager) setupStagingRepository(ctx context.Context, transaction *Transaction) (*localrepo.Repo, error) {
 	defer trace.StartRegion(ctx, "setupStagingRepository").End()
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.setupStagingRepository", nil)
 	defer span.Finish()
 
 	if transaction.stagingSnapshot != nil {
-		return nil, nil, errors.New("staging snapshot already setup")
+		return nil, errors.New("staging snapshot already setup")
 	}
 
 	var err error
 	transaction.stagingSnapshot, err = mgr.snapshotManager.GetSnapshot(ctx, []string{transaction.relativePath}, true)
 	if err != nil {
-		return nil, nil, fmt.Errorf("new snapshot: %w", err)
+		return nil, fmt.Errorf("new snapshot: %w", err)
 	}
 
-	// a wrapped ctx that point to staging root
-	stagingTxn := &Transaction{
-		fs: fsrecorder.NewFS(transaction.stagingSnapshot.Root(), nil),
-	}
-	stagingCtx := storage.ContextWithTransaction(ctx, stagingTxn)
-	return stagingCtx, mgr.repositoryFactory.Build(transaction.relativePath), nil
+	return mgr.repositoryFactory.Build(transaction.stagingSnapshot.RelativePath(transaction.relativePath)), nil
 }
 
 // packPrefixRegexp matches the output of `git index-pack` where it
@@ -1296,7 +1307,7 @@ func (mgr *TransactionManager) packObjects(ctx context.Context, transaction *Tra
 		return nil
 	}
 
-	if _, err := os.Stat(mgr.getAbsolutePath(ctx, transaction.snapshotRepository.GetRelativePath())); err != nil {
+	if _, err := os.Stat(mgr.getAbsolutePath(transaction.snapshotRepository.GetRelativePath())); err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("stat: %w", err)
 		}
@@ -1307,7 +1318,6 @@ func (mgr *TransactionManager) packObjects(ctx context.Context, transaction *Tra
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.packObjects", nil)
-	ctx = storage.ContextWithTransaction(ctx, transaction)
 	defer span.Finish()
 
 	// We want to only pack the objects that are present in the quarantine as they are potentially
@@ -1484,7 +1494,7 @@ func (mgr *TransactionManager) packObjects(ctx context.Context, transaction *Tra
 // why we don't track 'tables.list' operation here.
 func (mgr *TransactionManager) preparePackRefsReftable(ctx context.Context, transaction *Transaction) error {
 	runPackRefs := transaction.runHousekeeping.packRefs
-	repoPath := mgr.getAbsolutePath(ctx, transaction.snapshotRepository.GetRelativePath())
+	repoPath := mgr.getAbsolutePath(transaction.snapshotRepository.GetRelativePath())
 
 	if err := allowReftableCompaction(repoPath); err != nil {
 		return fmt.Errorf("allow reftable compaction: %w", err)
@@ -1580,7 +1590,7 @@ func (mgr *TransactionManager) preparePackRefsFiles(ctx context.Context, transac
 
 	// First walk to collect the list of loose refs.
 	looseReferences := make(map[git.ReferenceName]struct{})
-	repoPath := mgr.getAbsolutePath(ctx, transaction.snapshotRepository.GetRelativePath())
+	repoPath := mgr.getAbsolutePath(transaction.snapshotRepository.GetRelativePath())
 	if err := filepath.WalkDir(filepath.Join(repoPath, "refs"), func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -1754,8 +1764,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 	transaction.result <- func() commitResult {
 		var zeroOID git.ObjectID
 		if transaction.repositoryTarget() {
-
-			repositoryExists, err := mgr.doesRepositoryExist(ctx, transaction.relativePath, storage.WithRootStorage())
+			repositoryExists, err := mgr.doesRepositoryExist(ctx, transaction.relativePath)
 			if err != nil {
 				return commitResult{error: fmt.Errorf("does repository exist: %w", err)}
 			}
@@ -1792,7 +1801,7 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 				if refBackend == git.ReferenceBackendReftables || transaction.runHousekeeping != nil {
 					if refBackend == git.ReferenceBackendReftables {
 						if err := transaction.reftableRecorder.stageTables(ctx,
-							mgr.getAbsolutePath(ctx, transaction.relativePath),
+							mgr.getAbsolutePath(transaction.relativePath),
 							transaction,
 						); err != nil {
 							return commitResult{error: fmt.Errorf("stage tables: %w", err)}
@@ -2091,10 +2100,10 @@ func (mgr *TransactionManager) initialize(ctx context.Context) error {
 }
 
 // doesRepositoryExist returns whether the repository exists or not.
-func (mgr *TransactionManager) doesRepositoryExist(ctx context.Context, relativePath string, opts ...storage.GetRepoPathOption) (bool, error) {
+func (mgr *TransactionManager) doesRepositoryExist(ctx context.Context, relativePath string) (bool, error) {
 	defer trace.StartRegion(ctx, "doesRepositoryExist").End()
 
-	stat, err := os.Stat(mgr.getAbsolutePath(ctx, relativePath, opts...))
+	stat, err := os.Stat(mgr.getAbsolutePath(relativePath))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
@@ -2110,20 +2119,9 @@ func (mgr *TransactionManager) doesRepositoryExist(ctx context.Context, relative
 	return true, nil
 }
 
-// getAbsolutePath returns the absolute path of a relative path within the storage.
-// If the GetRepoPathOption UseRootStorage is set, it returns the repository’s original
-// path in the root storage (i.e., the storage defined in the Gitaly config).
-func (mgr *TransactionManager) getAbsolutePath(ctx context.Context, relativePath string, opts ...storage.GetRepoPathOption) string {
-	var cfg storage.GetRepoPathConfig
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-
-	if txn := storage.ExtractTransaction(ctx); txn != nil && !cfg.UseRootStorage {
-		return filepath.Join(txn.FS().Root(), relativePath)
-	}
-
-	return filepath.Join(mgr.storagePath, relativePath)
+// getAbsolutePath returns the relative path's absolute path in the storage.
+func (mgr *TransactionManager) getAbsolutePath(relativePath ...string) string {
+	return filepath.Join(append([]string{mgr.storagePath}, relativePath...)...)
 }
 
 // packFilePath returns a log entry's pack file's absolute path in the wal files directory.

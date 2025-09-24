@@ -80,7 +80,7 @@ func NewRepository(ctx context.Context, storageName string, logger log.Logger, l
 }
 
 func newDirectory(ctx context.Context, storageName string, prefix string, logger log.Logger, loc storage.Locator) (Dir, error) {
-	root, err := loc.TempDir(ctx, storageName)
+	root, err := loc.TempDir(storageName)
 	if err != nil {
 		return Dir{}, fmt.Errorf("temp directory: %w", err)
 	}

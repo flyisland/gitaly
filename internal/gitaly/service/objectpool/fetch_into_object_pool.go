@@ -33,10 +33,10 @@ func (s *server) FetchIntoObjectPool(ctx context.Context, req *gitalypb.FetchInt
 
 	originalPoolRepo := objectPool.Repo
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
-		originalPoolRepo = s.localRepoFactory.Build(&gitalypb.Repository{
+		originalPoolRepo = s.localRepoFactory.Build(tx.OriginalRepository(&gitalypb.Repository{
 			StorageName:  req.GetObjectPool().GetRepository().GetStorageName(),
 			RelativePath: req.GetObjectPool().GetRepository().GetRelativePath(),
-		})
+		}))
 	}
 
 	// When transactions are enabled, housekeeping tasks are scheduled on the transaction (by operations

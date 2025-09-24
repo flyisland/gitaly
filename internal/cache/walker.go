@@ -6,7 +6,6 @@
 package cache
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -150,7 +149,7 @@ func (c *DiskCache) moveAndClear(storage config.Storage) error {
 	logger := c.logger.WithField("storage", storage.Name)
 	logger.Info("clearing disk cache object folder")
 
-	tempPath, err := c.locator.TempDir(context.Background(), storage.Name)
+	tempPath, err := c.locator.TempDir(storage.Name)
 	if err != nil {
 		return fmt.Errorf("temp dir: %w", err)
 	}

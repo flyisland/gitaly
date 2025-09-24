@@ -9,9 +9,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/cache"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"google.golang.org/protobuf/proto"
 )
 
 type infoRefCache struct {
@@ -57,6 +59,14 @@ func (c infoRefCache) tryCache(ctx context.Context, in *gitalypb.InfoRefsRequest
 
 	c.logger.DebugContext(ctx, "Attempting to fetch cached response")
 	countAttempt()
+
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		// The cache uses the requests as the keys. As the request's repository in the RPC handler has been rewritten
+		// to point to the transaction's repository, the handler sees each request as different even if they point to
+		// the same repository. Restore the original request to ensure identical requests get the same key.
+		in = proto.Clone(in).(*gitalypb.InfoRefsRequest)
+		in.Repository = tx.OriginalRepository(in.GetRepository())
+	}
 
 	stream, err := c.streamer.GetStream(ctx, in.GetRepository(), in)
 	switch {

@@ -118,7 +118,9 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 			g.logger.WithError(err).Error("generate bundle: nil node manager within transaction")
 			return nil
 		}
-		strg, err := g.nodeManager.GetStorage(repoProto.GetStorageName())
+
+		originalRepo := tx.OriginalRepository(repoProto)
+		strg, err := g.nodeManager.GetStorage(originalRepo.GetStorageName())
 		if err != nil {
 			g.logger.WithError(err).Error("generate bundle: error getting storage")
 			return nil
@@ -126,7 +128,7 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 		// Create the transaction on the new context created above
 		ntx, err := strg.Begin(gCtx, storage.TransactionOptions{
 			ReadOnly:     true,
-			RelativePath: repoProto.GetRelativePath(),
+			RelativePath: originalRepo.GetRelativePath(),
 		})
 		if err != nil {
 			g.logger.WithError(err).Error("generate bundle: no transaction found")
@@ -137,7 +139,7 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 		// bundle generation. So once the bundle is generated, we must abort
 		// to free the snapshot.
 		defer func() { _ = ntx.Rollback(gCtx) }()
-		bundlePath = bundleRelativePath(repoProto, defaultBundle)
+		bundlePath = bundleRelativePath(originalRepo, defaultBundle)
 	}
 
 	writer := backup.NewLazyWriter(func() (io.WriteCloser, error) {
@@ -174,6 +176,17 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 // SignedURL returns a public URL to give anyone access to download the bundle from.
 func (g *GenerationManager) SignedURL(ctx context.Context, repo storage.Repository) (string, error) {
 	relativePath := bundleRelativePath(repo, defaultBundle)
+
+	repoProto, ok := repo.(*gitalypb.Repository)
+	if !ok {
+		return "", fmt.Errorf("unexpected repository type %t", repo)
+	}
+
+	if tx := storage.ExtractTransaction(ctx); tx != nil {
+		origRepo := tx.OriginalRepository(repoProto)
+		relativePath = bundleRelativePath(origRepo, defaultBundle)
+	}
+
 	return g.sink.signedURL(ctx, relativePath)
 }
 

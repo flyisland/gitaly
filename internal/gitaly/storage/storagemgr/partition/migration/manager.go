@@ -160,8 +160,6 @@ func (m *migrationManager) performMigrations(ctx context.Context, opts storage.B
 	if err != nil {
 		return fmt.Errorf("begin migration update: %w", err)
 	}
-	ctx = storage.ContextWithTransaction(ctx, txn)
-
 	defer func() {
 		if returnedErr != nil {
 			if err := txn.Rollback(ctx); err != nil {

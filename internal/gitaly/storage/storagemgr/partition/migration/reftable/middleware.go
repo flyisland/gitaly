@@ -37,6 +37,8 @@ func NewUnaryInterceptor(logger log.Logger, registry *protoregistry.Registry, re
 				return nil, fmt.Errorf("extract repository: %w", err)
 			}
 
+			targetRepo = tx.OriginalRepository(targetRepo)
+
 			switch methodInfo.Operation {
 			case protoregistry.OpAccessor:
 				register.RegisterMigration(targetRepo.GetStorageName(), targetRepo.GetRelativePath())
@@ -85,6 +87,8 @@ func NewStreamInterceptor(logger log.Logger, registry *protoregistry.Registry, r
 			if err != nil {
 				return fmt.Errorf("extract repository: %w", err)
 			}
+
+			targetRepo = tx.OriginalRepository(targetRepo)
 
 			switch methodInfo.Operation {
 			case protoregistry.OpAccessor:

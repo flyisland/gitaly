@@ -69,8 +69,7 @@ func setupObjectReader(t *testing.T, ctx context.Context) (config.Cfg, ObjectCon
 	})
 	repoExecutor := newRepoExecutor(t, cfg, repo)
 
-	locator := config.NewLocator(cfg)
-	cache := newCache(1*time.Hour, 1000, helper.NewTimerTicker(defaultEvictionInterval), locator)
+	cache := newCache(1*time.Hour, 1000, helper.NewTimerTicker(defaultEvictionInterval))
 	t.Cleanup(cache.Stop)
 
 	objectReader, cancel, err := cache.ObjectReader(ctx, repoExecutor)

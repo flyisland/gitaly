@@ -66,7 +66,7 @@ func remove(
 		}
 	}
 
-	tempDir, err := locator.TempDir(ctx, repository.GetStorageName())
+	tempDir, err := locator.TempDir(repository.GetStorageName())
 	if err != nil {
 		return structerr.NewInternal("temporary directory: %w", err)
 	}
