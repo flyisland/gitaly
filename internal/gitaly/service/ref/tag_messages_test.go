@@ -104,5 +104,5 @@ func readAllMessagesFromClient(t *testing.T, c gitalypb.RefService_GetTagMessage
 		currentMessage.Message = append(currentMessage.Message, resp.GetMessage()...)
 	}
 
-	return
+	return messages
 }

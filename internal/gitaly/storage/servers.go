@@ -48,7 +48,7 @@ func ExtractGitalyServers(ctx context.Context) (gitalyServersInfo GitalyServers,
 	if err := unmarshalGitalyServers(gitalyServersJSONEncoded[0], &gitalyServersInfo); err != nil {
 		return nil, err
 	}
-	return
+	return gitalyServersInfo, err
 }
 
 // ExtractGitalyServer extracts server information for a specific storage

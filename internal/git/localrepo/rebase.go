@@ -236,15 +236,15 @@ func getSignatureFromCommitAuthor(author *gitalypb.CommitAuthor) (signature *git
 	// care about timezone
 	timezone := author.GetTimezone()
 	if len(timezone) != 5 {
-		return
+		return signature
 	}
 
 	loc, err := time.Parse("-0700", string(timezone))
 	if err != nil {
-		return
+		return signature
 	}
 
 	signature.When = signature.When.In(loc.Location())
 
-	return
+	return signature
 }

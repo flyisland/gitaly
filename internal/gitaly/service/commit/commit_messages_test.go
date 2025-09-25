@@ -117,5 +117,5 @@ func readAllMessagesFromClient(t *testing.T, c gitalypb.CommitService_GetCommitM
 		currentMessage.Message = append(currentMessage.Message, resp.GetMessage()...)
 	}
 
-	return
+	return messages
 }

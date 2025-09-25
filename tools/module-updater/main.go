@@ -83,7 +83,7 @@ func getInput() (dirLocation string, fromVersion string, toVersion string, err e
 	flag.StringVar(&fromVersion, "from", "", "module version to upgrade from")
 	flag.StringVar(&toVersion, "to", "", "module version to upgrade to")
 	flag.Parse()
-	return
+	return dirLocation, fromVersion, toVersion, err
 }
 
 func isModuleVersion(input string) error {

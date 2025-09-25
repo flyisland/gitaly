@@ -90,5 +90,5 @@ func getSpaceStats(t *testing.T, path string) (available int64, used int64) {
 	// Redundant conversions to handle differences between unix families
 	available = int64(stats.Bavail) * int64(stats.Bsize)                   //nolint:unconvert,nolintlint
 	used = (int64(stats.Blocks) - int64(stats.Bfree)) * int64(stats.Bsize) //nolint:unconvert,nolintlint
-	return
+	return available, used
 }
