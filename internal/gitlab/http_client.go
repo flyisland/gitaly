@@ -13,12 +13,12 @@ import (
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab/client"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/prometheus/metrics"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/version"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/prometheus/metrics"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/version"
 )
 
 var glIDRegex = regexp.MustCompile(`\A[0-9]+\z`)

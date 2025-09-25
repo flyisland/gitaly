@@ -6,9 +6,9 @@ import (
 	"os"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/blackbox"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/version"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/blackbox"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/version"
 )
 
 var flagVersion = flag.Bool("version", false, "Print version and exit")

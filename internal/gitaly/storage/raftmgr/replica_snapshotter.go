@@ -10,11 +10,11 @@ import (
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
-	arc "gitlab.com/gitlab-org/gitaly/v16/internal/archive"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	arc "gitlab.com/gitlab-org/gitaly/v18/internal/archive"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
+	logging "gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 const snapSuffix = ".snap"

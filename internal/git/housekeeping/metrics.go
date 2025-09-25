@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
-	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
+	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
 )
 
 // Metrics stores prometheus metrics of housekeeping tasks.

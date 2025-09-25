@@ -5,7 +5,7 @@ package gitaly;
 import "lint.proto";
 import "shared.proto";
 
-option go_package = "gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb";
+option go_package = "gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb";
 
 // AnalysisService is a gRPC service providing RPCs that analyze objects in a repository.
 service AnalysisService {

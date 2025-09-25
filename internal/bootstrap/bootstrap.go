@@ -9,9 +9,9 @@ import (
 
 	"github.com/cloudflare/tableflip"
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/env"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/env"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"golang.org/x/sys/unix"
 )
 

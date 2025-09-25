@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/archive"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 var objectFiles = []*regexp.Regexp{

@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/sentryhandler"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/proxy"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/sentryhandler"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/proxy"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/interop/grpc_testing"

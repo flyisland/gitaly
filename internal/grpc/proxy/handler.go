@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/sentryhandler"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/sentryhandler"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 )
 
 // GetReferencesConfig is configuration that can be passed to GetReferences in order to change its default behaviour.

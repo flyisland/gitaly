@@ -7,11 +7,11 @@ import (
 	"io/fs"
 
 	"github.com/dgraph-io/badger/v4"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/walk"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue/databasemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/walk"
 )
 
 var repoAssignedKey = []byte("repo_assigned_to_partition")

@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/pktline"
 )
 
 func simulateHTTPClone(gitDir string) {

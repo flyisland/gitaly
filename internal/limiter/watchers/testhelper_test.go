@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/cgroups"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 type testCgroupManager struct {

@@ -5,7 +5,7 @@ package gitaly;
 import "google/protobuf/duration.proto";
 import "google/protobuf/wrappers.proto";
 
-option go_package = "gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb";
+option go_package = "gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb";
 
 // ServiceConfig defines the configuration that allows service owners to publish parameters to be
 // automatically used by all clients of their service. gRPC doesn't export this protobuf. So, we

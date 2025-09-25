@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
 )
 
 // main implements a helper binary for testing subprocess loggers. It sets up a subprocess logger and

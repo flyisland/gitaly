@@ -3,7 +3,7 @@ package gitpipe
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 )
 
 // CatfileInfoIterator is an iterator returned by the Revlist function.

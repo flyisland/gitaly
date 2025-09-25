@@ -7,10 +7,10 @@ import (
 	"maps"
 	"slices"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"go.etcd.io/raft/v3"
 )
 

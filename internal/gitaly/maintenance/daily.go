@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/dontpanic"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/dontpanic"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // StoragesJob runs a job on storages. The string slice param indicates which

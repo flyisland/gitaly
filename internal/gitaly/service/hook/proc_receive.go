@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 
-	gitalyhook "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"gitlab.com/gitlab-org/gitaly/v16/streamio"
+	gitalyhook "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/hook"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/streamio"
 )
 
 func sendProcReceiveHookResponse(stream gitalypb.HookService_ProcReceiveHookServer, code int32, stderr string) error {

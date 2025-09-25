@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 )
 
 // WriteBlobConfig is the configuration used to write blobs into the repository.

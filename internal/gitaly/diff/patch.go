@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 )
 
 // PatchParser defines the parser state required for parsing diffs. Patch output from a git diff

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	diskcache "gitlab.com/gitlab-org/gitaly/v16/internal/cache"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	diskcache "gitlab.com/gitlab-org/gitaly/v18/internal/cache"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )

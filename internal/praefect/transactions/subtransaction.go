@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/voting"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/voting"
 )
 
 // VoteResult represents the outcome of a transaction for a single voter.

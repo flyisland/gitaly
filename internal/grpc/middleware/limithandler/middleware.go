@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/requestinfohandler"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/requestinfohandler"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
 	"google.golang.org/grpc"
 )
 

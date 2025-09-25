@@ -2,7 +2,7 @@ package storagemgr
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
+	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
 )
 
 // Metrics contains the unscoped collected by StorageManager.

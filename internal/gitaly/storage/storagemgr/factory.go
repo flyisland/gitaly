@@ -1,9 +1,9 @@
 package storagemgr
 
 import (
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/node"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue/databasemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/node"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // Factory is a factory type that can instantiate new storages.

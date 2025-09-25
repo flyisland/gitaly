@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/backoff"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/backoff"
 )
 
 var (

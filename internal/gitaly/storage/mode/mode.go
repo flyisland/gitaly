@@ -5,7 +5,7 @@ package mode
 import (
 	"io/fs"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode/permission"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode/permission"
 )
 
 const (

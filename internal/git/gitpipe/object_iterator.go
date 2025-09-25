@@ -1,6 +1,6 @@
 package gitpipe
 
-import "gitlab.com/gitlab-org/gitaly/v16/internal/git"
+import "gitlab.com/gitlab-org/gitaly/v18/internal/git"
 
 // ObjectIterator is a common interface that is shared across the pipeline steps that work with
 // objects.

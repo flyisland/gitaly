@@ -7,7 +7,7 @@ import "google/protobuf/timestamp.proto";
 import "lint.proto";
 import "shared.proto";
 
-option go_package = "gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb";
+option go_package = "gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb";
 
 // CommitService is a service which provides RPCs that interact with Git
 // commits.
@@ -231,7 +231,7 @@ message ListCommitsRequest {
   // order is the order in which commits should be traversed. Please refer to
   // the enum's documentation for further information.
   Order order = 4;
-  
+
   // max_parents will skip all commits which have more than the specified number
   // of parents. If set to `0`, no filtering by parents will happen. If set to
   // `1`, all merge commits will be omitted.
@@ -255,10 +255,10 @@ message ListCommitsRequest {
   // author will only list commits whose author matches the given pattern,
   // which is a regular expression.
   bytes author = 10;
-  
+
   // reverse will cause all commits to be listed in reverse.
   bool reverse = 11;
-  
+
   // ignore_case will apply case-sensitive behaviour while regex matching.
   bool ignore_case = 12;
 

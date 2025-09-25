@@ -20,8 +20,8 @@ import (
 	cgrps "github.com/containerd/cgroups/v3"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/prometheus/client_golang/prometheus"
-	cgroupscfg "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/cgroups"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	cgroupscfg "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // cfs_period_us hardcoded to be 100ms.

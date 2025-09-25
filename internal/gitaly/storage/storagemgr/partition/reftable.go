@@ -11,9 +11,9 @@ import (
 	"runtime/trace"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/reftable"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/safe"
 )
 
 // reftableRecorder records the new reftables written during a transaction, and implements

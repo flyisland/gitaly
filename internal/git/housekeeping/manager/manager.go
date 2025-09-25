@@ -5,13 +5,13 @@ import (
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/transaction"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // Manager is a housekeeping manager. It is supposed to handle housekeeping tasks for repositories

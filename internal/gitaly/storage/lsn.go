@@ -5,7 +5,7 @@ import (
 	"math"
 	"strconv"
 
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // lsnFormatBase is the base used when formatting an LSN as a string.

@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 )
 
 // RefUpdateType represents the type of update a FetchStatusLine is. The

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore/glsql"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore/glsql"
 )
 
 // CorrelationIDKey is the key that is used to store the correlation ID for a specific replication job as part of the

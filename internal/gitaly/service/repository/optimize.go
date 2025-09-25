@@ -6,12 +6,12 @@ import (
 	"net/url"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
-	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/manager"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/config"
+	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/manager"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 func (s *server) OptimizeRepository(ctx context.Context, in *gitalypb.OptimizeRepositoryRequest) (*gitalypb.OptimizeRepositoryResponse, error) {

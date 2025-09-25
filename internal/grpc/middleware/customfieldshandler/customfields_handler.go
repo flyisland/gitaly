@@ -4,7 +4,7 @@ import (
 	"context"
 
 	grpcmw "github.com/grpc-ecosystem/go-grpc-middleware"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc"
 )
 

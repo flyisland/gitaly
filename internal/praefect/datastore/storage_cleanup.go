@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
 )
 
 // ClusterPath represents path on the cluster to the storage.

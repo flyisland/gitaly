@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"golang.org/x/sys/unix"
 )
 

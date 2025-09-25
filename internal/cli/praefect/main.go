@@ -20,8 +20,8 @@ import (
 	"slices"
 
 	"github.com/urfave/cli/v3"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/service"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/version"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/service"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/version"
 )
 
 func init() {

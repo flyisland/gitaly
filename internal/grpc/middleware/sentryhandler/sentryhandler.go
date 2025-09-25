@@ -10,8 +10,8 @@ import (
 
 	sentry "github.com/getsentry/sentry-go"
 	grpcmw "github.com/grpc-ecosystem/go-grpc-middleware/v2"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/requestinfohandler"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/requestinfohandler"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 )

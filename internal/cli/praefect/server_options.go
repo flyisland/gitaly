@@ -2,7 +2,7 @@
 
 package praefect
 
-import "gitlab.com/gitlab-org/gitaly/v16/internal/praefect"
+import "gitlab.com/gitlab-org/gitaly/v18/internal/praefect"
 
 // defaultServerOptions are only required by our testing infrastructure. When spawning Praefect as
 // an external, proxying executable we want to be able to use test-only interceptors. So if the

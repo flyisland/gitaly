@@ -3,7 +3,7 @@ package repocleaner
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // LogWarnAction is an implementation of the Action interface that allows to log a warning message

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/service"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/service"
 )
 
 func newCheckCommand(checkFuncs []service.CheckFunc) *cli.Command {

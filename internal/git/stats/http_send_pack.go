@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/pktline"
 )
 
 // ResponseBody returns how long it took to receive the last bytes of the response body.

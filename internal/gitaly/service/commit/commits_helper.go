@@ -3,11 +3,11 @@ package commit
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	gitlog "gitlab.com/gitlab-org/gitaly/v16/internal/git/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/chunk"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	gitlog "gitlab.com/gitlab-org/gitaly/v18/internal/git/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/chunk"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 func (s *server) sendCommits(

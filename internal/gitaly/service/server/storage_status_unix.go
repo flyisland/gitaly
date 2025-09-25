@@ -3,8 +3,8 @@
 package server
 
 import (
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"golang.org/x/sys/unix"
 )
 

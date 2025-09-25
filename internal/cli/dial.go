@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
+	gitalyauth "gitlab.com/gitlab-org/gitaly/v18/auth"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
 	"google.golang.org/grpc"
 )
 

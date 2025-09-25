@@ -3,7 +3,7 @@ package structerr
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // FieldsProducer extracts metadata from err if it contains a `structerr.Error` and exposes it as

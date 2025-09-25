@@ -46,9 +46,9 @@ linters:
       exclude-functions:
         - (*database/sql.DB).Close
         - (*database/sql.Rows).Close
-        - (*gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel.ServerConn).Close
-        - (*gitlab.com/gitlab-org/gitaly/v16/internal/streamcache.pipe).Close
-        - (*gitlab.com/gitlab-org/gitaly/v16/internal/streamcache.pipeReader).Close
+        - (*gitlab.com/gitlab-org/gitaly/v18/internal/grpc/sidechannel.ServerConn).Close
+        - (*gitlab.com/gitlab-org/gitaly/v18/internal/streamcache.pipe).Close
+        - (*gitlab.com/gitlab-org/gitaly/v18/internal/streamcache.pipeReader).Close
         - (*google.golang.org/grpc.ClientConn).Close
         - (*google.golang.org/grpc.ServerConn).Close
         - (*io.PipeReader).Close
@@ -169,16 +169,16 @@ linters:
           error_wrap:
             included-functions:
               - fmt.Errorf
-              - gitlab.com/gitlab-org/gitaly/v16/internal/structerr.*
+              - gitlab.com/gitlab-org/gitaly/v18/internal/structerr.*
           string_interpolation_quote:
             included-functions:
               - fmt.*
           testhelper_run:
             included-functions:
-              - gitlab.com/gitlab-org/gitaly/v16/internal/testhelper.Run
+              - gitlab.com/gitlab-org/gitaly/v18/internal/testhelper.Run
           unavailable_code:
             included-functions:
-              - gitlab.com/gitlab-org/gitaly/v16/internal/structerr.NewUnavailable
+              - gitlab.com/gitlab-org/gitaly/v18/internal/structerr.NewUnavailable
   exclusions:
     generated: lax
     rules:

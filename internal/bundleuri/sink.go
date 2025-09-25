@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gocloud.dev/blob"
 
 	_ "gocloud.dev/blob/azureblob" // register Azure driver

@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/urfave/cli/v3"
-	gitalycmd "gitlab.com/gitlab-org/gitaly/v16/cmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	gitalycmd "gitlab.com/gitlab-org/gitaly/v18/cmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 const validationErrorCode = 2

@@ -3,7 +3,7 @@ package trace2hooks
 import (
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/trace2"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/trace2"
 )
 
 func createExampleTrace(startTime time.Time) *trace2.Trace {

@@ -3,12 +3,12 @@ package server
 import (
 	"sync"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/cache"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/housekeeping"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/limithandler"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/cache"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/limithandler"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc"
 )
 

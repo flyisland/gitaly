@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/trace2"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/trace2"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 var statsIntData = map[string]string{

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 )
 
 var errTransactionNotFound = errors.New("transaction not found")

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/errors/cfgerror"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/duration"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/errors/cfgerror"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/duration"
 )
 
 func TestConfig_Validate(t *testing.T) {

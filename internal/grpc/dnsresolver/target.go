@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 // ValidateURL validates Gitaly address URL having dns scheme. The URL follows three forms:

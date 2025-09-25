@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 )
 
 func (s *server) removeOriginInRepo(ctx context.Context, repository gitcmd.RepositoryExecutor) error {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	cli "gitlab.com/gitlab-org/gitaly/v16/internal/cli/praefect"
+	cli "gitlab.com/gitlab-org/gitaly/v18/internal/cli/praefect"
 )
 
 func main() {

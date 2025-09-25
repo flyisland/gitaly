@@ -3,7 +3,7 @@ package migration
 import (
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 )
 
 // StateManager is used to manipulate the stored state of migrations.

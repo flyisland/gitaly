@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 )
 
 // CapabilitiesGitConfig returns a slice of gitcmd.ConfigPairs that can be injected

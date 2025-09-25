@@ -3,8 +3,8 @@
 package praefect
 
 import (
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testserver"
 )
 
 // defaultServerOptions are only required by our testing infrastructure. When spawning Praefect as

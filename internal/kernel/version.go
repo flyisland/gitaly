@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"sync"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 // Version models a kernel version.

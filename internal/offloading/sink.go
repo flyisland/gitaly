@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/backoff"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/backoff"
 	"gocloud.dev/blob"
 	"golang.org/x/sync/errgroup"
 
