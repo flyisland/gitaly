@@ -16,6 +16,7 @@ client:
   boot_disk_size: 20
   boot_disk_type: "pd-balanced"
 
+gitaly_revision: HEAD
 gitaly_instances:
   - name: "large"
     machine_type: "n2d-standard-16"
@@ -69,3 +70,24 @@ repositories:
         - "app"
         - "rubocop"
         - "qa"
+  - name: gitaly
+    include_in_test: true
+    remote: "https://gitlab.com/gitlab-org/gitaly.git"
+    revision: "4d78df8cb5c6b3abfef5530830dba6c67d9d4c53"
+    testdata:
+      commits:
+        - "765d81272feb53bcc0c50199183b4514c5ef7a73"
+        - "25965387d1a0a91d226912649180f38c04d89a36"
+        - "552d12d94dd24ad8dff93856e77a08b6a96f1d3e"
+      refs:
+        - "refs/heads/master"
+        - "refs/tags/v18.1.5"
+        - "refs/tags/v17.11.7"
+      files:
+        - "README.md"
+        - "internal/gitaly/rangediff/range_diff_test.go"
+        - "proto/go/gitalypb/blob.pb.go"
+      directories:
+        - "internal"
+        - "proto"
+        - "internal/gitaly/service/raft"
