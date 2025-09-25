@@ -19,10 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RaftService_SendMessage_FullMethodName   = "/gitaly.RaftService/SendMessage"
-	RaftService_SendSnapshot_FullMethodName  = "/gitaly.RaftService/SendSnapshot"
-	RaftService_JoinCluster_FullMethodName   = "/gitaly.RaftService/JoinCluster"
-	RaftService_GetPartitions_FullMethodName = "/gitaly.RaftService/GetPartitions"
+	RaftService_SendMessage_FullMethodName    = "/gitaly.RaftService/SendMessage"
+	RaftService_SendSnapshot_FullMethodName   = "/gitaly.RaftService/SendSnapshot"
+	RaftService_JoinCluster_FullMethodName    = "/gitaly.RaftService/JoinCluster"
+	RaftService_GetPartitions_FullMethodName  = "/gitaly.RaftService/GetPartitions"
+	RaftService_GetClusterInfo_FullMethodName = "/gitaly.RaftService/GetClusterInfo"
 )
 
 // RaftServiceClient is the client API for RaftService service.
@@ -43,6 +44,9 @@ type RaftServiceClient interface {
 	// partition states, and replica health. This is useful for monitoring and debugging.
 	// Returns a stream of partition information, one response per partition.
 	GetPartitions(ctx context.Context, in *GetPartitionsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetPartitionsResponse], error)
+	// GetClusterInfo retrieves cluster-wide statistics and overview information.
+	// This is a unary RPC that returns only aggregated statistics, not partition details.
+	GetClusterInfo(ctx context.Context, in *RaftClusterInfoRequest, opts ...grpc.CallOption) (*RaftClusterInfoResponse, error)
 }
 
 type raftServiceClient struct {
@@ -108,6 +112,16 @@ func (c *raftServiceClient) GetPartitions(ctx context.Context, in *GetPartitions
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RaftService_GetPartitionsClient = grpc.ServerStreamingClient[GetPartitionsResponse]
 
+func (c *raftServiceClient) GetClusterInfo(ctx context.Context, in *RaftClusterInfoRequest, opts ...grpc.CallOption) (*RaftClusterInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RaftClusterInfoResponse)
+	err := c.cc.Invoke(ctx, RaftService_GetClusterInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RaftServiceServer is the server API for RaftService service.
 // All implementations must embed UnimplementedRaftServiceServer
 // for forward compatibility.
@@ -126,6 +140,9 @@ type RaftServiceServer interface {
 	// partition states, and replica health. This is useful for monitoring and debugging.
 	// Returns a stream of partition information, one response per partition.
 	GetPartitions(*GetPartitionsRequest, grpc.ServerStreamingServer[GetPartitionsResponse]) error
+	// GetClusterInfo retrieves cluster-wide statistics and overview information.
+	// This is a unary RPC that returns only aggregated statistics, not partition details.
+	GetClusterInfo(context.Context, *RaftClusterInfoRequest) (*RaftClusterInfoResponse, error)
 	mustEmbedUnimplementedRaftServiceServer()
 }
 
@@ -147,6 +164,9 @@ func (UnimplementedRaftServiceServer) JoinCluster(context.Context, *JoinClusterR
 }
 func (UnimplementedRaftServiceServer) GetPartitions(*GetPartitionsRequest, grpc.ServerStreamingServer[GetPartitionsResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method GetPartitions not implemented")
+}
+func (UnimplementedRaftServiceServer) GetClusterInfo(context.Context, *RaftClusterInfoRequest) (*RaftClusterInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetClusterInfo not implemented")
 }
 func (UnimplementedRaftServiceServer) mustEmbedUnimplementedRaftServiceServer() {}
 func (UnimplementedRaftServiceServer) testEmbeddedByValue()                     {}
@@ -212,6 +232,24 @@ func _RaftService_GetPartitions_Handler(srv interface{}, stream grpc.ServerStrea
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type RaftService_GetPartitionsServer = grpc.ServerStreamingServer[GetPartitionsResponse]
 
+func _RaftService_GetClusterInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RaftClusterInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RaftServiceServer).GetClusterInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RaftService_GetClusterInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RaftServiceServer).GetClusterInfo(ctx, req.(*RaftClusterInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RaftService_ServiceDesc is the grpc.ServiceDesc for RaftService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -222,6 +260,10 @@ var RaftService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "JoinCluster",
 			Handler:    _RaftService_JoinCluster_Handler,
+		},
+		{
+			MethodName: "GetClusterInfo",
+			Handler:    _RaftService_GetClusterInfo_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
