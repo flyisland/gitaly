@@ -30,6 +30,10 @@ No changes.
 
 No changes.
 
+## 18.2.7 (2025-09-25)
+
+No changes.
+
 ## 18.2.6 (2025-09-09)
 
 No changes.
