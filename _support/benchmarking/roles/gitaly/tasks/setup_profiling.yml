@@ -25,10 +25,17 @@
     dest: /src/flamegraph
   become_user: git
 
-- name: Install stackcollapse-perf.pl as stackcollapse
+- name: Install stackcollapse-perf.pl as stackcollapse-perf
   copy:
     src: /src/flamegraph/stackcollapse-perf.pl
-    dest: /usr/local/bin/stackcollapse
+    dest: /usr/local/bin/stackcollapse-perf
+    mode: 0755
+    remote_src: true
+
+- name: Install stackcollapse-bpftrace.pl as stackcollapse-bpftrace
+  copy:
+    src: /src/flamegraph/stackcollapse-bpftrace.pl
+    dest: /usr/local/bin/stackcollapse-bpftrace
     mode: 0755
     remote_src: true
 

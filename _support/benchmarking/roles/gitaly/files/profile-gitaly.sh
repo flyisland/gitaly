@@ -36,7 +36,7 @@ generate_flamegraphs() {
 	perf script --header --input="${gitaly_perf_data}" \
 	  | gzip > "${gitaly_perf_txt}"
     zcat "${gitaly_perf_txt}" \
-	  | stackcollapse --kernel \
+	  | stackcollapse-perf --kernel \
 	  | flamegraph --hash --colors=perl > "${gitaly_perf_svg}"
 
 	all_perf_txt="${out_dir}/all-perf.txt.gz"
@@ -44,7 +44,7 @@ generate_flamegraphs() {
 	perf script --header --input="${all_perf_data}" \
 		| gzip > "${all_perf_txt}"
     zcat "${all_perf_txt}" \
-		| stackcollapse --kernel \
+		| stackcollapse-perf --kernel \
 		| flamegraph --hash --colors=perl > "${all_perf_svg}"
 }
 
