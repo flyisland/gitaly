@@ -703,3 +703,58 @@ qa:nightly-praefect-migration-test:
     project: gitlab-org/quality/praefect-migration-testing
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+qa:benchmark:performance:
+  stage: qa
+  image: google/cloud-sdk:slim
+  needs: []
+  variables:
+    GITALY_REVISION: $CI_COMMIT_SHA
+    BENCHMARK_INSTANCE_NAME: "gitaly-ci-${CI_PIPELINE_ID}"
+    BENCHMARK_DURATION: "2m"
+    GCP_BENCHMARKING_PROJECT_NAME: "gitaly-benchmark-0150d6cf"
+    GCP_BENCHMARKING_SA_KEY_FILE: "gitaly-benchmarking-sa.json"
+    GCP_SSH_KEY_NAME: "gitaly-bench"
+    EXPERIMENT: $CI_COMMIT_REF_SLUG
+  before_script:
+    # downlaod secure files to default location .secure_files
+    - curl --silent "https://gitlab.com/gitlab-org/incubation-engineering/mobile-devops/download-secure-files/-/raw/main/installer" | bash
+    # auth with gcp project
+    - export CI_SSH_PRIVATE_KEY_FILE="$CI_PROJECT_DIR/.secure_files/$GCP_SSH_KEY_NAME"
+    - export CI_SSH_PUBKEY_FILE="$CI_PROJECT_DIR/.secure_files/$GCP_SSH_KEY_NAME.pub"
+    - gcloud auth activate-service-account --key-file=".secure_files/$GCP_BENCHMARKING_SA_KEY_FILE" --quiet
+    - gcloud config set project $GCP_BENCHMARKING_PROJECT_NAME --quiet
+    - apt-get update && apt-get install -y python3 python3-pip ansible unzip openssh-client
+    # Install Terraform from HashiCorp repository
+    # Download the key
+    - curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    # Add the repository with signed-by option
+    - echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+    - apt-get update
+    - apt-get install -y terraform
+    - terraform version
+    # Setup SSH agent and add the key
+    - eval $(ssh-agent -s)
+    - chmod 600 "$CI_SSH_PRIVATE_KEY_FILE"
+    - ssh-add "$CI_SSH_PRIVATE_KEY_FILE"
+    - mkdir -p ~/.ssh
+    - echo "StrictHostKeyChecking no" >> ~/.ssh/config
+  script:
+    - cd _support/benchmarking
+    - export EXPERIMENT="${EXPERIMENT}"
+    - ./create-benchmark-instance --extra-vars "gitaly_revision=${GITALY_REVISION}"
+    - ./configure-benchmark-instance
+    - ./run-benchmarks --extra-vars "profile=false duration=${BENCHMARK_DURATION}"
+  after_script:
+    - cd _support/benchmarking
+    - ./destroy-benchmark-instance || true
+    - cd ../..
+    - rm -rf .secure_files
+  artifacts:
+    paths:
+      - "_support/benchmarking/experiments/${EXPERIMENT}/results/"
+    expire_in: 4 week
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+      when: manual
+      allow_failure: true

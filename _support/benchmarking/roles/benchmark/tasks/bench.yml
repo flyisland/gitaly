@@ -51,7 +51,7 @@
     mode: '0700'
     owner: git
     group: git
-
+    
 - name: Copy repositories config
   copy:
     content: "{{ config['repositories'] | to_nice_json }}"

@@ -15,7 +15,7 @@
 
     - name: ssh_pubkey
       prompt: "Enter the path to your SSH public key"
-      default: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519.pub"
+      default: "{{ lookup('env', 'CI_SSH_PUBKEY_FILE') | default(lookup('env', 'HOME') ~ '/.ssh/id_ed25519.pub', true) }}"
       private: false
   roles:
     - deploy

@@ -29,6 +29,12 @@ All scripts must be run with the `EXPERIMENT` environment variable set to the na
 Experiments are deployed using Terraform workspaces, so it's possible to deploy multiple experiments simultaneously.
 Feel free to export the environment varible instead of redefining it for each command.
 
+## Automated in Gitaly's CICD Pipeline
+1. Simply create a branch name that has the same name as the experiment name directory created inside the `_support/benchmarking/experiments` directory.
+2. When you raise a merge request, there will be a `qa:benchmark:performance` job that can be run. It is an optional job so click run to trigger it.
+3. Artifacts can be downloaded straight from the job artifacts. 
+
+## Running manually on local machine
 ### 1. Setup your environment
 
 1. Ensure that [`gcloud`](https://cloud.google.com/sdk/docs/install) is installed and available on your path.
