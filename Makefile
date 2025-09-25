@@ -731,6 +731,14 @@ ${BUILD_DIR}/bin/gitaly:   build-bundled-git
 ${BUILD_DIR}/bin/gitaly:   GO_BUILD_TAGS = ${SERVER_BUILD_TAGS}
 ${BUILD_DIR}/bin/gitaly:   ${GITALY_PACKED_EXECUTABLES} ${GIT_PACKED_EXECUTABLES}
 ${BUILD_DIR}/bin/praefect: GO_BUILD_TAGS = ${SERVER_BUILD_TAGS}
+
+## Here we are resetting GO_BUILD_TAGS to an empty list of tags for all binaries
+## except `gitaly` and `praefect`. Without this override, all binaries in
+## GITALY_PACKED_EXECUTABLES will be build with SERVER_BUILD_TAGS, which we
+## don't want. See MR here for more details:
+## https://gitlab.com/gitlab-org/gitaly/-/merge_requests/8173
+${GITALY_PACKED_EXECUTABLES}: GO_BUILD_TAGS =
+
 ${GITALY_EXECUTABLES}: ${BUILD_DIR}/bin/%: clear-go-build-cache-if-needed .FORCE
 	${Q}cd ${SOURCE_DIR} && go build -o "$@" -ldflags '-B gobuildid ${GO_LDFLAGS}' -tags "${GO_BUILD_TAGS}" $(addprefix ${SOURCE_DIR}/cmd/,$(@F))
 
