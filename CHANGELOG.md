@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.4.1 (2025-09-25)
+
+No changes.
+
 ## 18.4.0 (2025-09-17)
 
 ### Added (1 change)
