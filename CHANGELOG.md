@@ -14,6 +14,10 @@ No changes.
 
 - [Handle ErrPathTraversal error](gitlab-org/gitaly@6749c86ccfe5fc53f0a5ce4a3c7549d6d491609e) ([merge request](gitlab-org/gitaly!8119))
 
+## 18.3.3 (2025-09-25)
+
+No changes.
+
 ## 18.3.2 (2025-09-09)
 
 No changes.
