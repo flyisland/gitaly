@@ -685,6 +685,568 @@ func TestServer_GetClusterInfo_ReplicaUnavailable(t *testing.T) {
 	})
 }
 
+func TestServer_GetPartitions_RelativePathFiltering(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageNameOne))
+	cfg.Raft.ClusterID = clusterID
+	logger := testhelper.SharedLogger(t)
+
+	dbPath := testhelper.TempDir(t)
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(logger log.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	node, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+	require.NoError(t, err)
+
+	// Set up multiple partitions with different repository paths
+	stor, err := node.GetStorage(storageNameOne)
+	require.NoError(t, err)
+
+	raftStorage, ok := stor.(*raftmgr.RaftEnabledStorage)
+	require.True(t, ok)
+	routingTable := raftStorage.GetRoutingTable()
+
+	partitionKey1 := raftmgr.NewPartitionKey(storageNameOne, 1)
+	partitionKey2 := raftmgr.NewPartitionKey(storageNameOne, 2)
+
+	// Insert test entries with different relative paths
+	testEntry1 := raftmgr.RoutingTableEntry{
+		RelativePath: "@hashed/ab/cd/abcd1234.git",
+		Replicas: []*gitalypb.ReplicaID{
+			{
+				PartitionKey: partitionKey1,
+				MemberId:     1,
+				StorageName:  storageNameOne,
+				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				Metadata: &gitalypb.ReplicaID_Metadata{
+					Address: "gitaly-1.example.com:8075",
+				},
+			},
+		},
+		LeaderID: 1,
+		Term:     5,
+		Index:    100,
+	}
+
+	testEntry2 := raftmgr.RoutingTableEntry{
+		RelativePath: "@hashed/ef/gh/efgh5678.git",
+		Replicas: []*gitalypb.ReplicaID{
+			{
+				PartitionKey: partitionKey2,
+				MemberId:     2,
+				StorageName:  storageNameOne,
+				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				Metadata: &gitalypb.ReplicaID_Metadata{
+					Address: "gitaly-2.example.com:8075",
+				},
+			},
+		},
+		LeaderID: 2,
+		Term:     3,
+		Index:    50,
+	}
+
+	err = routingTable.UpsertEntry(testEntry1)
+	require.NoError(t, err)
+	err = routingTable.UpsertEntry(testEntry2)
+	require.NoError(t, err)
+
+	server := NewServer(&service.Dependencies{
+		Logger: logger,
+		Cfg:    cfg,
+		Node:   node,
+	})
+
+	t.Run("filter by existing relative path", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			RelativePath: "@hashed/ab/cd/abcd1234.git",
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey1, resp.GetPartitionKey())
+		require.Equal(t, "@hashed/ab/cd/abcd1234.git", resp.GetRelativePath())
+		require.Equal(t, uint64(1), resp.GetLeaderId())
+	})
+
+	t.Run("filter by different relative path", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			RelativePath: "@hashed/ef/gh/efgh5678.git",
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey2, resp.GetPartitionKey())
+		require.Equal(t, "@hashed/ef/gh/efgh5678.git", resp.GetRelativePath())
+		require.Equal(t, uint64(2), resp.GetLeaderId())
+	})
+
+	t.Run("filter by nonexistent relative path", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			RelativePath: "@hashed/nonexistent/repo.git",
+		}, stream)
+		require.NoError(t, err)
+		require.Empty(t, stream.responses, "should return empty stream for nonexistent repository")
+	})
+
+	t.Run("relative path filtering with replica details", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			RelativePath:          "@hashed/ab/cd/abcd1234.git",
+			IncludeReplicaDetails: true,
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey1, resp.GetPartitionKey())
+		require.Equal(t, "@hashed/ab/cd/abcd1234.git", resp.GetRelativePath())
+		require.Len(t, resp.GetReplicas(), 1)
+
+		replica := resp.GetReplicas()[0]
+		require.Equal(t, uint64(1), replica.GetReplicaId().GetMemberId())
+		require.True(t, replica.GetIsLeader())
+	})
+}
+
+func TestServer_GetPartitions_IncludeRelativePaths(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageNameOne))
+	cfg.Raft.ClusterID = clusterID
+	logger := testhelper.SharedLogger(t)
+
+	dbPath := testhelper.TempDir(t)
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(logger log.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	node, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+	require.NoError(t, err)
+
+	stor, err := node.GetStorage(storageNameOne)
+	require.NoError(t, err)
+
+	raftStorage, ok := stor.(*raftmgr.RaftEnabledStorage)
+	require.True(t, ok)
+	routingTable := raftStorage.GetRoutingTable()
+
+	partitionKey := raftmgr.NewPartitionKey(storageNameOne, 1)
+
+	// Insert a single entry for this test
+	testEntry := raftmgr.RoutingTableEntry{
+		RelativePath: "@hashed/ab/cd/abcd1234.git",
+		Replicas: []*gitalypb.ReplicaID{
+			{
+				PartitionKey: partitionKey,
+				MemberId:     1,
+				StorageName:  storageNameOne,
+				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				Metadata: &gitalypb.ReplicaID_Metadata{
+					Address: "gitaly-1.example.com:8075",
+				},
+			},
+		},
+		LeaderID: 1,
+		Term:     5,
+		Index:    100,
+	}
+
+	err = routingTable.UpsertEntry(testEntry)
+	require.NoError(t, err)
+
+	server := NewServer(&service.Dependencies{
+		Logger: logger,
+		Cfg:    cfg,
+		Node:   node,
+	})
+
+	t.Run("include relative paths disabled by default", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			PartitionKey: partitionKey,
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey, resp.GetPartitionKey())
+		require.Empty(t, resp.GetRelativePaths(), "should not include relative paths by default")
+		require.NotEmpty(t, resp.GetRelativePath(), "should still have the single relative path for backward compatibility")
+	})
+
+	t.Run("include relative paths when enabled", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			PartitionKey:         partitionKey,
+			IncludeRelativePaths: true,
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey, resp.GetPartitionKey())
+		require.Len(t, resp.GetRelativePaths(), 1, "should include relative paths for the partition")
+
+		// Verify the path is present
+		actualPaths := resp.GetRelativePaths()
+		require.Contains(t, actualPaths, "@hashed/ab/cd/abcd1234.git", "should return the repository path in the partition")
+	})
+
+	t.Run("include relative paths with replica details", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			PartitionKey:          partitionKey,
+			IncludeRelativePaths:  true,
+			IncludeReplicaDetails: true,
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey, resp.GetPartitionKey())
+		require.Len(t, resp.GetRelativePaths(), 1, "should include relative paths")
+		require.Len(t, resp.GetReplicas(), 1, "should include replica details")
+
+		replica := resp.GetReplicas()[0]
+		require.Equal(t, uint64(1), replica.GetReplicaId().GetMemberId())
+	})
+}
+
+func TestServer_MapRepositoryToPartitionKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageNameOne, storageNameTwo))
+	cfg.Raft.ClusterID = clusterID
+	logger := testhelper.SharedLogger(t)
+
+	dbPath := testhelper.TempDir(t)
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(logger log.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	node, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+	require.NoError(t, err)
+
+	server := NewServer(&service.Dependencies{
+		Logger: logger,
+		Cfg:    cfg,
+		Node:   node,
+	})
+
+	// Set up routing table entries in multiple storages
+	partitionKey1 := raftmgr.NewPartitionKey(storageNameOne, 1)
+	partitionKey2 := raftmgr.NewPartitionKey(storageNameTwo, 2)
+
+	// Storage 1
+	stor1, err := node.GetStorage(storageNameOne)
+	require.NoError(t, err)
+	raftStorage1, ok := stor1.(*raftmgr.RaftEnabledStorage)
+	require.True(t, ok)
+	routingTable1 := raftStorage1.GetRoutingTable()
+
+	testEntry1 := raftmgr.RoutingTableEntry{
+		RelativePath: "@hashed/test1/repo.git",
+		Replicas: []*gitalypb.ReplicaID{
+			{
+				PartitionKey: partitionKey1,
+				MemberId:     1,
+				StorageName:  storageNameOne,
+			},
+		},
+		LeaderID: 1,
+		Term:     5,
+		Index:    100,
+	}
+	err = routingTable1.UpsertEntry(testEntry1)
+	require.NoError(t, err)
+
+	// Storage 2
+	stor2, err := node.GetStorage(storageNameTwo)
+	require.NoError(t, err)
+	raftStorage2, ok := stor2.(*raftmgr.RaftEnabledStorage)
+	require.True(t, ok)
+	routingTable2 := raftStorage2.GetRoutingTable()
+
+	testEntry2 := raftmgr.RoutingTableEntry{
+		RelativePath: "@hashed/test2/repo.git",
+		Replicas: []*gitalypb.ReplicaID{
+			{
+				PartitionKey: partitionKey2,
+				MemberId:     2,
+				StorageName:  storageNameTwo,
+			},
+		},
+		LeaderID: 2,
+		Term:     3,
+		Index:    50,
+	}
+	err = routingTable2.UpsertEntry(testEntry2)
+	require.NoError(t, err)
+
+	t.Run("find existing repository in storage 1", func(t *testing.T) {
+		partitionKey, err := server.mapRepositoryToPartitionKey(ctx, node, "@hashed/test1/repo.git")
+		require.NoError(t, err)
+		require.NotNil(t, partitionKey)
+		require.Equal(t, partitionKey1, partitionKey)
+	})
+
+	t.Run("find existing repository in storage 2", func(t *testing.T) {
+		partitionKey, err := server.mapRepositoryToPartitionKey(ctx, node, "@hashed/test2/repo.git")
+		require.NoError(t, err)
+		require.NotNil(t, partitionKey)
+		require.Equal(t, partitionKey2, partitionKey)
+	})
+
+	t.Run("repository not found returns nil", func(t *testing.T) {
+		partitionKey, err := server.mapRepositoryToPartitionKey(ctx, node, "@hashed/nonexistent/repo.git")
+		require.NoError(t, err)
+		require.Nil(t, partitionKey, "should return nil for nonexistent repository")
+	})
+
+	t.Run("handles context cancellation", func(t *testing.T) {
+		cancelCtx, cancel := context.WithCancel(ctx)
+		cancel() // Cancel immediately
+
+		partitionKey, err := server.mapRepositoryToPartitionKey(cancelCtx, node, "@hashed/test1/repo.git")
+		require.Error(t, err)
+		require.Nil(t, partitionKey)
+		require.Equal(t, context.Canceled, err)
+	})
+}
+
+func TestServer_CollectRelativePathsForPartition(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageNameOne))
+	cfg.Raft.ClusterID = clusterID
+	logger := testhelper.SharedLogger(t)
+
+	dbPath := testhelper.TempDir(t)
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(logger log.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	node, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+	require.NoError(t, err)
+
+	server := NewServer(&service.Dependencies{
+		Logger: logger,
+		Cfg:    cfg,
+		Node:   node,
+	})
+
+	stor, err := node.GetStorage(storageNameOne)
+	require.NoError(t, err)
+	raftStorage, ok := stor.(*raftmgr.RaftEnabledStorage)
+	require.True(t, ok)
+	routingTable := raftStorage.GetRoutingTable()
+
+	partitionKey := raftmgr.NewPartitionKey(storageNameOne, 1)
+
+	// Add a single entry for this partition
+	testEntry := raftmgr.RoutingTableEntry{
+		RelativePath: "@hashed/ab/cd/abcd1234.git",
+		Replicas: []*gitalypb.ReplicaID{
+			{
+				PartitionKey: partitionKey,
+				MemberId:     1,
+				StorageName:  storageNameOne,
+			},
+		},
+		LeaderID: 1,
+		Term:     5,
+		Index:    100,
+	}
+	err = routingTable.UpsertEntry(testEntry)
+	require.NoError(t, err)
+
+	t.Run("collect all relative paths for partition", func(t *testing.T) {
+		paths, err := server.collectRelativePathsForPartition(ctx, node, partitionKey)
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		require.Contains(t, paths, "@hashed/ab/cd/abcd1234.git")
+	})
+
+	t.Run("empty result for nonexistent partition", func(t *testing.T) {
+		nonexistentPartition := raftmgr.NewPartitionKey(storageNameOne, 999)
+		paths, err := server.collectRelativePathsForPartition(ctx, node, nonexistentPartition)
+		require.NoError(t, err)
+		require.Empty(t, paths)
+	})
+
+	t.Run("handles context cancellation", func(t *testing.T) {
+		cancelCtx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		paths, err := server.collectRelativePathsForPartition(cancelCtx, node, partitionKey)
+		require.Error(t, err)
+		require.Nil(t, paths)
+		require.Equal(t, context.Canceled, err)
+	})
+}
+
+func TestServer_GetPartitions_CombinedFlags(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageNameOne))
+	cfg.Raft.ClusterID = clusterID
+	logger := testhelper.SharedLogger(t)
+
+	dbPath := testhelper.TempDir(t)
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(logger log.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	t.Cleanup(dbMgr.Close)
+
+	node, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
+	require.NoError(t, err)
+
+	stor, err := node.GetStorage(storageNameOne)
+	require.NoError(t, err)
+	raftStorage, ok := stor.(*raftmgr.RaftEnabledStorage)
+	require.True(t, ok)
+	routingTable := raftStorage.GetRoutingTable()
+
+	partitionKey := raftmgr.NewPartitionKey(storageNameOne, 1)
+
+	// Set up one repository
+	testEntry := raftmgr.RoutingTableEntry{
+		RelativePath: "@hashed/target/repo.git",
+		Replicas: []*gitalypb.ReplicaID{
+			{
+				PartitionKey: partitionKey,
+				MemberId:     1,
+				StorageName:  storageNameOne,
+				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				Metadata: &gitalypb.ReplicaID_Metadata{
+					Address: "gitaly-1.example.com:8075",
+				},
+			},
+		},
+		LeaderID: 1,
+		Term:     5,
+		Index:    100,
+	}
+	err = routingTable.UpsertEntry(testEntry)
+	require.NoError(t, err)
+
+	server := NewServer(&service.Dependencies{
+		Logger: logger,
+		Cfg:    cfg,
+		Node:   node,
+	})
+
+	t.Run("relative_path + include_relative_paths + include_replica_details", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			RelativePath:          "@hashed/target/repo.git",
+			IncludeRelativePaths:  true,
+			IncludeReplicaDetails: true,
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey, resp.GetPartitionKey())
+
+		// Should include relative paths for the partition
+		require.Len(t, resp.GetRelativePaths(), 1)
+		require.Contains(t, resp.GetRelativePaths(), "@hashed/target/repo.git")
+
+		// Should include replica details
+		require.Len(t, resp.GetReplicas(), 1)
+		replica := resp.GetReplicas()[0]
+		require.Equal(t, uint64(1), replica.GetReplicaId().GetMemberId())
+		require.True(t, replica.GetIsLeader())
+	})
+
+	t.Run("partition_key + include_relative_paths", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			PartitionKey:         partitionKey,
+			IncludeRelativePaths: true,
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey, resp.GetPartitionKey())
+		require.Len(t, resp.GetRelativePaths(), 1)
+		require.Contains(t, resp.GetRelativePaths(), "@hashed/target/repo.git")
+		require.Empty(t, resp.GetReplicas(), "should not include replicas when not requested")
+	})
+
+	t.Run("all flags together", func(t *testing.T) {
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
+			PartitionKey:          partitionKey,
+			RelativePath:          "@hashed/target/repo.git", // This should be ignored since PartitionKey takes precedence
+			IncludeRelativePaths:  true,
+			IncludeReplicaDetails: true,
+		}, stream)
+		require.NoError(t, err)
+		require.Len(t, stream.responses, 1)
+
+		resp := stream.responses[0]
+		require.Equal(t, partitionKey, resp.GetPartitionKey())
+		require.Len(t, resp.GetRelativePaths(), 1)
+		require.Contains(t, resp.GetRelativePaths(), "@hashed/target/repo.git")
+		require.Len(t, resp.GetReplicas(), 1)
+	})
+}
+
 // mockNonRaftNode is a mock implementation that doesn't support Raft
 type mockNonRaftNode struct{}
 

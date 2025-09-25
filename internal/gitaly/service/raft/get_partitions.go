@@ -3,8 +3,11 @@ package raft
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3"
@@ -20,6 +23,32 @@ func (s *Server) GetPartitions(req *gitalypb.GetPartitionsRequest, stream gitaly
 		return structerr.NewInternal("node is not Raft-enabled")
 	}
 
+	// Handle relative_path filtering by mapping repository path to partition key
+	if req.GetRelativePath() != "" {
+		partitionKey, err := s.mapRepositoryToPartitionKey(ctx, node, req.GetRelativePath())
+		if err != nil {
+			return fmt.Errorf("map repository to partition key: %w", err)
+		}
+		if partitionKey != nil {
+			// Create a new request with the mapped partition key for filtering
+			// Preserve the storage filter if it was specified
+			filteredReq := &gitalypb.GetPartitionsRequest{
+				ClusterId:             req.GetClusterId(),
+				PartitionKey:          partitionKey,
+				Storage:               req.GetStorage(),
+				IncludeReplicaDetails: req.GetIncludeReplicaDetails(),
+				IncludeRelativePaths:  req.GetIncludeRelativePaths(),
+			}
+			req = filteredReq
+		} else {
+			// Repository path not found, return empty stream
+			return nil
+		}
+	}
+
+	// Track sent partition keys to avoid duplicates across storages
+	sentPartitions := make(map[string]bool)
+
 	for _, storage := range s.cfg.Storages {
 		select {
 		case <-ctx.Done():
@@ -27,7 +56,7 @@ func (s *Server) GetPartitions(req *gitalypb.GetPartitionsRequest, stream gitaly
 		default:
 		}
 
-		if err := s.collectStorageInfo(ctx, storage.Name, node, req, stream); err != nil {
+		if err := s.collectStorageInfo(ctx, storage.Name, node, req, stream, sentPartitions); err != nil {
 			return err
 		}
 	}
@@ -36,30 +65,32 @@ func (s *Server) GetPartitions(req *gitalypb.GetPartitionsRequest, stream gitaly
 }
 
 // collectStorageInfo collects Raft information from a specific storage
-func (s *Server) collectStorageInfo(ctx context.Context, storageName string, node *raftmgr.Node, req *gitalypb.GetPartitionsRequest, stream gitalypb.RaftService_GetPartitionsServer) error {
+func (s *Server) collectStorageInfo(ctx context.Context, storageName string, node *raftmgr.Node, req *gitalypb.GetPartitionsRequest, stream gitalypb.RaftService_GetPartitionsServer, sentPartitions map[string]bool) error {
 	storageManager, err := node.GetStorage(storageName)
 	if err != nil {
-		return fmt.Errorf("get storage %s: %w", storageName, err)
+		s.logger.WithFields(log.Fields{"storage": storageName}).WithError(err).WarnContext(ctx, "failed to get storage, skipping")
+		return nil // Skip inaccessible storages gracefully
 	}
 
 	raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)
 	if !ok {
-		return fmt.Errorf("storage %s is not Raft-enabled", storageName)
+		// Skip non-Raft storages silently (this is expected for non-Raft configured storages)
+		return nil
 	}
 	routingTable := raftStorage.GetRoutingTable()
 	replicaRegistry := raftStorage.GetReplicaRegistry()
 
 	// If a specific partition is requested, only get that one
 	if req.GetPartitionKey() != nil {
-		return s.collectPartitionInfo(ctx, req.GetPartitionKey(), routingTable, replicaRegistry, req.GetIncludeReplicaDetails(), stream)
+		return s.collectPartitionInfo(ctx, node, req.GetPartitionKey(), routingTable, replicaRegistry, req, stream, sentPartitions)
 	}
 
 	// List all partitions if no specific partition is requested
-	return s.collectAllPartitions(ctx, storageName, routingTable, replicaRegistry, req.GetIncludeReplicaDetails(), stream)
+	return s.collectAllPartitions(ctx, storageName, node, routingTable, replicaRegistry, req, stream, sentPartitions)
 }
 
 // collectAllPartitions collects information about all partitions in the routing table for a specific storage
-func (s *Server) collectAllPartitions(ctx context.Context, storageName string, routingTable raftmgr.RoutingTable, replicaRegistry raftmgr.ReplicaRegistry, includeDetails bool, stream gitalypb.RaftService_GetPartitionsServer) error {
+func (s *Server) collectAllPartitions(ctx context.Context, storageName string, node *raftmgr.Node, routingTable raftmgr.RoutingTable, replicaRegistry raftmgr.ReplicaRegistry, req *gitalypb.GetPartitionsRequest, stream gitalypb.RaftService_GetPartitionsServer, sentPartitions map[string]bool) error {
 	// Get all entries and filter manually since partition keys are opaque
 	allEntries, err := routingTable.ListEntries()
 	if err != nil {
@@ -90,8 +121,22 @@ func (s *Server) collectAllPartitions(ctx context.Context, storageName string, r
 			continue // Skip partitions that don't have replicas in the requested storage
 		}
 
+		// Check if partition matches storage filter if specified
+		if req.GetStorage() != "" {
+			hasReplicaInFilteredStorage := false
+			for _, replica := range entry.Replicas {
+				if replica.GetStorageName() == req.GetStorage() {
+					hasReplicaInFilteredStorage = true
+					break
+				}
+			}
+			if !hasReplicaInFilteredStorage {
+				continue // Skip partitions that don't have replicas in the requested storage
+			}
+		}
+
 		partitionKey := entry.Replicas[0].GetPartitionKey()
-		if err := s.collectPartitionInfo(ctx, partitionKey, routingTable, replicaRegistry, includeDetails, stream); err != nil {
+		if err := s.collectPartitionInfo(ctx, node, partitionKey, routingTable, replicaRegistry, req, stream, sentPartitions); err != nil {
 			return structerr.NewInternal("failed to collect partition info").WithMetadata("partition", partitionKey)
 		}
 	}
@@ -100,9 +145,15 @@ func (s *Server) collectAllPartitions(ctx context.Context, storageName string, r
 }
 
 // collectPartitionInfo collects information about a specific partition
-func (s *Server) collectPartitionInfo(ctx context.Context, partitionKey *gitalypb.RaftPartitionKey, routingTable raftmgr.RoutingTable, replicaRegistry raftmgr.ReplicaRegistry, includeDetails bool, stream gitalypb.RaftService_GetPartitionsServer) error {
+func (s *Server) collectPartitionInfo(ctx context.Context, node *raftmgr.Node, partitionKey *gitalypb.RaftPartitionKey, routingTable raftmgr.RoutingTable, replicaRegistry raftmgr.ReplicaRegistry, req *gitalypb.GetPartitionsRequest, stream gitalypb.RaftService_GetPartitionsServer, sentPartitions map[string]bool) error {
 	if partitionKey == nil {
 		return fmt.Errorf("partition key cannot be nil")
+	}
+
+	// Check if we've already sent this partition to avoid duplicates
+	partitionKeyValue := partitionKey.GetValue()
+	if sentPartitions[partitionKeyValue] {
+		return nil
 	}
 
 	entry, err := routingTable.GetEntry(partitionKey)
@@ -129,7 +180,16 @@ func (s *Server) collectPartitionInfo(ctx context.Context, partitionKey *gitalyp
 		response.Index = state.Index
 	}
 
-	if includeDetails && len(entry.Replicas) > 0 {
+	// Collect relative paths if requested
+	if req.GetIncludeRelativePaths() {
+		relativePaths, err := s.collectRelativePathsForPartition(ctx, node, partitionKey)
+		if err != nil {
+			return fmt.Errorf("collect relative paths for partition: %w", err)
+		}
+		response.RelativePaths = relativePaths
+	}
+
+	if req.GetIncludeReplicaDetails() && len(entry.Replicas) > 0 {
 		response.Replicas = make([]*gitalypb.GetPartitionsResponse_ReplicaStatus, 0, len(entry.Replicas))
 
 		// Try to get replica from registry for additional info
@@ -141,6 +201,8 @@ func (s *Server) collectPartitionInfo(ctx context.Context, partitionKey *gitalyp
 		}
 	}
 
+	// Mark this partition as sent and send the response
+	sentPartitions[partitionKeyValue] = true
 	return stream.Send(response)
 }
 
@@ -194,4 +256,99 @@ func (s *Server) getReplicaState(replicaID *gitalypb.ReplicaID, leaderID uint64,
 		return raftmgr.StateString(raft.StateLeader)
 	}
 	return raftmgr.StateString(raft.StateFollower)
+}
+
+// mapRepositoryToPartitionKey maps a repository path to its corresponding partition key
+// by using the storage's partition assignment mechanism
+func (s *Server) mapRepositoryToPartitionKey(ctx context.Context, node *raftmgr.Node, repositoryPath string) (*gitalypb.RaftPartitionKey, error) {
+	for _, storageConfig := range s.cfg.Storages {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		storageManager, err := node.GetStorage(storageConfig.Name)
+		if err != nil {
+			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to get storage while mapping repository, skipping")
+			continue // Skip storages that can't be accessed
+		}
+
+		// Search the routing table for the repository path
+		raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)
+		if !ok {
+			continue // Skip non-Raft storages
+		}
+
+		routingTable := raftStorage.GetRoutingTable()
+		allEntries, err := routingTable.ListEntries()
+		if err != nil {
+			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to list entries while mapping repository, skipping")
+			continue // Skip if we can't list entries
+		}
+
+		// Find an entry that matches this repository path
+		for _, entry := range allEntries {
+			if entry.RelativePath == repositoryPath && len(entry.Replicas) > 0 {
+				// Found the matching repository path, return the partition key
+				replica := entry.Replicas[0]
+				return replica.GetPartitionKey(), nil
+			}
+		}
+	}
+
+	return nil, nil // Repository path not found, but this is not an error
+}
+
+// collectRelativePathsForPartition collects all relative paths that belong to a specific partition
+func (s *Server) collectRelativePathsForPartition(ctx context.Context, node *raftmgr.Node, partitionKey *gitalypb.RaftPartitionKey) ([]string, error) {
+	// Use routing table information directly
+	return s.getRelativePathsFromRoutingTable(ctx, node, partitionKey)
+}
+
+// getRelativePathsFromRoutingTable gets relative paths for a partition from routing table entries
+func (s *Server) getRelativePathsFromRoutingTable(ctx context.Context, node *raftmgr.Node, partitionKey *gitalypb.RaftPartitionKey) ([]string, error) {
+	relativePathsMap := make(map[string]struct{})
+
+	for _, storageConfig := range s.cfg.Storages {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		storageManager, err := node.GetStorage(storageConfig.Name)
+		if err != nil {
+			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to get storage while collecting paths, skipping")
+			continue
+		}
+
+		raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)
+		if !ok {
+			continue
+		}
+
+		routingTable := raftStorage.GetRoutingTable()
+		allEntries, err := routingTable.ListEntries()
+		if err != nil {
+			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to list entries while collecting paths, skipping")
+			continue
+		}
+
+		// Find entries that match this partition key and collect their relative paths
+		for _, entry := range allEntries {
+			if len(entry.Replicas) == 0 {
+				continue
+			}
+
+			replica := entry.Replicas[0]
+			if replica.GetPartitionKey().GetValue() == partitionKey.GetValue() {
+				if entry.RelativePath != "" {
+					relativePathsMap[entry.RelativePath] = struct{}{}
+				}
+			}
+		}
+	}
+
+	return slices.Collect(maps.Keys(relativePathsMap)), nil
 }

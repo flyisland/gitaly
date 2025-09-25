@@ -151,8 +151,17 @@ message GetPartitionsRequest {
   // partition_key is an optional filter to get information about a specific partition.
   // If not provided, returns information about all partitions.
   RaftPartitionKey partition_key = 2;
+  // relative_path is an optional filter to get information about partitions containing
+  // the specified repository relative path.
+  string relative_path = 3;
+  // storage is an optional filter to get information about partitions that have
+  // replicas on the specified storage name.
+  string storage = 4;
   // include_replica_details determines whether to include detailed replica state information.
-  bool include_replica_details = 3;
+  bool include_replica_details = 5;
+  // include_relative_paths determines whether to include the list of repository paths
+  // for each partition in the response.
+  bool include_relative_paths = 6;
 }
 
 // GetPartitionsResponse is the response for the GetPartitions streaming RPC.
@@ -188,6 +197,9 @@ message GetPartitionsResponse {
   uint64 index = 6;
   // relative_path is the repository path for backward compatibility.
   string relative_path = 7;
+  // relative_paths contains the list of repository paths in this partition
+  // when include_relative_paths is set to true in the request.
+  repeated string relative_paths = 8;
 }
 
 // RaftService manages the sending of Raft messages to peers.
