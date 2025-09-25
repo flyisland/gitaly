@@ -144,8 +144,8 @@ message JoinClusterRequest {
 message JoinClusterResponse {
 }
 
-// RaftClusterInfoRequest is the request for the GetClusterInfo RPC.
-message RaftClusterInfoRequest {
+// GetPartitionsRequest is the request for the GetPartitions RPC.
+message GetPartitionsRequest {
   // cluster_id is the identifier of the Raft cluster to query.
   string cluster_id = 1;
   // partition_key is an optional filter to get information about a specific partition.
@@ -155,9 +155,9 @@ message RaftClusterInfoRequest {
   bool include_replica_details = 3;
 }
 
-// RaftClusterInfoResponse is the response for the GetClusterInfo streaming RPC.
+// GetPartitionsResponse is the response for the GetPartitions streaming RPC.
 // Each response message contains information about a single partition.
-message RaftClusterInfoResponse {
+message GetPartitionsResponse {
   // ReplicaStatus contains status information about a single replica.
   message ReplicaStatus {
     // replica_id uniquely identifies the replica.
@@ -217,10 +217,10 @@ service RaftService {
     };
   }
 
-  // GetClusterInfo retrieves comprehensive information about the Raft cluster topology,
+  // GetPartitions retrieves comprehensive information about the Raft cluster topology,
   // partition states, and replica health. This is useful for monitoring and debugging.
   // Returns a stream of partition information, one response per partition.
-  rpc GetClusterInfo(RaftClusterInfoRequest) returns (stream RaftClusterInfoResponse) {
+  rpc GetPartitions(GetPartitionsRequest) returns (stream GetPartitionsResponse) {
     option (op_type) = {
       op: ACCESSOR
       scope_level: STORAGE

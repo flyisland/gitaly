@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestServer_GetClusterInfo(t *testing.T) {
+func TestServer_GetPartitions(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
@@ -56,8 +56,8 @@ func TestServer_GetClusterInfo(t *testing.T) {
 	})
 
 	t.Run("basic cluster info retrieval", func(t *testing.T) {
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{}, stream)
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{}, stream)
 		require.NoError(t, err)
 		// With empty routing tables, no responses are expected
 		for _, resp := range stream.responses {
@@ -67,8 +67,8 @@ func TestServer_GetClusterInfo(t *testing.T) {
 	})
 
 	t.Run("with replica details enabled", func(t *testing.T) {
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
 			IncludeReplicaDetails: true,
 		}, stream)
 		require.NoError(t, err)
@@ -82,8 +82,8 @@ func TestServer_GetClusterInfo(t *testing.T) {
 	t.Run("with specific partition filter", func(t *testing.T) {
 		partitionKey := raftmgr.NewPartitionKey(authorityName, 1)
 
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
 			PartitionKey:          partitionKey,
 			IncludeReplicaDetails: true,
 		}, stream)
@@ -94,8 +94,8 @@ func TestServer_GetClusterInfo(t *testing.T) {
 		// This test ensures that the response only includes partitions
 		// where the authority name matches the storage name, using the new
 		// ListEntriesWithFilter method to prevent cross-storage contamination
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{}, stream)
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{}, stream)
 		require.NoError(t, err)
 
 		// Verify that returned partitions have authority names that match configured storage names
@@ -126,8 +126,8 @@ func TestServer_GetClusterInfo_NonRaftNode(t *testing.T) {
 		Node:   &mockNonRaftNode{},
 	})
 
-	stream := &mockGetClusterInfoStream{}
-	err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{}, stream)
+	stream := &mockGetPartitionsStream{}
+	err := server.GetPartitions(&gitalypb.GetPartitionsRequest{}, stream)
 	require.Error(t, err)
 	require.Equal(t, codes.Internal, status.Code(err))
 	require.Contains(t, err.Error(), "node is not Raft-enabled")
@@ -212,8 +212,8 @@ func TestServer_GetClusterInfo_WithMockData(t *testing.T) {
 	})
 
 	t.Run("retrieve specific partition with replicas", func(t *testing.T) {
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
 			PartitionKey:          partitionKey,
 			IncludeReplicaDetails: true,
 		}, stream)
@@ -244,8 +244,8 @@ func TestServer_GetClusterInfo_WithMockData(t *testing.T) {
 	})
 
 	t.Run("retrieve partition without replica details", func(t *testing.T) {
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
 			PartitionKey:          partitionKey,
 			IncludeReplicaDetails: false,
 		}, stream)
@@ -295,8 +295,8 @@ func TestServer_GetClusterInfo_NonexistentPartition(t *testing.T) {
 	// Request info for a partition that doesn't exist
 	nonexistentPartition := raftmgr.NewPartitionKey("nonexistent-authority", 999)
 
-	stream := &mockGetClusterInfoStream{}
-	err = server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+	stream := &mockGetPartitionsStream{}
+	err = server.GetPartitions(&gitalypb.GetPartitionsRequest{
 		PartitionKey: nonexistentPartition,
 	}, stream)
 	require.NoError(t, err) // Should not error, but should return empty stream
@@ -429,8 +429,8 @@ func TestServer_GetClusterInfo_LiveStateVsRoutingTable(t *testing.T) {
 	})
 
 	t.Run("returns live state not stale routing table data", func(t *testing.T) {
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
 			PartitionKey:          partitionKey,
 			IncludeReplicaDetails: true,
 		}, stream)
@@ -522,15 +522,15 @@ func TestServer_GetClusterInfo_ConcurrentAccess(t *testing.T) {
 	t.Run("concurrent cluster info requests", func(t *testing.T) {
 		var wg sync.WaitGroup
 		numGoroutines := 10
-		results := make([]*mockGetClusterInfoStream, numGoroutines)
+		results := make([]*mockGetPartitionsStream, numGoroutines)
 
 		// Execute multiple concurrent GetClusterInfo requests
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				stream := &mockGetClusterInfoStream{}
-				err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+				stream := &mockGetPartitionsStream{}
+				err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
 					IncludeReplicaDetails: true,
 				}, stream)
 				require.NoError(t, err)
@@ -545,7 +545,7 @@ func TestServer_GetClusterInfo_ConcurrentAccess(t *testing.T) {
 		require.NotEmpty(t, firstResult.responses, "should return partition information")
 
 		// Create a map of partition key values from the first result for comparison
-		expectedPartitions := make(map[string]*gitalypb.RaftClusterInfoResponse)
+		expectedPartitions := make(map[string]*gitalypb.GetPartitionsResponse)
 		for _, resp := range firstResult.responses {
 			expectedPartitions[resp.GetPartitionKey().GetValue()] = resp
 		}
@@ -555,7 +555,7 @@ func TestServer_GetClusterInfo_ConcurrentAccess(t *testing.T) {
 				"result %d should have same number of responses as first result", i)
 
 			// Verify response content is consistent (same partitions, same data) regardless of order
-			resultPartitions := make(map[string]*gitalypb.RaftClusterInfoResponse)
+			resultPartitions := make(map[string]*gitalypb.GetPartitionsResponse)
 			for _, resp := range result.responses {
 				resultPartitions[resp.GetPartitionKey().GetValue()] = resp
 			}
@@ -573,8 +573,8 @@ func TestServer_GetClusterInfo_ConcurrentAccess(t *testing.T) {
 	})
 
 	t.Run("streaming multiple partitions", func(t *testing.T) {
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
 			IncludeReplicaDetails: true,
 		}, stream)
 		require.NoError(t, err)
@@ -666,8 +666,8 @@ func TestServer_GetClusterInfo_ReplicaUnavailable(t *testing.T) {
 	})
 
 	t.Run("falls back to routing table when replica unavailable", func(t *testing.T) {
-		stream := &mockGetClusterInfoStream{}
-		err := server.GetClusterInfo(&gitalypb.RaftClusterInfoRequest{
+		stream := &mockGetPartitionsStream{}
+		err := server.GetPartitions(&gitalypb.GetPartitionsRequest{
 			PartitionKey:          partitionKey,
 			IncludeReplicaDetails: true,
 		}, stream)
@@ -692,19 +692,19 @@ func (m *mockNonRaftNode) GetStorage(storageName string) (storage.Storage, error
 	return nil, nil
 }
 
-// mockGetClusterInfoStream implements gitalypb.RaftService_GetClusterInfoServer for testing
-type mockGetClusterInfoStream struct {
-	gitalypb.RaftService_GetClusterInfoServer
-	responses []*gitalypb.RaftClusterInfoResponse
+// mockGetPartitionsStream implements gitalypb.RaftService_GetPartitionsServer for testing
+type mockGetPartitionsStream struct {
+	gitalypb.RaftService_GetPartitionsServer
+	responses []*gitalypb.GetPartitionsResponse
 	ctx       context.Context
 }
 
-func (m *mockGetClusterInfoStream) Send(resp *gitalypb.RaftClusterInfoResponse) error {
+func (m *mockGetPartitionsStream) Send(resp *gitalypb.GetPartitionsResponse) error {
 	m.responses = append(m.responses, resp)
 	return nil
 }
 
-func (m *mockGetClusterInfoStream) Context() context.Context {
+func (m *mockGetPartitionsStream) Context() context.Context {
 	if m.ctx == nil {
 		return context.Background()
 	}

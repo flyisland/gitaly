@@ -10,9 +10,9 @@ import (
 	"go.etcd.io/raft/v3"
 )
 
-// GetClusterInfo retrieves comprehensive information about the Raft cluster topology,
+// GetPartitions retrieves comprehensive information about the Raft cluster topology,
 // partition states, and replica health. This is useful for monitoring and debugging.
-func (s *Server) GetClusterInfo(req *gitalypb.RaftClusterInfoRequest, stream gitalypb.RaftService_GetClusterInfoServer) error {
+func (s *Server) GetPartitions(req *gitalypb.GetPartitionsRequest, stream gitalypb.RaftService_GetPartitionsServer) error {
 	ctx := stream.Context()
 
 	node, ok := s.node.(*raftmgr.Node)
@@ -36,7 +36,7 @@ func (s *Server) GetClusterInfo(req *gitalypb.RaftClusterInfoRequest, stream git
 }
 
 // collectStorageInfo collects Raft information from a specific storage
-func (s *Server) collectStorageInfo(ctx context.Context, storageName string, node *raftmgr.Node, req *gitalypb.RaftClusterInfoRequest, stream gitalypb.RaftService_GetClusterInfoServer) error {
+func (s *Server) collectStorageInfo(ctx context.Context, storageName string, node *raftmgr.Node, req *gitalypb.GetPartitionsRequest, stream gitalypb.RaftService_GetPartitionsServer) error {
 	storageManager, err := node.GetStorage(storageName)
 	if err != nil {
 		return fmt.Errorf("get storage %s: %w", storageName, err)
@@ -59,7 +59,7 @@ func (s *Server) collectStorageInfo(ctx context.Context, storageName string, nod
 }
 
 // collectAllPartitions collects information about all partitions in the routing table for a specific storage
-func (s *Server) collectAllPartitions(ctx context.Context, storageName string, routingTable raftmgr.RoutingTable, replicaRegistry raftmgr.ReplicaRegistry, includeDetails bool, stream gitalypb.RaftService_GetClusterInfoServer) error {
+func (s *Server) collectAllPartitions(ctx context.Context, storageName string, routingTable raftmgr.RoutingTable, replicaRegistry raftmgr.ReplicaRegistry, includeDetails bool, stream gitalypb.RaftService_GetPartitionsServer) error {
 	// Get all entries and filter manually since partition keys are opaque
 	allEntries, err := routingTable.ListEntries()
 	if err != nil {
@@ -100,7 +100,7 @@ func (s *Server) collectAllPartitions(ctx context.Context, storageName string, r
 }
 
 // collectPartitionInfo collects information about a specific partition
-func (s *Server) collectPartitionInfo(ctx context.Context, partitionKey *gitalypb.RaftPartitionKey, routingTable raftmgr.RoutingTable, replicaRegistry raftmgr.ReplicaRegistry, includeDetails bool, stream gitalypb.RaftService_GetClusterInfoServer) error {
+func (s *Server) collectPartitionInfo(ctx context.Context, partitionKey *gitalypb.RaftPartitionKey, routingTable raftmgr.RoutingTable, replicaRegistry raftmgr.ReplicaRegistry, includeDetails bool, stream gitalypb.RaftService_GetPartitionsServer) error {
 	if partitionKey == nil {
 		return fmt.Errorf("partition key cannot be nil")
 	}
@@ -112,7 +112,7 @@ func (s *Server) collectPartitionInfo(ctx context.Context, partitionKey *gitalyp
 		return nil
 	}
 
-	response := &gitalypb.RaftClusterInfoResponse{
+	response := &gitalypb.GetPartitionsResponse{
 		ClusterId:    s.cfg.Raft.ClusterID,
 		PartitionKey: partitionKey,
 		LeaderId:     entry.LeaderID,
@@ -130,7 +130,7 @@ func (s *Server) collectPartitionInfo(ctx context.Context, partitionKey *gitalyp
 	}
 
 	if includeDetails && len(entry.Replicas) > 0 {
-		response.Replicas = make([]*gitalypb.RaftClusterInfoResponse_ReplicaStatus, 0, len(entry.Replicas))
+		response.Replicas = make([]*gitalypb.GetPartitionsResponse_ReplicaStatus, 0, len(entry.Replicas))
 
 		// Try to get replica from registry for additional info
 		replica, _ := replicaRegistry.GetReplica(partitionKey)
@@ -145,8 +145,8 @@ func (s *Server) collectPartitionInfo(ctx context.Context, partitionKey *gitalyp
 }
 
 // buildReplicaStatus creates a ReplicaStatus for the given replica
-func (s *Server) buildReplicaStatus(replicaID *gitalypb.ReplicaID, entry *raftmgr.RoutingTableEntry, replica raftmgr.RaftReplica) *gitalypb.RaftClusterInfoResponse_ReplicaStatus {
-	status := &gitalypb.RaftClusterInfoResponse_ReplicaStatus{
+func (s *Server) buildReplicaStatus(replicaID *gitalypb.ReplicaID, entry *raftmgr.RoutingTableEntry, replica raftmgr.RaftReplica) *gitalypb.GetPartitionsResponse_ReplicaStatus {
+	status := &gitalypb.GetPartitionsResponse_ReplicaStatus{
 		ReplicaId:  replicaID,
 		IsLeader:   replicaID.GetMemberId() == entry.LeaderID,
 		IsHealthy:  s.checkReplicaHealth(replicaID),
