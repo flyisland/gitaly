@@ -987,7 +987,7 @@ func getUpdatedAndOutdatedSecondaries(
 	// the RPC successfully, we assume the RPC is not correctly voting and replicate everywhere.
 	if transaction.CountSubtransactions() == 0 {
 		markOutdated("no-votes", routerNodesToStorages(route.Secondaries))
-		return
+		return primaryDirtied, updated, outdated
 	}
 
 	// If we cannot get the transaction state, then something's gone awfully wrong. We go the
@@ -995,7 +995,7 @@ func getUpdatedAndOutdatedSecondaries(
 	nodeStates, err := transaction.State()
 	if err != nil {
 		markOutdated("missing-tx-state", routerNodesToStorages(route.Secondaries))
-		return
+		return primaryDirtied, updated, outdated
 	}
 
 	// If the primary node did not commit the transaction but there were some subtransactions committed,
@@ -1003,7 +1003,7 @@ func getUpdatedAndOutdatedSecondaries(
 	// but it's what we got. So in order to ensure a consistent state, we need to replicate.
 	if state := nodeStates[route.Primary.Storage]; state != transactions.VoteCommitted {
 		markOutdated("primary-not-committed", routerNodesToStorages(route.Secondaries))
-		return
+		return primaryDirtied, updated, outdated
 	}
 
 	// Now we finally got the potentially happy case: when the secondary committed the
@@ -1024,7 +1024,7 @@ func getUpdatedAndOutdatedSecondaries(
 		nodesByState["updated"] = append(nodesByState["updated"], secondary.Storage)
 	}
 
-	return
+	return primaryDirtied, updated, outdated
 }
 
 func equalGrpcError(err1, err2 error) bool {

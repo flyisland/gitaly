@@ -270,7 +270,7 @@ type instrumentedReadCloser struct {
 func (irc instrumentedReadCloser) Read(p []byte) (n int, err error) {
 	n, err = irc.ReadCloser.Read(p)
 	irc.counter.Add(float64(n))
-	return
+	return n, err
 }
 
 // PutStream will store a stream in a repo-namespace keyed by the digest of the

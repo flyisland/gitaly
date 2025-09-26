@@ -219,17 +219,17 @@ func (c *cache) Fetch(ctx context.Context, key string, dst io.Writer, create fun
 	)
 	rc, wt, created, err = c.getStream(key, create)
 	if err != nil {
-		return
+		return written, created, err
 	}
 	defer rc.Close()
 
 	written, err = io.Copy(dst, rc)
 	if err != nil {
-		return
+		return written, created, err
 	}
 
 	err = wt.Wait(ctx)
-	return
+	return written, created, err
 }
 
 func (c *cache) getStream(key string, create func(io.Writer) error) (_ io.ReadCloser, _ *waiter, created bool, err error) {

@@ -355,7 +355,7 @@ func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.RaftParti
 		return fmt.Errorf("failed to send chunk, %d bytes sent: %w", sent, err)
 	}
 
-	return
+	return returnedErr
 }
 
 // getRaftClient returns a Raft client connection for the given address
