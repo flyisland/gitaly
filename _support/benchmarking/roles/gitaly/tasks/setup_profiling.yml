@@ -46,6 +46,13 @@
     mode: 0755
     remote_src: true
 
+- name: Install off-CPU profiling scripts
+  copy:
+    src: gitaly_offcpu_profiler/
+    dest: /usr/local/gitaly_offcpu_profiler/
+    mode: preserve
+    directory_mode: 0755
+
 - name: Install profile-gitaly.sh as profile-gitaly
   copy:
     src: profile-gitaly.sh

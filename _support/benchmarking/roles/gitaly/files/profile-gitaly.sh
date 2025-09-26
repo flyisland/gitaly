@@ -18,15 +18,20 @@ usage() {
 }
 
 profile() {
-	# Profile Gitaly and child processes
+	# Profile on-CPU time for Gitaly and child processes
 	perf record --freq=99 -g --pid="$(pidof -s gitaly)" \
 	    --output="${gitaly_perf_data}" -- sleep "${seconds}" &
 
-	# Profile whole system
+	# Profile on-CPU time for whole system
 	perf record --freq=97 -g --all-cpus \
 		--output="${all_perf_data}" -- sleep "${seconds}" &
 
-	# TODO add bpftrace scripts
+	# Profile off-CPU time for whole system (with filtering as a post-processing step)
+	min_stall_duration_us=1000
+	offcpu_profile_raw_output_file="${out_dir}/offcpu_profile.raw.txt.gz"
+	bpftrace /usr/local/gitaly_offcpu_profiler/offcpu_profile.bt "${seconds}" "${min_stall_duration_us}" \
+		| gzip > "${offcpu_profile_raw_output_file}" &
+
 	wait
 }
 
@@ -46,6 +51,8 @@ generate_flamegraphs() {
     zcat "${all_perf_txt}" \
 		| stackcollapse-perf --kernel \
 		| flamegraph --hash --colors=perl > "${all_perf_svg}"
+
+	/usr/local/gitaly_offcpu_profiler/offcpu_profile_postprocessing.sh "${offcpu_profile_raw_output_file}"
 }
 
 main() {

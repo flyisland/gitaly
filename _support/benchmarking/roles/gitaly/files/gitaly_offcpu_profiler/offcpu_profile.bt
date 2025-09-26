@@ -1,0 +1,123 @@
+#!/usr/bin/env bpftrace
+
+// This bpftrace script works similarly to BCC's offcputime script, except it instruments before each context switch via a tracepoint instead of after via a kprobe.
+// Notes:
+//  * Instruments context switches via tracepoint "sched_switch".
+//    * Kernel source: See call to "trace_sched_switch" in function "__schedule" in "kernel/sched/core.c".
+//    * This tracepoint runs on the outgoing task immediately before calling "context_switch".
+//    * This covers all context switches.  "__schedule" is the only entry to "context_switch", so we reach this tracepoint if the task actually changes (prev != next).
+//  * Logic:
+//    * WARNING: During the tracepoint, the outgoing task is still the current task.  Must save task state when entering sleep, as it is not yet available when ending sleep.
+//    * For the outgoing task, save the current timestamp as the start-of-sleep and the current stack trace.
+//    * For the incoming task, use the current timestamp as the end-of-sleep and the saved stack trace as what was stalled.
+//    * Compute the incoming task's sleep duration, and report any interesting details for the incoming task.
+//    * Omit any unmatched start/end events or negative durations (likely due to skewed timestamp measurements among CPUs).
+//    * Optionally skip reporting short durations, if only interested in tracing long stalls.
+
+config = {
+    max_map_keys = 1048576;
+    print_maps_on_exit = 0;
+}
+
+BEGIN
+{
+    if ($# != 2) {
+        printf("Usage: <script> <capture_duration_seconds> <min_stall_duration_us>\n");
+        exit();
+    }
+    @profile_start_ts = nsecs;
+    @deadline = nsecs + ((uint64) $1) * 1_000_000_000;
+    printf("Starting profile for %d seconds: %s\n", $1, strftime("%Y-%m-%d %H:%M:%S.%f %Z", @profile_start_ts));
+    printf("Tracing off-CPU delays slower than %d us.\n", $2);
+}
+
+tracepoint:sched:sched_switch
+{
+    $now = (uint64)nsecs;
+    $prev_tid = args->prev_pid;
+    $next_tid = args->next_pid;
+
+    // Optionally for context, count how often the workload has either or both an incoming and outgoing thread.
+    @has_prev_and_next_task[($prev_tid != 0), ($next_tid != 0)] = count();
+
+    // Record outgoing thread details at start of sleep.
+    if ($prev_tid) {
+        @sleep_start_ts[$prev_tid] = $now;
+        @sleep_start_kstack[$prev_tid] = kstack();
+        @sleep_start_ustack[$prev_tid] = ustack();
+    }
+
+    // Nothing more to do unless an incoming task with saved state is being scheduled.
+    if (! $next_tid || ! @sleep_start_ts[$next_tid]) {
+        return;
+    }
+
+    // Fetch saved state for incoming thread from when it started sleeping.
+    $next_thread_sleep_start_ts = @sleep_start_ts[$next_tid];
+    $next_kstack = @sleep_start_kstack[$next_tid];
+    $next_ustack = @sleep_start_ustack[$next_tid];
+    delete(@sleep_start_ts[$next_tid]);
+    delete(@sleep_start_kstack[$next_tid]);
+    delete(@sleep_start_ustack[$next_tid]);
+
+    // Omit missing or mismeasured events.
+    if (! $next_thread_sleep_start_ts) {
+        @skip_stats["no start ts"] = stats(1);
+        return;
+    } else if ($next_thread_sleep_start_ts > $now) {
+        @skip_stats["negative duration"] = stats(1);
+        return;
+    }
+
+    // Calculate incoming thread's duration.
+    $next_thread_duration_us = ( $now - $next_thread_sleep_start_ts ) / 1000;
+    if ($next_thread_duration_us < $2) {
+        @skip_stats["faster than threshold"] = stats($next_thread_duration_us);
+        return;
+    }
+
+    // For debugging, trap any wildly mismeasured durations (over 1000 seconds).  Expect none.
+    if ($next_thread_duration_us > 1e9) {
+        printf("Too big: dur_us=%llu start_ts=%llu end_ts=%llu next_tid=%d this_tid=%d comm=%s\n",
+            $next_thread_duration_us,
+            $next_thread_sleep_start_ts,
+            $now,
+            $next_tid,
+            tid,
+            args->next_comm
+        );
+    }
+
+    // Accumulate slow off-CPU stall details for reporting.
+    @slow_offcpu_duration_us_hist = hist($next_thread_duration_us);
+    @slow_offcpu_duration_us_stats_by_comm[args->next_comm] = stats($next_thread_duration_us);
+    @slow_offcpu_duration_us_by_kstack[$next_kstack, args->next_comm] = sum($next_thread_duration_us);
+}
+
+interval:ms:100
+{
+    if (nsecs >= @deadline) {
+        delete(@deadline);
+        exit();
+    }
+}
+
+END
+{
+    $profile_end_ts = nsecs;
+    printf("Finished profile: %s\n", strftime("%Y-%m-%d %H:%M:%S.%f %Z", $profile_end_ts));
+
+    printf("\nProfile summary start:\n\n");
+    printf("Started:  %s\n", strftime("%Y-%m-%d %H:%M:%S.%f %Z", @profile_start_ts));
+    printf("Finished: %s\n", strftime("%Y-%m-%d %H:%M:%S.%f %Z", $profile_end_ts));
+    printf("Profile duration: %llu us\n\n", ($profile_end_ts - @profile_start_ts) / 1000);
+    print(@has_prev_and_next_task);
+    print(@slow_offcpu_duration_us_hist);
+    print(@slow_offcpu_duration_us_stats_by_comm);
+    print(@skip_stats);
+    printf("\nProfile summary end\n");
+
+    printf("\nProfile results start:\n\n");
+    print(@slow_offcpu_duration_us_by_kstack);
+    printf("\nProfile results end\n");
+}

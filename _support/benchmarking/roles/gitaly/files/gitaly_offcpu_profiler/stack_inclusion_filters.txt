@@ -1,0 +1,2 @@
+# Inclusion filter file must be non-empty.  To match any input line, include a blank line in this file (i.e. empty string matches all input lines).
+gitaly;
