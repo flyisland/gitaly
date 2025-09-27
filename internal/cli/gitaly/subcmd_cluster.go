@@ -11,9 +11,11 @@ func newClusterCommand() *cli.Command {
 		UsageText: "gitaly cluster command [command options]",
 		Description: `The cluster command provides subcommands for managing and inspecting Gitaly clusters.
 
-Use 'gitaly cluster info' to display cluster topology and partition information.`,
+Use 'gitaly cluster info' to display cluster statistics and overview.
+Use 'gitaly cluster get-partition' to display detailed partition information.`,
 		Commands: []*cli.Command{
 			newClusterInfoCommand(),
+			newClusterGetPartitionCommand(),
 		},
 	}
 }

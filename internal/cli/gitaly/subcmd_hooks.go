@@ -9,7 +9,6 @@ import (
 
 	"github.com/urfave/cli/v3"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
@@ -152,17 +151,4 @@ func dial(ctx context.Context, addr, token string, timeout time.Duration, opts .
 	}
 
 	return client.New(ctx, addr, client.WithGrpcOptions(opts))
-}
-
-func getAddressWithScheme(cfg config.Cfg) (string, error) {
-	switch {
-	case cfg.SocketPath != "":
-		return "unix:" + cfg.SocketPath, nil
-	case cfg.ListenAddr != "":
-		return "tcp://" + cfg.ListenAddr, nil
-	case cfg.TLSListenAddr != "":
-		return "tls://" + cfg.TLSListenAddr, nil
-	default:
-		return "", errors.New("no address configured")
-	}
 }

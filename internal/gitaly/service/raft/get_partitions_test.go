@@ -1247,13 +1247,6 @@ func TestServer_GetPartitions_CombinedFlags(t *testing.T) {
 	})
 }
 
-// mockNonRaftNode is a mock implementation that doesn't support Raft
-type mockNonRaftNode struct{}
-
-func (m *mockNonRaftNode) GetStorage(storageName string) (storage.Storage, error) {
-	return nil, nil
-}
-
 // mockGetPartitionsStream implements gitalypb.RaftService_GetPartitionsServer for testing
 type mockGetPartitionsStream struct {
 	gitalypb.RaftService_GetPartitionsServer
