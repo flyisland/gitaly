@@ -25,6 +25,8 @@ const (
 )
 
 func TestClusterInfoCommand(t *testing.T) {
+	testhelper.SkipWithPraefect(t, "RAFT is not compatible with Praefect")
+
 	ctx := testhelper.Context(t)
 
 	tests := []struct {
@@ -55,9 +57,7 @@ func TestClusterInfoCommand(t *testing.T) {
 		{
 			name: "non-raft server",
 			setupServer: func(t *testing.T) (string, func()) {
-				if testhelper.IsRaftEnabled() {
-					t.Skip("Skipping non-raft server test when GITALY_TEST_RAFT is enabled")
-				}
+				testhelper.SkipWithRaft(t, "Skipping non-raft server test when GITALY_TEST_RAFT is enabled")
 
 				cfg := testcfg.Build(t)
 
@@ -82,8 +82,13 @@ func TestClusterInfoCommand(t *testing.T) {
 			setupServer: func(t *testing.T) (string, func()) {
 				return setupRaftServerForPartition(t, setupTestData)
 			},
-			args: []string{},
+			args: []string{"--no-color"},
 			expectedOutput: `=== Gitaly Cluster Information ===
+
+=== Cluster Health Summary ===
+
+  Partitions: ✓ Healthy (2/2)
+  Replicas: ✓ Healthy (6/6)
 
 === Cluster Statistics ===
   Total Partitions: 2
@@ -117,8 +122,13 @@ Use --list-partitions to display partition overview table.
 			setupServer: func(t *testing.T) (string, func()) {
 				return setupRaftServerForPartition(t, setupTestData)
 			},
-			args: []string{"--list-partitions"},
+			args: []string{"--list-partitions", "--no-color"},
 			expectedOutput: `=== Gitaly Cluster Information ===
+
+=== Cluster Health Summary ===
+
+  Partitions: ✓ Healthy (2/2)
+  Replicas: ✓ Healthy (6/6)
 
 === Cluster Statistics ===
   Total Partitions: 2
@@ -147,8 +157,13 @@ ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98  storage-2  sto
 			setupServer: func(t *testing.T) (string, func()) {
 				return setupRaftServerForPartition(t, setupTestData)
 			},
-			args: []string{"--storage", storageOne},
+			args: []string{"--storage", storageOne, "--no-color"},
 			expectedOutput: `=== Gitaly Cluster Information ===
+
+=== Cluster Health Summary ===
+
+  Partitions: ✓ Healthy (2/2)
+  Replicas: ✓ Healthy (6/6)
 
 === Cluster Statistics ===
   Total Partitions: 2

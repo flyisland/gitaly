@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/fatih/color"
+	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -16,6 +19,7 @@ const (
 	flagClusterInfoConfig         = "config"
 	flagClusterInfoStorage        = "storage"
 	flagClusterInfoListPartitions = "list-partitions"
+	flagClusterInfoNoColor        = "no-color"
 )
 
 func newClusterInfoCommand() *cli.Command {
@@ -57,6 +61,10 @@ For detailed partition information, use 'gitaly cluster get-partition'.`,
 				Name:  flagClusterInfoListPartitions,
 				Usage: "display partition overview table (default: only show cluster statistics)",
 			},
+			&cli.BoolFlag{
+				Name:  flagClusterInfoNoColor,
+				Usage: "disable colored output",
+			},
 		},
 		Action: clusterInfoAction,
 	}
@@ -68,6 +76,10 @@ func clusterInfoAction(ctx context.Context, cmd *cli.Command) error {
 	// Get filter flags
 	storage := cmd.String(flagClusterInfoStorage)
 	listPartitions := cmd.Bool(flagClusterInfoListPartitions)
+	noColor := cmd.Bool(flagClusterInfoNoColor)
+
+	// Configure color output
+	colorOutput := setupColorOutput(cmd.Writer, noColor)
 
 	// Create Raft client using shared helper
 	raftClient, cleanup, err := loadConfigAndCreateRaftClient(ctx, configPath)
@@ -77,11 +89,11 @@ func clusterInfoAction(ctx context.Context, cmd *cli.Command) error {
 	defer cleanup()
 
 	// Display cluster info with optimized RPC calls
-	return displayClusterInfo(ctx, cmd.Writer, raftClient, storage, listPartitions)
+	return displayClusterInfo(ctx, cmd.Writer, raftClient, storage, listPartitions, colorOutput)
 }
 
 // displayClusterInfo calls GetClusterInfo and optionally GetPartitions RPCs, processes the data, and displays the results
-func displayClusterInfo(ctx context.Context, writer io.Writer, client gitalypb.RaftServiceClient, storage string, listPartitions bool) error {
+func displayClusterInfo(ctx context.Context, writer io.Writer, client gitalypb.RaftServiceClient, storage string, listPartitions bool, colorOutput *colorOutput) error {
 	// Step 1: Always get cluster statistics using GetClusterInfo RPC
 	var clusterInfoReq *gitalypb.RaftClusterInfoRequest
 	clusterInfoResp, err := client.GetClusterInfo(ctx, clusterInfoReq)
@@ -119,16 +131,16 @@ func displayClusterInfo(ctx context.Context, writer io.Writer, client gitalypb.R
 	}
 
 	// Step 3: Display results using the RPC responses
-	return displayFormattedResults(writer, clusterInfoResp, partitionResponses, storage, listPartitions)
+	return displayFormattedResults(writer, clusterInfoResp, partitionResponses, storage, listPartitions, colorOutput)
 }
 
 // displayFormattedResults displays cluster information using tabular format
-func displayFormattedResults(writer io.Writer, clusterInfoResp *gitalypb.RaftClusterInfoResponse, partitions []*gitalypb.GetPartitionsResponse, storage string, listPartitions bool) error {
-	fmt.Fprintf(writer, "=== Gitaly Cluster Information ===\n\n")
+func displayFormattedResults(writer io.Writer, clusterInfoResp *gitalypb.RaftClusterInfoResponse, partitions []*gitalypb.GetPartitionsResponse, storage string, listPartitions bool, colorOutput *colorOutput) error {
+	fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Gitaly Cluster Information ==="))
 
 	// Display cluster statistics overview
 	if clusterInfoResp.GetStatistics() != nil {
-		if err := displayClusterStatistics(writer, clusterInfoResp.GetStatistics(), storage); err != nil {
+		if err := displayClusterStatistics(writer, clusterInfoResp.GetStatistics(), storage, colorOutput); err != nil {
 			return err
 		}
 	}
@@ -139,29 +151,37 @@ func displayFormattedResults(writer io.Writer, clusterInfoResp *gitalypb.RaftClu
 			// Sort partitions by partition key for consistent output
 			sortPartitionsByKey(partitions)
 
-			return displayPartitionTable(writer, partitions, storage)
+			return displayPartitionTable(writer, partitions, storage, colorOutput)
 		} else if storage != "" {
 			fmt.Fprintf(writer, "No partitions found for storage: %s\n", storage)
 		}
 	} else {
 		// Suggest showing partitions if not displayed
-		fmt.Fprintf(writer, "Use --list-partitions to display partition overview table.\n")
+		fmt.Fprintf(writer, "%s\n", colorOutput.formatInfo("Use --list-partitions to display partition overview table."))
 	}
 
 	return nil
 }
 
 // displayClusterStatistics displays cluster-wide statistics in a readable format
-func displayClusterStatistics(writer io.Writer, stats *gitalypb.ClusterStatistics, storageFilter string) error {
-	fmt.Fprintf(writer, "=== Cluster Statistics ===\n")
-	fmt.Fprintf(writer, "  Total Partitions: %d\n", stats.GetTotalPartitions())
-	fmt.Fprintf(writer, "  Total Replicas: %d\n", stats.GetTotalReplicas())
-	fmt.Fprintf(writer, "  Healthy Partitions: %d\n", stats.GetHealthyPartitions())
-	fmt.Fprintf(writer, "  Healthy Replicas: %d\n", stats.GetHealthyReplicas())
+func displayClusterStatistics(writer io.Writer, stats *gitalypb.ClusterStatistics, storageFilter string, colorOutput *colorOutput) error {
+	// Display overall cluster health at the top
+	partitionHealth := colorOutput.formatHealthStatus(int(stats.GetHealthyPartitions()), int(stats.GetTotalPartitions()))
+	replicaHealth := colorOutput.formatHealthStatus(int(stats.GetHealthyReplicas()), int(stats.GetTotalReplicas()))
+
+	fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Cluster Health Summary ==="))
+	fmt.Fprintf(writer, "  Partitions: %s\n", partitionHealth)
+	fmt.Fprintf(writer, "  Replicas: %s\n\n", replicaHealth)
+
+	fmt.Fprintf(writer, "%s\n", colorOutput.formatHeader("=== Cluster Statistics ==="))
+	fmt.Fprintf(writer, "  Total Partitions: %s\n", colorOutput.formatInfo(fmt.Sprintf("%d", stats.GetTotalPartitions())))
+	fmt.Fprintf(writer, "  Total Replicas: %s\n", colorOutput.formatInfo(fmt.Sprintf("%d", stats.GetTotalReplicas())))
+	fmt.Fprintf(writer, "  Healthy Partitions: %s\n", colorOutput.formatInfo(fmt.Sprintf("%d", stats.GetHealthyPartitions())))
+	fmt.Fprintf(writer, "  Healthy Replicas: %s\n", colorOutput.formatInfo(fmt.Sprintf("%d", stats.GetHealthyReplicas())))
 	fmt.Fprintf(writer, "\n")
 
 	if len(stats.GetStorageStats()) > 0 {
-		fmt.Fprintf(writer, "=== Per-Storage Statistics ===\n\n")
+		fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Per-Storage Statistics ==="))
 
 		// Filter storage names if a storage filter is specified
 		var storageNames []string
@@ -203,8 +223,8 @@ func displayClusterStatistics(writer io.Writer, stats *gitalypb.ClusterStatistic
 }
 
 // displayPartitionTable displays partitions in a tabular format
-func displayPartitionTable(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse, storageFilter string) error {
-	fmt.Fprintf(writer, "=== Partition Overview ===\n\n")
+func displayPartitionTable(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse, storageFilter string, colorOutput *colorOutput) error {
+	fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Partition Overview ==="))
 
 	// Create table writer
 	tw := tabwriter.NewWriter(writer, 0, 0, 2, ' ', 0)
@@ -225,7 +245,7 @@ func displayPartitionTable(writer io.Writer, partitions []*gitalypb.GetPartition
 		for _, replica := range partition.GetReplicas() {
 			storageName := replica.GetReplicaId().GetStorageName()
 			if replica.GetIsLeader() {
-				leader = storageName
+				leader = colorOutput.formatInfo(storageName)
 				leaderLastIndex = replica.GetLastIndex()
 				leaderMatchIndex = replica.GetMatchIndex()
 			}
@@ -247,8 +267,15 @@ func displayPartitionTable(writer io.Writer, partitions []*gitalypb.GetPartition
 			replicasStr = fmt.Sprintf("%s (filtered: %s)", replicasStr, strings.Join(filteredReplicas, ", "))
 		}
 
-		// Format health status
-		healthStr := fmt.Sprintf("%d/%d", healthyReplicas, totalReplicas)
+		// Format health status with color
+		var healthStr string
+		if healthyReplicas == totalReplicas && totalReplicas > 0 {
+			healthStr = colorOutput.formatHealthy(fmt.Sprintf("%d/%d", healthyReplicas, totalReplicas))
+		} else if healthyReplicas == 0 {
+			healthStr = colorOutput.formatUnhealthy(fmt.Sprintf("%d/%d", healthyReplicas, totalReplicas))
+		} else {
+			healthStr = colorOutput.formatWarning(fmt.Sprintf("%d/%d", healthyReplicas, totalReplicas))
+		}
 
 		// Format last index and match index
 		lastIndexStr := "N/A"
@@ -275,4 +302,103 @@ func displayPartitionTable(writer io.Writer, partitions []*gitalypb.GetPartition
 	}
 
 	return nil
+}
+
+// colorOutput holds color configuration for terminal output
+type colorOutput struct {
+	enabled bool
+	green   *color.Color
+	red     *color.Color
+	yellow  *color.Color
+	blue    *color.Color
+	cyan    *color.Color
+	bold    *color.Color
+}
+
+// setupColorOutput configures color output based on terminal capabilities and user preferences
+func setupColorOutput(writer io.Writer, noColor bool) *colorOutput {
+	// Determine if we should use color
+	shouldUseColor := !noColor && supportsColor(writer)
+
+	co := &colorOutput{
+		enabled: shouldUseColor,
+		green:   color.New(color.FgGreen),
+		red:     color.New(color.FgRed),
+		yellow:  color.New(color.FgYellow),
+		blue:    color.New(color.FgBlue),
+		cyan:    color.New(color.FgCyan),
+		bold:    color.New(color.Bold),
+	}
+
+	// Disable color if requested or not supported
+	if !shouldUseColor {
+		color.NoColor = true
+	}
+
+	return co
+}
+
+// supportsColor checks if the writer supports color output
+func supportsColor(writer io.Writer) bool {
+	// Check if it's a file (like os.Stdout/os.Stderr)
+	if f, ok := writer.(*os.File); ok {
+		return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
+	}
+	return false
+}
+
+// formatHealthy returns colored text for healthy status
+func (co *colorOutput) formatHealthy(text string) string {
+	if co.enabled {
+		return co.green.Sprint(text)
+	}
+	return text
+}
+
+// formatUnhealthy returns colored text for unhealthy status
+func (co *colorOutput) formatUnhealthy(text string) string {
+	if co.enabled {
+		return co.red.Sprint(text)
+	}
+	return text
+}
+
+// formatWarning returns colored text for warning status
+func (co *colorOutput) formatWarning(text string) string {
+	if co.enabled {
+		return co.yellow.Sprint(text)
+	}
+	return text
+}
+
+// formatHeader returns colored text for headers
+func (co *colorOutput) formatHeader(text string) string {
+	if co.enabled {
+		return co.bold.Sprint(text)
+	}
+	return text
+}
+
+// formatInfo returns colored text for informational content
+func (co *colorOutput) formatInfo(text string) string {
+	if co.enabled {
+		return co.cyan.Sprint(text)
+	}
+	return text
+}
+
+// formatHealthStatus returns a colored health indicator with symbol
+func (co *colorOutput) formatHealthStatus(healthy, total int) string {
+	if healthy == total && total > 0 {
+		symbol := "✓"
+		status := fmt.Sprintf("%s Healthy (%d/%d)", symbol, healthy, total)
+		return co.formatHealthy(status)
+	} else if healthy == 0 {
+		symbol := "✗"
+		status := fmt.Sprintf("%s Unhealthy (%d/%d)", symbol, healthy, total)
+		return co.formatUnhealthy(status)
+	}
+	symbol := "⚠"
+	status := fmt.Sprintf("%s Degraded (%d/%d)", symbol, healthy, total)
+	return co.formatWarning(status)
 }

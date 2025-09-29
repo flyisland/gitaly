@@ -15,6 +15,7 @@ const (
 	flagGetPartitionConfig       = "config"
 	flagGetPartitionPartitionKey = "partition-key"
 	flagGetPartitionRelativePath = "relative-path"
+	flagGetPartitionNoColor      = "no-color"
 )
 
 func newClusterGetPartitionCommand() *cli.Command {
@@ -52,6 +53,10 @@ the partition containing a specific repository.`,
 				Name:  flagGetPartitionRelativePath,
 				Usage: "show partition info for a specific repository path",
 			},
+			&cli.BoolFlag{
+				Name:  flagGetPartitionNoColor,
+				Usage: "disable colored output",
+			},
 		},
 		Action: getPartitionAction,
 	}
@@ -63,6 +68,10 @@ func getPartitionAction(ctx context.Context, cmd *cli.Command) error {
 	// Get filter flags
 	partitionKey := cmd.String(flagGetPartitionPartitionKey)
 	relativePath := cmd.String(flagGetPartitionRelativePath)
+	noColor := cmd.Bool(flagGetPartitionNoColor)
+
+	// Configure color output
+	colorOutput := setupColorOutput(cmd.Writer, noColor)
 
 	// Validate that at least one filter is provided
 	if partitionKey == "" && relativePath == "" {
@@ -87,11 +96,11 @@ func getPartitionAction(ctx context.Context, cmd *cli.Command) error {
 	defer cleanup()
 
 	// Display partition details
-	return displayPartitionDetails(ctx, cmd.Writer, raftClient, partitionKey, relativePath)
+	return displayPartitionDetails(ctx, cmd.Writer, raftClient, partitionKey, relativePath, colorOutput)
 }
 
 // displayPartitionDetails calls RPCs and displays detailed partition information
-func displayPartitionDetails(ctx context.Context, writer io.Writer, client gitalypb.RaftServiceClient, partitionKey, relativePath string) error {
+func displayPartitionDetails(ctx context.Context, writer io.Writer, client gitalypb.RaftServiceClient, partitionKey, relativePath string, colorOutput *colorOutput) error {
 	// Get partition details using GetPartitions RPC
 	partitionsReq := &gitalypb.GetPartitionsRequest{
 		IncludeRelativePaths:  true,
@@ -118,20 +127,20 @@ func displayPartitionDetails(ctx context.Context, writer io.Writer, client gital
 	}
 
 	// Step 3: Display results
-	return displayFormattedPartitionDetails(writer, partitionResponses, partitionKey, relativePath)
+	return displayFormattedPartitionDetails(writer, partitionResponses, partitionKey, relativePath, colorOutput)
 }
 
 // displayFormattedPartitionDetails displays detailed partition information
-func displayFormattedPartitionDetails(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse, partitionKey, relativePath string) error {
+func displayFormattedPartitionDetails(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse, partitionKey, relativePath string, colorOutput *colorOutput) error {
 	// Display detailed partition information
 	if len(partitions) > 0 {
 		// Sort partitions by partition key for consistent output
 		sortPartitionsByKey(partitions)
 
 		if relativePath != "" {
-			fmt.Fprintf(writer, "=== Partition Details for Repository: %s ===\n\n", relativePath)
+			fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader(fmt.Sprintf("=== Partition Details for Repository: %s ===", relativePath)))
 		} else if partitionKey != "" {
-			fmt.Fprintf(writer, "=== Partition Details for Key: %s ===\n\n", partitionKey)
+			fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader(fmt.Sprintf("=== Partition Details for Key: %s ===", partitionKey)))
 		}
 
 		for i, partition := range partitions {
@@ -139,7 +148,7 @@ func displayFormattedPartitionDetails(writer io.Writer, partitions []*gitalypb.G
 				fmt.Fprintf(writer, "\n")
 			}
 
-			fmt.Fprintf(writer, "Partition: %s\n\n", partition.GetPartitionKey().GetValue())
+			fmt.Fprintf(writer, "Partition: %s\n\n", colorOutput.formatInfo(partition.GetPartitionKey().GetValue()))
 
 			// Display replicas in tabular format
 			if len(partition.GetReplicas()) > 0 {
@@ -149,13 +158,17 @@ func displayFormattedPartitionDetails(writer io.Writer, partitions []*gitalypb.G
 				fmt.Fprintf(tw, "-------\t----\t------\t----------\t-----------\n")
 
 				for _, replica := range partition.GetReplicas() {
-					role := "Follower"
+					var role string
 					if replica.GetIsLeader() {
-						role = "Leader"
+						role = colorOutput.formatInfo("Leader")
+					} else {
+						role = "Follower"
 					}
-					health := "Healthy"
-					if !replica.GetIsHealthy() {
-						health = "Unhealthy"
+					var health string
+					if replica.GetIsHealthy() {
+						health = colorOutput.formatHealthy("Healthy")
+					} else {
+						health = colorOutput.formatUnhealthy("Unhealthy")
 					}
 					fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\n",
 						replica.GetReplicaId().GetStorageName(),
@@ -171,7 +184,7 @@ func displayFormattedPartitionDetails(writer io.Writer, partitions []*gitalypb.G
 
 			// Display repositories in tabular format
 			if len(partition.GetRelativePaths()) > 0 {
-				fmt.Fprintf(writer, "Repositories:\n\n")
+				fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("Repositories:"))
 
 				tw := tabwriter.NewWriter(writer, 0, 0, 2, ' ', 0)
 

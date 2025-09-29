@@ -22,6 +22,8 @@ import (
 )
 
 func TestClusterGetPartitionCommand(t *testing.T) {
+	testhelper.SkipWithPraefect(t, "RAFT is not compatible with Praefect")
+
 	ctx := testhelper.Context(t)
 
 	tests := []struct {
@@ -82,6 +84,8 @@ func TestClusterGetPartitionCommand(t *testing.T) {
 		{
 			name: "non-raft server",
 			setupServer: func(t *testing.T) (string, func()) {
+				testhelper.SkipWithRaft(t, "Skipping non-raft server test when GITALY_TEST_RAFT is enabled")
+
 				cfg := testcfg.Build(t)
 
 				// Start a regular Gitaly server without Raft
