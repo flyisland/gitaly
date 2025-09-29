@@ -69,7 +69,6 @@ variables:
   FF_USE_GIT_NATIVE_CLONE: "true"
   GIT_STRATEGY: "clone"
 
-
 include:
   - template: Jobs/SAST.latest.gitlab-ci.yml
   - template: Security/Dependency-Scanning.gitlab-ci.yml
@@ -271,7 +270,15 @@ test:
         TEST_TARGET: test
         USE_MESON: YesPlease
       - TEST_TARGET:
-          [test-with-praefect, race-go, test-wal, test-raft, test-with-praefect-wal, test-with-git-master, test-with-git-prev]
+          [
+            test-with-praefect,
+            race-go,
+            test-wal,
+            test-raft,
+            test-with-praefect-wal,
+            test-with-git-master,
+            test-with-git-prev,
+          ]
       # Execute tests with our minimum required Postgres version, as well. If
       # the minimum version changes, please change this to the new minimum
       # version. Furthermore, please make sure to update the minimum required
@@ -342,8 +349,7 @@ test:sha256:
   <<: *test_definition
   parallel:
     matrix:
-      - TEST_TARGET:
-          [test, test-with-praefect, test-with-reftable, test-wal, test-raft, test-with-praefect-wal]
+      - TEST_TARGET: [test, test-with-praefect, test-with-reftable, test-wal, test-raft, test-with-praefect-wal]
         TEST_WITH_SHA256: "YesPlease"
 
 test:fips:
@@ -364,7 +370,17 @@ test:fips:
     GOTESTSUM_OPTIONS: "--rerun-fails-max-failures=24 --rerun-fails=3"
   before_script:
     - *test_before_script
-    - dnf install -y python3
+    # Install minimal pyenv build dependencies
+    - dnf install -y gcc make patch zlib-devel bzip2-devel openssl-devel libffi-devel
+    # Install pyenv
+    - curl https://pyenv.run | bash
+    - export PYENV_ROOT="$HOME/.pyenv"
+    - export PATH="$PYENV_ROOT/bin:$PATH"
+    - eval "$(pyenv init -)"
+    # Install Python 3.13.7
+    - pyenv install 3.13.7
+    - pyenv global 3.13.7
+    - python3 --version
     - test "$(cat /proc/sys/crypto/fips_enabled)" = "1" || (echo "System is not running in FIPS mode" && exit 1)
   parallel:
     matrix:
@@ -406,11 +422,14 @@ test:macos:
     - sudo diskutil apfs create $(hdiutil attach -nomount ram://4194304) RAMDisk
     - brew uninstall asdf --force
     - rm -rf $HOME/.asdf
-    - brew install python go@${GO_VERSION} cmake postgresql
+    - brew install pyenv go@${GO_VERSION} cmake postgresql
+    - pyenv install 3.13.7
+    - pyenv global 3.13.7
+    - export PATH="$HOME/.pyenv/versions/3.13.7/bin:$PATH"
     # Older Go versions may be keg-only and thus aren't linked into `PATH` by
     # default. We need to override this mechanism to force this specific Go
     # version to become active.
-    - brew link --force go@${GO_VERSION} python
+    - brew link --force go@${GO_VERSION}
     - go version
     - python3 --version
     - sw_vers
@@ -562,7 +581,7 @@ start-rails-specs:
     on_stop: rails-specs-cleanup
   rules:
     - changes:
-      - .tool-versions
+        - .tool-versions
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       when: manual
       allow_failure: true
