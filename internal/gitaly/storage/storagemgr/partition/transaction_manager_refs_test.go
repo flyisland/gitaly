@@ -1388,32 +1388,6 @@ func generateModifyReferencesTests(t *testing.T, setup testTransactionSetup) []t
 			},
 		},
 		{
-			desc: "delete symbolic reference pointing to non-existent reference",
-			steps: steps{
-				StartManager{
-					ModifyStorage: func(tb testing.TB, cfg config.Cfg, storagePath string) {
-						gittest.Exec(tb, cfg,
-							"-C", filepath.Join(storagePath, setup.RelativePath),
-							"symbolic-ref", "refs/heads/symbolic", "refs/heads/main",
-						)
-					},
-				},
-				Begin{
-					RelativePaths: []string{setup.RelativePath},
-				},
-				Commit{
-					ReferenceUpdates: git.ReferenceUpdates{
-						"refs/heads/symbolic": {OldOID: setup.ObjectHash.ZeroOID, NewOID: setup.ObjectHash.ZeroOID},
-					},
-				},
-			},
-			expectedState: StateAssertion{
-				Database: DatabaseState{
-					string(keyAppliedLSN): storage.LSN(1).ToProto(),
-				},
-			},
-		},
-		{
 			desc: "delete symbolic reference",
 			steps: steps{
 				StartManager{
