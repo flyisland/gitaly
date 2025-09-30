@@ -105,7 +105,9 @@ func (vf ValueFlag) OptionArgs() ([]string, error) {
 func ConvertGlobalOptions(options *gitalypb.GlobalOptions) []CmdOpt {
 	if options != nil && options.GetLiteralPathspecs() {
 		return []CmdOpt{
-			WithEnv("GIT_LITERAL_PATHSPECS=1"),
+			WithGlobalOption(Flag{
+				Name: "--literal-pathspecs",
+			}),
 		}
 	}
 
