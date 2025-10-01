@@ -1903,8 +1903,14 @@ func TestReplica_AddNode(t *testing.T) {
 			destinationAddresses = append(destinationAddresses, address)
 			addressesToReplicas[address] = replica
 
-			routingTableTwo := replica.raftEnabledStorage.GetRoutingTable()
-			err := routingTableTwo.UpsertEntry(RoutingTableEntry{
+			// Register the replica so it can receive Raft messages from other nodes.
+			// Without registration, the transport layer cannot route messages to this replica,
+			// preventing it from learning about the current leader.
+			replicaRegistry := replica.raftEnabledStorage.GetReplicaRegistry()
+			replicaRegistry.RegisterReplica(partitionKey, replica)
+
+			replicaRoutingTable := replica.raftEnabledStorage.GetRoutingTable()
+			err := replicaRoutingTable.UpsertEntry(RoutingTableEntry{
 				Replicas: []*gitalypb.ReplicaID{
 					{
 						PartitionKey: partitionKey,
