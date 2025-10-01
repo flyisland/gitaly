@@ -6,7 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"sync"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -27,6 +27,75 @@ import (
 	"google.golang.org/grpc"
 )
 
+func TestReportLostFoundDirectoryExistence(t *testing.T) {
+	type testSetup func(*testing.T, string)
+	noContentFn := func(t *testing.T, path string) {}
+	hasContentFn := func(t *testing.T, path string) {
+		require.NoError(t, os.MkdirAll(filepath.Join(path, migration.LostFoundPrefix), mode.Directory))
+	}
+
+	for _, tc := range []struct {
+		desc             string
+		storages         map[string]testSetup
+		expectedStorages []string
+	}{
+		{
+			desc: "storages have no garbage",
+			storages: map[string]testSetup{
+				"s1": noContentFn,
+				"s2": noContentFn,
+			},
+		},
+		{
+			desc: "one storage has no garbage, the other has",
+			storages: map[string]testSetup{
+				"s1": noContentFn,
+				"s2": hasContentFn,
+			},
+			expectedStorages: []string{"s2"},
+		},
+		{
+			desc: "all storages have garbage",
+			storages: map[string]testSetup{
+				"s1": hasContentFn,
+				"s2": hasContentFn,
+				"s3": hasContentFn,
+			},
+			expectedStorages: []string{"s1", "s2", "s3"},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+			tmpDir := testhelper.TempDir(t)
+			logger := testhelper.NewLogger(t)
+			hook := testhelper.AddLoggerHook(logger)
+			defer hook.Reset()
+
+			cfg := testcfg.Build(t)
+			cfg.Storages = make([]config.Storage, len(tc.storages))
+			var idx int
+			for storageName, setupFn := range tc.storages {
+				cfg.Storages[idx].Name = storageName
+				cfg.Storages[idx].Path = filepath.Join(tmpDir, storageName)
+				idx++
+				setupFn(t, filepath.Join(tmpDir, storageName))
+			}
+
+			migration.ReportLostFoundDirectoryExistence(logger, cfg)
+			logEntries := hook.AllEntries()
+			require.Equal(t, len(tc.expectedStorages), len(logEntries))
+			actualStorage := make([]string, 0, len(tc.storages))
+			if len(tc.expectedStorages) > 0 {
+				for _, entry := range logEntries {
+					require.Contains(t, entry.Message, "leftover migration garbage dir is detected")
+					actualStorage = append(actualStorage, entry.Data["storageName"].(string))
+				}
+				require.ElementsMatch(t, tc.expectedStorages, actualStorage)
+			}
+		})
+	}
+}
+
 func TestNewLeftoverFileMigration_WithOrWithoutFeatureFlag(t *testing.T) {
 	t.Parallel()
 	testhelper.NewFeatureSets(
@@ -35,19 +104,13 @@ func TestNewLeftoverFileMigration_WithOrWithoutFeatureFlag(t *testing.T) {
 }
 
 func testNewLeftoverFileMigration(t *testing.T, ctx context.Context) {
-	var mu sync.RWMutex
 	t.Parallel()
-	cfg := testcfg.Build(t)
-
-	var migrationPtr *[]migration.Migration
-	var migrations []migration.Migration
-	migrationPtr = &migrations
-	repoClient, socket := runGitalyServer(t, cfg, testserver.WithMigrations(migrationPtr))
-	cfg.SocketPath = socket
 
 	for _, tc := range []struct {
 		desc                 string
 		garbageInPreviousRun bool
+		hasDotKeepFiles      bool
+		hasLogsDirs          bool
 	}{
 		{
 			desc: "move all leftover files",
@@ -56,12 +119,31 @@ func testNewLeftoverFileMigration(t *testing.T, ctx context.Context) {
 			desc:                 "garbage files from previous migration run",
 			garbageInPreviousRun: true,
 		},
+		{
+			desc:            "has .keep file",
+			hasDotKeepFiles: true,
+		},
+		{
+			desc:        "has logs dir",
+			hasLogsDirs: true,
+		},
+		{
+			desc:            "has .keep file and logs dir",
+			hasDotKeepFiles: true,
+			hasLogsDirs:     true,
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			poolSetup := createLeftoverMigrationRepo(t, ctx, cfg, true, "")
-			repoSetup := createLeftoverMigrationRepo(t, ctx, cfg, false, poolSetup.repoPath)
+			cfg := testcfg.Build(t)
+			var migrationPtr *[]migration.Migration
+			var migrations []migration.Migration
+			migrationPtr = &migrations
+			repoClient, socket := runGitalyServer(t, cfg, testserver.WithMigrations(migrationPtr))
+			cfg.SocketPath = socket
+			poolSetup := createLeftoverMigrationRepo(t, ctx, cfg, true, "", tc.hasDotKeepFiles, tc.hasLogsDirs)
+			repoSetup := createLeftoverMigrationRepo(t, ctx, cfg, false, poolSetup.repoPath, tc.hasDotKeepFiles, tc.hasLogsDirs)
 
 			repoPathOnDisk, err := filepath.Rel(repoSetup.storagePath, repoSetup.repoPath)
 			require.NoError(t, err)
@@ -92,14 +174,11 @@ func testNewLeftoverFileMigration(t *testing.T, ctx context.Context) {
 				}
 			}
 
-			// Avoid racing if other test also change the migration slice.
-			mu.Lock()
 			migrations = []migration.Migration{migration.NewLeftoverFileMigration(config.NewLocator(cfg))}
 
 			_, err = repoClient.RepositorySize(ctx, &gitalypb.RepositorySizeRequest{
 				Repository: repoSetup.repo,
 			})
-			mu.Unlock()
 			require.NoError(t, err)
 
 			// Force WAL sync to ensure migration transaction effects are applied to disk
@@ -134,7 +213,7 @@ type leftoverMigrationRepoSetup struct {
 // The repository itself is created via a Gitaly RPC, but its contents are written directly to disk,
 // bypassing Gitaly. This simplifies test setup and allows precise control over the repository state,
 // enabling us to add arbitrary garbage files as needed for testing.
-func createLeftoverMigrationRepo(t *testing.T, ctx context.Context, cfg config.Cfg, isPool bool, poolRepoPath string) leftoverMigrationRepoSetup {
+func createLeftoverMigrationRepo(t *testing.T, ctx context.Context, cfg config.Cfg, isPool bool, poolRepoPath string, hasDotKeepFile, hasLogsDir bool) leftoverMigrationRepoSetup {
 	t.Helper()
 	if isPool {
 		require.Empty(t, poolRepoPath)
@@ -229,13 +308,8 @@ func createLeftoverMigrationRepo(t *testing.T, ctx context.Context, cfg config.C
 		"objects/12/f4d6cb2e1b9a7930e01db68bc3c1f5943733e52ff6cb7b2dcf1a47.invalid":              {Mode: mode.File, Content: []byte("suffix invalid")},
 
 		"objects/pack": {Mode: mode.Directory},
-		"objects/pack/pack-1234567890abcdef1234567890abcdef12345678.keep":                          {Mode: mode.File, Content: []byte{}},
 		"objects/pack/pack-1234567890abcdef1234567890abcdef12345678.mtime":                         {Mode: mode.File, Content: []byte("SHA1 mtime")},
 		"objects/pack/pack-0b2e4c1d9a3ed1a7c8f8e3f4b0c5d6a1b9f3e7c4d2b1f0e8a3c7d5b2e0a9abcd.mtime": {Mode: mode.File, Content: []byte("SHA256 mtime")},
-		"objects/pack/pack-3ed1a7c8f0b2e4c1d9a8e3f4b0c5d6a1b9f3e7c4d2b1f0e8a3c7d5b2e0a9c6d3.keep":  {Mode: mode.File, Content: []byte("SHA256 keep")},
-
-		"logs":          {Mode: mode.Directory},
-		"logs/some.log": {Mode: mode.File, Content: []byte("some log")},
 
 		"worktrees":                         {Mode: mode.Directory},
 		"worktrees/a_worktree":              {Mode: mode.File, Content: []byte("j worktree")},
@@ -243,6 +317,14 @@ func createLeftoverMigrationRepo(t *testing.T, ctx context.Context, cfg config.C
 		"gitlab-worktree/a_gitlab_worktree": {Mode: mode.File, Content: []byte("j gitlab worktree")},
 	}
 
+	if hasDotKeepFile {
+		filesMayBeRemoved["objects/pack/pack-1234567890abcdef1234567890abcdef12345678.keep"] = testhelper.DirectoryEntry{Mode: mode.File, Content: []byte{}}
+		filesMayBeRemoved["objects/pack/pack-3ed1a7c8f0b2e4c1d9a8e3f4b0c5d6a1b9f3e7c4d2b1f0e8a3c7d5b2e0a9c6d3.keep"] = testhelper.DirectoryEntry{Mode: mode.File, Content: []byte("SHA256 keep")}
+	}
+	if hasLogsDir {
+		filesMayBeRemoved["logs"] = testhelper.DirectoryEntry{Mode: mode.Directory}
+		filesMayBeRemoved["logs/some.log"] = testhelper.DirectoryEntry{Mode: mode.File, Content: []byte("some log")}
+	}
 	// Link to the pool repo if needed.
 	if !isPool && poolRepoPath != "" {
 		poolRelPath, err := filepath.Rel(filepath.Join(repoPath, "objects"), filepath.Join(poolRepoPath, "objects"))
@@ -305,7 +387,7 @@ func createLeftoverMigrationRepo(t *testing.T, ctx context.Context, cfg config.C
 		return setup
 	}
 
-	// Garbage are now outside the repo dir, it lives in +gitaly/lost+found
+	// Garbage are now outside the repo dir, it lives in leftover migration garbage dir.
 	for k, v := range repoStateMaybeRemove {
 		if v.Mode.IsDir() {
 			v.Mode = mode.Directory
@@ -313,6 +395,16 @@ func createLeftoverMigrationRepo(t *testing.T, ctx context.Context, cfg config.C
 		}
 	}
 	setup.expectedGarbageDirState = repoStateMaybeRemove
+
+	// If a .keep file or logs directory exists, we need to backup the objects dir.
+	// To validate this, we add all object files to setup.expectedGarbageDirState.
+	if hasDotKeepFile || hasLogsDir {
+		for k, v := range repoStateMustStay {
+			if strings.HasPrefix(k, "/objects") {
+				setup.expectedGarbageDirState[k] = v
+			}
+		}
+	}
 	return setup
 }
 

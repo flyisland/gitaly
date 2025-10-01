@@ -771,6 +771,9 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	// database), but this is a close enough indication of startup latency.
 	logger.WithField("duration_ms", time.Since(beganRun).Milliseconds()).Info("Started Gitaly")
 
+	// Report leftover migration garbage directory statistics if there are any
+	migration.ReportLostFoundDirectoryExistence(logger, cfg)
+
 	if !cfg.DailyMaintenance.IsDisabled() {
 		shutdownWorkers, err := maintenance.StartWorkers(
 			ctx,
