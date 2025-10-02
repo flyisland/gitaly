@@ -6,7 +6,7 @@
     mode: '0755'
 - name: Copy plot.py script
   copy:
-    src: plot.py
+    src: "{{ playbook_dir }}/experiments/{{ gitaly_benchmarking_experiment_name }}/plot.py"
     dest: /src/plot.py
 - name: Install pip3
   apt:

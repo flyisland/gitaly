@@ -4,7 +4,30 @@
 
 An Ansible script for running RPC-level benchmarks against Gitaly.
 
+Benchmarks are organised into "experiments", defind as subdirectories within the `experiments/` folder. Each experiment
+consists of four configuration files:
+
+- `config.yml.example` and `config.yml` - sets up the infrastructure and repositories used for the benchmark. Repository-level
+  configuration like the reference backend and test data are defned here. When you're running an existing experiment, copy the
+  `config.yml.example` to `config.yml`. When creating a new experiment, write and commit a `config.yml.example` for others to
+  use.
+- `k6-benchmark.js` - defines the offered workload to Gitaly during the benchmark. Workloads in K6 are organised as
+  scenarios which can run concurrently. Refer to the [k6 documentation](https://grafana.com/docs/k6/latest/using-k6/)
+  for more information. The runtime is upper-bounded by the `workload_wait_duration` defned in
+  `roles/benchmark/vars/main.yml`.
+- `plot.py` - ingests the Gitaly JSON logfile and uses the `pandas` and `plotnine` libraries to produce graphs.
+- `profile-gitaly.sh` - executes concurrently with K6 to profile the Gitaly host under load. The profiling duration is
+  defined as `profile_duration` in `roles/benchmark/vars/main.yml`. This duration should be <= the workload duration.
+
+These files can be customised for each experiment and committed back to the Gitaly repository, allowing experiments to
+be easily reproduced. When starting a new experiment, you can simply make a copy of the `example` experiment as a
+starting point.
+
 ## Steps for use
+
+All scripts must be run with the `EXPERIMENT` environment variable set to the name of a directory within `experiments/`.
+Experiments are deployed using Terraform workspaces, so it's possible to deploy multiple experiments simultaneously.
+Feel free to export the environment varible instead of redefining it for each command.
 
 ### 1. Setup your environment
 
@@ -13,18 +36,18 @@ An Ansible script for running RPC-level benchmarks against Gitaly.
 1. Create a new Python virtualenv: `python3 -m venv env`
 1. Activate the virtualenv: `source env/bin/activate`
 1. Install Ansible: `python3 -m pip install -r requirements.txt`
-1. Copy `config.yml.example` to `config.yml` to customize the machine types and repositories used for benchmarking. If
-   you don't have access to the default GCP project, you can point the configuration to your own.
+1. Copy the experiment's `config.yml.example` to `config.yml` to customize the machine types and repositories used
+   for benchmarking. If you don't have access to the default GCP project, you can point the configuration to your own.
 
 ### 2. Create instance
 
 ```shell
-./create-benchmark-instance
+EXPERIMENT=example ./create-benchmark-instance
 ```
 
 This will create the Gitaly nodes and a small client node to send requests to
-Gitaly over gRPC. This will prompt for the Gitaly revision to be built,
-instance name, and public SSH key to use for connections.
+Gitaly over gRPC. This will prompt for the instance name and public SSH key to
+use for connections.
 
 Use the `gitaly_bench` user to SSH into the instance if desired:
 
@@ -35,7 +58,7 @@ ssh gitaly_bench@<INSTANCE_ADDRESS>
 ### 3. Configure instance
 
 ```shell
-./configure-benchmark-instance
+EXPERIMENT=example ./configure-benchmark-instance
 ```
 
 Build and install Gitaly from source with from desired reference and install
@@ -45,41 +68,30 @@ profiling tools. A disk image containing the test repositories will be mounted t
 ### 4. Run benchmarks
 
 ```shell
-./run-benchmarks
+EXPERIMENT=example ./run-benchmarks
 ```
 
-Run the benchmarks specified in `k6-benchmark.js`. By default Gitaly is
-profiled with `perf` for flamegraphs and other metrics, which
-may add ~10% overhead. Set the `profile` variable to `false` to disable profiling:
+Run the specified experiment, using the scripts defined in the `experiments/${EXPERIMENT}`
+directory. Profiling can be optionally disabled to eliminate overhead, but graphs will still
+be generated.
 
 ```shell
-./run-benchmarks --extra-vars "profile=false"
+EXPERIMENT=example ./run-benchmarks --extra-vars "profile=false"
 ```
 
 On completion a tarball of the benchmark output will be written to
-`results/benchmark-<BENCH_TIMESTAMP>.tar.gz`. The root directory
+`experiments/${EXPERIMENT}/results/benchmark-<BENCH_TIMESTAMP>.tar.gz`. The root directory
 contains the k6 test summary and associated logs. Each subdirectory is named after
 the target Gitaly instance (i.e. `gitaly_instances[*].name` from the `config.yml`
-file) and contains instance-specific output:
-
-- `gitaly.log` - The main Gitaly log file.
-- Various statistics extracted from the Gitaly log file, as pairs of `.txt` and
-  `.png` files. These are produced by `roles/gitaly/files/plot.py`.
-
-When profiling is enabled, the following are also present:
-
-- `all-perf.svg` - Flamegraph built from a system-wide `perf` capture. This uses
-  `--call-graph=dwarf` and will provide accurate stack traces for Git but
-  Gitaly's will be invalid.
-- `gitaly-perf.svg` - Flamegraph built from running `perf` against Gitaly only.
-  This uses `--call-graph=fp` for accurate stack traces for Golang.
+file) and contains instance-specific output.
 
 ### 5. Destroy instance
 
 ```shell
-./destroy-benchmark-instance
+EXPERIMENT=example ./destroy-benchmark-instance
 ```
 
 All nodes will be destroyed. As GCP will frequently reuse public IP addresses,
 the addresses of the now destroyed instances are automatically removed from
 your `~/.ssh/known_hosts` file to prevent connection failures on future runs.
+    

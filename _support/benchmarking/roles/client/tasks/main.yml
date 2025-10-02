@@ -1,7 +1,7 @@
 ---
 - name: Load config
   include_vars:
-    file: "{{ playbook_dir }}/config.yml"
+    file: "{{ playbook_dir }}/experiments/{{ gitaly_benchmarking_experiment_name }}/config.yml"
     name: config
 # needed for Ansible > 4.0 https://github.com/ansible/ansible/issues/74830
 - name: Install acl

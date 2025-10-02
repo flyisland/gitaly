@@ -1,2 +1,11 @@
 #!/bin/sh
-exec ansible-playbook -i localhost, create.yml "$@"
+
+if [ -z "$EXPERIMENT" ]
+then
+    echo "EXPERIMENT must be set to one of the directory names under experiments/"
+    exit 1
+fi
+
+exec ansible-playbook \
+    -i localhost, create.yml \
+    -e "gitaly_benchmarking_experiment_name=${EXPERIMENT}" "$@"

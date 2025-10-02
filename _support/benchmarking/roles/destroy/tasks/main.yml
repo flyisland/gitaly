@@ -4,5 +4,6 @@
     project_path: "{{ playbook_dir }}/terraform"
     variables_file: terraform.tfvars
     state: absent
+    workspace: "{{ gitaly_benchmarking_experiment_name }}"
   notify:
     - remove hostkeys
