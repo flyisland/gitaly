@@ -93,7 +93,7 @@ const selectTestRepo = () => {
   return {
     repository: {
       storageName: 'default',
-      relativePath: `${repo.name}.git`,
+      relativePath: `${repo.name}`,
       glRepository: repo.name,                // irrelevant but mandatory
       glProjectPath: `foo/bar/${repo.name}`,  // irrelevant but mandatory
     },
