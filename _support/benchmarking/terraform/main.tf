@@ -74,7 +74,7 @@ resource "null_resource" "prepare_repos_wait" {
 }
 
 resource "google_compute_image" "repos" {
-  name        = "git-repos"
+  name        =  format("%s-git-repos", var.gitaly_benchmarking_deployment_name)
   source_disk = google_compute_disk.prepare_repos.self_link
 
   depends_on = [null_resource.prepare_repos_wait]
