@@ -20,7 +20,7 @@ consists of four configuration files:
   defined as `profile_duration` in `roles/benchmark/vars/main.yml`. This duration should be <= the workload duration.
 
 These files can be customised for each experiment and committed back to the Gitaly repository, allowing experiments to
-be easily reproduced. When starting a new experiment, you can simply make a copy of the `example` experiment as a
+be easily reproduced. When starting a new experiment, you can simply make a copy of the `master` experiment as a
 starting point.
 
 ## Steps for use
@@ -48,7 +48,7 @@ Feel free to export the environment varible instead of redefining it for each co
 ### 2. Create instance
 
 ```shell
-EXPERIMENT=example ./create-benchmark-instance
+EXPERIMENT=master ./create-benchmark-instance
 ```
 
 This will create the Gitaly nodes and a small client node to send requests to
@@ -64,7 +64,7 @@ ssh gitaly_bench@<INSTANCE_ADDRESS>
 ### 3. Configure instance
 
 ```shell
-EXPERIMENT=example ./configure-benchmark-instance
+EXPERIMENT=master ./configure-benchmark-instance
 ```
 
 Build and install Gitaly from source with from desired reference and install
@@ -74,7 +74,7 @@ profiling tools. A disk image containing the test repositories will be mounted t
 ### 4. Run benchmarks
 
 ```shell
-EXPERIMENT=example ./run-benchmarks
+EXPERIMENT=master ./run-benchmarks
 ```
 
 Run the specified experiment, using the scripts defined in the `experiments/${EXPERIMENT}`
@@ -82,7 +82,7 @@ directory. Profiling can be optionally disabled to eliminate overhead, but graph
 be generated.
 
 ```shell
-EXPERIMENT=example ./run-benchmarks --extra-vars "profile=false"
+EXPERIMENT=master ./run-benchmarks --extra-vars "profile=false"
 ```
 
 On completion a tarball of the benchmark output will be written to
@@ -94,7 +94,7 @@ file) and contains instance-specific output.
 ### 5. Destroy instance
 
 ```shell
-EXPERIMENT=example ./destroy-benchmark-instance
+EXPERIMENT=master ./destroy-benchmark-instance
 ```
 
 All nodes will be destroyed. As GCP will frequently reuse public IP addresses,
