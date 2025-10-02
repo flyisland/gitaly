@@ -9,8 +9,10 @@ use_regional_disk: false
 # One of these zones must be the zone for benchmark_zone
 regional_disk_replica_zones: ["us-central1-a", "us-central1-b"]
 
+# The image to use for the client node and all Gitaly nodes.
 os_image: "ubuntu-os-cloud/ubuntu-2204-lts"
 
+# Configuration parameters for the sole client instance.
 client:
   machine_type: "n2d-standard-4"
   boot_disk_size: 20
@@ -20,25 +22,42 @@ client:
   # specified for the gitaly_instances below.
   gitaly_revision: HEAD
 
+# Configuration parameters for a collection of N Gitaly nodes. Benchmarks will execute for each Gitaly
+# node.
 gitaly_instances:
+    # Try to use a short name, otherwise we'll exceed the GCP resource name length of 63 characters
   - name: "large"
     machine_type: "n2d-standard-16"
     boot_disk_type: "pd-balanced"
     boot_disk_size: 20
     gitaly_revision: HEAD
+    # These are manually templated and don't translate directly to config.toml entries.
     config:
+      # Whether transactions should be enabled.
       transactions: true
     environment:
+      # Arbitrary environment variables. Note that SNAPSHOT_DRIVER doesn't actually do anything; it
+      # just serves as an example.
       SNAPSHOT_DRIVER: deepclone
 
 repository_disk_size: 100
 repository_disk_type: "pd-balanced"
+# A list of repositories to be cloned onto the repositories disk, along with test inputs to be used
+# for RPC calls. This section of the configuration is re-serialised into JSON and provided to the
+# K6 script.
+#
+# NOTE: you may wish to delete some of these entries, otherwise benchmarking setup may take a while
+# to clone each repo.
 repositories:
   - name: git
+    # Whether this repository should be tested. This toggle is read by the K6 script.
     include_in_test: true
+    # Which reference backend to use. This defines how the repository will be cloned.
     reference_backend: files
     remote: "https://gitlab.com/gitlab-org/git.git"
     revision: "2462961280690837670d997bde64bd4ebf8ae66d"
+    # Test data to be used as RPC inputs. The K6 script will randomly choose out of these available
+    # inputs.
     testdata:
       commits:
         - "fea9d18c534a445ef6e488d8ee711fa92fa0e6bd"
