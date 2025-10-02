@@ -69,7 +69,7 @@ repositories:
         - "refs/tags/v2.50.0"
       files:
         - "README.md"
-        - "t/t4013/diff.log_--cc_-m_-p_master"
+        - "t/lib-diff.sh"
         - "packfile.c"
       directories:
         - "t"
@@ -91,7 +91,7 @@ repositories:
         - "refs/tags/v2.50.0"
       files:
         - "README.md"
-        - "t/t4013/diff.log_--cc_-m_-p_master"
+        - "t/lib-diff.sh"
         - "packfile.c"
       directories:
         - "t"
