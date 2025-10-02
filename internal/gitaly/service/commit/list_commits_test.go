@@ -266,6 +266,30 @@ func TestListCommits(t *testing.T) {
 				main1, main0,
 			},
 		},
+		{
+			desc: "empty paths parameter behaves like no filtering",
+			request: &gitalypb.ListCommitsRequest{
+				Repository: repoProto,
+				Revisions: []string{
+					main1ID.String(),
+				},
+				Paths: [][]byte{},
+			},
+			expectedCommits: []*gitalypb.GitCommit{
+				main1, main0,
+			},
+		},
+		{
+			desc: "paths parameter with non-existent path returns no commits",
+			request: &gitalypb.ListCommitsRequest{
+				Repository: repoProto,
+				Revisions: []string{
+					main1ID.String(),
+				},
+				Paths: [][]byte{[]byte("non-existent-file.txt")},
+			},
+			expectedCommits: nil,
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()

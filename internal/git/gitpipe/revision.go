@@ -59,6 +59,7 @@ type revlistConfig struct {
 	commitMessagePatterns [][]byte
 	skipResult            func(*RevisionResult) bool
 	skip                  uint
+	paths                 []string
 }
 
 // RevlistOption is an option for the revlist pipeline step.
@@ -198,6 +199,13 @@ func WithSkip(p uint) RevlistOption {
 	}
 }
 
+// WithPaths limits git-rev-list(1) to only show commits that affect the given paths.
+func WithPaths(paths ...string) RevlistOption {
+	return func(cfg *revlistConfig) {
+		cfg.paths = paths
+	}
+}
+
 // Revlist runs git-rev-list(1) with objects and object names enabled. The returned channel will
 // contain all object IDs listed by this command. Cancelling the context will cause the pipeline to
 // be cancelled, too.
@@ -304,11 +312,17 @@ func Revlist(
 			)
 		}
 
+		var postSepArgs []string
+		if len(cfg.paths) > 0 {
+			postSepArgs = append(postSepArgs, cfg.paths...)
+		}
+
 		var stderr strings.Builder
 		revlist, err := repo.Exec(ctx,
 			gitcmd.Command{
-				Name:  "rev-list",
-				Flags: flags,
+				Name:        "rev-list",
+				Flags:       flags,
+				PostSepArgs: postSepArgs,
 			},
 			gitcmd.WithStderr(&stderr),
 			gitcmd.WithSetupStdout(),

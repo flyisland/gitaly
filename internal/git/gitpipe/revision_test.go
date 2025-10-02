@@ -479,6 +479,123 @@ func TestRevlist(t *testing.T) {
 				{OID: subblob, ObjectName: []byte("subtree/subblob")},
 			},
 		},
+		{
+			desc: "skip commits - basic test",
+			revisions: []string{
+				commitA.String(),
+			},
+			options: []RevlistOption{
+				WithSkip(1),
+			},
+			expectedResults: nil, // commitA has no parents, so skipping 1 returns nothing
+		},
+		{
+			desc: "path filtering - subtree path only",
+			revisions: []string{
+				commitB.String(),
+			},
+			options: []RevlistOption{
+				WithPaths("subtree"),
+			},
+			expectedResults: []RevisionResult{
+				{OID: commitB},
+			},
+		},
+		{
+			desc: "path filtering - non-existent path",
+			revisions: []string{
+				commitB.String(),
+			},
+			options: []RevlistOption{
+				WithPaths("non-existent.txt"),
+			},
+			expectedResults: nil,
+		},
+		{
+			desc: "path filtering with objects",
+			revisions: []string{
+				commitB.String(),
+			},
+			options: []RevlistOption{
+				WithPaths("subtree"),
+				WithObjects(),
+			},
+			expectedResults: []RevisionResult{
+				{OID: commitB},
+				{OID: treeB},
+				{OID: subtree, ObjectName: []byte("subtree")},
+				{OID: subblob, ObjectName: []byte("subtree/subblob")},
+			},
+		},
+		{
+			desc: "path filtering - multiple paths",
+			revisions: []string{
+				commitB.String(),
+			},
+			options: []RevlistOption{
+				WithPaths("branch-test.txt", "subtree"),
+			},
+			expectedResults: []RevisionResult{
+				{OID: commitB},
+				{OID: commitA},
+			},
+		},
+		{
+			desc: "path filtering - multiple paths with objects",
+			revisions: []string{
+				commitB.String(),
+			},
+			options: []RevlistOption{
+				WithPaths("branch-test.txt", "subtree"),
+				WithObjects(),
+			},
+			expectedResults: []RevisionResult{
+				{OID: commitB},
+				{OID: treeB},
+				{OID: blob, ObjectName: []byte("branch-test.txt")},
+				{OID: subtree, ObjectName: []byte("subtree")},
+				{OID: subblob, ObjectName: []byte("subtree/subblob")},
+				{OID: commitA},
+				{OID: treeA},
+			},
+		},
+		{
+			desc: "path filtering - multiple paths, some non-existent",
+			revisions: []string{
+				commitB.String(),
+			},
+			options: []RevlistOption{
+				WithPaths("subtree", "non-existent.txt"),
+			},
+			expectedResults: []RevisionResult{
+				{OID: commitB},
+			},
+		},
+		{
+			desc: "path filtering - root path",
+			revisions: []string{
+				commitB.String(),
+			},
+			options: []RevlistOption{
+				WithPaths("."),
+			},
+			expectedResults: []RevisionResult{
+				{OID: commitB},
+				{OID: commitA},
+			},
+		},
+		{
+			desc: "path filtering - glob pattern",
+			revisions: []string{
+				commitB.String(),
+			},
+			options: []RevlistOption{
+				WithPaths("*.txt"),
+			},
+			expectedResults: []RevisionResult{
+				{OID: commitA},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			it := Revlist(ctx, repo, tc.revisions, tc.options...)
