@@ -1,0 +1,16 @@
+do_futex
+do_wait
+do_nanosleep
+sysvec_apic_timer_interrupt
+do_epoll_wait
+do_sched_yield
+schedule_hrtimeout_range
+schedule_timeout
+fuse_dev_do_read
+pipe_read
+pipe_write
+kthread\+[0-9]+;worker_thread
+kthread\+[0-9]+;smpboot_thread_fn
+kthread\+[0-9]+;kjournald2\+[0-9]+;schedule
+kthreadd
+rcu_sched

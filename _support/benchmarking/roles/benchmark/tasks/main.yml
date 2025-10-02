@@ -1,6 +1,6 @@
 ---
 - name: Set run_name
-  set_fact: "run_name=benchmark-{{ gitaly_revision }}-{{ lookup('pipe', 'date +%s') }}"
+  set_fact: "run_name=benchmark-{{ lookup('pipe', 'date +%s') }}"
 
 - name: Run benchmarks against each target machine
   include_tasks: bench.yml

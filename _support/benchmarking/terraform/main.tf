@@ -46,7 +46,7 @@ resource "google_compute_instance" "prepare_repos" {
   # https://cloud.google.com/compute/docs/instances/startup-scripts/linux
   metadata = {
     startup-script = templatefile("${path.module}/../setup-repositories.sh", {
-      repositories = local.repository_urls
+      repositories = local.config.repositories
     })
   }
 }
@@ -74,7 +74,7 @@ resource "null_resource" "prepare_repos_wait" {
 }
 
 resource "google_compute_image" "repos" {
-  name        = "git-repos"
+  name        =  format("%s-git-repos", var.gitaly_benchmarking_deployment_name)
   source_disk = google_compute_disk.prepare_repos.self_link
 
   depends_on = [null_resource.prepare_repos_wait]

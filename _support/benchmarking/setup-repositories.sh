@@ -19,11 +19,17 @@ chmod a+w "$${mountpoint}"
 
 echo "repositories disk successfully mounted as an ext4 volume at $${mountpoint}}"
 
+echo "installing Git"
+sudo add-apt-repository -y ppa:git-core/ppa && \
+    sudo apt update && \
+    sudo apt install git -y
+echo "finished installing Git"
+
 cd "$${mountpoint}"
 
-%{for repo_url in repositories}
-if ! git clone --bare "${repo_url}"; then
-echo "WARNING: Failed to clone ${repo_url}, continuing with other repositories" >&2
+%{for repo in repositories}
+if ! git clone --bare --ref-format="${repo.reference_backend}" "${repo.remote}" "${repo.name}"; then
+echo "WARNING: Failed to clone ${repo.remote}, continuing with other repositories" >&2
 fi
 %{endfor}
 

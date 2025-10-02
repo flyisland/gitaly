@@ -60,7 +60,7 @@
   git:
     repo: https://gitlab.com/gitlab-org/gitaly.git
     dest: /src/gitaly
-    version: "{{ hostvars[groups['client'][0]]['gitaly_commit'] }}"
+    version: "{{ target_instance.gitaly_revision }}"
   become_user: git
 
 - name: Build Gitaly
@@ -77,6 +77,7 @@
     target: install
     params:
       PREFIX: /opt/gitaly
+      GIT_APPEND_BUILD_OPTIONS: "CFLAGS='-fno-omit-frame-pointer -g -O2'"
     jobs: "{{ ansible_processor_nproc }}"
     chdir: /src/gitaly
   environment:
@@ -92,8 +93,8 @@
     mode: '0600'
 
 - name: Install Gitaly systemd service
-  copy:
-    src: gitaly.service
+  template:
+    src: gitaly.service.j2
     dest: /etc/systemd/system/gitaly.service
     owner: root
     group: root

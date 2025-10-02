@@ -18,33 +18,41 @@ usage() {
 }
 
 profile() {
-	# Profile Gitaly and child processes
+	# Profile on-CPU time for Gitaly and child processes
 	perf record --freq=99 -g --pid="$(pidof -s gitaly)" \
 	    --output="${gitaly_perf_data}" -- sleep "${seconds}" &
 
-	# Profile whole system
-	# --call-graph=dwarf - Use DWARF debug info for call stack, works well with
-	#                      C programs but is much larger than fp, causing
-	#                      flamegraph generation to be proportionately slower.
-	perf record --freq=99 --call-graph=dwarf --all-cpus \
+	# Profile on-CPU time for whole system
+	perf record --freq=97 -g --all-cpus \
 		--output="${all_perf_data}" -- sleep "${seconds}" &
 
-	# TODO add bpftrace scripts
+	# Profile off-CPU time for whole system (with filtering as a post-processing step)
+	min_stall_duration_us=1000
+	offcpu_profile_raw_output_file="${out_dir}/offcpu_profile.raw.txt.gz"
+	bpftrace /usr/local/gitaly_offcpu_profiler/offcpu_profile.bt "${seconds}" "${min_stall_duration_us}" \
+		| gzip > "${offcpu_profile_raw_output_file}" &
+
 	wait
 }
 
 generate_flamegraphs() {
+	gitaly_perf_txt="${out_dir}/gitaly-perf.txt.gz"
 	gitaly_perf_svg="${out_dir}/gitaly-perf.svg"
 	perf script --header --input="${gitaly_perf_data}" \
-	  | stackcollapse \
-	  | flamegraph > "${gitaly_perf_svg}" &
+	  | gzip > "${gitaly_perf_txt}"
+    zcat "${gitaly_perf_txt}" \
+	  | stackcollapse-perf --kernel \
+	  | flamegraph --hash --colors=perl > "${gitaly_perf_svg}"
 
+	all_perf_txt="${out_dir}/all-perf.txt.gz"
 	all_perf_svg="${out_dir}/all-perf.svg"
 	perf script --header --input="${all_perf_data}" \
-		| stackcollapse \
-		| flamegraph > "${all_perf_svg}" &
+		| gzip > "${all_perf_txt}"
+    zcat "${all_perf_txt}" \
+		| stackcollapse-perf --kernel \
+		| flamegraph --hash --colors=perl > "${all_perf_svg}"
 
-	wait
+	/usr/local/gitaly_offcpu_profiler/offcpu_profile_postprocessing.sh "${offcpu_profile_raw_output_file}"
 }
 
 main() {

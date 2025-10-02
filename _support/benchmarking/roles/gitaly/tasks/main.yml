@@ -8,10 +8,6 @@
   set_fact:
     target_instance: "{{ config['gitaly_instances'] | selectattr('name', 'equalto', gitaly_name) | first }}"
 
-- name: Show ref and commit being used
-  debug:
-    msg: "Building Gitaly at {{ gitaly_revision }} on {{ hostvars[groups['client'][0]]['gitaly_commit'] }}"
-
 - include_tasks: initialize.yml
 - include_tasks: setup_go.yml
 - include_tasks: setup_gitaly.yml

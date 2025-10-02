@@ -25,10 +25,17 @@
     dest: /src/flamegraph
   become_user: git
 
-- name: Install stackcollapse-perf.pl as stackcollapse
+- name: Install stackcollapse-perf.pl as stackcollapse-perf
   copy:
     src: /src/flamegraph/stackcollapse-perf.pl
-    dest: /usr/local/bin/stackcollapse
+    dest: /usr/local/bin/stackcollapse-perf
+    mode: 0755
+    remote_src: true
+
+- name: Install stackcollapse-bpftrace.pl as stackcollapse-bpftrace
+  copy:
+    src: /src/flamegraph/stackcollapse-bpftrace.pl
+    dest: /usr/local/bin/stackcollapse-bpftrace
     mode: 0755
     remote_src: true
 
@@ -38,6 +45,13 @@
     dest: /usr/local/bin/flamegraph
     mode: 0755
     remote_src: true
+
+- name: Install off-CPU profiling scripts
+  copy:
+    src: gitaly_offcpu_profiler/
+    dest: /usr/local/gitaly_offcpu_profiler/
+    mode: preserve
+    directory_mode: 0755
 
 - name: Install profile-gitaly.sh as profile-gitaly
   copy:
