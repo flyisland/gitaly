@@ -1,7 +1,7 @@
 ---
 - name: Load config
   include_vars:
-    file: "{{ playbook_dir }}/config.yml"
+    file: "{{ playbook_dir }}/experiments/{{ gitaly_benchmarking_experiment_name }}/config.yml"
     name: config
 
 - name: Get current instance configuration

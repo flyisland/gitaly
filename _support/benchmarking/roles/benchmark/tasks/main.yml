@@ -18,5 +18,5 @@
 - name: Fetch results from client
   fetch:
     src: "/tmp/{{ run_name }}.tar.gz"
-    dest: "{{ playbook_dir }}/results/"
+    dest: "{{ playbook_dir }}/experiments/{{ gitaly_benchmarking_experiment_name }}/results/"
     flat: true

@@ -41,7 +41,7 @@
 
 - name: Load repositories config
   include_vars:
-    file: "{{ playbook_dir }}/config.yml"
+    file: "{{ playbook_dir }}/experiments/{{ gitaly_benchmarking_experiment_name }}/config.yml"
     name: config
 
 - name: Create benchmark-gitaly directory
@@ -62,7 +62,7 @@
 
 - name: Copy workload configuration to client node
   copy:
-    src: "{{ playbook_dir }}/k6-benchmark.js"
+    src: "{{ playbook_dir }}/experiments/{{ gitaly_benchmarking_experiment_name }}/k6-benchmark.js"
     dest: /opt/benchmark-gitaly/k6-benchmark.js
     mode: "0644"
     owner: git

@@ -1,4 +1,4 @@
-/hosts.ini
+hosts.ini
 /terraform/*
 !/terraform/main.tf
 !/terraform/locals.tf
@@ -9,3 +9,4 @@
 /results/*
 config.yml
 /env/*
+/experiments/*/results/*

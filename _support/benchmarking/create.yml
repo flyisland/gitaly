@@ -5,7 +5,12 @@
   vars_prompt:
     - name: gitaly_benchmarking_deployment_name
       prompt: "Enter a name for your benchmark deployment"
-      default: "{{ lookup('env', 'USER') }}-{{ lookup('pipe', 'date +%Y-%m-%d') }}"
+      default: "{{ lookup('env', 'EXPERIMENT') }}-{{ lookup('env', 'USER') }}-{{ lookup('pipe', 'date +%Y%m%d') }}"
+      private: false
+
+    - name: gitaly_benchmarking_experiment_name
+      prompt: "Enter the experiment to perform"
+      default: "example"
       private: false
 
     - name: ssh_pubkey

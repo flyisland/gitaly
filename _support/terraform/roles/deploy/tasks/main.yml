@@ -24,4 +24,4 @@
 - name: hosts.ini
   template:
     src: hosts.ini.j2
-    dest: "{{ playbook_dir }}/hosts.ini"
+    dest: "{{ playbook_dir }}/experiments/{{ gitaly_benchmarking_experiment_name }}/hosts.ini"
