@@ -17,6 +17,7 @@ locals {
 }
 
 provider "google" {
+  # Running locally, gcloud auth will be used implicitly instead
   credentials = fileexists(local.credentials_file) ? file(local.credentials_file) : null
   project = local.config.project
   region  = local.config.benchmark_region
