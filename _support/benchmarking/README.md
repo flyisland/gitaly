@@ -7,10 +7,8 @@ An Ansible script for running RPC-level benchmarks against Gitaly.
 Benchmarks are organised into "experiments", defind as subdirectories within the `experiments/` folder. Each experiment
 consists of four configuration files:
 
-- `config.yml.example` and `config.yml` - sets up the infrastructure and repositories used for the benchmark. Repository-level
-  configuration like the reference backend and test data are defned here. When you're running an existing experiment, copy the
-  `config.yml.example` to `config.yml`. When creating a new experiment, write and commit a `config.yml.example` for others to
-  use.
+- `config.yml` - sets up the infrastructure and repositories used for the benchmark. Repository-level
+  configuration like the reference backend and test data are defined here.
 - `k6-benchmark.js` - defines the offered workload to Gitaly during the benchmark. Workloads in K6 are organised as
   scenarios which can run concurrently. Refer to the [k6 documentation](https://grafana.com/docs/k6/latest/using-k6/)
   for more information. The runtime is upper-bounded by the `workload_wait_duration` defned in
@@ -20,7 +18,7 @@ consists of four configuration files:
   defined as `profile_duration` in `roles/benchmark/vars/main.yml`. This duration should be <= the workload duration.
 
 These files can be customised for each experiment and committed back to the Gitaly repository, allowing experiments to
-be easily reproduced. When starting a new experiment, you can simply make a copy of the `example` experiment as a
+be easily reproduced. When starting a new experiment, you can simply make a copy of the `master` experiment as a
 starting point.
 
 ## Steps for use
@@ -29,6 +27,12 @@ All scripts must be run with the `EXPERIMENT` environment variable set to the na
 Experiments are deployed using Terraform workspaces, so it's possible to deploy multiple experiments simultaneously.
 Feel free to export the environment varible instead of redefining it for each command.
 
+## Automated in Gitaly's CICD Pipeline
+1. Simply create a branch name that has the same name as the experiment name directory created inside the `_support/benchmarking/experiments` directory.
+2. When you raise a merge request, there will be a `qa:benchmark:performance` job that can be run. It is an optional job so click run to trigger it.
+3. Artifacts can be downloaded straight from the job artifacts. 
+
+## Running manually on local machine
 ### 1. Setup your environment
 
 1. Ensure that [`gcloud`](https://cloud.google.com/sdk/docs/install) is installed and available on your path.
@@ -36,13 +40,13 @@ Feel free to export the environment varible instead of redefining it for each co
 1. Create a new Python virtualenv: `python3 -m venv env`
 1. Activate the virtualenv: `source env/bin/activate`
 1. Install Ansible: `python3 -m pip install -r requirements.txt`
-1. Copy the experiment's `config.yml.example` to `config.yml` to customize the machine types and repositories used
+1. Create a `config.yml` to customize the machine types and repositories used
    for benchmarking. If you don't have access to the default GCP project, you can point the configuration to your own.
 
 ### 2. Create instance
 
 ```shell
-EXPERIMENT=example ./create-benchmark-instance
+EXPERIMENT=master ./create-benchmark-instance
 ```
 
 This will create the Gitaly nodes and a small client node to send requests to
@@ -58,7 +62,7 @@ ssh gitaly_bench@<INSTANCE_ADDRESS>
 ### 3. Configure instance
 
 ```shell
-EXPERIMENT=example ./configure-benchmark-instance
+EXPERIMENT=master ./configure-benchmark-instance
 ```
 
 Build and install Gitaly from source with from desired reference and install
@@ -68,7 +72,7 @@ profiling tools. A disk image containing the test repositories will be mounted t
 ### 4. Run benchmarks
 
 ```shell
-EXPERIMENT=example ./run-benchmarks
+EXPERIMENT=master ./run-benchmarks
 ```
 
 Run the specified experiment, using the scripts defined in the `experiments/${EXPERIMENT}`
@@ -76,7 +80,7 @@ directory. Profiling can be optionally disabled to eliminate overhead, but graph
 be generated.
 
 ```shell
-EXPERIMENT=example ./run-benchmarks --extra-vars "profile=false"
+EXPERIMENT=master ./run-benchmarks --extra-vars "profile=false"
 ```
 
 On completion a tarball of the benchmark output will be written to
@@ -88,7 +92,7 @@ file) and contains instance-specific output.
 ### 5. Destroy instance
 
 ```shell
-EXPERIMENT=example ./destroy-benchmark-instance
+EXPERIMENT=master ./destroy-benchmark-instance
 ```
 
 All nodes will be destroyed. As GCP will frequently reuse public IP addresses,

@@ -7,6 +7,5 @@ hosts.ini
 !/terraform-prepare/locals.tf
 /group_vars/all.yml
 /results/*
-config.yml
 /env/*
 /experiments/*/results/*

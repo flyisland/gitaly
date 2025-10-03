@@ -1,14 +1,24 @@
 variable "gitaly_benchmarking_deployment_name" {}
 variable "ssh_pubkey" {}
 variable "experiment" {}
+variable "gcp_sa_key_file" {
+  description = "GCP service account key file name"
+  type        = string
+  default = "nonexistent"
+}
 variable "startup_script" {
   default = <<EOF
     set -e
     if [ -d /src/gitaly ] ; then exit; fi
   EOF
 }
+locals {
+  credentials_file = "${path.module}/../../../.secure_files/${var.gcp_sa_key_file}"
+}
 
 provider "google" {
+  # Running locally, gcloud auth will be used implicitly instead
+  credentials = fileexists(local.credentials_file) ? file(local.credentials_file) : null
   project = local.config.project
   region  = local.config.benchmark_region
   zone    = local.config.benchmark_zone
