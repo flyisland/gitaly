@@ -7,10 +7,8 @@ An Ansible script for running RPC-level benchmarks against Gitaly.
 Benchmarks are organised into "experiments", defind as subdirectories within the `experiments/` folder. Each experiment
 consists of four configuration files:
 
-- `config.yml.example` and `config.yml` - sets up the infrastructure and repositories used for the benchmark. Repository-level
-  configuration like the reference backend and test data are defned here. When you're running an existing experiment, copy the
-  `config.yml.example` to `config.yml`. When creating a new experiment, write and commit a `config.yml.example` for others to
-  use.
+- `config.yml` - sets up the infrastructure and repositories used for the benchmark. Repository-level
+  configuration like the reference backend and test data are defined here.
 - `k6-benchmark.js` - defines the offered workload to Gitaly during the benchmark. Workloads in K6 are organised as
   scenarios which can run concurrently. Refer to the [k6 documentation](https://grafana.com/docs/k6/latest/using-k6/)
   for more information. The runtime is upper-bounded by the `workload_wait_duration` defned in
@@ -42,7 +40,7 @@ Feel free to export the environment varible instead of redefining it for each co
 1. Create a new Python virtualenv: `python3 -m venv env`
 1. Activate the virtualenv: `source env/bin/activate`
 1. Install Ansible: `python3 -m pip install -r requirements.txt`
-1. Copy the experiment's `config.yml.example` to `config.yml` to customize the machine types and repositories used
+1. Create a `config.yml` to customize the machine types and repositories used
    for benchmarking. If you don't have access to the default GCP project, you can point the configuration to your own.
 
 ### 2. Create instance
