@@ -7,17 +7,32 @@ set -euxo pipefail
 
 disk_name="/dev/disk/by-id/google-repositories"
 mountpoint="/mnt/disks/repositories"
+filesystem="${filesystem}"
+mount_opts="${mount_opts}"
 
 # Disks mounted to a GCP VM are prefixed with "google-"
 # https://cloud.google.com/compute/docs/disks/format-mount-disk-linux#format_linux
-#
-# TODO make this configurable so we can test other filesystems, like btrfs.
-mkfs.ext4 -m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard "$${disk_name}"
+
+echo "Formatting disk with $${filesystem} filesystem"
+
+case "$${filesystem}" in
+    "ext4")
+        mkfs.ext4 -m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard "$${disk_name}"
+        ;;
+    "xfs")
+        mkfs.xfs -f "$${disk_name}"
+        ;;
+    *)
+        echo "ERROR: Unsupported filesystem: $${filesystem}"
+        exit 1
+        ;;
+esac
+
 mkdir -p "$${mountpoint}"
-mount -o discard,defaults "$${disk_name}" "$${mountpoint}"
+mount -o "$${mount_opts}" "$${disk_name}" "$${mountpoint}"
 chmod a+w "$${mountpoint}"
 
-echo "repositories disk successfully mounted as an ext4 volume at $${mountpoint}}"
+echo "repositories disk successfully mounted as a $${filesystem} volume at $${mountpoint} with options: $${mount_opts}"
 
 echo "installing Git"
 sudo add-apt-repository -y ppa:git-core/ppa && \

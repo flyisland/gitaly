@@ -11,6 +11,12 @@
       - acl
     state: present
 
+- name: Install filesystem tools
+  apt:
+    name:
+      - "{{ 'xfsprogs' if target_instance.filesystem | default('ext4') == 'xfs' else 'e2fsprogs' }}"
+    state: present
+
 # Set high uid to ensure it's not squashed by another service
 - name: Create 'git' user
   user:
@@ -23,8 +29,8 @@
   mount:
     path: /mnt/git-repositories
     src: /dev/disk/by-id/google-repository-disk
-    fstype: ext4
-    opts: discard,defaults
+    fstype: "{{ target_instance.filesystem | default('ext4') }}"
+    opts: "{{ target_instance.fs_mount_opts | default('discard,defaults') }}"
     state: mounted
 
 - name: Set git as owner of git-repositories directory

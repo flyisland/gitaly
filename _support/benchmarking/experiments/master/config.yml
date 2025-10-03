@@ -31,6 +31,10 @@ gitaly_instances:
     boot_disk_type: "pd-balanced"
     boot_disk_size: 20
     gitaly_revision: HEAD
+    disk_size: 100
+    disk_type: "pd-balanced"
+    filesystem: "ext4"  # Options: ext4, xfs
+    fs_mount_opts: "defaults"  # Mount options for repository disk
     # These are manually templated and don't translate directly to config.toml entries.
     config:
       # Whether transactions should be enabled.
@@ -40,8 +44,6 @@ gitaly_instances:
       # just serves as an example.
       SNAPSHOT_DRIVER: deepclone
 
-repository_disk_size: 100
-repository_disk_type: "pd-balanced"
 # A list of repositories to be cloned onto the repositories disk, along with test inputs to be used
 # for RPC calls. This section of the configuration is re-serialised into JSON and provided to the
 # K6 script.

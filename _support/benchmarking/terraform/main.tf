@@ -28,7 +28,7 @@ provider "google" {
 resource "google_compute_disk" "prepare_repos" {
   name = format("%s-prepare-repos-disk", var.gitaly_benchmarking_deployment_name)
   type = "pd-standard"
-  size = local.config.repository_disk_size
+  size = local.config.gitaly_instances[0].disk_size
 }
 
 # Temporary VM which clones and prepares the `git-repositories-<hash>` disk.
@@ -58,6 +58,8 @@ resource "google_compute_instance" "prepare_repos" {
   metadata = {
     startup-script = templatefile("${path.module}/../setup-repositories.sh", {
       repositories = local.config.repositories
+      filesystem   = local.config.gitaly_instances[0].filesystem
+      mount_opts   = local.config.gitaly_instances[0].fs_mount_opts
     })
   }
 }
@@ -95,7 +97,7 @@ resource "google_compute_disk" "repository-disk" {
   for_each = { for idx, instance in local.config.gitaly_instances : instance.name => instance }
 
   name  = format("%s-repository-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
-  type  = local.config.repository_disk_type
+  type  = each.value.disk_type
   image = google_compute_image.repos.self_link
 }
 
@@ -103,7 +105,7 @@ resource "google_compute_region_disk" "repository-region-disk" {
   for_each = local.config.use_regional_disk ? {} : { for idx, instance in local.config.gitaly_instances : instance.name => instance }
 
   name          = format("%s-repository-region-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
-  type          = local.config.repository_disk_type
+  type          = each.value.disk_type
   snapshot      = google_compute_snapshot.repository-disk[each.key].id
   replica_zones = local.config.regional_disk_replica_zones
 }
@@ -190,4 +192,12 @@ output "client_internal_ip" {
 
 output "client_ssh_ip" {
   value = google_compute_instance.client.network_interface[0].access_config[0].nat_ip
+}
+
+output "filesystem" {
+  value = { for k, v in local.config.gitaly_instances : v.name => v.filesystem }
+}
+
+output "fs_mount_opts" {
+  value = { for k, v in local.config.gitaly_instances : v.name => v.fs_mount_opts }
 }
