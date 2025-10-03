@@ -4,6 +4,7 @@ variable "experiment" {}
 variable "gcp_sa_key_file" {
   description = "GCP service account key file name"
   type        = string
+  default = "nonexistent"
 }
 variable "startup_script" {
   default = <<EOF
@@ -16,7 +17,7 @@ locals {
 }
 
 provider "google" {
-  credentials = fileexists(local.credentials_file) ? file(local.credentials_file) : ""
+  credentials = fileexists(local.credentials_file) ? file(local.credentials_file) : null
   project = local.config.project
   region  = local.config.benchmark_region
   zone    = local.config.benchmark_zone
