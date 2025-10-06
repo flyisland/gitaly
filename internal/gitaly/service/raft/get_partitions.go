@@ -77,20 +77,21 @@ func (s *Server) collectStorageInfo(ctx context.Context, storageName string, nod
 	}
 
 	raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)
-	if !ok {
-		// Skip non-Raft storages silently (this is expected for non-Raft configured storages)
-		return nil
-	}
-	routingTable := raftStorage.GetRoutingTable()
-	replicaRegistry := raftStorage.GetReplicaRegistry()
+	if ok {
+		routingTable := raftStorage.GetRoutingTable()
+		replicaRegistry := raftStorage.GetReplicaRegistry()
 
-	// If a specific partition is requested, only get that one
-	if req.GetPartitionKey() != nil {
-		return s.collectPartitionInfo(ctx, node, req.GetPartitionKey(), routingTable, replicaRegistry, req, stream, sentPartitions)
+		// If a specific partition is requested, only get that one
+		if req.GetPartitionKey() != nil {
+			return s.collectPartitionInfo(ctx, node, req.GetPartitionKey(), routingTable, replicaRegistry, req, stream, sentPartitions)
+		}
+
+		// List all partitions if no specific partition is requested
+		return s.collectAllPartitions(ctx, storageName, node, routingTable, replicaRegistry, req, stream, sentPartitions)
 	}
 
-	// List all partitions if no specific partition is requested
-	return s.collectAllPartitions(ctx, storageName, node, routingTable, replicaRegistry, req, stream, sentPartitions)
+	// Skip non-Raft storages silently (this is expected for non-Raft configured storages)
+	return nil
 }
 
 // collectAllPartitions collects information about all partitions in the routing table for a specific storage
@@ -167,6 +168,10 @@ func (s *Server) collectPartitionInfo(ctx context.Context, node *raftmgr.Node, p
 		return nil
 	}
 
+	// Try to get replica from registry for live state information
+	// This replica variable is used both for updating response state and building replica details
+	replica, _ := replicaRegistry.GetReplica(partitionKey)
+
 	response := &gitalypb.GetPartitionsResponse{
 		ClusterId:    s.cfg.Raft.ClusterID,
 		PartitionKey: partitionKey,
@@ -176,8 +181,8 @@ func (s *Server) collectPartitionInfo(ctx context.Context, node *raftmgr.Node, p
 		RelativePath: entry.RelativePath,
 	}
 
-	// Try to get current Raft state from the replica if available
-	if replica, err := replicaRegistry.GetReplica(partitionKey); err == nil && replica != nil {
+	// Use current Raft state from the replica if available
+	if replica != nil {
 		// Get current term and index from the live Raft state machine instead of potentially outdated routing table
 		state := replica.GetCurrentState()
 		response.Term = state.Term
@@ -195,9 +200,6 @@ func (s *Server) collectPartitionInfo(ctx context.Context, node *raftmgr.Node, p
 
 	if req.GetIncludeReplicaDetails() && len(entry.Replicas) > 0 {
 		response.Replicas = make([]*gitalypb.GetPartitionsResponse_ReplicaStatus, 0, len(entry.Replicas))
-
-		// Try to get replica from registry for additional info
-		replica, _ := replicaRegistry.GetReplica(partitionKey)
 
 		for _, replicaID := range entry.Replicas {
 			replicaStatus := s.buildReplicaStatus(replicaID, entry, replica)
@@ -221,10 +223,12 @@ func (s *Server) buildReplicaStatus(replicaID *gitalypb.ReplicaID, entry *raftmg
 		MatchIndex: entry.Index,
 	}
 
-	// Use more specific information from replica if available
+	// Override with live replica state if available for more accurate information
 	if replica != nil {
 		state := replica.GetCurrentState()
+		// LastIndex from live state is always more current than routing table
 		status.LastIndex = state.Index
+		// For followers, MatchIndex should not exceed their own LastIndex
 		if !status.GetIsLeader() {
 			status.MatchIndex = min(status.GetMatchIndex(), state.Index)
 		}
@@ -266,12 +270,17 @@ func (s *Server) getReplicaState(replicaID *gitalypb.ReplicaID, leaderID uint64,
 // by searching routing tables across all storages. Each routing table entry maps repository
 // paths to their assigned partitions. This function performs a linear search to find the
 // partition containing the specified repository, returning the partition key when found.
+//
+// Partition assignment is determined by the Raft manager during repository creation and is
+// recorded in the routing table. This function simply looks up the existing assignment rather
+// than computing it.
 func (s *Server) mapRepositoryToPartitionKey(ctx context.Context, node *raftmgr.Node, repositoryPath string) (*gitalypb.RaftPartitionKey, error) {
 	var foundKey *gitalypb.RaftPartitionKey
 
 	err := s.eachRoutingTableEntry(ctx, node, func(storageName string, entry *raftmgr.RoutingTableEntry) error {
 		if entry.RelativePath == repositoryPath && len(entry.Replicas) > 0 {
 			// Found the matching repository path, return the partition key
+			// Use first replica's partition key since all replicas in the same entry share the same partition
 			foundKey = entry.Replicas[0].GetPartitionKey()
 			return errIterationComplete // Use sentinel error to break iteration early
 		}
