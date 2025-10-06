@@ -238,9 +238,10 @@ endif
 
 # git-filter-repo target
 GIT_FILTER_REPO                      ?= ${BUILD_DIR}/bin/git-filter-repo
-GIT_FILTER_REPO_VERSION              ?= v2.45.0
+GIT_FILTER_REPO_VERSION              ?= v2.47.0
 GIT_FILTER_REPO_REPO_URL             ?= https://github.com/newren/git-filter-repo
 GIT_FILTER_REPO_SOURCE_DIR           ?= ${DEPENDENCY_DIR}/git-filter-repo
+
 
 # These variables control test options and artifacts
 ## List of Go packages which shall be tested.
@@ -677,6 +678,7 @@ install-git: build-git
 	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${DEPENDENCY_DIR}/git-distribution" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} install
 endif
 
+
 ${SOURCE_DIR}/NOTICE: ${BUILD_DIR}/NOTICE
 	${Q}mv $< $@
 
@@ -803,6 +805,7 @@ ${PROTOC}: ${DEPENDENCY_DIR}/protoc.version | ${TOOLS_DIR}
 	${Q}cmake --build "${PROTOC_BUILD_DIR}" --target install -- -j $(shell nproc)
 	${Q}cp "${PROTOC_INSTALL_DIR}"/bin/protoc ${PROTOC}
 
+
 ${PROTOC_GEN_GITALY_LINT}: proto | ${TOOLS_DIR}
 	${Q}go build -o $@ ${SOURCE_DIR}/tools/protoc-gen-gitaly-lint
 
@@ -822,6 +825,7 @@ ${DEPENDENCY_DIR}/raftpb: ${DEPENDENCY_DIR}/gogoproto
 	${Q}${GIT} -C "${RAFTPB_SOURCE_DIR}" config remote.origin.tagOpt --no-tags
 	${Q}${GIT} -C "${RAFTPB_SOURCE_DIR}" fetch --depth 1 ${GIT_QUIET} origin main
 	${Q}${GIT} -C "${RAFTPB_SOURCE_DIR}" checkout ${GIT_QUIET} --detach FETCH_HEAD
+
 
 ${GIT_FILTER_REPO}: ${DEPENDENCY_DIR}/git-filter-repo.version | ${BUILD_DIR}/bin
 	${Q}${GIT} -c init.defaultBranch=master init ${GIT_QUIET} "${GIT_FILTER_REPO_SOURCE_DIR}"
