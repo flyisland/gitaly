@@ -22,7 +22,7 @@ provider "google" {
 resource "google_compute_disk" "repository-disk" {
   for_each = { for idx, instance in local.config.gitaly_instances : instance.name => instance }
 
-  name = format("%s-repository-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
+  name = format("%s-repo-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
   type = each.value.disk_type
   size = each.value.disk_size
 }
