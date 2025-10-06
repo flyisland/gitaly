@@ -1105,7 +1105,7 @@ func TestServer_CollectRelativePathsForPartition(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("collect all relative paths for partition", func(t *testing.T) {
-		paths, err := server.collectRelativePathsForPartition(ctx, node, partitionKey)
+		paths, err := server.getRelativePathsFromRoutingTable(ctx, node, partitionKey)
 		require.NoError(t, err)
 		require.Len(t, paths, 1)
 		require.Contains(t, paths, "@hashed/ab/cd/abcd1234.git")
@@ -1113,7 +1113,7 @@ func TestServer_CollectRelativePathsForPartition(t *testing.T) {
 
 	t.Run("empty result for nonexistent partition", func(t *testing.T) {
 		nonexistentPartition := raftmgr.NewPartitionKey(storageNameOne, 999)
-		paths, err := server.collectRelativePathsForPartition(ctx, node, nonexistentPartition)
+		paths, err := server.getRelativePathsFromRoutingTable(ctx, node, nonexistentPartition)
 		require.NoError(t, err)
 		require.Empty(t, paths)
 	})
@@ -1122,7 +1122,7 @@ func TestServer_CollectRelativePathsForPartition(t *testing.T) {
 		cancelCtx, cancel := context.WithCancel(ctx)
 		cancel()
 
-		paths, err := server.collectRelativePathsForPartition(cancelCtx, node, partitionKey)
+		paths, err := server.getRelativePathsFromRoutingTable(cancelCtx, node, partitionKey)
 		require.Error(t, err)
 		require.Nil(t, paths)
 		require.Equal(t, context.Canceled, err)

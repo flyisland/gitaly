@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -48,70 +47,48 @@ func (s *Server) calculateClusterStatistics(ctx context.Context, node *raftmgr.N
 	healthyReplicas := uint32(0)
 
 	// Collect all unique partitions across all storages to avoid double counting
-	allPartitions := make(map[string]raftmgr.RoutingTableEntry)
+	allPartitions := make(map[string]*raftmgr.RoutingTableEntry)
 	// Track which partitions we've already counted replicas for to avoid double-counting
-	countedPartitionReplicas := make(map[string]bool)
+	countedPartitionReplicas := make(map[string]struct{})
 
-	for _, storage := range s.cfg.Storages {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
+	err := s.eachRoutingTableEntry(ctx, node, func(storageName string, entry *raftmgr.RoutingTableEntry) error {
+		// Skip entries without replicas
+		if len(entry.Replicas) == 0 {
+			return nil
 		}
 
-		storageManager, err := node.GetStorage(storage.Name)
-		if err != nil {
-			s.logger.WithFields(log.Fields{"storage": storage.Name}).WithError(err).WarnContext(ctx, "failed to get storage for cluster statistics")
-			continue // Skip inaccessible storages
-		}
+		// Use partition key value as unique identifier
+		partitionKeyValue := entry.Replicas[0].GetPartitionKey().GetValue()
+		allPartitions[partitionKeyValue] = entry
 
-		raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)
-		if !ok {
-			continue // Skip non-Raft storages
-		}
+		// Count total replicas and healthy replicas only once per partition
+		if _, counted := countedPartitionReplicas[partitionKeyValue]; !counted {
+			countedPartitionReplicas[partitionKeyValue] = struct{}{}
+			totalReplicas += uint32(len(entry.Replicas))
 
-		routingTable := raftStorage.GetRoutingTable()
-		allEntries, err := routingTable.ListEntries()
-		if err != nil {
-			s.logger.WithFields(log.Fields{"storage": storage.Name}).WithError(err).WarnContext(ctx, "failed to list routing table entries for cluster statistics")
-			continue // Skip if we can't list entries
-		}
-
-		// Collect unique partitions and per-storage statistics
-		for _, entry := range allEntries {
-			// Skip entries without replicas
-			if len(entry.Replicas) == 0 {
-				continue
-			}
-
-			// Use partition key value as unique identifier
-			partitionKeyValue := entry.Replicas[0].GetPartitionKey().GetValue()
-			allPartitions[partitionKeyValue] = *entry
-
-			// Count total replicas and healthy replicas only once per partition
-			if !countedPartitionReplicas[partitionKeyValue] {
-				countedPartitionReplicas[partitionKeyValue] = true
-				totalReplicas += uint32(len(entry.Replicas))
-
-				for _, replica := range entry.Replicas {
-					if s.checkReplicaHealth(replica) {
-						healthyReplicas++
-					}
-				}
-			}
-
-			// Count per-storage replica and leader stats
 			for _, replica := range entry.Replicas {
-				if replica.GetStorageName() == storage.Name {
-					statistics.StorageStats[storage.Name].ReplicaCount++
-
-					// Check if this replica is the leader
-					if replica.GetMemberId() == entry.LeaderID {
-						statistics.StorageStats[storage.Name].LeaderCount++
-					}
+				if s.checkReplicaHealth(replica) {
+					healthyReplicas++
 				}
 			}
 		}
+
+		// Count per-storage replica and leader stats
+		for _, replica := range entry.Replicas {
+			if replica.GetStorageName() == storageName {
+				statistics.StorageStats[storageName].ReplicaCount++
+
+				// Check if this replica is the leader
+				if replica.GetMemberId() == entry.LeaderID {
+					statistics.StorageStats[storageName].LeaderCount++
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Count unique partitions and healthy partitions

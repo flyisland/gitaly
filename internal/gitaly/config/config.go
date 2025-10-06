@@ -1093,6 +1093,21 @@ func (cfg *Cfg) InternalSocketPath() string {
 	return filepath.Join(cfg.InternalSocketDir(), "intern")
 }
 
+// GetAddressWithScheme returns the appropriate address with scheme based on the configuration.
+// It prioritizes socket path, then listen address, then TLS listen address.
+func (cfg *Cfg) GetAddressWithScheme() (string, error) {
+	switch {
+	case cfg.SocketPath != "":
+		return "unix:" + cfg.SocketPath, nil
+	case cfg.ListenAddr != "":
+		return "tcp://" + cfg.ListenAddr, nil
+	case cfg.TLSListenAddr != "":
+		return "tls://" + cfg.TLSListenAddr, nil
+	default:
+		return "", errors.New("no address configured")
+	}
+}
+
 func (cfg *Cfg) validateBinDir() error {
 	if len(cfg.BinDir) == 0 {
 		return fmt.Errorf("bin_dir: is not set")

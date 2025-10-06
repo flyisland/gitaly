@@ -2,6 +2,7 @@ package raft
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -12,6 +13,9 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 	"go.etcd.io/raft/v3"
 )
+
+// errIterationComplete is a sentinel error used to break iteration early
+var errIterationComplete = errors.New("iteration complete")
 
 // GetPartitions retrieves comprehensive information about the Raft cluster topology,
 // partition states, and replica health. This is useful for monitoring and debugging.
@@ -182,7 +186,7 @@ func (s *Server) collectPartitionInfo(ctx context.Context, node *raftmgr.Node, p
 
 	// Collect relative paths if requested
 	if req.GetIncludeRelativePaths() {
-		relativePaths, err := s.collectRelativePathsForPartition(ctx, node, partitionKey)
+		relativePaths, err := s.getRelativePathsFromRoutingTable(ctx, node, partitionKey)
 		if err != nil {
 			return fmt.Errorf("collect relative paths for partition: %w", err)
 		}
@@ -259,22 +263,76 @@ func (s *Server) getReplicaState(replicaID *gitalypb.ReplicaID, leaderID uint64,
 }
 
 // mapRepositoryToPartitionKey maps a repository path to its corresponding partition key
-// by using the storage's partition assignment mechanism
+// by searching routing tables across all storages. Each routing table entry maps repository
+// paths to their assigned partitions. This function performs a linear search to find the
+// partition containing the specified repository, returning the partition key when found.
 func (s *Server) mapRepositoryToPartitionKey(ctx context.Context, node *raftmgr.Node, repositoryPath string) (*gitalypb.RaftPartitionKey, error) {
+	var foundKey *gitalypb.RaftPartitionKey
+
+	err := s.eachRoutingTableEntry(ctx, node, func(storageName string, entry *raftmgr.RoutingTableEntry) error {
+		if entry.RelativePath == repositoryPath && len(entry.Replicas) > 0 {
+			// Found the matching repository path, return the partition key
+			foundKey = entry.Replicas[0].GetPartitionKey()
+			return errIterationComplete // Use sentinel error to break iteration early
+		}
+		return nil
+	})
+
+	// If we found the key, return it (ignore the sentinel error)
+	if foundKey != nil {
+		return foundKey, nil
+	}
+
+	// If we got a real error (not the sentinel), return it
+	if err != nil && !errors.Is(err, errIterationComplete) {
+		return nil, err
+	}
+
+	return nil, nil // Repository path not found, but this is not an error
+}
+
+// getRelativePathsFromRoutingTable gets relative paths for a partition from routing table entries
+func (s *Server) getRelativePathsFromRoutingTable(ctx context.Context, node *raftmgr.Node, partitionKey *gitalypb.RaftPartitionKey) ([]string, error) {
+	relativePathsMap := make(map[string]struct{})
+
+	err := s.eachRoutingTableEntry(ctx, node, func(storageName string, entry *raftmgr.RoutingTableEntry) error {
+		if len(entry.Replicas) == 0 {
+			return nil
+		}
+
+		replica := entry.Replicas[0]
+		if replica.GetPartitionKey().GetValue() == partitionKey.GetValue() {
+			if entry.RelativePath != "" {
+				relativePathsMap[entry.RelativePath] = struct{}{}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return slices.Collect(maps.Keys(relativePathsMap)), nil
+}
+
+// eachRoutingTableEntry iterates over all routing table entries across all configured storages,
+// invoking the provided callback for each entry. It gracefully skips inaccessible or non-Raft storages.
+// The callback receives the storage name and routing table entry. If the callback returns an error,
+// iteration stops and the error is returned.
+func (s *Server) eachRoutingTableEntry(ctx context.Context, node *raftmgr.Node, callback func(storageName string, entry *raftmgr.RoutingTableEntry) error) error {
 	for _, storageConfig := range s.cfg.Storages {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return ctx.Err()
 		default:
 		}
 
 		storageManager, err := node.GetStorage(storageConfig.Name)
 		if err != nil {
-			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to get storage while mapping repository, skipping")
-			continue // Skip storages that can't be accessed
+			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to get storage while iterating, skipping")
+			continue
 		}
 
-		// Search the routing table for the repository path
 		raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)
 		if !ok {
 			continue // Skip non-Raft storages
@@ -283,72 +341,16 @@ func (s *Server) mapRepositoryToPartitionKey(ctx context.Context, node *raftmgr.
 		routingTable := raftStorage.GetRoutingTable()
 		allEntries, err := routingTable.ListEntries()
 		if err != nil {
-			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to list entries while mapping repository, skipping")
-			continue // Skip if we can't list entries
+			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to list entries while iterating, skipping")
+			continue
 		}
 
-		// Find an entry that matches this repository path
 		for _, entry := range allEntries {
-			if entry.RelativePath == repositoryPath && len(entry.Replicas) > 0 {
-				// Found the matching repository path, return the partition key
-				replica := entry.Replicas[0]
-				return replica.GetPartitionKey(), nil
+			if err := callback(storageConfig.Name, entry); err != nil {
+				return err
 			}
 		}
 	}
 
-	return nil, nil // Repository path not found, but this is not an error
-}
-
-// collectRelativePathsForPartition collects all relative paths that belong to a specific partition
-func (s *Server) collectRelativePathsForPartition(ctx context.Context, node *raftmgr.Node, partitionKey *gitalypb.RaftPartitionKey) ([]string, error) {
-	// Use routing table information directly
-	return s.getRelativePathsFromRoutingTable(ctx, node, partitionKey)
-}
-
-// getRelativePathsFromRoutingTable gets relative paths for a partition from routing table entries
-func (s *Server) getRelativePathsFromRoutingTable(ctx context.Context, node *raftmgr.Node, partitionKey *gitalypb.RaftPartitionKey) ([]string, error) {
-	relativePathsMap := make(map[string]struct{})
-
-	for _, storageConfig := range s.cfg.Storages {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		storageManager, err := node.GetStorage(storageConfig.Name)
-		if err != nil {
-			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to get storage while collecting paths, skipping")
-			continue
-		}
-
-		raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)
-		if !ok {
-			continue
-		}
-
-		routingTable := raftStorage.GetRoutingTable()
-		allEntries, err := routingTable.ListEntries()
-		if err != nil {
-			s.logger.WithFields(log.Fields{"storage": storageConfig.Name}).WithError(err).DebugContext(ctx, "failed to list entries while collecting paths, skipping")
-			continue
-		}
-
-		// Find entries that match this partition key and collect their relative paths
-		for _, entry := range allEntries {
-			if len(entry.Replicas) == 0 {
-				continue
-			}
-
-			replica := entry.Replicas[0]
-			if replica.GetPartitionKey().GetValue() == partitionKey.GetValue() {
-				if entry.RelativePath != "" {
-					relativePathsMap[entry.RelativePath] = struct{}{}
-				}
-			}
-		}
-	}
-
-	return slices.Collect(maps.Keys(relativePathsMap)), nil
+	return nil
 }

@@ -71,7 +71,7 @@ func setHooksAction(ctx context.Context, cmd *cli.Command) error {
 		storage = cfg.Storages[0].Name
 	}
 
-	address, err := getAddressWithScheme(cfg)
+	address, err := cfg.GetAddressWithScheme()
 	if err != nil {
 		return fmt.Errorf("get Gitaly address: %w", err)
 	}
