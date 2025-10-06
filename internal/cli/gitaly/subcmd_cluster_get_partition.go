@@ -25,19 +25,20 @@ func newClusterGetPartitionCommand() *cli.Command {
 		UsageText: `gitaly cluster get-partition --config <gitaly_config_file> [--partition-key <key>] [--relative-path <path>]
 
 Examples:
-  # Get detailed info for a specific partition by key
-  gitaly cluster get-partition --config config.toml --partition-key sha256:abc123...
+  # Get detailed info for a specific partition by key (64-character SHA256 hex)
+  gitaly cluster get-partition --config config.toml --partition-key abc123...
 
   # Get partition info for a specific repository path
   gitaly cluster get-partition --config config.toml --relative-path @hashed/ab/cd/abcd...`,
 		Description: `Display detailed information about specific partitions including:
   - Partition key and replica topology
   - Leader/follower status for each replica
-  - Health status of replicas
+  - Health status of replicas (checks if address is configured, not actual reachability)
   - List of repositories in the partition
 
 Use --partition-key to filter by a specific partition key, or --relative-path to find
-the partition containing a specific repository.`,
+the partition containing a specific repository. When using --relative-path, the output
+shows the partition that contains the specified repository.`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     flagGetPartitionConfig,
