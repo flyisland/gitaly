@@ -6,12 +6,7 @@ variable "gcp_sa_key_file" {
   type        = string
   default = "nonexistent"
 }
-variable "startup_script" {
-  default = <<EOF
-    set -e
-    if [ -d /src/gitaly ] ; then exit; fi
-  EOF
-}
+
 locals {
   credentials_file = "${path.module}/../../../.secure_files/${var.gcp_sa_key_file}"
 }
@@ -24,98 +19,21 @@ provider "google" {
   zone    = local.config.benchmark_zone
 }
 
-# Temporary disk from which we create the `git-repositories-<hash>` disk image from.
-resource "google_compute_disk" "prepare_repos" {
-  name = format("%s-prepare-repos-disk", var.gitaly_benchmarking_deployment_name)
-  type = "pd-standard"
-  size = local.config.gitaly_instances[0].disk_size
-}
-
-# Temporary VM which clones and prepares the `git-repositories-<hash>` disk.
-resource "google_compute_instance" "prepare_repos" {
-  name         = format("%s-prepare-repos-vm", var.gitaly_benchmarking_deployment_name)
-  machine_type = "n2d-standard-8"
-  zone         = local.config.benchmark_zone
-
-  boot_disk {
-    initialize_params {
-      image = local.config.os_image
-    }
-  }
-
-  attached_disk {
-    source      = google_compute_disk.prepare_repos.self_link
-    device_name = "repositories"
-  }
-
-  network_interface {
-    network = "default"
-    access_config {}
-  }
-
-  # If the script fails, you can SSH into the VM manually to debug the script:
-  # https://cloud.google.com/compute/docs/instances/startup-scripts/linux
-  metadata = {
-    startup-script = templatefile("${path.module}/../setup-repositories.sh", {
-      repositories = local.config.repositories
-      filesystem   = local.config.gitaly_instances[0].filesystem
-      mount_opts   = local.config.gitaly_instances[0].fs_mount_opts
-    })
-  }
-}
-
-# Waits for the temporary setup VM to shut down, signalling the repos have been cloned.
-resource "null_resource" "prepare_repos_wait" {
-  provisioner "local-exec" {
-    command = <<-EOF
-      timeout 7200 bash -c '
-        while true; do
-          STATUS=$(gcloud compute instances describe ${google_compute_instance.prepare_repos.name} \
-            --zone=${google_compute_instance.prepare_repos.zone} \
-            --format="value(status)" \
-            --project=${local.config.project})
-          if [ "$STATUS" = "TERMINATED" ]; then
-            break
-          fi
-          sleep 30
-        done
-      '
-    EOF
-  }
-
-  depends_on = [google_compute_instance.prepare_repos]
-}
-
-resource "google_compute_image" "repos" {
-  name        = format("%s-git-repos", var.gitaly_benchmarking_deployment_name)
-  source_disk = google_compute_disk.prepare_repos.self_link
-
-  depends_on = [null_resource.prepare_repos_wait]
-}
-
 resource "google_compute_disk" "repository-disk" {
   for_each = { for idx, instance in local.config.gitaly_instances : instance.name => instance }
 
-  name  = format("%s-repository-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
-  type  = each.value.disk_type
-  image = google_compute_image.repos.self_link
+  name = format("%s-repository-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
+  type = each.value.disk_type
+  size = each.value.disk_size
 }
 
 resource "google_compute_region_disk" "repository-region-disk" {
-  for_each = local.config.use_regional_disk ? {} : { for idx, instance in local.config.gitaly_instances : instance.name => instance }
+  for_each = local.config.use_regional_disk ? { for idx, instance in local.config.gitaly_instances : instance.name => instance } : {}
 
   name          = format("%s-repository-region-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
   type          = each.value.disk_type
-  snapshot      = google_compute_snapshot.repository-disk[each.key].id
+  size          = each.value.disk_size
   replica_zones = local.config.regional_disk_replica_zones
-}
-
-resource "google_compute_snapshot" "repository-disk" {
-  for_each = local.config.use_regional_disk ? {} : { for idx, instance in local.config.gitaly_instances : instance.name => instance }
-
-  name        = format("%s-repository-snapshot-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
-  source_disk = google_compute_disk.repository-disk[each.key].name
-  zone        = local.config.benchmark_zone
 }
 
 resource "google_compute_instance" "gitaly" {
@@ -133,7 +51,7 @@ resource "google_compute_instance" "gitaly" {
   }
 
   attached_disk {
-    source      = local.config.use_regional_disk ? google_compute_region_disk.repository-region-disk[0].self_link : google_compute_disk.repository-disk[each.key].self_link
+    source      = local.config.use_regional_disk ? google_compute_region_disk.repository-region-disk[each.key].self_link : google_compute_disk.repository-disk[each.key].self_link
     device_name = "repository-disk"
   }
 
@@ -145,9 +63,6 @@ resource "google_compute_instance" "gitaly" {
 
   metadata = {
     ssh-keys       = format("gitaly_bench:%s", var.ssh_pubkey)
-    startup-script = <<EOF
-      ${var.startup_script}
-    EOF
   }
 
   tags = ["gitaly"]
@@ -171,10 +86,7 @@ resource "google_compute_instance" "client" {
   }
 
   metadata = {
-    ssh-keys       = format("gitaly_bench:%s", var.ssh_pubkey)
-    startup-script = <<EOF
-      ${var.startup_script}
-    EOF
+    ssh-keys = format("gitaly_bench:%s", var.ssh_pubkey)
   }
 }
 

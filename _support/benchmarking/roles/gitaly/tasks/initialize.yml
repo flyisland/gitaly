@@ -25,6 +25,18 @@
     groups: admin,google-sudoers
     append: true
 
+- name: Format repositories disk
+  filesystem:
+    fstype: "{{ target_instance.filesystem | default('ext4') }}"
+    dev: /dev/disk/by-id/google-repository-disk
+    opts: "{{ target_instance.fs_format_opts | default(omit) }}"
+
+- name: Create mount point directory
+  file:
+    path: /mnt/git-repositories
+    state: directory
+    mode: '0755'
+
 - name: Mount repositories disk
   mount:
     path: /mnt/git-repositories
@@ -33,7 +45,41 @@
     opts: "{{ target_instance.fs_mount_opts | default('discard,defaults') }}"
     state: mounted
 
-- name: Set git as owner of git-repositories directory
+- name: Set permissions on repositories directory
+  file:
+    path: /mnt/git-repositories
+    owner: git
+    group: git
+    mode: '0755'
+    state: directory
+
+- name: Add Git PPA repository
+  apt_repository:
+    repo: ppa:git-core/ppa
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Install Git
+  apt:
+    name: git
+    state: latest
+  become: true
+
+- name: Clone repositories in parallel
+  shell: |
+    if [ ! -d "{{ item.name }}" ]; then
+      git clone --bare --ref-format={{ item.reference_backend }} {{ item.remote }} {{ item.name }}
+    fi
+  args:
+    chdir: /mnt/git-repositories
+    creates: "/mnt/git-repositories/{{ item.name }}"
+  loop: "{{ config.repositories }}"
+  async: 900
+  poll: 30
+  register: git_clone_jobs
+
+- name: Set git as owner of repositories directory
   file:
     path: /mnt/git-repositories
     owner: git
