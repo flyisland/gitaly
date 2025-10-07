@@ -14,8 +14,9 @@
 - name: Install filesystem tools
   apt:
     name:
-      - "{{ 'xfsprogs' if target_instance.filesystem | default('ext4') == 'xfs' else 'e2fsprogs' }}"
+      - "{{ {'xfs': 'xfsprogs', 'btrfs': 'btrfs-progs', 'ext4': 'e2fsprogs'}[target_instance.filesystem | default('ext4')] }}"
     state: present
+    update_cache: yes
 
 # Set high uid to ensure it's not squashed by another service
 - name: Create 'git' user
