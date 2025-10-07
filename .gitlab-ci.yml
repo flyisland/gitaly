@@ -771,6 +771,9 @@ qa:benchmark:performance:
       - "_support/benchmarking/experiments/${EXPERIMENT}/results/"
     expire_in: 4 week
   rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
     - if: $CI_MERGE_REQUEST_IID
       when: manual
       allow_failure: true
