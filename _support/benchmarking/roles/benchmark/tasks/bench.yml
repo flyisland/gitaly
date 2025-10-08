@@ -35,9 +35,10 @@
     state: restarted
   delegate_to: "{{ target_host }}"
 
-- name: Pause for Gitaly to start up
-  pause:
-    seconds: 5
+- name: Wait for Gitaly to start up
+  shell: sleep 5
+  delegate_to: "{{ target_host }}"
+  changed_when: false  # Sleeping doesn't change anything
 
 - name: Load repositories config
   include_vars:

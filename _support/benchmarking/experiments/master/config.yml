@@ -31,6 +31,22 @@ gitaly_instances:
     boot_disk_type: "pd-balanced"
     boot_disk_size: 20
     gitaly_revision: HEAD
+    disk_size: 100
+    disk_type: "pd-balanced"
+    # ==== Standard Filesystem settings  ====
+    # Btrfs setup
+    # filesystem: "btrfs"  # Options: ext4, xfs, btrfs
+    # fs_mount_opts: "noatime,compress=zstd,space_cache=v2,ssd,discard=async"
+    # fs_format_opts: "-f -n 16k"
+    # XFS setup 
+    # filesystem: "xfs"  # Options: ext4, xfs, btrfs
+    # fs_mount_opts: "defaults,discard"
+    # fs_format_opts: "-f"
+    # ext4 setup
+    filesystem: "ext4"  # Options: ext4, xfs, btrfs
+    fs_mount_opts: "defaults,discard"
+    fs_format_opts: ""
+
     # These are manually templated and don't translate directly to config.toml entries.
     config:
       # Whether transactions should be enabled.
@@ -40,8 +56,6 @@ gitaly_instances:
       # just serves as an example.
       SNAPSHOT_DRIVER: deepclone
 
-repository_disk_size: 100
-repository_disk_type: "pd-balanced"
 # A list of repositories to be cloned onto the repositories disk, along with test inputs to be used
 # for RPC calls. This section of the configuration is re-serialised into JSON and provided to the
 # K6 script.
