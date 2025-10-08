@@ -390,3 +390,18 @@ func combineMetadataItems(err error) []MetadataItem {
 
 	return metadataItems
 }
+
+// WithNewMessage returns a copy of `e` with a different message
+// while keeping all structured information the same.
+func (e Error) WithNewMessage(format string, a ...any) Error {
+	newErr := newError(e.code, format, a...)
+
+	for _, detail := range e.Details() {
+		newErr = newErr.WithDetail(detail)
+	}
+
+	metadata := e.MetadataItems()
+	newErr = newErr.WithMetadataItems(metadata...)
+
+	return newErr
+}

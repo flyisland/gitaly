@@ -425,12 +425,14 @@ func TestWriteRef_locked(t *testing.T) {
 	})
 
 	testhelper.RequireGrpcError(t,
-		testhelper.WithInterceptedMetadata(
-			structerr.NewAborted("reference is locked already"),
-			"reference",
+		testhelper.WithInterceptedMetadataItems(
+			// This gets intercepted by the Aborted interceptor which replaces the error message.
+			// The error instead gets shifted to the error_details metadata item.
+			structerr.NewAborted("The operation could not be completed. Please try again."),
+			structerr.MetadataItem{Key: "error_details", Value: "reference is locked already"},
 			// For reftable there is only table level locking and hence no
 			// reference value is provided.
-			gittest.FilesOrReftables("refs/heads/locked-branch", ""),
+			structerr.MetadataItem{Key: "reference", Value: gittest.FilesOrReftables("refs/heads/locked-branch", "")},
 		),
 		err,
 	)

@@ -267,25 +267,24 @@ func TestUpdateReferences(t *testing.T) {
 							},
 						},
 					},
-					expectedErr: structerr.NewAborted("reference does not point to expected object").
-						WithDetail(&testproto.ErrorMetadata{
-							Key: []byte("actual_object_id"), Value: []byte(oldCommitID),
-						}).
-						WithDetail(&testproto.ErrorMetadata{
-							Key: []byte("expected_object_id"), Value: missingCommitID,
-						}).
-						WithDetail(&testproto.ErrorMetadata{
-							Key: []byte("reference"), Value: []byte("refs/heads/branch"),
-						}).
-						WithDetail(&gitalypb.UpdateReferencesError{
-							Error: &gitalypb.UpdateReferencesError_ReferenceStateMismatch{
-								ReferenceStateMismatch: &gitalypb.ReferenceStateMismatchError{
-									ReferenceName:    []byte("refs/heads/branch"),
-									ExpectedObjectId: missingCommitID,
-									ActualObjectId:   []byte(oldCommitID),
-								},
+					// This gets intercepted by the Aborted interceptor which replaces the error message
+					// "reference does not point to expected object"
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewAborted("The operation could not be completed. Please try again.").WithMetadataItems(
+							structerr.MetadataItem{Key: "actual_object_id", Value: string(oldCommitID)},
+							structerr.MetadataItem{Key: "error_details", Value: "reference does not point to expected object"},
+							structerr.MetadataItem{Key: "expected_object_id", Value: string(missingCommitID)},
+							structerr.MetadataItem{Key: "reference", Value: "refs/heads/branch"},
+						),
+					).WithDetail(&gitalypb.UpdateReferencesError{
+						Error: &gitalypb.UpdateReferencesError_ReferenceStateMismatch{
+							ReferenceStateMismatch: &gitalypb.ReferenceStateMismatchError{
+								ReferenceName:    []byte("refs/heads/branch"),
+								ExpectedObjectId: missingCommitID,
+								ActualObjectId:   []byte(oldCommitID),
 							},
-						}),
+						},
+					}),
 					expectedRefs: []git.Reference{
 						git.NewSymbolicReference("HEAD", "refs/heads/main"),
 						git.NewReference("refs/heads/branch", oldCommitID),
@@ -330,17 +329,20 @@ func TestUpdateReferences(t *testing.T) {
 							},
 						},
 					},
-					expectedErr: structerr.NewAborted("reference is already locked").
-						WithDetail(&testproto.ErrorMetadata{
-							Key: []byte("reference"), Value: expectedRefs,
-						}).
-						WithDetail(&gitalypb.UpdateReferencesError{
-							Error: &gitalypb.UpdateReferencesError_ReferencesLocked{
-								ReferencesLocked: &gitalypb.ReferencesLockedError{
-									Refs: [][]byte{expectedRefs},
-								},
+					// This gets intercepted by the Aborted interceptor which replaces the error message
+					// "reference is already locked"
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewAborted("The operation could not be completed. Please try again.").WithMetadataItems(
+							structerr.MetadataItem{Key: "error_details", Value: "reference is already locked"},
+							structerr.MetadataItem{Key: "reference", Value: "refs/heads/branch"},
+						),
+					).WithDetail(&gitalypb.UpdateReferencesError{
+						Error: &gitalypb.UpdateReferencesError_ReferencesLocked{
+							ReferencesLocked: &gitalypb.ReferencesLockedError{
+								Refs: [][]byte{expectedRefs},
 							},
-						}),
+						},
+					}),
 					expectedRefs: []git.Reference{
 						git.NewSymbolicReference("HEAD", "refs/heads/main"),
 						git.NewReference("refs/heads/branch", oldCommitID),
@@ -374,25 +376,24 @@ func TestUpdateReferences(t *testing.T) {
 							},
 						},
 					},
-					expectedErr: structerr.NewAborted("reference does not point to expected object").
-						WithDetail(&testproto.ErrorMetadata{
-							Key: []byte("actual_object_id"), Value: []byte(oldCommitID),
-						}).
-						WithDetail(&testproto.ErrorMetadata{
-							Key: []byte("expected_object_id"), Value: missingCommitID,
-						}).
-						WithDetail(&testproto.ErrorMetadata{
-							Key: []byte("reference"), Value: []byte("refs/heads/branch"),
-						}).
-						WithDetail(&gitalypb.UpdateReferencesError{
-							Error: &gitalypb.UpdateReferencesError_ReferenceStateMismatch{
-								ReferenceStateMismatch: &gitalypb.ReferenceStateMismatchError{
-									ReferenceName:    []byte("refs/heads/branch"),
-									ExpectedObjectId: missingCommitID,
-									ActualObjectId:   []byte(oldCommitID),
-								},
+					// This gets intercepted by the Aborted interceptor which replaces the error message
+					// "reference does not point to expected object"
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewAborted("The operation could not be completed. Please try again.").WithMetadataItems(
+							structerr.MetadataItem{Key: "actual_object_id", Value: string(oldCommitID)},
+							structerr.MetadataItem{Key: "error_details", Value: "reference does not point to expected object"},
+							structerr.MetadataItem{Key: "expected_object_id", Value: string(missingCommitID)},
+							structerr.MetadataItem{Key: "reference", Value: "refs/heads/branch"},
+						),
+					).WithDetail(&gitalypb.UpdateReferencesError{
+						Error: &gitalypb.UpdateReferencesError_ReferenceStateMismatch{
+							ReferenceStateMismatch: &gitalypb.ReferenceStateMismatchError{
+								ReferenceName:    []byte("refs/heads/branch"),
+								ExpectedObjectId: missingCommitID,
+								ActualObjectId:   []byte(oldCommitID),
 							},
-						}),
+						},
+					}),
 					expectedRefs: []git.Reference{
 						git.NewSymbolicReference("HEAD", "refs/heads/main"),
 						git.NewReference("refs/heads/branch", oldCommitID),

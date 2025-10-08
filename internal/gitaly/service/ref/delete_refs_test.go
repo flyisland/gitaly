@@ -222,15 +222,20 @@ func TestDeleteRefs_refLocked(t *testing.T) {
 	expectedRefs := gittest.FilesOrReftables([]byte("refs/heads/master"), nil)
 
 	require.Nil(t, response)
-	detailedErr := structerr.NewAborted("cannot lock references").WithDetail(
-		&gitalypb.DeleteRefsError{
-			Error: &gitalypb.DeleteRefsError_ReferencesLocked{
-				ReferencesLocked: &gitalypb.ReferencesLockedError{
-					Refs: [][]byte{expectedRefs},
-				},
+	// This gets intercepted by the Aborted interceptor which replaces the error message
+	// "cannot lock references"
+	detailedErr := testhelper.ToInterceptedMetadata(
+		structerr.NewAborted("The operation could not be completed. Please try again.").
+			WithMetadata(
+				"error_details", "cannot lock references",
+			),
+	).WithDetail(&gitalypb.DeleteRefsError{
+		Error: &gitalypb.DeleteRefsError_ReferencesLocked{
+			ReferencesLocked: &gitalypb.ReferencesLockedError{
+				Refs: [][]byte{expectedRefs},
 			},
 		},
-	)
+	})
 	testhelper.RequireGrpcError(t, detailedErr, err)
 }
 

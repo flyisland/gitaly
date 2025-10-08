@@ -40,6 +40,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/limithandler"
+	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/middleware/statushandler"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter"
@@ -179,7 +180,9 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 	// `structerr.WithMetadata()` is not only logged, but also present in the error details.
 	serverOpts := []server.Option{
 		server.WithUnaryInterceptor(StructErrUnaryInterceptor),
+		server.WithUnaryInterceptor(statushandler.AbortedErrorUnaryInterceptor),
 		server.WithStreamInterceptor(StructErrStreamInterceptor),
+		server.WithStreamInterceptor(statushandler.AbortedErrorStreamInterceptor),
 	}
 
 	deps := gsd.createDependencies(tb, ctx, cfg)
