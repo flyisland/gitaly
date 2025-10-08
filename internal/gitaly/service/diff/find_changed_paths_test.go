@@ -72,6 +72,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100755,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: newBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -80,6 +81,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 				}
 				return setupData{
@@ -110,6 +112,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: initialBlobID.String(),
+						CommitId:  initialCommit.String(),
 					},
 				}
 				return setupData{
@@ -164,6 +167,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100755,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: newBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_ADDED,
@@ -172,6 +176,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100755,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: newBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -180,6 +185,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 				}
 
@@ -227,6 +233,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  lastCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -235,6 +242,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  lastCommit.String(),
 					},
 				}
 
@@ -276,6 +284,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_DELETED,
@@ -284,6 +293,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o000000,
 						OldBlobId: renameBlobID.String(),
 						NewBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
+						CommitId:  newCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_ADDED,
@@ -292,6 +302,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: renameBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 				}
 
@@ -333,6 +344,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_RENAMED,
@@ -342,6 +354,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: renameBlobID.String(),
 						NewBlobId: renameBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 				}
 
@@ -385,6 +398,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 				}
 
@@ -438,6 +452,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: newBlobID.String(),
+						CommitId:  rightCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -446,6 +461,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: afterBlobID.String(),
 						NewBlobId: beforeBlobID.String(),
+						CommitId:  rightCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -454,6 +470,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  rightCommit.String(),
 					},
 				}
 
@@ -556,6 +573,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: leftNewFileOid.String(),
+						CommitId:  leftCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_DELETED,
@@ -564,6 +582,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o000000,
 						OldBlobId: leftContributingOid.String(),
 						NewBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
+						CommitId:  leftCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -572,6 +591,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: rightNewFileOid.String(),
 						NewBlobId: leftNewFileOid.String(),
+						CommitId:  leftCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -580,6 +600,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: rightReadmeOid.String(),
 						NewBlobId: oldReadmeOid.String(),
+						CommitId:  leftCommit.String(),
 					},
 				}
 
@@ -706,6 +727,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100755,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: newBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -714,6 +736,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 				}
 				return setupData{
@@ -816,6 +839,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: leftBlobID.String(),
 						NewBlobId: leftRightBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -824,6 +848,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: rightBlobID.String(),
 						NewBlobId: leftRightBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 				}
 
@@ -891,6 +916,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: blobID.String(),
 						NewBlobId: mergeBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -899,6 +925,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: blobID1.String(),
 						NewBlobId: mergeBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -907,6 +934,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: blobID2.String(),
 						NewBlobId: mergeBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -915,6 +943,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: blobID3.String(),
 						NewBlobId: mergeBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -923,6 +952,7 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: blobID4.String(),
 						NewBlobId: mergeBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 				}
 
@@ -930,6 +960,132 @@ func TestFindChangedPathsRequest_success(t *testing.T) {
 					repo:          repo,
 					diffMode:      gitalypb.FindChangedPathsRequest_MERGE_COMMIT_DIFF_MODE_ALL_PARENTS,
 					commits:       []commitRequest{{commit: mergeCommit.String()}},
+					expectedPaths: expectedPaths,
+				}
+			},
+		},
+		{
+			desc: "Returns the expected results with commit IDs included",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				newBlobID := gittest.WriteBlob(t, cfg, repoPath, []byte("new"))
+				beforeBlobID := gittest.WriteBlob(t, cfg, repoPath, []byte("before"))
+				afterBlobID := gittest.WriteBlob(t, cfg, repoPath, []byte("after"))
+
+				oldCommit := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "modified.txt", Mode: "100644", OID: beforeBlobID},
+					),
+				)
+				newCommit := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithParents(oldCommit),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "added.txt", Mode: "100755", OID: newBlobID},
+						gittest.TreeEntry{Path: "modified.txt", Mode: "100644", OID: afterBlobID},
+					),
+				)
+
+				expectedPaths := []*gitalypb.ChangedPaths{
+					{
+						Status:    gitalypb.ChangedPaths_ADDED,
+						Path:      []byte("added.txt"),
+						OldMode:   0o000000,
+						NewMode:   0o100755,
+						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
+						NewBlobId: newBlobID.String(),
+						CommitId:  newCommit.String(),
+					},
+					{
+						Status:    gitalypb.ChangedPaths_MODIFIED,
+						Path:      []byte("modified.txt"),
+						OldMode:   0o100644,
+						NewMode:   0o100644,
+						OldBlobId: beforeBlobID.String(),
+						NewBlobId: afterBlobID.String(),
+						CommitId:  newCommit.String(),
+					},
+				}
+				return setupData{
+					repo:          repo,
+					commits:       []commitRequest{{commit: newCommit.String()}},
+					expectedPaths: expectedPaths,
+				}
+			},
+		},
+		{
+			desc: "Returns the expected results with commit IDs for multiple commits",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blob1 := gittest.WriteBlob(t, cfg, repoPath, []byte("content1"))
+				blob2 := gittest.WriteBlob(t, cfg, repoPath, []byte("content2"))
+				blob3 := gittest.WriteBlob(t, cfg, repoPath, []byte("content3"))
+
+				commit1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file1.txt", Mode: "100644", OID: blob1},
+					),
+				)
+				commit2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithParents(commit1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file1.txt", Mode: "100644", OID: blob2},
+						gittest.TreeEntry{Path: "file2.txt", Mode: "100644", OID: blob1},
+					),
+				)
+				commit3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithParents(commit2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file1.txt", Mode: "100644", OID: blob3},
+						gittest.TreeEntry{Path: "file2.txt", Mode: "100644", OID: blob2},
+					),
+				)
+
+				expectedPaths := []*gitalypb.ChangedPaths{
+					{
+						Status:    gitalypb.ChangedPaths_MODIFIED,
+						Path:      []byte("file1.txt"),
+						OldMode:   0o100644,
+						NewMode:   0o100644,
+						OldBlobId: blob1.String(),
+						NewBlobId: blob2.String(),
+						CommitId:  commit2.String(),
+					},
+					{
+						Status:    gitalypb.ChangedPaths_ADDED,
+						Path:      []byte("file2.txt"),
+						OldMode:   0o000000,
+						NewMode:   0o100644,
+						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
+						NewBlobId: blob1.String(),
+						CommitId:  commit2.String(),
+					},
+					{
+						Status:    gitalypb.ChangedPaths_MODIFIED,
+						Path:      []byte("file1.txt"),
+						OldMode:   0o100644,
+						NewMode:   0o100644,
+						OldBlobId: blob2.String(),
+						NewBlobId: blob3.String(),
+						CommitId:  commit3.String(),
+					},
+					{
+						Status:    gitalypb.ChangedPaths_MODIFIED,
+						Path:      []byte("file2.txt"),
+						OldMode:   0o100644,
+						NewMode:   0o100644,
+						OldBlobId: blob1.String(),
+						NewBlobId: blob2.String(),
+						CommitId:  commit3.String(),
+					},
+				}
+				return setupData{
+					repo: repo,
+					commits: []commitRequest{
+						{commit: commit2.String()},
+						{commit: commit3.String()},
+					},
 					expectedPaths: expectedPaths,
 				}
 			},
@@ -1035,6 +1191,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o100755,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: newBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -1043,6 +1200,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 				}
 				return setupData{
@@ -1097,6 +1255,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o100755,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: newBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_ADDED,
@@ -1105,6 +1264,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o100755,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: newBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_MODIFIED,
@@ -1113,6 +1273,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  mergeCommit.String(),
 					},
 				}
 
@@ -1154,6 +1315,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: beforeBlobID.String(),
 						NewBlobId: afterBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_DELETED,
@@ -1162,6 +1324,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o000000,
 						OldBlobId: renameBlobID.String(),
 						NewBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
+						CommitId:  newCommit.String(),
 					},
 					{
 						Status:    gitalypb.ChangedPaths_ADDED,
@@ -1170,6 +1333,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: renameBlobID.String(),
+						CommitId:  newCommit.String(),
 					},
 				}
 
@@ -1201,6 +1365,7 @@ func TestFindChangedPathsRequest_deprecated(t *testing.T) {
 						NewMode:   0o100644,
 						OldBlobId: gittest.DefaultObjectHash.ZeroOID.String(),
 						NewBlobId: blobID.String(),
+						CommitId:  rootCommit.String(),
 					},
 				}
 
@@ -1387,7 +1552,11 @@ func TestFindChangedPathsRequest_failing(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		rpcRequest := &gitalypb.FindChangedPathsRequest{Repository: tc.repo, Commits: tc.commits, Requests: tc.requests}
+		rpcRequest := &gitalypb.FindChangedPathsRequest{
+			Repository: tc.repo,
+			Commits:    tc.commits,
+			Requests:   tc.requests,
+		}
 		stream, err := client.FindChangedPaths(ctx, rpcRequest)
 		require.NoError(t, err)
 

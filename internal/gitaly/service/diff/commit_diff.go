@@ -112,7 +112,7 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 		if err := parsePaths(bufio.NewReader(diffTreeExec), func(cp *gitalypb.ChangedPaths) error {
 			diffManifest[diffManifestKey(cp.GetPath(), cp.GetOldBlobId(), cp.GetNewBlobId())] = cp
 			return nil
-		}); err != nil {
+		}, false); err != nil {
 			return structerr.NewInternal("diff-tree parse: %w", err)
 		}
 	}
