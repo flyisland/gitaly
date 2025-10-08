@@ -66,8 +66,8 @@ EXPERIMENT=master ./configure-benchmark-instance
 ```
 
 Build and install Gitaly from source with from desired reference and install
-profiling tools. A disk image containing the test repositories will be mounted to
-`/mnt/git-repositories` on the Gitaly node.
+profiling tools. Test repositories will be cloned directly to `/mnt/git-repositories` 
+on each Gitaly node during instance startup.
 
 ### 4. Run benchmarks
 
