@@ -43,7 +43,7 @@
     path: /mnt/git-repositories
     src: /dev/disk/by-id/google-repository-disk
     fstype: "{{ target_instance.filesystem | default('ext4') }}"
-    opts: "{{ target_instance.fs_mount_opts | default('discard,defaults') }}"
+    opts: "{{ target_instance.fs_mount_opts | default(omit) }}"
     state: mounted
 
 - name: Set permissions on repositories directory
@@ -78,7 +78,6 @@
   loop: "{{ config.repositories }}"
   async: 900
   poll: 30
-  register: git_clone_jobs
 
 - name: Set git as owner of repositories directory
   file:
@@ -99,6 +98,3 @@
 # Match limits set by Omnibus
 - name: Set file-max
   shell: echo "1000000" > /proc/sys/fs/file-max
-
-- name: Update apt cache
-  apt: update_cache=yes

@@ -28,8 +28,7 @@ resource "google_compute_disk" "repository-disk" {
 }
 
 resource "google_compute_region_disk" "repository-region-disk" {
-  for_each = local.config.use_regional_disk ? { for idx, instance in local.config.gitaly_instances : instance.name => instance } : {}
-
+for_each = { for idx, instance in local.config.gitaly_instances : instance.name => instance if local.config.use_regional_disk }
   name          = format("%s-repository-region-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
   type          = each.value.disk_type
   size          = each.value.disk_size
