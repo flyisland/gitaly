@@ -38,6 +38,10 @@ No changes.
 
 No changes.
 
+## 18.2.8 (2025-10-08)
+
+No changes.
+
 ## 18.2.7 (2025-09-25)
 
 No changes.
