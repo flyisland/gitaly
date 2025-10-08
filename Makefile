@@ -156,9 +156,9 @@ GIT_VERSION ?=
 # GIT_VERSION_MASTER is a commit hash from Git’s master branch, typically between 7–14 days old.
 # Do not modify the format, it's automatically updated by renovate-gitlab-bot. The timestamp
 # is used for version comparison by renovate.
-# renovate: 1754054220
-GIT_VERSION_MASTER ?= 23466173824c0a0f835c0d790c2f38156ae6284a
-GIT_VERSION_PREV ?= 41d0310a83aba75a19585d8fbbf021938d8d2ace
+# renovate: 1759171235000
+GIT_VERSION_MASTER ?= d5518d52b23dc4d7d001b0725c5faab4063a3598
+GIT_VERSION_PREV ?= 23466173824c0a0f835c0d790c2f38156ae6284a
 #
 # GIT_VERSION_x_xx defines versions for each instance of bundled Git we ship. When a new
 # major version is added, be sure to update GIT_PACKED_EXECUTABLES, the *-bundled-git targets,
