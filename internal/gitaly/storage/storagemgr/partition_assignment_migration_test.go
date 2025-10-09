@@ -24,22 +24,10 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
 
-type mockNode struct{}
-
-func (n mockNode) GetStorage(storageName string) (storage.Storage, error) {
-	return mockStorage{}, nil
-}
-
-type mockStorage struct{ nodeimpl.Storage }
-
-func (m mockStorage) MaybeAssignToPartition(ctx context.Context, relativePath string) (storage.PartitionID, error) {
-	return 0, fmt.Errorf("cannot assign to partition")
-}
-
 type testCase struct {
 	name                  string
 	setupContext          func(t *testing.T) (ctx context.Context, cancel context.CancelFunc)
-	setupNode             func(t *testing.T, ctx context.Context, cfg config.Cfg, dbMgr *databasemgr.DBManager, logger log.Logger) (storage.Node, error)
+	setupNode             func(t *testing.T, ctx context.Context, cfg config.Cfg, dbMgr *databasemgr.DBManager, logger log.Logger) (*nodeimpl.Manager, error)
 	expectedError         string
 	validateResult        func(t *testing.T, ctx context.Context, db keyvalue.Store, repo *localrepo.Repo, pool *objectpool.ObjectPool, ptnID storage.PartitionID)
 	cancelContext         bool
@@ -104,6 +92,7 @@ func TestPartitionAssignmentMigration(t *testing.T) {
 
 			node, err := tc.setupNode(t, ctx, cfg, dbMgr, logger)
 			require.NoError(t, err)
+			defer node.Close()
 
 			var ptnID storage.PartitionID
 			if tc.createAdditionalRepos {
@@ -135,21 +124,23 @@ func setupCancelableContext(t *testing.T) (context.Context, context.CancelFunc) 
 	return context.WithCancel(testhelper.Context(t))
 }
 
-func setupDefaultNode(t *testing.T, ctx context.Context, cfg config.Cfg, dbMgr *databasemgr.DBManager, logger log.Logger) (storage.Node, error) {
+func setupDefaultNode(t *testing.T, ctx context.Context, cfg config.Cfg, dbMgr *databasemgr.DBManager, logger log.Logger) (*nodeimpl.Manager, error) {
 	return nodeimpl.NewManager(
 		cfg.Storages,
 		NewFactory(
 			logger,
 			dbMgr,
-			nil,
+			newStubPartitionFactory(),
 			config.DefaultMaxInactivePartitions,
 			NewMetrics(cfg.Prometheus),
 		),
 	)
 }
 
-func setupMockNode(t *testing.T, ctx context.Context, cfg config.Cfg, dbMgr *databasemgr.DBManager, logger log.Logger) (storage.Node, error) {
-	return mockNode{}, nil
+func setupMockNode(t *testing.T, ctx context.Context, cfg config.Cfg, dbMgr *databasemgr.DBManager, logger log.Logger) (*nodeimpl.Manager, error) {
+	// Create a factory that returns a storage that fails on MaybeAssignToPartition
+	mockFactory := &mockStorageFactory{}
+	return nodeimpl.NewManager(cfg.Storages, mockFactory)
 }
 
 func validateSuccessfulMigration(t *testing.T, ctx context.Context, db keyvalue.Store, repo *localrepo.Repo, pool *objectpool.ObjectPool, ptnID storage.PartitionID) {
@@ -231,4 +222,44 @@ func setupRepoWithObjectPool(t *testing.T, ctx context.Context, cfg config.Cfg, 
 	require.NoError(t, pool.Link(ctx, repo))
 
 	return repo, pool
+}
+
+type mockStorageFactory struct{}
+
+func (f *mockStorageFactory) New(storageName, storagePath string) (nodeimpl.Storage, error) {
+	return &mockFailingStorage{}, nil
+}
+
+type mockFailingStorage struct{}
+
+func (s *mockFailingStorage) ListPartitions(partitionID storage.PartitionID) (storage.PartitionIterator, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *mockFailingStorage) MaybeAssignToPartition(ctx context.Context, relativePath string) (storage.PartitionID, error) {
+	return 0, fmt.Errorf("cannot assign to partition")
+}
+
+func (s *mockFailingStorage) GetAssignedPartitionID(relativePath string) (storage.PartitionID, error) {
+	return 0, fmt.Errorf("not implemented")
+}
+
+func (s *mockFailingStorage) MaybeUpdateRepositoryKey(relativePath string, ptnID storage.PartitionID) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (s *mockFailingStorage) Begin(ctx context.Context, opts storage.TransactionOptions) (storage.Transaction, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *mockFailingStorage) GetPartition(ctx context.Context, partitionID storage.PartitionID) (storage.Partition, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *mockFailingStorage) HasPendingWAL(ctx context.Context, partitionID storage.PartitionID) (bool, error) {
+	return false, fmt.Errorf("not implemented")
+}
+
+func (s *mockFailingStorage) Close() {
+	// No-op for mock
 }

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
@@ -69,6 +70,7 @@ func newStubPartitionFactory() PartitionFactory {
 						return nil, ctx.Err()
 					}
 
+					kvData := make(map[string][]byte)
 					return mockTransaction{
 						commit: func(ctx context.Context) (storage.LSN, error) {
 							select {
@@ -76,11 +78,30 @@ func newStubPartitionFactory() PartitionFactory {
 								// Commits fail if partition is closed.
 								return 0, storage.ErrTransactionProcessingStopped
 							default:
+								// Commit the KV data
+								if len(kvData) > 0 {
+									err := db.Update(func(txn keyvalue.ReadWriter) error {
+										for key, value := range kvData {
+											// The db is already prefixed with the partition prefix, so just add kv/ subpath
+											partitionKey := append([]byte("kv/"), []byte(key)...)
+											if err := txn.Set(partitionKey, value); err != nil {
+												return err
+											}
+										}
+										return nil
+									})
+									if err != nil {
+										return 0, err
+									}
+								}
 								// Commits fail if context is done.
 								return 0, ctx.Err()
 							}
 						},
-						rollback: func(context.Context) error { return nil },
+						rollback:    func(context.Context) error { return nil },
+						db:          db,
+						partitionID: partitionID,
+						kvData:      kvData,
 					}, nil
 				},
 				close: func() {
@@ -154,8 +175,11 @@ func (m *mockPartition) GetLogReader() storage.LogReader {
 
 type mockTransaction struct {
 	storage.Transaction
-	commit   func(context.Context) (storage.LSN, error)
-	rollback func(context.Context) error
+	commit      func(context.Context) (storage.LSN, error)
+	rollback    func(context.Context) error
+	db          keyvalue.Transactioner
+	partitionID storage.PartitionID
+	kvData      map[string][]byte
 }
 
 func (m mockTransaction) Commit(ctx context.Context) (storage.LSN, error) {
@@ -163,6 +187,62 @@ func (m mockTransaction) Commit(ctx context.Context) (storage.LSN, error) {
 }
 
 func (m mockTransaction) Rollback(ctx context.Context) error { return m.rollback(ctx) }
+
+func (m mockTransaction) KV() keyvalue.ReadWriter {
+	// Return a KV store that tracks changes and commits them to the real database
+	return &mockKV{
+		data:        m.kvData,
+		db:          m.db,
+		partitionID: m.partitionID,
+	}
+}
+
+type mockKV struct {
+	data        map[string][]byte
+	db          keyvalue.Transactioner
+	partitionID storage.PartitionID
+}
+
+func (m *mockKV) Get(key []byte) (keyvalue.Item, error) {
+	if value, exists := m.data[string(key)]; exists {
+		return &mockItem{value: value}, nil
+	}
+	return nil, badger.ErrKeyNotFound
+}
+
+func (m *mockKV) Set(key, value []byte) error {
+	m.data[string(key)] = value
+	return nil
+}
+
+func (m *mockKV) Delete(key []byte) error {
+	delete(m.data, string(key))
+	return nil
+}
+
+func (m *mockKV) NewIterator(opts keyvalue.IteratorOptions) keyvalue.Iterator {
+	return nil // Implement if needed
+}
+
+type mockItem struct {
+	value []byte
+}
+
+func (m *mockItem) Key() []byte {
+	return nil
+}
+
+func (m *mockItem) Value(fn func([]byte) error) error {
+	return fn(m.value)
+}
+
+func (m *mockItem) ValueCopy(dst []byte) ([]byte, error) {
+	if len(dst) < len(m.value) {
+		dst = make([]byte, len(m.value))
+	}
+	copy(dst, m.value)
+	return dst[:len(m.value)], nil
+}
 
 // blockOnPartitionClosing checks if any partitions are currently in the process of
 // closing. If some are, the function waits for the closing process to complete before
