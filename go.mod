@@ -13,6 +13,7 @@ require (
 	github.com/cloudflare/tableflip v1.2.3
 	github.com/containerd/cgroups/v3 v3.0.5
 	github.com/dgraph-io/badger/v4 v4.7.0
+	github.com/fatih/color v1.16.0
 	github.com/getsentry/sentry-go v0.35.3
 	github.com/git-lfs/git-lfs/v3 v3.7.0
 	github.com/go-enry/go-enry/v2 v2.9.2
@@ -26,6 +27,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/yamux v0.1.2-0.20220728231024-8f49b6f63f18
 	github.com/jackc/pgx/v5 v5.7.6
+	github.com/mattn/go-isatty v0.0.20
 	github.com/miekg/dns v1.1.68
 	github.com/olekukonko/tablewriter v1.0.7
 	github.com/opencontainers/runtime-spec v1.2.1
@@ -125,7 +127,6 @@ require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
-	github.com/fatih/color v1.16.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/git-lfs/gitobj/v2 v2.1.1 // indirect
 	github.com/git-lfs/go-netrc v0.0.0-20250218165306-ba0029b43d11 // indirect
@@ -172,7 +173,6 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.25.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/montanaflynn/stats v0.7.0 // indirect
