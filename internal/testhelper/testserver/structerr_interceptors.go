@@ -2,11 +2,14 @@ package testserver
 
 import (
 	"context"
+	"errors"
 	"sort"
 
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/proto"
 )
 
 // StructErrUnaryInterceptor is an interceptor for unary RPC calls that injects error metadata as detailed
@@ -32,14 +35,27 @@ func interceptedError(err error) error {
 		}
 		sort.Strings(keys)
 
-		// We need to wrap the top-level error with the expected intercepted metadata, or
-		// otherwise we lose error context.
-		errWithMetadata := structerr.New("%w", err)
-		for _, key := range keys {
-			errWithMetadata = testhelper.WithInterceptedMetadata(errWithMetadata, key, metadata[key])
+		var structErr structerr.Error
+		var existingDetails []proto.Message
+
+		code := codes.Unknown
+		if errors.As(err, &structErr) {
+			code = structErr.Code()
+			existingDetails = structErr.Details()
 		}
 
-		return errWithMetadata
+		// This keeps the top-level error context if it was wrapped
+		newErr := structerr.New("%s", err.Error()).WithGRPCCode(code)
+
+		for _, detail := range existingDetails {
+			newErr = newErr.WithDetail(detail)
+		}
+
+		for _, key := range keys {
+			newErr = testhelper.WithInterceptedMetadata(newErr, key, metadata[key])
+		}
+
+		return newErr
 	}
 
 	return err

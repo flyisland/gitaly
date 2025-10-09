@@ -226,16 +226,17 @@ func TestDeleteRefs_refLocked(t *testing.T) {
 	// "cannot lock references"
 	detailedErr := testhelper.ToInterceptedMetadata(
 		structerr.NewAborted("The operation could not be completed. Please try again.").
+			WithDetail(&gitalypb.DeleteRefsError{
+				Error: &gitalypb.DeleteRefsError_ReferencesLocked{
+					ReferencesLocked: &gitalypb.ReferencesLockedError{
+						Refs: [][]byte{expectedRefs},
+					},
+				},
+			}).
 			WithMetadata(
 				"error_details", "cannot lock references",
 			),
-	).WithDetail(&gitalypb.DeleteRefsError{
-		Error: &gitalypb.DeleteRefsError_ReferencesLocked{
-			ReferencesLocked: &gitalypb.ReferencesLockedError{
-				Refs: [][]byte{expectedRefs},
-			},
-		},
-	})
+	)
 	testhelper.RequireGrpcError(t, detailedErr, err)
 }
 

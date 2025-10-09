@@ -30,7 +30,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb/testproto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -217,28 +216,23 @@ func testUserMergeBranch(t *testing.T, ctx context.Context) {
 					secondRequest:          &gitalypb.UserMergeBranchRequest{Apply: true},
 					secondExpectedResponse: &gitalypb.OperationBranchUpdate{},
 					secondExpectedErr: func(response *gitalypb.UserMergeBranchResponse) error {
-						return structerr.NewFailedPrecondition("reference update: reference does not point to expected object").
-							WithDetail(&testproto.ErrorMetadata{
-								Key:   []byte("actual_object_id"),
-								Value: []byte(secondCommit),
-							}).
-							WithDetail(&testproto.ErrorMetadata{
-								Key:   []byte("expected_object_id"),
-								Value: []byte(data.masterCommit),
-							}).
-							WithDetail(&testproto.ErrorMetadata{
-								Key:   []byte("reference"),
-								Value: []byte("refs/heads/" + data.branch),
-							}).
-							WithDetail(&gitalypb.UserMergeBranchError{
-								Error: &gitalypb.UserMergeBranchError_ReferenceUpdate{
-									ReferenceUpdate: &gitalypb.ReferenceUpdateError{
-										ReferenceName: []byte("refs/heads/" + data.branch),
-										OldOid:        data.masterCommit,
-										NewOid:        response.GetCommitId(),
+						return testhelper.ToInterceptedMetadata(
+							structerr.NewFailedPrecondition("reference update: reference does not point to expected object").
+								WithDetail(&gitalypb.UserMergeBranchError{
+									Error: &gitalypb.UserMergeBranchError_ReferenceUpdate{
+										ReferenceUpdate: &gitalypb.ReferenceUpdateError{
+											ReferenceName: []byte("refs/heads/" + data.branch),
+											OldOid:        data.masterCommit,
+											NewOid:        response.GetCommitId(),
+										},
 									},
-								},
-							})
+								}).
+								WithMetadataItems(
+									structerr.MetadataItem{Key: "actual_object_id", Value: secondCommit},
+									structerr.MetadataItem{Key: "expected_object_id", Value: data.masterCommit},
+									structerr.MetadataItem{Key: "reference", Value: "refs/heads/" + data.branch},
+								),
+						)
 					},
 				}
 			},
@@ -815,20 +809,15 @@ func testUserMergeBranchConcurrentUpdate(t *testing.T, ctx context.Context) {
 
 	expectedErr := testhelper.WithOrWithoutWAL(
 		structerr.NewFailedPrecondition("unexpected old value").WithDetail(expectedDetail),
-		structerr.NewFailedPrecondition("reference update: reference does not point to expected object").
-			WithDetail(&testproto.ErrorMetadata{
-				Key:   []byte("actual_object_id"),
-				Value: []byte(concurrentCommitID),
-			}).
-			WithDetail(&testproto.ErrorMetadata{
-				Key:   []byte("expected_object_id"),
-				Value: []byte(commits.left),
-			}).
-			WithDetail(&testproto.ErrorMetadata{
-				Key:   []byte("reference"),
-				Value: []byte("refs/heads/branch"),
-			}).
-			WithDetail(expectedDetail),
+		testhelper.ToInterceptedMetadata(
+			structerr.NewFailedPrecondition("reference update: reference does not point to expected object").
+				WithDetail(expectedDetail).
+				WithMetadataItems(
+					structerr.MetadataItem{Key: "actual_object_id", Value: concurrentCommitID},
+					structerr.MetadataItem{Key: "expected_object_id", Value: commits.left},
+					structerr.MetadataItem{Key: "reference", Value: "refs/heads/branch"},
+				),
+		),
 	)
 
 	secondResponse, err := stream.Recv()
