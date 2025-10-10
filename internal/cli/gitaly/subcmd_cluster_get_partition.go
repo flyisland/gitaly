@@ -2,6 +2,7 @@ package gitaly
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
@@ -16,20 +18,24 @@ const (
 	flagGetPartitionPartitionKey = "partition-key"
 	flagGetPartitionRelativePath = "relative-path"
 	flagGetPartitionNoColor      = "no-color"
+	flagGetPartitionFormat       = "format"
 )
 
 func newClusterGetPartitionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "get-partition",
 		Usage: "display detailed partition information",
-		UsageText: `gitaly cluster get-partition --config <gitaly_config_file> [--partition-key <key>] [--relative-path <path>]
+		UsageText: `gitaly cluster get-partition --config <gitaly_config_file> [--partition-key <key>] [--relative-path <path>] [--format <text|json>]
 
 Examples:
   # Get detailed info for a specific partition by key (64-character SHA256 hex)
   gitaly cluster get-partition --config config.toml --partition-key abc123...
 
   # Get partition info for a specific repository path
-  gitaly cluster get-partition --config config.toml --relative-path @hashed/ab/cd/abcd...`,
+  gitaly cluster get-partition --config config.toml --relative-path @hashed/ab/cd/abcd...
+
+  # Output as JSON for programmatic consumption
+  gitaly cluster get-partition --config config.toml --partition-key abc123... --format json`,
 		Description: `Display detailed information about specific partitions including:
   - Partition key and replica topology
   - Leader/follower status for each replica
@@ -38,7 +44,11 @@ Examples:
 
 Use --partition-key to filter by a specific partition key, or --relative-path to find
 the partition containing a specific repository. When using --relative-path, the output
-shows the partition that contains the specified repository.`,
+shows the partition that contains the specified repository.
+
+Output formats:
+  - text (default): Human-readable colored tables and detailed information
+  - json: Machine-readable JSON for automation and scripting`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     flagGetPartitionConfig,
@@ -58,6 +68,11 @@ shows the partition that contains the specified repository.`,
 				Name:  flagGetPartitionNoColor,
 				Usage: "disable colored output",
 			},
+			&cli.StringFlag{
+				Name:  flagGetPartitionFormat,
+				Usage: "output format: 'text' (default) or 'json'",
+				Value: "text",
+			},
 		},
 		Action: getPartitionAction,
 	}
@@ -70,9 +85,12 @@ func getPartitionAction(ctx context.Context, cmd *cli.Command) error {
 	partitionKey := cmd.String(flagGetPartitionPartitionKey)
 	relativePath := cmd.String(flagGetPartitionRelativePath)
 	noColor := cmd.Bool(flagGetPartitionNoColor)
+	format := cmd.String(flagGetPartitionFormat)
 
-	// Configure color output
-	colorOutput := setupColorOutput(cmd.Writer, noColor)
+	// Validate format
+	if format != "text" && format != "json" {
+		return fmt.Errorf("invalid format %q: must be 'text' or 'json'", format)
+	}
 
 	// Validate that at least one filter is provided
 	if partitionKey == "" && relativePath == "" {
@@ -96,12 +114,24 @@ func getPartitionAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	defer cleanup()
 
-	// Display partition details
-	return displayPartitionDetails(ctx, cmd.Writer, raftClient, partitionKey, relativePath, colorOutput)
+	// Fetch partition data
+	partitions, err := fetchPartitionData(ctx, raftClient, partitionKey, relativePath)
+	if err != nil {
+		return err
+	}
+
+	// Output based on format
+	if format == "json" {
+		return outputPartitionDetailsJSON(cmd.Writer, partitions)
+	}
+
+	// Configure color output for text format
+	colorOutput := setupColorOutput(cmd.Writer, noColor)
+	return outputPartitionDetailsText(cmd.Writer, partitions, partitionKey, relativePath, colorOutput)
 }
 
-// displayPartitionDetails calls RPCs and displays detailed partition information
-func displayPartitionDetails(ctx context.Context, writer io.Writer, client gitalypb.RaftServiceClient, partitionKey, relativePath string, colorOutput *colorOutput) error {
+// fetchPartitionData retrieves partition details from the Raft service
+func fetchPartitionData(ctx context.Context, client gitalypb.RaftServiceClient, partitionKey, relativePath string) ([]*gitalypb.GetPartitionsResponse, error) {
 	// Get partition details using GetPartitions RPC
 	partitionsReq := &gitalypb.GetPartitionsRequest{
 		IncludeRelativePaths:  true,
@@ -118,21 +148,64 @@ func displayPartitionDetails(ctx context.Context, writer io.Writer, client gital
 
 	partitionsStream, err := client.GetPartitions(ctx, partitionsReq)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve partition information - verify server is running and Raft is enabled: %w", err)
+		return nil, fmt.Errorf("failed to retrieve partition information - verify server is running and Raft is enabled: %w", err)
 	}
 
-	// Step 2: Collect all partition responses using helper function
+	// Collect all partition responses using helper function
 	partitionResponses, err := collectPartitionResponses(partitionsStream)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Step 3: Display results
-	return displayFormattedPartitionDetails(writer, partitionResponses, partitionKey, relativePath, colorOutput)
+	return partitionResponses, nil
 }
 
-// displayFormattedPartitionDetails displays detailed partition information
-func displayFormattedPartitionDetails(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse, partitionKey, relativePath string, colorOutput *colorOutput) error {
+// outputPartitionDetailsJSON outputs partition details in JSON format
+func outputPartitionDetailsJSON(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse) error {
+	// Sort partitions by partition key for consistent output
+	if len(partitions) > 0 {
+		sortPartitionsByKey(partitions)
+	}
+
+	// Configure protojson marshaler
+	marshaler := protojson.MarshalOptions{
+		EmitUnpopulated: false, // Omit fields with default values
+		UseProtoNames:   false, // Use lowerCamelCase JSON field names
+	}
+
+	// Build the partitions array
+	var partitionsArray []map[string]interface{}
+	for _, partition := range partitions {
+		partitionBytes, err := marshaler.Marshal(partition)
+		if err != nil {
+			return fmt.Errorf("failed to marshal partition: %w", err)
+		}
+
+		var partitionMap map[string]interface{}
+		if err := json.Unmarshal(partitionBytes, &partitionMap); err != nil {
+			return fmt.Errorf("failed to unmarshal partition: %w", err)
+		}
+
+		partitionsArray = append(partitionsArray, partitionMap)
+	}
+
+	// Build the output structure
+	output := map[string]interface{}{
+		"partitions": partitionsArray,
+	}
+
+	// Marshal with indentation for human-friendly output
+	jsonBytes, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON output: %w", err)
+	}
+
+	fmt.Fprintf(writer, "%s\n", string(jsonBytes))
+	return nil
+}
+
+// outputPartitionDetailsText displays detailed partition information in human-readable text format
+func outputPartitionDetailsText(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse, partitionKey, relativePath string, colorOutput *colorOutput) error {
 	// Display detailed partition information
 	if len(partitions) > 0 {
 		// Sort partitions by partition key for consistent output
