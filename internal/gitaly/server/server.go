@@ -135,7 +135,8 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 		), logMatcher),
 		loghandler.StreamLogDataCatcherServerInterceptor(),
 		sentryhandler.StreamLogHandler(),
-		statushandler.Stream, // Should be below LogHandler
+		statushandler.AbortedErrorStreamInterceptor,
+		statushandler.Stream, // Should be below LogHandler and above AbortedInterceptor in case this returns Aborted in the future
 		auth.StreamServerInterceptor(s.cfg.Auth),
 	}
 	unaryServerInterceptors := []grpc.UnaryServerInterceptor{
@@ -150,7 +151,8 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 		), logMatcher),
 		loghandler.UnaryLogDataCatcherServerInterceptor(),
 		sentryhandler.UnaryLogHandler(),
-		statushandler.Unary, // Should be below LogHandler
+		statushandler.AbortedErrorUnaryInterceptor,
+		statushandler.Unary, // Should be below LogHandler and above AbortedInterceptor in case this returns Aborted in the future
 		auth.UnaryServerInterceptor(s.cfg.Auth),
 	}
 	// Should be below auth handler to prevent v2 hmac tokens from timing out while queued

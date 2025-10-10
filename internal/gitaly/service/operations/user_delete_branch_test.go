@@ -23,7 +23,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb/testproto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -214,28 +213,23 @@ func TestUserDeleteBranch(t *testing.T) {
 						ExpectedOldOid: firstCommit.String(),
 					},
 					repoPath: repoPath,
-					expectedErr: structerr.NewFailedPrecondition("reference update failed: reference update: reference does not point to expected object").
-						WithDetail(&testproto.ErrorMetadata{
-							Key:   []byte("actual_object_id"),
-							Value: []byte(secondCommit),
-						}).
-						WithDetail(&testproto.ErrorMetadata{
-							Key:   []byte("expected_object_id"),
-							Value: []byte(firstCommit),
-						}).
-						WithDetail(&testproto.ErrorMetadata{
-							Key:   []byte("reference"),
-							Value: []byte("refs/heads/" + branchName),
-						}).
-						WithDetail(&gitalypb.UserDeleteBranchError{
-							Error: &gitalypb.UserDeleteBranchError_ReferenceUpdate{
-								ReferenceUpdate: &gitalypb.ReferenceUpdateError{
-									ReferenceName: []byte("refs/heads/" + branchName),
-									OldOid:        firstCommit.String(),
-									NewOid:        gittest.DefaultObjectHash.ZeroOID.String(),
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewFailedPrecondition("reference update failed: reference update: reference does not point to expected object").
+							WithDetail(&gitalypb.UserDeleteBranchError{
+								Error: &gitalypb.UserDeleteBranchError_ReferenceUpdate{
+									ReferenceUpdate: &gitalypb.ReferenceUpdateError{
+										ReferenceName: []byte("refs/heads/" + branchName),
+										OldOid:        firstCommit.String(),
+										NewOid:        gittest.DefaultObjectHash.ZeroOID.String(),
+									},
 								},
-							},
-						}),
+							}).
+							WithMetadataItems(
+								structerr.MetadataItem{Key: "actual_object_id", Value: secondCommit},
+								structerr.MetadataItem{Key: "expected_object_id", Value: firstCommit},
+								structerr.MetadataItem{Key: "reference", Value: "refs/heads/" + branchName},
+							),
+					),
 					expectedRefs: []string{"master", branchName},
 				}
 			},
@@ -381,20 +375,20 @@ func TestUserDeleteBranch_concurrentUpdate(t *testing.T) {
 	// reference value is provided.
 	value := gittest.FilesOrReftables([]byte("refs/heads/concurrent-update"), nil)
 
-	testhelper.RequireGrpcError(t, structerr.NewFailedPrecondition("reference update failed: reference update: reference is already locked").
-		WithDetail(&testproto.ErrorMetadata{
-			Key:   []byte("reference"),
-			Value: value,
-		}).
-		WithDetail(&gitalypb.UserDeleteBranchError{
-			Error: &gitalypb.UserDeleteBranchError_ReferenceUpdate{
-				ReferenceUpdate: &gitalypb.ReferenceUpdateError{
-					OldOid:        commitID.String(),
-					NewOid:        gittest.DefaultObjectHash.ZeroOID.String(),
-					ReferenceName: []byte("refs/heads/concurrent-update"),
+	detailedErr := testhelper.ToInterceptedMetadata(
+		structerr.NewFailedPrecondition("reference update failed: reference update: reference is already locked").
+			WithDetail(&gitalypb.UserDeleteBranchError{
+				Error: &gitalypb.UserDeleteBranchError_ReferenceUpdate{
+					ReferenceUpdate: &gitalypb.ReferenceUpdateError{
+						OldOid:        commitID.String(),
+						NewOid:        gittest.DefaultObjectHash.ZeroOID.String(),
+						ReferenceName: []byte("refs/heads/concurrent-update"),
+					},
 				},
-			},
-		}), err)
+			}).
+			WithMetadata("reference", string(value)),
+	)
+	testhelper.RequireGrpcError(t, detailedErr, err)
 	require.Nil(t, response)
 }
 

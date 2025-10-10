@@ -11,7 +11,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb/testproto"
 )
 
 func TestUserFFBranch(t *testing.T) {
@@ -289,27 +288,22 @@ func TestUserFFBranch(t *testing.T) {
 						Branch:         []byte("master"),
 						ExpectedOldOid: firstCommit.String(),
 					},
-					expectedErr: structerr.NewFailedPrecondition("update reference with hooks: reference update: reference does not point to expected object").
-						WithDetail(&testproto.ErrorMetadata{
-							Key:   []byte("actual_object_id"),
-							Value: []byte(secondCommit),
-						}).
-						WithDetail(&testproto.ErrorMetadata{
-							Key:   []byte("expected_object_id"),
-							Value: []byte(firstCommit),
-						}).
-						WithDetail(&testproto.ErrorMetadata{
-							Key:   []byte("reference"),
-							Value: []byte("refs/heads/master"),
-						}).
-						WithDetail(&gitalypb.UserFFBranchError{
-							Error: &gitalypb.UserFFBranchError_ReferenceUpdate{
-								ReferenceUpdate: &gitalypb.ReferenceUpdateError{
-									OldOid: firstCommit.String(),
-									NewOid: commitToMerge.String(),
+					expectedErr: testhelper.ToInterceptedMetadata(
+						structerr.NewFailedPrecondition("update reference with hooks: reference update: reference does not point to expected object").
+							WithDetail(&gitalypb.UserFFBranchError{
+								Error: &gitalypb.UserFFBranchError_ReferenceUpdate{
+									ReferenceUpdate: &gitalypb.ReferenceUpdateError{
+										OldOid: firstCommit.String(),
+										NewOid: commitToMerge.String(),
+									},
 								},
-							},
-						}),
+							}).
+							WithMetadataItems(
+								structerr.MetadataItem{Key: "actual_object_id", Value: secondCommit},
+								structerr.MetadataItem{Key: "expected_object_id", Value: firstCommit},
+								structerr.MetadataItem{Key: "reference", Value: "refs/heads/master"},
+							),
+					),
 				}
 			},
 		},

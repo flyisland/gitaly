@@ -156,7 +156,12 @@ func testUserSquashTransactional(t *testing.T, ctx context.Context) {
 			voteFn: func(ctx context.Context, tx txinfo.Transaction, vote voting.Vote, phase voting.Phase) error {
 				return errors.New("vote failed")
 			},
-			expectedErr: structerr.NewAborted("preparatory vote on squashed commit: vote failed"),
+			// This gets intercepted by the Aborted interceptor which replaces the error message
+			// "preparatory vote on squashed commit: vote failed"
+			expectedErr: testhelper.ToInterceptedMetadata(
+				structerr.NewAborted("The operation could not be completed. Please try again.").WithMetadata(
+					"error_details", "preparatory vote on squashed commit: vote failed"),
+			),
 			expectedVotes: []voting.Vote{
 				squashedCommitVote,
 			},
@@ -170,7 +175,12 @@ func testUserSquashTransactional(t *testing.T, ctx context.Context) {
 				}
 				return nil
 			},
-			expectedErr: structerr.NewAborted("committing vote on squashed commit: vote failed"),
+			// This gets intercepted by the Aborted interceptor which replaces the error message
+			// "committing vote on squashed commit: vote failed"
+			expectedErr: testhelper.ToInterceptedMetadata(
+				structerr.NewAborted("The operation could not be completed. Please try again.").WithMetadata(
+					"error_details", "committing vote on squashed commit: vote failed"),
+			),
 			expectedVotes: []voting.Vote{
 				squashedCommitVote,
 				squashedCommitVote,

@@ -216,10 +216,15 @@ ref:refs/heads/main ref:refs/heads/branch-1 HEAD
 			},
 		},
 		{
-			desc:              "hook fails with failed vote",
-			stdin:             stdin,
-			voteResponse:      gitalypb.VoteTransactionResponse_ABORT,
-			expectedErr:       structerr.NewAborted("reference-transaction hook: error voting on transaction: transaction was aborted"),
+			desc:         "hook fails with failed vote",
+			stdin:        stdin,
+			voteResponse: gitalypb.VoteTransactionResponse_ABORT,
+			// This gets intercepted by the Aborted interceptor which replaces the error message
+			// "reference-transaction hook: error voting on transaction: transaction was aborted"
+			expectedErr: testhelper.ToInterceptedMetadata(
+				structerr.NewAborted("The operation could not be completed. Please try again.").WithMetadata(
+					"error_details", "reference-transaction hook: error voting on transaction: transaction was aborted"),
+			),
 			expectedReftxHash: stdin,
 			expectedInitialValues: map[git.ReferenceName]git.Reference{
 				"refs/heads/branch-1": git.NewReference("refs/heads/branch-1", gittest.DefaultObjectHash.ZeroOID),
