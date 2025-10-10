@@ -327,7 +327,7 @@ func (req *trackRepositoryRequest) authoritativeRepositoryExists(ctx context.Con
 					"node_address": node.Address,
 				}).Debug("check if repository exists on Gitaly node")
 
-				conn, err := subCmdDial(ctx, node.Address, node.Token, defaultDialTimeout)
+				conn, err := glcli.Dial(ctx, node.Address, node.Token, defaultDialTimeout)
 				if err != nil {
 					return false, fmt.Errorf("error dialing: %w", err)
 				}

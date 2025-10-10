@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
+	glcli "gitlab.com/gitlab-org/gitaly/v16/internal/cli"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
@@ -126,7 +127,7 @@ func dialGitalyStorages(ctx context.Context, cfg config.Config, timeout time.Dur
 	nodeSet := praefect.NodeSet{}
 	for _, vs := range cfg.VirtualStorages {
 		for _, node := range vs.Nodes {
-			conn, err := subCmdDial(ctx, node.Address, node.Token, timeout)
+			conn, err := glcli.Dial(ctx, node.Address, node.Token, timeout)
 			if err != nil {
 				return nil, fmt.Errorf("dial with %q gitaly at %q", node.Storage, node.Address)
 			}
