@@ -2,7 +2,6 @@ package gitaly
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -108,16 +107,6 @@ Use --list-partitions to display partition overview table.
 `,
 		},
 		{
-			name: "basic cluster info without partitions (robust check)",
-			setupServer: func(t *testing.T) (string, func()) {
-				return setupRaftServerForPartition(t, setupTestData)
-			},
-			args:        []string{},
-			expectError: false,
-			// This test uses content validation instead of exact string matching
-			expectedOutput: "ROBUST_CHECK",
-		},
-		{
 			name: "cluster info with show partitions flag",
 			setupServer: func(t *testing.T) (string, func()) {
 				return setupRaftServerForPartition(t, setupTestData)
@@ -185,6 +174,386 @@ PARTITION KEY                                                     LEADER     REP
 ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98  storage-2  storage-1, storage-2, storage-3 (filtered: storage-1)  3/3     150         150          1 repos
 `,
 		},
+		{
+			name: "cluster info with JSON format (basic)",
+			setupServer: func(t *testing.T) (string, func()) {
+				return setupRaftServerForPartition(t, setupTestData)
+			},
+			args:        []string{"--format", "json"},
+			expectError: false,
+			expectedOutput: `{
+  "clusterInfo": {
+    "clusterId": "test-cluster",
+    "statistics": {
+      "healthyPartitions": 2,
+      "healthyReplicas": 6,
+      "storageStats": {
+        "storage-1": {
+          "leaderCount": 1,
+          "replicaCount": 2
+        },
+        "storage-2": {
+          "leaderCount": 1,
+          "replicaCount": 2
+        },
+        "storage-3": {
+          "replicaCount": 2
+        }
+      },
+      "totalPartitions": 2,
+      "totalReplicas": 6
+    }
+  }
+}
+`,
+		},
+		{
+			name: "cluster info with JSON format and list-partitions",
+			setupServer: func(t *testing.T) (string, func()) {
+				return setupRaftServerForPartition(t, setupTestData)
+			},
+			args:        []string{"--format", "json", "--list-partitions"},
+			expectError: false,
+			expectedOutput: `{
+  "clusterInfo": {
+    "clusterId": "test-cluster",
+    "statistics": {
+      "healthyPartitions": 2,
+      "healthyReplicas": 6,
+      "storageStats": {
+        "storage-1": {
+          "leaderCount": 1,
+          "replicaCount": 2
+        },
+        "storage-2": {
+          "leaderCount": 1,
+          "replicaCount": 2
+        },
+        "storage-3": {
+          "replicaCount": 2
+        }
+      },
+      "totalPartitions": 2,
+      "totalReplicas": 6
+    }
+  },
+  "partitions": [
+    {
+      "clusterId": "test-cluster",
+      "index": "100",
+      "leaderId": "1",
+      "partitionKey": {
+        "value": "1ae75994b13cfe1d19983e0d7eeac7b4a7077bd9c4a26e3421c1acd3d683a4ad"
+      },
+      "relativePath": "@hashed/ab/cd/repo1.git",
+      "relativePaths": [
+        "@hashed/ab/cd/repo1.git"
+      ],
+      "replicas": [
+        {
+          "isHealthy": true,
+          "isLeader": true,
+          "lastIndex": "100",
+          "matchIndex": "100",
+          "replicaId": {
+            "memberId": "1",
+            "metadata": {
+              "address": "gitaly-1.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "1ae75994b13cfe1d19983e0d7eeac7b4a7077bd9c4a26e3421c1acd3d683a4ad"
+            },
+            "storageName": "storage-1",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "leader"
+        },
+        {
+          "isHealthy": true,
+          "lastIndex": "100",
+          "matchIndex": "100",
+          "replicaId": {
+            "memberId": "2",
+            "metadata": {
+              "address": "gitaly-2.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "1ae75994b13cfe1d19983e0d7eeac7b4a7077bd9c4a26e3421c1acd3d683a4ad"
+            },
+            "storageName": "storage-2",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "follower"
+        },
+        {
+          "isHealthy": true,
+          "lastIndex": "100",
+          "matchIndex": "100",
+          "replicaId": {
+            "memberId": "3",
+            "metadata": {
+              "address": "gitaly-3.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "1ae75994b13cfe1d19983e0d7eeac7b4a7077bd9c4a26e3421c1acd3d683a4ad"
+            },
+            "storageName": "storage-3",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "follower"
+        }
+      ],
+      "term": "5"
+    },
+    {
+      "clusterId": "test-cluster",
+      "index": "150",
+      "leaderId": "5",
+      "partitionKey": {
+        "value": "ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98"
+      },
+      "relativePath": "@hashed/ef/gh/repo2.git",
+      "relativePaths": [
+        "@hashed/ef/gh/repo2.git"
+      ],
+      "replicas": [
+        {
+          "isHealthy": true,
+          "lastIndex": "150",
+          "matchIndex": "150",
+          "replicaId": {
+            "memberId": "4",
+            "metadata": {
+              "address": "gitaly-1.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98"
+            },
+            "storageName": "storage-1",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "follower"
+        },
+        {
+          "isHealthy": true,
+          "isLeader": true,
+          "lastIndex": "150",
+          "matchIndex": "150",
+          "replicaId": {
+            "memberId": "5",
+            "metadata": {
+              "address": "gitaly-2.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98"
+            },
+            "storageName": "storage-2",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "leader"
+        },
+        {
+          "isHealthy": true,
+          "lastIndex": "150",
+          "matchIndex": "150",
+          "replicaId": {
+            "memberId": "6",
+            "metadata": {
+              "address": "gitaly-3.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98"
+            },
+            "storageName": "storage-3",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "follower"
+        }
+      ],
+      "term": "6"
+    }
+  ]
+}
+`,
+		},
+		{
+			name: "cluster info with JSON format and storage filter",
+			setupServer: func(t *testing.T) (string, func()) {
+				return setupRaftServerForPartition(t, setupTestData)
+			},
+			args:        []string{"--format", "json", "--storage", storageOne},
+			expectError: false,
+			expectedOutput: `{
+  "clusterInfo": {
+    "clusterId": "test-cluster",
+    "statistics": {
+      "healthyPartitions": 2,
+      "healthyReplicas": 6,
+      "storageStats": {
+        "storage-1": {
+          "leaderCount": 1,
+          "replicaCount": 2
+        },
+        "storage-2": {
+          "leaderCount": 1,
+          "replicaCount": 2
+        },
+        "storage-3": {
+          "replicaCount": 2
+        }
+      },
+      "totalPartitions": 2,
+      "totalReplicas": 6
+    }
+  },
+  "partitions": [
+    {
+      "clusterId": "test-cluster",
+      "index": "100",
+      "leaderId": "1",
+      "partitionKey": {
+        "value": "1ae75994b13cfe1d19983e0d7eeac7b4a7077bd9c4a26e3421c1acd3d683a4ad"
+      },
+      "relativePath": "@hashed/ab/cd/repo1.git",
+      "relativePaths": [
+        "@hashed/ab/cd/repo1.git"
+      ],
+      "replicas": [
+        {
+          "isHealthy": true,
+          "isLeader": true,
+          "lastIndex": "100",
+          "matchIndex": "100",
+          "replicaId": {
+            "memberId": "1",
+            "metadata": {
+              "address": "gitaly-1.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "1ae75994b13cfe1d19983e0d7eeac7b4a7077bd9c4a26e3421c1acd3d683a4ad"
+            },
+            "storageName": "storage-1",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "leader"
+        },
+        {
+          "isHealthy": true,
+          "lastIndex": "100",
+          "matchIndex": "100",
+          "replicaId": {
+            "memberId": "2",
+            "metadata": {
+              "address": "gitaly-2.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "1ae75994b13cfe1d19983e0d7eeac7b4a7077bd9c4a26e3421c1acd3d683a4ad"
+            },
+            "storageName": "storage-2",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "follower"
+        },
+        {
+          "isHealthy": true,
+          "lastIndex": "100",
+          "matchIndex": "100",
+          "replicaId": {
+            "memberId": "3",
+            "metadata": {
+              "address": "gitaly-3.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "1ae75994b13cfe1d19983e0d7eeac7b4a7077bd9c4a26e3421c1acd3d683a4ad"
+            },
+            "storageName": "storage-3",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "follower"
+        }
+      ],
+      "term": "5"
+    },
+    {
+      "clusterId": "test-cluster",
+      "index": "150",
+      "leaderId": "5",
+      "partitionKey": {
+        "value": "ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98"
+      },
+      "relativePath": "@hashed/ef/gh/repo2.git",
+      "relativePaths": [
+        "@hashed/ef/gh/repo2.git"
+      ],
+      "replicas": [
+        {
+          "isHealthy": true,
+          "lastIndex": "150",
+          "matchIndex": "150",
+          "replicaId": {
+            "memberId": "4",
+            "metadata": {
+              "address": "gitaly-1.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98"
+            },
+            "storageName": "storage-1",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "follower"
+        },
+        {
+          "isHealthy": true,
+          "isLeader": true,
+          "lastIndex": "150",
+          "matchIndex": "150",
+          "replicaId": {
+            "memberId": "5",
+            "metadata": {
+              "address": "gitaly-2.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98"
+            },
+            "storageName": "storage-2",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "leader"
+        },
+        {
+          "isHealthy": true,
+          "lastIndex": "150",
+          "matchIndex": "150",
+          "replicaId": {
+            "memberId": "6",
+            "metadata": {
+              "address": "gitaly-3.example.com:8075"
+            },
+            "partitionKey": {
+              "value": "ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98"
+            },
+            "storageName": "storage-3",
+            "type": "REPLICA_TYPE_VOTER"
+          },
+          "state": "follower"
+        }
+      ],
+      "term": "6"
+    }
+  ]
+}
+`,
+		},
+		{
+			name: "cluster info with invalid format",
+			setupServer: func(t *testing.T) (string, func()) {
+				return setupRaftServerForPartition(t, setupTestData)
+			},
+			args:           []string{"--format", "yaml"},
+			expectError:    true,
+			expectedOutput: "invalid format \"yaml\": must be 'text' or 'json'",
+		},
 	}
 
 	for _, tc := range tests {
@@ -211,43 +580,10 @@ ae3928eb528786e728edb0583f06ec25d4d0f41f3ad6105a8c2777790d8cfc98  storage-2  sto
 				require.Contains(t, err.Error(), tc.expectedOutput)
 			} else {
 				require.NoError(t, err, "Command should execute successfully")
-
-				// Check if this is a robust test case
-				if tc.expectedOutput == "ROBUST_CHECK" {
-					// Use content-based validation instead of exact string matching
-					assertClusterStatistics(t, actualOutput, 2, 6)
-					assertOutputContains(t, actualOutput, []string{
-						"=== Gitaly Cluster Information ===",
-						"=== Per-Storage Statistics ===",
-						"storage-1",
-						"storage-2",
-						"storage-3",
-						"Use --list-partitions to display partition overview table.",
-					})
-				} else {
-					require.Equal(t, tc.expectedOutput, actualOutput, "Output should match exactly")
-				}
+				require.Equal(t, tc.expectedOutput, actualOutput, "Output should match exactly")
 			}
 		})
 	}
-}
-
-// assertOutputContains checks that output contains all expected content parts without enforcing exact formatting
-func assertOutputContains(t *testing.T, output string, expectedParts []string) {
-	t.Helper()
-	for _, part := range expectedParts {
-		require.Contains(t, output, part, "Output should contain: %q", part)
-	}
-}
-
-// assertClusterStatistics validates cluster statistics in output without exact formatting
-func assertClusterStatistics(t *testing.T, output string, expectedPartitions, expectedReplicas int) {
-	t.Helper()
-	require.Contains(t, output, "=== Cluster Statistics ===")
-	require.Contains(t, output, fmt.Sprintf("Total Partitions: %d", expectedPartitions))
-	require.Contains(t, output, fmt.Sprintf("Total Replicas: %d", expectedReplicas))
-	require.Contains(t, output, fmt.Sprintf("Healthy Partitions: %d", expectedPartitions))
-	require.Contains(t, output, fmt.Sprintf("Healthy Replicas: %d", expectedReplicas))
 }
 
 // setupTestData populates the Raft cluster with test partition data

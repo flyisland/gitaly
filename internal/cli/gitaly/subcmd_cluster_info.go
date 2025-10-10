@@ -2,6 +2,7 @@ package gitaly
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
@@ -20,13 +22,14 @@ const (
 	flagClusterInfoStorage        = "storage"
 	flagClusterInfoListPartitions = "list-partitions"
 	flagClusterInfoNoColor        = "no-color"
+	flagClusterInfoFormat         = "format"
 )
 
 func newClusterInfoCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "info",
 		Usage: "display cluster statistics and overview",
-		UsageText: `gitaly cluster info --config <gitaly_config_file> [--list-partitions] [--storage <name>]
+		UsageText: `gitaly cluster info --config <gitaly_config_file> [--list-partitions] [--storage <name>] [--format <text|json>]
 
 Examples:
   # Show cluster statistics only (default)
@@ -36,7 +39,13 @@ Examples:
   gitaly cluster info --config config.toml --list-partitions
 
   # Filter by storage (shows partition overview for that storage)
-  gitaly cluster info --config config.toml --storage storage-1 --list-partitions`,
+  gitaly cluster info --config config.toml --storage storage-1 --list-partitions
+
+  # Output as JSON for programmatic consumption
+  gitaly cluster info --config config.toml --format json
+
+  # Output JSON with partition details
+  gitaly cluster info --config config.toml --format json --list-partitions`,
 		Description: `Display cluster-wide information including:
   - Cluster statistics (total partitions, replicas, health) - shown by default
   - Per-storage statistics (leader and replica counts)
@@ -44,6 +53,10 @@ Examples:
 
 By default, only cluster statistics are displayed. Use --list-partitions to see
 a partition overview table. Use --storage to filter partitions by storage.
+
+Output formats:
+  - text (default): Human-readable colored tables and statistics
+  - json: Machine-readable JSON for automation and scripting
 
 For detailed partition information, use 'gitaly cluster get-partition'.`,
 		Flags: []cli.Flag{
@@ -65,6 +78,11 @@ For detailed partition information, use 'gitaly cluster get-partition'.`,
 				Name:  flagClusterInfoNoColor,
 				Usage: "disable colored output",
 			},
+			&cli.StringFlag{
+				Name:  flagClusterInfoFormat,
+				Usage: "output format: 'text' (default) or 'json'",
+				Value: "text",
+			},
 		},
 		Action: clusterInfoAction,
 	}
@@ -77,9 +95,12 @@ func clusterInfoAction(ctx context.Context, cmd *cli.Command) error {
 	storage := cmd.String(flagClusterInfoStorage)
 	listPartitions := cmd.Bool(flagClusterInfoListPartitions)
 	noColor := cmd.Bool(flagClusterInfoNoColor)
+	format := cmd.String(flagClusterInfoFormat)
 
-	// Configure color output
-	colorOutput := setupColorOutput(cmd.Writer, noColor)
+	// Validate format
+	if format != "text" && format != "json" {
+		return fmt.Errorf("invalid format %q: must be 'text' or 'json'", format)
+	}
 
 	// Create Raft client using shared helper
 	raftClient, cleanup, err := loadConfigAndCreateRaftClient(ctx, configPath)
@@ -88,17 +109,29 @@ func clusterInfoAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	defer cleanup()
 
-	// Display cluster info with optimized RPC calls
-	return displayClusterInfo(ctx, cmd.Writer, raftClient, storage, listPartitions, colorOutput)
+	// Fetch cluster data
+	clusterInfoResp, partitions, err := fetchClusterData(ctx, raftClient, storage, listPartitions)
+	if err != nil {
+		return err
+	}
+
+	// Output based on format
+	if format == "json" {
+		return outputClusterInfoJSON(cmd.Writer, clusterInfoResp, partitions, storage, listPartitions)
+	}
+
+	// Configure color output for text format
+	colorOutput := setupColorOutput(cmd.Writer, noColor)
+	return outputClusterInfoText(cmd.Writer, clusterInfoResp, partitions, storage, listPartitions, colorOutput)
 }
 
-// displayClusterInfo calls GetClusterInfo and optionally GetPartitions RPCs, processes the data, and displays the results
-func displayClusterInfo(ctx context.Context, writer io.Writer, client gitalypb.RaftServiceClient, storage string, listPartitions bool, colorOutput *colorOutput) error {
+// fetchClusterData retrieves cluster information and optionally partition details from the Raft service
+func fetchClusterData(ctx context.Context, client gitalypb.RaftServiceClient, storage string, listPartitions bool) (*gitalypb.RaftClusterInfoResponse, []*gitalypb.GetPartitionsResponse, error) {
 	// Step 1: Always get cluster statistics using GetClusterInfo RPC
 	var clusterInfoReq *gitalypb.RaftClusterInfoRequest
 	clusterInfoResp, err := client.GetClusterInfo(ctx, clusterInfoReq)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve cluster information - verify server is running and Raft is enabled: %w", err)
+		return nil, nil, fmt.Errorf("failed to retrieve cluster information - verify server is running and Raft is enabled: %w", err)
 	}
 
 	// Step 2: Only get partition details if needed (when --list-partitions is set or --storage filter is provided)
@@ -120,22 +153,82 @@ func displayClusterInfo(ctx context.Context, writer io.Writer, client gitalypb.R
 
 		partitionsStream, err := client.GetPartitions(ctx, partitionsReq)
 		if err != nil {
-			return fmt.Errorf("failed to retrieve partition details - verify server is running and storage %q exists: %w", storage, err)
+			return nil, nil, fmt.Errorf("failed to retrieve partition details - verify server is running and storage %q exists: %w", storage, err)
 		}
 
 		// Collect all partition responses using helper function
 		partitionResponses, err = collectPartitionResponses(partitionsStream)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 	}
 
-	// Step 3: Display results using the RPC responses
-	return displayFormattedResults(writer, clusterInfoResp, partitionResponses, storage, listPartitions, colorOutput)
+	return clusterInfoResp, partitionResponses, nil
 }
 
-// displayFormattedResults displays cluster information using tabular format
-func displayFormattedResults(writer io.Writer, clusterInfoResp *gitalypb.RaftClusterInfoResponse, partitions []*gitalypb.GetPartitionsResponse, storage string, listPartitions bool, colorOutput *colorOutput) error {
+// outputClusterInfoJSON outputs cluster information in JSON format
+func outputClusterInfoJSON(writer io.Writer, clusterInfoResp *gitalypb.RaftClusterInfoResponse, partitions []*gitalypb.GetPartitionsResponse, storage string, listPartitions bool) error {
+	// Include partitions in JSON if they were fetched (either via --list-partitions or --storage filter)
+	includePartitions := listPartitions || storage != ""
+
+	// Sort partitions by partition key for consistent output
+	if includePartitions && len(partitions) > 0 {
+		sortPartitionsByKey(partitions)
+	}
+
+	// Configure protojson marshaler
+	marshaler := protojson.MarshalOptions{
+		EmitUnpopulated: false, // Omit fields with default values
+		UseProtoNames:   false, // Use lowerCamelCase JSON field names
+	}
+
+	// Convert protobuf to JSON, then to map for standard JSON marshaling
+	clusterInfoBytes, err := marshaler.Marshal(clusterInfoResp)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cluster info: %w", err)
+	}
+
+	var clusterInfoMap map[string]interface{}
+	if err := json.Unmarshal(clusterInfoBytes, &clusterInfoMap); err != nil {
+		return fmt.Errorf("failed to unmarshal cluster info: %w", err)
+	}
+
+	// Build the output structure
+	output := map[string]interface{}{
+		"clusterInfo": clusterInfoMap,
+	}
+
+	// Add partitions if requested
+	if includePartitions && len(partitions) > 0 {
+		var partitionsArray []map[string]interface{}
+		for _, partition := range partitions {
+			partitionBytes, err := marshaler.Marshal(partition)
+			if err != nil {
+				return fmt.Errorf("failed to marshal partition: %w", err)
+			}
+
+			var partitionMap map[string]interface{}
+			if err := json.Unmarshal(partitionBytes, &partitionMap); err != nil {
+				return fmt.Errorf("failed to unmarshal partition: %w", err)
+			}
+
+			partitionsArray = append(partitionsArray, partitionMap)
+		}
+		output["partitions"] = partitionsArray
+	}
+
+	// Marshal with indentation for human-friendly output
+	jsonBytes, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON output: %w", err)
+	}
+
+	fmt.Fprintf(writer, "%s\n", string(jsonBytes))
+	return nil
+}
+
+// outputClusterInfoText displays cluster information in human-readable text format
+func outputClusterInfoText(writer io.Writer, clusterInfoResp *gitalypb.RaftClusterInfoResponse, partitions []*gitalypb.GetPartitionsResponse, storage string, listPartitions bool, colorOutput *colorOutput) error {
 	fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Gitaly Cluster Information ==="))
 
 	// Display cluster statistics overview
