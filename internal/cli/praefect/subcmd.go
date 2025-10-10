@@ -8,11 +8,8 @@ import (
 	"io"
 	"time"
 
-	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore/glsql"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -53,26 +50,6 @@ func openDB(conf config.DB, errOut io.Writer) (*sql.DB, func(), error) {
 	}
 
 	return db, clean, nil
-}
-
-func subCmdDial(ctx context.Context, addr, token string, timeout time.Duration, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	opts = append(opts,
-		client.UnaryInterceptor(),
-		client.StreamInterceptor(),
-	)
-
-	if len(token) > 0 {
-		opts = append(opts,
-			grpc.WithPerRPCCredentials(
-				gitalyauth.RPCCredentialsV2(token),
-			),
-		)
-	}
-
-	return client.New(ctx, addr, client.WithGrpcOptions(opts))
 }
 
 type requiredParameterError string

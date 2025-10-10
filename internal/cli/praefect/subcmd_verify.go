@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/urfave/cli/v3"
+	glcli "gitlab.com/gitlab-org/gitaly/v16/internal/cli"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
 )
@@ -100,7 +101,7 @@ func verifyAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("get node address: %w", err)
 	}
 
-	conn, err := subCmdDial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
+	conn, err := glcli.Dial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}

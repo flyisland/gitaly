@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
+	glcli "gitlab.com/gitlab-org/gitaly/v16/internal/cli"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
@@ -191,7 +192,7 @@ func (cmd *removeRepository) exec(ctx context.Context, logger log.Logger, db *sq
 }
 
 func (cmd *removeRepository) removeRepository(ctx context.Context, repo *gitalypb.Repository, addr, token string) (bool, error) {
-	conn, err := subCmdDial(ctx, addr, token, cmd.dialTimeout)
+	conn, err := glcli.Dial(ctx, addr, token, cmd.dialTimeout)
 	if err != nil {
 		return false, fmt.Errorf("error dialing: %w", err)
 	}
