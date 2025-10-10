@@ -49,10 +49,8 @@ enabled = true
 dir = "/mnt/git-repositories/+gitaly/PackObjectsCache"
 max_age = '5m'
 
-{% if target_instance['config']['transactions'] %}
 [transactions]
-enabled = true
-{% else %}
-[transactions]
-enabled = false
-{% endif %}
+enabled = {{ target_instance['config']['transactions'] | default(false) | lower }}
+
+[raft]
+enabled = {{ target_instance['config']['raft'] | default(false) | lower }}
