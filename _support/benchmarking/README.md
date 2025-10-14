@@ -28,7 +28,18 @@ Experiments are deployed using Terraform workspaces, so it's possible to deploy 
 Feel free to export the environment varible instead of redefining it for each command.
 
 ## Automated in Gitaly's CICD Pipeline
-1. Simply create a branch name that has the same name as the experiment name directory created inside the `_support/benchmarking/experiments` directory.
+1. Simply create a branch name that has the same name as the experiment name directory created inside the `_support/benchmarking/experiments` directory. If your branch is named `b/experiment-one`, the directory name will be `b-experiment-one`. Ensure the branch name is short as it gets used when creating the instance and there is a 63 character limit imposed on instance names in Google Cloud Platform. 
+Eg. {branch_name}-ci-{YYYYMMDD}-gitaly-{instance_name} 
+
+The directory must have the minimum following files:
+```
+.
+├── config.yml
+├── k6-benchmark.js
+├── plot.py
+├── profile-gitaly.sh
+```
+
 2. When you raise a merge request, there will be a `qa:benchmark:performance` job that can be run. It is an optional job so click run to trigger it.
 3. Artifacts can be downloaded straight from the job artifacts. 
 
@@ -99,3 +110,27 @@ All nodes will be destroyed. As GCP will frequently reuse public IP addresses,
 the addresses of the now destroyed instances are automatically removed from
 your `~/.ssh/known_hosts` file to prevent connection failures on future runs.
     
+## FAQs
+### How do we change the k6 test duration time? 
+1. Directly inside the `k6-benchmark.js` there are timings to be changed for read/write RPCs and that control the ramping times of these RPC. By default we are using the ramping option. 
+
+```
+  const stages_read = [{target: 50, duration: '20s'}, {target: 100, duration: '10s'}, {target: 200, duration: '20s'}, {target: 50, duration: '10s'}]
+  const stages_write = [{target: 25, duration: '20s'}, {target: 50, duration: '10s'}, {target: 100, duration: '20s'}, {target: 25, duration: '10s'}]
+```
+
+2. Edit `_support/benchmarking/roles/benchmark/vars/main.yml`
+```
+profile_duration: 600
+workload_wait_duration: 600
+```
+This ensures the ansible workload wait job has sufficient time to wait for till the end of the k6 test run. Note `profile_duration`should be <= the workload duration.
+
+Alternatively if your `k6-benchmark.js` script is using the static option of a constant workload for the RPCs.
+
+1.  Edit `_support/benchmarking/roles/benchmark/vars/main.yml`
+
+```
+profile_duration: 600
+workload_duration: "600s"
+```
