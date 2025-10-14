@@ -655,6 +655,8 @@ message UserCherryPickRequest {
   // commit_author_email is the author email to be applied to the cherry-picked commit. If not provided, the original commit's author email is
   // used instead.
   bytes commit_author_email = 12;
+  // sign signifies whether the commit is to be signed
+  bool sign = 13;
 }
 
 // UserCherryPickResponse is a response for the UserCherryPick RPC.
