@@ -13,7 +13,8 @@ Gitaly logs the following line confirming transactions are enabled:
 {"level":"warning","msg":"Transactions enabled. Transactions are an experimental feature. The feature is not production ready yet and might lead to various issues including data loss.","pid":70356,"time":"2025-07-16T07:44:28.884Z"}
 ```
 
-While transactions are functional and being tested in production on GitLab.com, they're not considered generally available yet. The original blueprint describing transactions in Gitaly can be found [here](https://handbook.gitlab.com/handbook/engineering/architecture/design-documents/gitaly_transaction_management), and it's worthwhile reading it before this document. This document focuses on the current state of the implementation.
+While transactions are functional and being tested in production on GitLab.com, they're not considered generally available yet. The original blueprint describing transactions in Gitaly can be found at the
+[GitLab Handbook](https://handbook.gitlab.com/handbook/engineering/architecture/design-documents/gitaly_transaction_management), and it's worthwhile reading it before this document. This document focuses on the current state of the implementation.
 
 Transactions provide [snapshot isolation](https://en.wikipedia.org/wiki/Snapshot_isolation) with [optimistic concurrency control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control). Transactions read a stable snapshot of the latest committed state of a repository at the time the transaction began and remain isolated from concurrent changes of other transactions. Possible conflicts are detected at commit time, and lead to transactions being aborted.
 
@@ -25,7 +26,8 @@ The transaction implementation is described below roughly in a top-down order as
 
 ### Integration
 
-Transactions integrate largely transparently with the rest of Gitaly. The integration is done through plugging in a gRPC interceptor that wraps each RPC call into a transaction. The interceptor implementation can be found [here](https://gitlab.com/gitlab-org/gitaly/-/blob/7c0f925b3df33c77de8c124b5f89447a13da3059/internal/gitaly/storage/storagemgr/middleware.go#L97). On a high level, the interceptor:
+Transactions integrate largely transparently with the rest of Gitaly. The integration is done through plugging in a gRPC interceptor that wraps each RPC call into a transaction. The interceptor implementation can be found at
+[this location in the codebase](https://gitlab.com/gitlab-org/gitaly/-/blob/7c0f925b3df33c77de8c124b5f89447a13da3059/internal/gitaly/storage/storagemgr/middleware.go#L97). On a high level, the interceptor:
 
 - Extracts the repositories the RPC is operating on from the request based on the annotations in the protobuf schemas.
 - Begins a transaction against the target repository.
@@ -64,7 +66,8 @@ Whether repository is, or is about to be connected to an object pool, is determi
   - For example, `CreateFork` contains the origin repository as an additional repository. We place the fork in the same partition as an objet pool might be created, and the fork and the origin connected to it.
   - `CreateObjectPool` will similarly place the object pool into the same partition as the source repository since it will generally be connected to it.
 
-Partitioning is handled in the `StorageManager` component. This component handles routing transactions to the correct partitions, and starting and stopping partitions as needed. The partition assignments are retrieved or created [here](https://gitlab.com/gitlab-org/gitaly/-/blob/7c0f925b3df33c77de8c124b5f89447a13da3059/internal/gitaly/storage/storagemgr/partition_manager.go#L331) when a transaction is began against a repository for the first time. The assignment handling is fairly crude at the moment. The assignments are created before the repository is even created, and assignments are not deleted even if the repository is deleted.
+Partitioning is handled in the `StorageManager` component. This component handles routing transactions to the correct partitions, and starting and stopping partitions as needed. The partition assignments are retrieved or created at
+[this location in the codebase](https://gitlab.com/gitlab-org/gitaly/-/blob/7c0f925b3df33c77de8c124b5f89447a13da3059/internal/gitaly/storage/storagemgr/partition_manager.go#L331) when a transaction is began against a repository for the first time. The assignment handling is fairly crude at the moment. The assignments are created before the repository is even created, and assignments are not deleted even if the repository is deleted.
 
 ### Transaction Manager
 
@@ -161,7 +164,7 @@ The conflict checking logic is not general enough to detect all conflicts. For e
 
 ## Tooling
 
-- There are some basic transaction specific metrics dashboarded [here](https://dashboards.gitlab.net/d/cdqjq90oyrzswb/transactions).
+- There are some [basic transaction specific metrics dashboarded](https://dashboards.gitlab.net/d/cdqjq90oyrzswb/transactions).
 - There's [a dashboard in Kibana](https://log.gprd.gitlab.net/app/lens#/edit/d2e51e80-33f5-4c2e-a401-fccf8858cad4) to identify repositories that are slow to snapshot.
 - Go's execution traces can be useful for identifying delays in transaction processing and interactions between different goroutines.
   - [Gotraceui](https://gotraceui.dev) is a useful for digging into the traces.
