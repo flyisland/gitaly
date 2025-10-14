@@ -494,6 +494,7 @@ func testServerUserCherryPickMergeCommit(t *testing.T, ctx context.Context) {
 		Commit:     cherryPickedCommit,
 		BranchName: []byte(destinationBranch),
 		Message:    []byte("Cherry-picking " + cherryPickedCommit.GetId()),
+		Sign:       false,
 	}
 
 	response, err := client.UserCherryPick(ctx, request)

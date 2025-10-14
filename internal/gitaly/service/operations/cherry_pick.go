@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook/updateref"
@@ -114,7 +115,10 @@ func (s *Server) UserCherryPick(ctx context.Context, req *gitalypb.UserCherryPic
 		CommitterEmail: committerSignature.Email,
 		CommitterDate:  committerSignature.When,
 		GitConfig:      s.gitConfig,
-		Sign:           true,
+		// Once we have Rails sending the Sign field to all of the RPC's, we plan to remove the GPGSigning feature flag.
+		// Right now, there are self-managed instances with the GPGSigning flag enabled.
+		// For those instances, send Sign: true to continue to sign web based commits.
+		Sign: featureflag.GPGSigning.IsEnabled(ctx) || req.GetSign(),
 	}
 
 	if len(req.GetCommitAuthorName()) != 0 && len(req.GetCommitAuthorEmail()) != 0 {
