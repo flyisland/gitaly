@@ -5,6 +5,10 @@ hosts.ini
 /terraform-prepare/*
 !/terraform-prepare/main.tf
 !/terraform-prepare/locals.tf
+!/terraform-prepare/outputs.tf
+!/terraform-prepare/variables.tf
+/terraform.tfstate
+!/terraform-prepare/modules
 /group_vars/all.yml
 /results/*
 /env/*
@@ -13,4 +17,3 @@ hosts.ini
 /cleanup/infra/*
 !/cleanup/infra/*.tf
 !/cleanup/infra/*.tfvars
-

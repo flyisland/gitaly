@@ -1,5 +1,6 @@
 # This variable will be prefixed to all machines created by terraform
 gitaly_benchmarking_deployment_name = "{{ gitaly_benchmarking_deployment_name }}"
+gitaly_benchmarking_setup = "{{ gitaly_benchmarking_setup }}"
 ssh_pubkey = "{{ lookup('file', ssh_pubkey) }}"
 experiment = "{{ gitaly_benchmarking_experiment_name }}"
 gcp_sa_key_file = "{{ lookup('env', 'GCP_BENCHMARKING_SA_KEY_FILE') }}"
