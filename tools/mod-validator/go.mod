@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/stretchr/testify v1.11.0
 	github.com/urfave/cli/v3 v3.4.1
-	golang.org/x/mod v0.27.0
+	golang.org/x/mod v0.29.0
 )
 
 require (
