@@ -666,6 +666,60 @@ func (sm *StorageManager) MaybeAssignToPartition(ctx context.Context, relativePa
 	return sm.partitionAssigner.getPartitionID(ctx, relativePath, "", false)
 }
 
+// MaybeUpdateRepositoryKey ensures that the repositoryKey is added to partition KV
+// only if the repository exists. This method uses a partition transaction to ensure
+// atomicity and conflict detection with concurrent repository operations.
+func (sm *StorageManager) MaybeUpdateRepositoryKey(relativePath string, ptnID storage.PartitionID) (returnErr error) {
+	ctx := context.Background()
+
+	// Get a partition handle to create a transaction
+	ptn, err := sm.GetPartition(ctx, ptnID)
+	if err != nil {
+		return fmt.Errorf("get partition: %w", err)
+	}
+	defer ptn.Close()
+
+	txn, err := ptn.Begin(ctx, storage.BeginOptions{
+		Write:         true,
+		RelativePaths: []string{relativePath},
+	})
+	if err != nil {
+		return fmt.Errorf("begin partition transaction: %w", err)
+	}
+	defer func() {
+		returnErr = errors.Join(returnErr, txn.Rollback(ctx))
+	}()
+
+	// Verify the repository still exists on disk within the transaction
+	repositoryPath := filepath.Join(sm.path, relativePath)
+	if err := storage.ValidateGitDirectory(repositoryPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// Repository was deleted, don't create the key
+			return nil
+		}
+		return fmt.Errorf("validate git directory: %w", err)
+	}
+
+	kv := txn.KV()
+	key := storage.RepositoryKey(relativePath)
+	_, err = kv.Get(key)
+	if err != nil {
+		if !errors.Is(err, badger.ErrKeyNotFound) {
+			return fmt.Errorf("get KV pair: %w", err)
+		}
+
+		if err := kv.Set(key, nil); err != nil {
+			return fmt.Errorf("set KV pair: %w", err)
+		}
+	}
+
+	if _, err := txn.Commit(ctx); err != nil {
+		return fmt.Errorf("commit partition transaction: %w", err)
+	}
+
+	return nil
+}
+
 // HasPendingWAL checks if a partition has any pending WAL entries by examining the partition's WAL directory.
 // It returns true if there are any WAL entries that needs to be applied, false otherwise.
 func (sm *StorageManager) HasPendingWAL(ctx context.Context, partitionID storage.PartitionID) (bool, error) {

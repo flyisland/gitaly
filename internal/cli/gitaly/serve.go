@@ -461,6 +461,23 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			return fmt.Errorf("new node manager: %w", err)
 		}
 		defer nodeMgr.Close()
+		node = nodeMgr
+
+		assignmentWorkerErrCh := make(chan error, 1)
+		go func() {
+			defer close(assignmentWorkerErrCh)
+			started := time.Now()
+			err := storagemgr.AssignmentWorker(ctx, cfg, nodeMgr, dbMgr, locator)
+			duration := time.Since(started)
+
+			if err != nil {
+				logger.WithField("duration_ms", duration.Milliseconds()).WithError(err).Error("partition assignment worker failed")
+			} else {
+				logger.WithField("duration_ms", duration.Milliseconds()).Info("partition assignment worker completed")
+			}
+
+			assignmentWorkerErrCh <- err
+		}()
 
 		if cfg.Raft.Enabled {
 			for _, storageCfg := range cfg.Storages {
@@ -473,20 +490,10 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 				}
 			}
 			node = raftNode
+		}
 
-			// Start partition worker synchronously as it is a pre-requisite for Raft.
-			if err := storagemgr.AssignmentWorker(ctx, cfg, node, dbMgr, locator); err != nil {
-				return fmt.Errorf("partition assignment worker: %w", err)
-			}
-
-			if err := replicaPartitionMigration(cfg.Storages, locator, dbMgr, logger, true); err != nil {
-				return err
-			}
-		} else {
-			if err := replicaPartitionMigration(cfg.Storages, locator, dbMgr, logger, false); err != nil {
-				return err
-			}
-			node = nodeMgr
+		if err := replicaPartitionMigration(cfg, locator, dbMgr, logger, assignmentWorkerErrCh); err != nil {
+			return err
 		}
 
 		reftableMigrator := reftable.NewMigrator(logger, reftableMigratorMetrics, node, localrepoFactory)
@@ -795,8 +802,8 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 }
 
 // replicaPartitionMigration performs replica partition migrations for all storages.
-func replicaPartitionMigration(storages []config.Storage, locator storage.Locator, dbMgr *databasemgr.DBManager, logger log.Logger, raftEnabled bool) error {
-	for _, storageCfg := range storages {
+func replicaPartitionMigration(cfg config.Cfg, locator storage.Locator, dbMgr *databasemgr.DBManager, logger log.Logger, assignmentWorkerErrCh <-chan error) error {
+	for _, storageCfg := range cfg.Storages {
 		partitionsDir, err := locator.PartitionsDir(storageCfg.Name)
 		if err != nil {
 			return fmt.Errorf("retrieving partitions dir for storage %s: %w", storageCfg.Name, err)
@@ -821,7 +828,7 @@ func replicaPartitionMigration(storages []config.Storage, locator storage.Locato
 		var migrate func() error
 		var actionDesc, completionDesc string
 
-		if raftEnabled {
+		if cfg.Raft.Enabled {
 			// migrate partitions to be raft replica compatible
 			shouldMigrate = !migrated
 			migrate = migrator.Forward
@@ -836,11 +843,16 @@ func replicaPartitionMigration(storages []config.Storage, locator storage.Locato
 		}
 
 		if shouldMigrate {
+			// Block and wait for assignment worker to complete before migration
+			if err := <-assignmentWorkerErrCh; err != nil {
+				return fmt.Errorf("partition assignment worker: %w", err)
+			}
+
 			logger.Info(fmt.Sprintf("%s for storage: %s", actionDesc, storageCfg.Name))
 			startTime := time.Now()
 
 			if err := migrate(); err != nil {
-				if raftEnabled {
+				if cfg.Raft.Enabled {
 					return fmt.Errorf("migrating replica partitions: %w", err)
 				}
 				return fmt.Errorf("undoing replica partitions migration: %w", err)
