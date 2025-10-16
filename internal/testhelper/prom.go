@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	prom_model "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
 )
@@ -71,7 +72,7 @@ func RequireHistogramSampleCounts(t *testing.T, c prometheus.Collector, expected
 // ComparePromMetrics is a variant of RequirePromMetrics. It returns an error if the actual
 // collected metrics don't match the expected ones.
 func ComparePromMetrics(t *testing.T, c prometheus.Collector, expected string, metrics ...string) error {
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.LegacyValidation)
 
 	if len(metrics) == 0 {
 		family, err := parser.TextToMetricFamilies(strings.NewReader(expected))
