@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/errors/cfgerror"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/errors/cfgerror"
 )
 
 // Node describes an address that serves a storage

@@ -4,12 +4,12 @@ import (
 	"context"
 	"os"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mdfile"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode/permission"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/fstype"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/version"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mdfile"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode/permission"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/fstype"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/version"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 func (s *server) ServerInfo(ctx context.Context, in *gitalypb.ServerInfoRequest) (*gitalypb.ServerInfoResponse, error) {

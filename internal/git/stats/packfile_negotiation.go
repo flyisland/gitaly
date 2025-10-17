@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/pktline"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/text"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 //nolint:revive // This is unintentionally missing documentation.

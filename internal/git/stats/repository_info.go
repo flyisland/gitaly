@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/reftable"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/reftable"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 const (

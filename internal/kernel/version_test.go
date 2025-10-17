@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 func TestIsAtLeast(t *testing.T) {

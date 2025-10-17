@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 )
 
 // Version represents the version of git itself.

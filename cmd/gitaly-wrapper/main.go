@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/bootstrap"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/env"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/ps"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/bootstrap"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/env"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/ps"
 	"golang.org/x/sys/unix"
 )
 

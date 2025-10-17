@@ -9,8 +9,8 @@ import (
 
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"

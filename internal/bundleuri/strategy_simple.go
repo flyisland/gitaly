@@ -3,7 +3,7 @@ package bundleuri
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 )
 
 // SimpleStrategy  is a very simple strategy used

@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/sidechannel"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"google.golang.org/grpc"
 )
 

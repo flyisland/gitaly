@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 func newBundleURICommand() *cli.Command {

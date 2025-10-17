@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/dontpanic"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/dontpanic"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 func TestTry(t *testing.T) {

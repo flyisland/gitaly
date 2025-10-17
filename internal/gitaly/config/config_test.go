@@ -15,14 +15,14 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/errors/cfgerror"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/cgroups"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/sentry"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/duration"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/errors/cfgerror"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/sentry"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/duration"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 func TestBinaryPath(t *testing.T) {

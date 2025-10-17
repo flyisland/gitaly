@@ -6,9 +6,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
-	promconfig "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	promconfig "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 func TestNewPerRPCPromMonitor(t *testing.T) {

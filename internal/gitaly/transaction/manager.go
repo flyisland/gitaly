@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/voting"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/txinfo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/voting"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // ServerSignature obtains the public key from all storage nodes and

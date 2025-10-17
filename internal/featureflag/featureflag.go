@@ -9,7 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/env"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/env"
 	"google.golang.org/grpc/metadata"
 )
 

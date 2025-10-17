@@ -3,11 +3,11 @@ package raftmgr
 import (
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue/databasemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // RaftEnabledStorage wraps a storage.Storage instance with Raft functionality

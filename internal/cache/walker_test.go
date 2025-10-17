@@ -11,10 +11,10 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 )
 
 func TestDiskCacheObjectWalker(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 )
 
 // FeatureSet is a representation of a set of features that should be disabled.

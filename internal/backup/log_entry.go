@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
-	logging "gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/archive"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
+	logging "gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 const (

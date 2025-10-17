@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // FieldsProducer adds feature_flags logging fields to gRPC logs. Only enabled flags are available.

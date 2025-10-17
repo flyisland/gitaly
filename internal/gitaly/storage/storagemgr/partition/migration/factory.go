@@ -3,10 +3,10 @@ package migration
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // migrationFactory defines a partition factory that wraps another partition factory.

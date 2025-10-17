@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // WorkerFunc is a function that does a unit of work meant to run in the background

@@ -1,9 +1,9 @@
 package info
 
 import (
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/chunk"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/chunk"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/protobuf/proto"
 )
 

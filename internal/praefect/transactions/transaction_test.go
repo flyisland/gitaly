@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/voting"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/voting"
 )
 
 func TestTransactionCancellationWithEmptyTransaction(t *testing.T) {

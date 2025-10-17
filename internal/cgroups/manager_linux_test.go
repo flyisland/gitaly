@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/cgroups"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 // mockRand is a mock for random number generator that implements randomizer interface of cgroups package.

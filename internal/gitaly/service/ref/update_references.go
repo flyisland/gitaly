@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/updateref"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // UpdateReferences updates a set of references atomically. It allows for reference creations, deletions and updates in

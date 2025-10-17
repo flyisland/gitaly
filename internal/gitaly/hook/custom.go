@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/env"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/env"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"golang.org/x/sys/unix"
 )
 

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/signature"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/signature"
 )
 
 func gpgApp() *cli.Command {

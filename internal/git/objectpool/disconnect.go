@@ -11,14 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/transaction"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/text"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/voting"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/transaction"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/text"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/voting"
 )
 
 // Disconnect disconnects the specified repository from its object pool. If the repository does not

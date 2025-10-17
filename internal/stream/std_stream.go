@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // StdoutStderrResponse is an interface for RPC responses that need to stream stderr and stdout

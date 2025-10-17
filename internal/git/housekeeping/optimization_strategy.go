@@ -6,9 +6,9 @@ import (
 	"math"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
 )
 
 const (

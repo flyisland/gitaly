@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/metrics"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/metrics"
 )
 
 // localElector relies on an in-memory datastore to track the primary

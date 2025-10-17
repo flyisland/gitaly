@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // PruneOldGitalyProcessDirectories removes leftover temporary directories that belonged to processes that

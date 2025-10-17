@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore/glsql"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore/glsql"
 )
 
 // InvalidArgumentError tags the error as being caused by an invalid argument.

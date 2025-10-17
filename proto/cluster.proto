@@ -5,7 +5,7 @@ package gitaly;
 import "lint.proto";
 import "raftpb/raft.proto"; // Upstream go.etcd.io/raft/v3/raftpb/raft.proto
 
-option go_package = "gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb";
+option go_package = "gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb";
 
 // RaftEntry encapsulates critical data for replication using etcd/raft library.
 // It has a request ID allowing the primary to track when the action is

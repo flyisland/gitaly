@@ -12,7 +12,7 @@ import (
 	"fmt"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 )
 
 // Generator is a function that computes a cacheable value for a repository based on the given key.

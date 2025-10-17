@@ -4,10 +4,10 @@ import (
 	"context"
 	"runtime/trace"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/conflict/refdb/historymgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/conflict/refdb/historymgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 // ErrRepositoryConcurrentlyDeleted is returned when the repository was concurrently deleted by

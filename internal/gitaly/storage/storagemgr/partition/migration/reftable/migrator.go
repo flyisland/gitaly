@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration"
-	migrationid "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/migration/id"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/migration"
+	migrationid "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/migration/id"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 type migrationHandler interface {

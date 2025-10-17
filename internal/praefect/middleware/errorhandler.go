@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/nodes/tracker"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/nodes/tracker"
 	"google.golang.org/grpc"
 )
 

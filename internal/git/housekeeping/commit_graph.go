@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 // WriteCommitGraphConfigForRepository returns the optimal default-configuration for the given repo.

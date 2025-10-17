@@ -10,9 +10,9 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 )
 
 func TestConfiguration(t *testing.T) {

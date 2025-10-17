@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/signature"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/signature"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // ServerSignature reponds with PublicKey used by Gitaly for commit signature

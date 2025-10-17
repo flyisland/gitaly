@@ -10,9 +10,9 @@ import (
 	"runtime/trace"
 	"sync"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/safe"
 )
 
 // ErrLogEntryNotAppended is returned by CompareAndAppendLogEntry if the expected LSN

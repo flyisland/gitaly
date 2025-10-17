@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/catfile"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 // ObjectType is an Enum for the type of object of

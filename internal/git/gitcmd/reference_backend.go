@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 )
 
 var regexpReferenceBackend = regexp.MustCompile(`^[ \t]*(?i:refstorage)[ \t]*=[ \t]*(.*)[ \t;#]?`)

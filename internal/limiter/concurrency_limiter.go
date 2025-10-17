@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/tracing"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

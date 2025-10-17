@@ -3,7 +3,7 @@ package datastore
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/datastructure"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/datastructure"
 )
 
 // MockRepositoryStore allows for mocking a RepositoryStore by parametrizing its behavior. All methods

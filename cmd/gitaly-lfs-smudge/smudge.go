@@ -10,11 +10,11 @@ import (
 	"net/url"
 
 	"github.com/git-lfs/git-lfs/v3/lfs"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/smudge"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitlab"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/pktline"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/smudge"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 func filter(ctx context.Context, cfg smudge.Config, to io.Writer, from io.Reader, logger log.Logger) (returnedErr error) {

@@ -5,13 +5,13 @@ import (
 
 	"github.com/go-enry/go-license-detector/v4/licensedb"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testserver"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 const (

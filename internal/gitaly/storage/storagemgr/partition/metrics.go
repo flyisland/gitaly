@@ -2,9 +2,9 @@ package partition
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/snapshot"
 )
 
 // Metrics contains the metrics collected across all TransactionManagers.

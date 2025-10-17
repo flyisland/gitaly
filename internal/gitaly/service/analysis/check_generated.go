@@ -6,10 +6,10 @@ import (
 	"io"
 
 	"github.com/go-enry/go-enry/v2"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/chunk"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/chunk"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 )

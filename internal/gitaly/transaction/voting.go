@@ -7,9 +7,9 @@ import (
 	"io"
 	"os"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/voting"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/safe"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/txinfo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/voting"
 )
 
 // RunOnContext runs the given function if the context identifies a transaction.

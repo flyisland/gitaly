@@ -1,14 +1,14 @@
 package praefect
 
 import (
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/proxy"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/nodes"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/service"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/transactions"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/proxy"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/nodes"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/service"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/transactions"
 )
 
 // Dependencies consolidates Praefect service dependencies for injection.

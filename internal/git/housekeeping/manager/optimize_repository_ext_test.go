@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
-	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v16/internal/git/housekeeping/manager"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/stats"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service/setup"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testcfg"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testserver"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
+	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/manager"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service/setup"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testserver"
 )
 
 func TestPruneIfNeeded(t *testing.T) {

@@ -13,11 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore/glsql"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper/testdb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore/glsql"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testdb"
 )
 
 func TestNewListener(t *testing.T) {

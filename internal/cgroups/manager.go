@@ -3,8 +3,8 @@
 package cgroups
 
 import (
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/cgroups"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 func newCgroupManager(cgroups.Config, log.Logger, int) Manager {

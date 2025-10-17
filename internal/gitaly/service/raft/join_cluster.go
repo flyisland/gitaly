@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/raftmgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // JoinCluster handles leader-initiated node joining. The leader calls this RPC on a new node

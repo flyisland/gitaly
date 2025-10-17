@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 )
 
 // HTTPPush hosts information about a typical HTTP-based push.

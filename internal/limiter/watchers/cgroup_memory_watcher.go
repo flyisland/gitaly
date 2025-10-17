@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/cgroups"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
 )
 
 const (

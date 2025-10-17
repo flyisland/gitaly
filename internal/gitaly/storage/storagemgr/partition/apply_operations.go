@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // applyOperations applies the operations from the log entry to the storage.

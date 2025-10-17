@@ -5,10 +5,10 @@ import (
 	"io"
 
 	"github.com/sirupsen/logrus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/backchannel"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/listenmux"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/backchannel"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/listenmux"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/sidechannel"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )

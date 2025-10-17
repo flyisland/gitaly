@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config/cgroups"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 // cmdArgs are Command arguments used processes to be added to a cgroup.

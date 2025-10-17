@@ -9,7 +9,7 @@ import (
 	"sort"
 
 	"github.com/urfave/cli/v3"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // sha256Pattern is the compiled regex for validating partition keys (SHA256 hex strings)

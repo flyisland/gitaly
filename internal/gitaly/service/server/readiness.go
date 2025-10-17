@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // ReadinessCheck is a stub that does nothing but exists to support single interface for gitaly

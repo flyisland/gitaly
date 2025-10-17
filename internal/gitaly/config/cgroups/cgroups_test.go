@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/errors/cfgerror"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/errors/cfgerror"
 )
 
 func TestFallbackToOldVersion(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/cgroups"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 func TestCgroupMemoryWatcher_Name(t *testing.T) {

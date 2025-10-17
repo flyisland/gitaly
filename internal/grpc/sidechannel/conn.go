@@ -6,10 +6,10 @@ import (
 	"io"
 	"net"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/pktline"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/streamio"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/pktline"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/streamio"
 	"google.golang.org/grpc"
 )
 

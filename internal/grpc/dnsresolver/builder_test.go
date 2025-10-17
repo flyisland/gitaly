@@ -8,7 +8,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"google.golang.org/grpc/resolver"
 )
 

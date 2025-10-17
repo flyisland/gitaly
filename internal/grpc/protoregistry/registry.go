@@ -3,8 +3,8 @@ package protoregistry
 import (
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/protoutil"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/protoutil"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/protobuf/reflect/protodesc"
 	protoreg "google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/safe"
 )
 
 const (

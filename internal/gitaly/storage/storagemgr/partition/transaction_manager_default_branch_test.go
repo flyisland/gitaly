@@ -3,9 +3,9 @@ package partition
 import (
 	"testing"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gittest"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 )
 
 func generateDefaultBranchTests(t *testing.T, setup testTransactionSetup) []transactionTestCase {

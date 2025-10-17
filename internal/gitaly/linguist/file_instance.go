@@ -5,8 +5,8 @@ import (
 	"io"
 
 	"github.com/go-enry/go-enry/v2"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitattributes"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitpipe"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitattributes"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitpipe"
 )
 
 const (

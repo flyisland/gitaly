@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/service"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/service"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // AssignmentStore is an interface for getting repository host node assignments.

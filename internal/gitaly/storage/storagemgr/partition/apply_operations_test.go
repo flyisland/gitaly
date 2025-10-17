@@ -8,12 +8,12 @@ import (
 	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/fsrecorder"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/wal"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/fsrecorder"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/wal"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 func TestApplyOperations(t *testing.T) {

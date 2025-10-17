@@ -4,15 +4,15 @@ import (
 	"context"
 	"io"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	gitalyhook "gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/hook"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/service"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/limiter"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/streamcache"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	gitalyhook "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/hook"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/streamcache"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 type server struct {

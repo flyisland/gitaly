@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	gitalyauth "gitlab.com/gitlab-org/gitaly/v16/auth"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	gitalyauth "gitlab.com/gitlab-org/gitaly/v18/auth"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 )

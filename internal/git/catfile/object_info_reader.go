@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 // ObjectInfoReader returns information about an object referenced by a given revision.

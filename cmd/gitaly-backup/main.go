@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	cli "gitlab.com/gitlab-org/gitaly/v16/internal/cli/gitalybackup"
+	cli "gitlab.com/gitlab-org/gitaly/v18/internal/cli/gitalybackup"
 )
 
 func main() {

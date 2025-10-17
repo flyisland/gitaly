@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/archive"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/backup"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // BackupPartition creates a backup of entire partition streamed directly to object-storage.

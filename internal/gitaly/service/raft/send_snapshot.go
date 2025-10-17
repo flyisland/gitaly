@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/safe"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
-	"gitlab.com/gitlab-org/gitaly/v16/streamio"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/safe"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/streamio"
 )
 
 // SendSnapshot streams a snapshot from a leader to a follower node in the raft network.

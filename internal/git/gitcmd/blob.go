@@ -6,9 +6,9 @@ import (
 	"io"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 // WriteBlobConfig is the configuration used to write blobs into the repository.

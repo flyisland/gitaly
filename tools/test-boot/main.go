@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
 )
 
 type gitalyConfig struct {

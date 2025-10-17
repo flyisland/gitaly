@@ -5,8 +5,8 @@ import (
 	"errors"
 	"sync"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/txinfo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/transaction/voting"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/txinfo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/voting"
 )
 
 // MockManager is a mock Manager for use in tests.

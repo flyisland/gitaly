@@ -34,7 +34,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/yamux"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 type yamuxLogWrapper struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 )

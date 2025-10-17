@@ -5,7 +5,7 @@ import (
 	"regexp"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/env"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/env"
 )
 
 const (

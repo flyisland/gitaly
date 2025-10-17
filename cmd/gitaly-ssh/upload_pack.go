@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/gitalyclient"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/sidechannel"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/gitalyclient"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/sidechannel"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 )

@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/urfave/cli/v3"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/datastore"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore"
 )
 
 const sqlPingCmdName = "sql-ping"

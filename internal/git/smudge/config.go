@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/env"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/env"
 )
 
 // ConfigEnvironmentKey is the key that gitaly-lfs-smudge expects the configuration to exist at. The

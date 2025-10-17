@@ -14,8 +14,8 @@ import (
 	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/archive"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/archive"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
 )
 
 type tbRecorder struct {

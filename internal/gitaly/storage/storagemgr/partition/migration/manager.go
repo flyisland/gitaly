@@ -12,10 +12,10 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc/metadata"
 )
 

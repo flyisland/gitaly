@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	"github.com/urfave/cli/v3"
-	glcli "gitlab.com/gitlab-org/gitaly/v16/internal/cli"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	glcli "gitlab.com/gitlab-org/gitaly/v18/internal/cli"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 func newMetadataCommand() *cli.Command {

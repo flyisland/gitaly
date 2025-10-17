@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/backoff"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/backoff"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"google.golang.org/grpc/resolver"
 )
 

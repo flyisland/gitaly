@@ -8,7 +8,7 @@ import "google/protobuf/timestamp.proto";
 import "lint.proto";
 import "shared.proto";
 
-option go_package = "gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb";
+option go_package = "gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb";
 
 // RepositoryService is a service providing RPCs accessing repositories as a whole.
 service RepositoryService {

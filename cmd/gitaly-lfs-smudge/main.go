@@ -6,9 +6,9 @@ import (
 	"io"
 	"os"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/command"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/smudge"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/smudge"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/labkit/tracing"
 )
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	ff "gitlab.com/gitlab-org/gitaly/v16/internal/featureflag"
+	ff "gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"google.golang.org/grpc/metadata"
 )
 

@@ -1,4 +1,4 @@
-module gitlab.com/gitlab-org/gitaly/v16
+module gitlab.com/gitlab-org/gitaly/v18
 
 go 1.24.0
 

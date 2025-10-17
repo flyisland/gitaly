@@ -9,11 +9,11 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/storagemgr/partition/snapshot"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v16/middleware"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/snapshot"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )

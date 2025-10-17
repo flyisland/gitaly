@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/config"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/praefect/nodes"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/nodes"
 )
 
 // generates a praefect configuration with the specified number of backend

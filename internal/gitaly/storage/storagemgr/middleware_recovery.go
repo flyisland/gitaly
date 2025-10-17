@@ -8,10 +8,10 @@ import (
 	"os"
 	"sync"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/keyvalue/databasemgr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
-	"gitlab.com/gitlab-org/gitaly/v16/middleware"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue/databasemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
+	"gitlab.com/gitlab-org/gitaly/v18/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )

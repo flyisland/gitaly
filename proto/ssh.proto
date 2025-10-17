@@ -6,7 +6,7 @@ import "lint.proto";
 import "packfile.proto";
 import "shared.proto";
 
-option go_package = "gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb";
+option go_package = "gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb";
 
 // SSHService is a service that provides RPCs required for SSH-based Git clones.
 service SSHService {

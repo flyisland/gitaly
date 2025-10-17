@@ -3,7 +3,7 @@ package cache
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/grpc/protoregistry"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
 )
 
 var (

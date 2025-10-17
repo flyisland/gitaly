@@ -13,13 +13,13 @@ import (
 	"github.com/go-enry/go-license-detector/v4/licensedb"
 	"github.com/go-enry/go-license-detector/v4/licensedb/api"
 	"github.com/go-enry/go-license-detector/v4/licensedb/filer"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/tracing"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/unarycache"
-	"gitlab.com/gitlab-org/gitaly/v16/proto/go/gitalypb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/unarycache"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 // The `github.com/go-enry/go-license-detector` package uses https://spdx.org/licenses/

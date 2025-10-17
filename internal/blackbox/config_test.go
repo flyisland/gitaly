@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/helper/duration"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/duration"
 )
 
 func TestConfigParseFailures(t *testing.T) {

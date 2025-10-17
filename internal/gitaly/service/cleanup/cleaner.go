@@ -7,10 +7,10 @@ import (
 	"io"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/gitcmd"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/git/updateref"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/updateref"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 // forEachFunc can be called for every entry in the filter-repo or BFG object

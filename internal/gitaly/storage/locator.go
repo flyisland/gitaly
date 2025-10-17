@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 )
 
 // NewStorageNotFoundError returns a new error wrapping ErrStorageNotFound with an InvalidArgument

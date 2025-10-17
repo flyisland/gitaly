@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/urfave/cli/v3"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/backup"
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/backup"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"golang.org/x/sync/errgroup"
 )
 

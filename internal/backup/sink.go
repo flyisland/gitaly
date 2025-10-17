@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/gitlab-org/gitaly/v16/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
 	"gocloud.dev/blob"
 	"gocloud.dev/blob/azureblob"
 	"gocloud.dev/blob/fileblob"
