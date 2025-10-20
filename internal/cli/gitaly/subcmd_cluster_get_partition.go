@@ -2,15 +2,11 @@ package gitaly
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"text/tabwriter"
 
 	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
@@ -120,14 +116,19 @@ func getPartitionAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	// Prepare output structure
+	output := &PartitionDetailsOutput{
+		Partitions: partitions,
+	}
+
 	// Output based on format
 	if format == "json" {
-		return outputPartitionDetailsJSON(cmd.Writer, partitions)
+		return output.ToJSON(cmd.Writer)
 	}
 
 	// Configure color output for text format
 	colorOutput := setupColorOutput(cmd.Writer, noColor)
-	return outputPartitionDetailsText(cmd.Writer, partitions, partitionKey, relativePath, colorOutput)
+	return output.ToText(cmd.Writer, colorOutput, partitionKey, relativePath)
 }
 
 // fetchPartitionData retrieves partition details from the Raft service
@@ -158,123 +159,4 @@ func fetchPartitionData(ctx context.Context, client gitalypb.RaftServiceClient, 
 	}
 
 	return partitionResponses, nil
-}
-
-// outputPartitionDetailsJSON outputs partition details in JSON format
-func outputPartitionDetailsJSON(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse) error {
-	// Sort partitions by partition key for consistent output
-	if len(partitions) > 0 {
-		sortPartitionsByKey(partitions)
-	}
-
-	// Configure protojson marshaler
-	marshaler := protojson.MarshalOptions{
-		EmitUnpopulated: false, // Omit fields with default values
-		UseProtoNames:   false, // Use lowerCamelCase JSON field names
-	}
-
-	// Build the partitions array
-	var partitionsArray []map[string]interface{}
-	for _, partition := range partitions {
-		partitionBytes, err := marshaler.Marshal(partition)
-		if err != nil {
-			return fmt.Errorf("failed to marshal partition: %w", err)
-		}
-
-		var partitionMap map[string]interface{}
-		if err := json.Unmarshal(partitionBytes, &partitionMap); err != nil {
-			return fmt.Errorf("failed to unmarshal partition: %w", err)
-		}
-
-		partitionsArray = append(partitionsArray, partitionMap)
-	}
-
-	// Build the output structure
-	output := map[string]interface{}{
-		"partitions": partitionsArray,
-	}
-
-	// Marshal with indentation for human-friendly output
-	jsonBytes, err := json.MarshalIndent(output, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal JSON output: %w", err)
-	}
-
-	fmt.Fprintf(writer, "%s\n", string(jsonBytes))
-	return nil
-}
-
-// outputPartitionDetailsText displays detailed partition information in human-readable text format
-func outputPartitionDetailsText(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse, partitionKey, relativePath string, colorOutput *colorOutput) error {
-	// Display detailed partition information
-	if len(partitions) > 0 {
-		// Sort partitions by partition key for consistent output
-		sortPartitionsByKey(partitions)
-
-		if relativePath != "" {
-			fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader(fmt.Sprintf("=== Partition Details for Repository: %s ===", relativePath)))
-		} else if partitionKey != "" {
-			fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader(fmt.Sprintf("=== Partition Details for Key: %s ===", partitionKey)))
-		}
-
-		for i, partition := range partitions {
-			if i > 0 {
-				fmt.Fprintf(writer, "\n")
-			}
-
-			fmt.Fprintf(writer, "Partition: %s\n\n", colorOutput.formatInfo(partition.GetPartitionKey().GetValue()))
-
-			// Display replicas in tabular format
-			if len(partition.GetReplicas()) > 0 {
-				tw := tabwriter.NewWriter(writer, 0, 0, 2, ' ', 0)
-
-				fmt.Fprintf(tw, "STORAGE\tROLE\tHEALTH\tLAST INDEX\tMATCH INDEX\n")
-				fmt.Fprintf(tw, "-------\t----\t------\t----------\t-----------\n")
-
-				for _, replica := range partition.GetReplicas() {
-					var role string
-					if replica.GetIsLeader() {
-						role = colorOutput.formatInfo("Leader")
-					} else {
-						role = "Follower"
-					}
-					var health string
-					if replica.GetIsHealthy() {
-						health = colorOutput.formatHealthy("Healthy")
-					} else {
-						health = colorOutput.formatUnhealthy("Unhealthy")
-					}
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\n",
-						replica.GetReplicaId().GetStorageName(),
-						role,
-						health,
-						replica.GetLastIndex(),
-						replica.GetMatchIndex())
-				}
-
-				_ = tw.Flush()
-				fmt.Fprintf(writer, "\n")
-			}
-
-			// Display repositories in tabular format
-			if len(partition.GetRelativePaths()) > 0 {
-				fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("Repositories:"))
-
-				tw := tabwriter.NewWriter(writer, 0, 0, 2, ' ', 0)
-
-				fmt.Fprintf(tw, "REPOSITORY PATH\n")
-				fmt.Fprintf(tw, "---------------\n")
-
-				for _, path := range partition.GetRelativePaths() {
-					fmt.Fprintf(tw, "%s\n", path)
-				}
-
-				_ = tw.Flush()
-			}
-		}
-	} else {
-		fmt.Fprintf(writer, "No partitions found matching the specified criteria.\n")
-	}
-
-	return nil
 }
