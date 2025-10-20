@@ -18,6 +18,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -112,7 +113,9 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 	gCtx, cancel := context.WithCancel(g.ctx)
 	defer cancel()
 
-	bundlePath := bundleRelativePath(repo, defaultBundle)
+	// We must use `ctx` here and not `gCtx`, because `ctx` is the context
+	// of the gRPC request, and this is what we want.
+	bundlePath := bundleRelativePath(ctx, repo, defaultBundle)
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		if g.nodeManager == nil {
 			g.logger.WithError(err).Error("generate bundle: nil node manager within transaction")
@@ -139,7 +142,10 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 		// bundle generation. So once the bundle is generated, we must abort
 		// to free the snapshot.
 		defer func() { _ = ntx.Rollback(gCtx) }()
-		bundlePath = bundleRelativePath(originalRepo, defaultBundle)
+
+		// We must use `ctx` here and not `gCtx`, because `ctx` is the context
+		// of the gRPC request, and this is what we want.
+		bundlePath = bundleRelativePath(ctx, originalRepo, defaultBundle)
 	}
 
 	writer := backup.NewLazyWriter(func() (io.WriteCloser, error) {
@@ -175,7 +181,7 @@ func (g *GenerationManager) Generate(ctx context.Context, repo *localrepo.Repo) 
 
 // SignedURL returns a public URL to give anyone access to download the bundle from.
 func (g *GenerationManager) SignedURL(ctx context.Context, repo storage.Repository) (string, error) {
-	relativePath := bundleRelativePath(repo, defaultBundle)
+	relativePath := bundleRelativePath(ctx, repo, defaultBundle)
 
 	repoProto, ok := repo.(*gitalypb.Repository)
 	if !ok {
@@ -184,7 +190,7 @@ func (g *GenerationManager) SignedURL(ctx context.Context, repo storage.Reposito
 
 	if tx := storage.ExtractTransaction(ctx); tx != nil {
 		origRepo := tx.OriginalRepository(repoProto)
-		relativePath = bundleRelativePath(origRepo, defaultBundle)
+		relativePath = bundleRelativePath(ctx, origRepo, defaultBundle)
 	}
 
 	return g.sink.signedURL(ctx, relativePath)
@@ -205,7 +211,23 @@ func (g *GenerationManager) UploadPackGitConfig(ctx context.Context, repo storag
 }
 
 // bundleRelativePath returns a relative path of the bundle-URI bundle inside the bucket.
-func bundleRelativePath(repo storage.Repository, name string) string {
-	repoPath := filepath.Join(repo.GetStorageName(), repo.GetRelativePath())
+func bundleRelativePath(ctx context.Context, repo storage.Repository, name string) string {
+	repoPath := filepath.Join(storageNameForBundle(ctx, repo), repo.GetRelativePath())
 	return filepath.Join(repoPath, "uri", name+".bundle")
+}
+
+// storageNameForBundle returns the name of the storage of the repository
+// to be used to generate the bundle path. If the context contains gRPC
+// metadata in which the Praefect virtual storage is present, it uses that storage
+// name. Else it defaults to the repository's storage name.
+// Using the Praefect virtual storage name is an optimization technique to
+// avoid generating one bundle per Gitaly node when behind Praefect.
+func storageNameForBundle(ctx context.Context, repo storage.Repository) string {
+	storageName := repo.GetStorageName()
+	md, _ := metadata.FromIncomingContext(ctx)
+	vs := md.Get(VirtualStorageKey)
+	if len(vs) > 0 {
+		storageName = vs[0]
+	}
+	return storageName
 }

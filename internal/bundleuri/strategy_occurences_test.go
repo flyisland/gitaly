@@ -141,7 +141,7 @@ func TestOccurrenceStrategy_Evaluate(t *testing.T) {
 
 			// Set state
 			s.state = map[string]*repositoryState{
-				bundleRelativePath(repo, defaultBundle): tt.state,
+				bundleRelativePath(ctx, repo, defaultBundle): tt.state,
 			}
 
 			s.now = tt.now
