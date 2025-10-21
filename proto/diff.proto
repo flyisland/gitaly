@@ -383,6 +383,8 @@ message FindChangedPathsRequest {
   // field.
   repeated string commits = 2 [deprecated=true];
   // requests specifies the requests of what to compare.
+  // if all requests are of type CommitRequest, the associated commit_id will be
+  // returned in the ChangedPaths messages.
   repeated Request requests = 3;
 
   // merge_commit_diff_mode controls how merge commits are treated.
@@ -447,6 +449,10 @@ message ChangedPaths {
   bytes old_path = 7;
   // score denotes the similarity between the source and target. Only present for renames and copies.
   int32 score = 8;
+  // commit_id refers to the commit that the changed path is associated with.
+  // Only gets populated if all requests in a FindChangedPathsRequest are of
+  // type CommitRequest
+  string commit_id = 9;
 }
 
 // GetPatchIDRequest is a request for the GetPatchID RPC.

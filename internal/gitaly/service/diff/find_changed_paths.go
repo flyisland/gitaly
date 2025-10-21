@@ -62,6 +62,7 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 
 	diffChunker := chunk.New(&findChangedPathsSender{stream: stream})
 
+	includeCommitID := true
 	requests := make([]string, len(in.GetRequests()))
 	for i, request := range in.GetRequests() {
 		str, err := changedPathsRequestToString(request)
@@ -69,6 +70,11 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 			return err
 		}
 		requests[i] = str
+
+		// Check if all requests are of type CommitRequest to determine if we should include commit IDs
+		if _, ok := request.GetType().(*gitalypb.FindChangedPathsRequest_Request_CommitRequest_); !ok {
+			includeCommitID = false
+		}
 	}
 
 	diffFilter := "AMDTCR"
@@ -95,12 +101,15 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 		gitcmd.Flag{Name: "-z"},
 		gitcmd.Flag{Name: "--stdin"},
 		gitcmd.Flag{Name: "-r"},
-		gitcmd.Flag{Name: "--no-commit-id"},
 		// By default, git-diff-tree(1) does not report changes in the root commit.
 		// By adding below flag we ask Git to behave as when comparing to an empty
 		// tree in that case.
 		gitcmd.Flag{Name: "--root"},
 		gitcmd.Flag{Name: "--diff-filter=" + diffFilter},
+	}
+
+	if !includeCommitID {
+		flags = append(flags, gitcmd.Flag{Name: "--no-commit-id"})
 	}
 
 	if in.GetFindRenames() {
@@ -141,7 +150,7 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 			return fmt.Errorf("send diff chunk: %w", err)
 		}
 		return nil
-	}); err != nil {
+	}, includeCommitID); err != nil {
 		return fmt.Errorf("parsing err: %w", err)
 	}
 
@@ -152,9 +161,27 @@ func (s *server) FindChangedPaths(in *gitalypb.FindChangedPathsRequest, stream g
 	return diffChunker.Flush()
 }
 
-func parsePaths(reader *bufio.Reader, callback func(cp *gitalypb.ChangedPaths) error) error {
+func parsePaths(reader *bufio.Reader, callback func(cp *gitalypb.ChangedPaths) error, includeCommitID bool) error {
+	var currentCommitID string
 	for {
-		paths, err := nextPath(reader)
+		// Read up to the first colon. If commit_ids were requested,
+		// these are parsed and included in the response.
+		beforePathEntry, err := reader.ReadBytes(':')
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+		}
+
+		if includeCommitID && len(beforePathEntry) > 0 {
+			// Remove the trailing colon and trim whitespace and null bytes
+			commitLine := strings.Trim(strings.TrimSpace(string(beforePathEntry[:len(beforePathEntry)-1])), "\x00")
+			if len(commitLine) == git.ObjectHashSHA1.EncodedLen() || len(commitLine) == git.ObjectHashSHA256.EncodedLen() {
+				currentCommitID = commitLine
+			}
+		}
+
+		paths, err := nextPath(reader, currentCommitID)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -173,7 +200,7 @@ func parsePaths(reader *bufio.Reader, callback func(cp *gitalypb.ChangedPaths) e
 	return nil
 }
 
-func nextPath(reader *bufio.Reader) ([]*gitalypb.ChangedPaths, error) {
+func nextPath(reader *bufio.Reader, currentCommitID string) ([]*gitalypb.ChangedPaths, error) {
 	// When using git-diff-tree(1) option '-c' each line will be in the format:
 	//
 	//    1. a colon for each source.
@@ -211,13 +238,6 @@ func nextPath(reader *bufio.Reader) ([]*gitalypb.ChangedPaths, error) {
 	// The number of sources returned depends on the number of parents of
 	// the commit, so we don't know in advance. First step is to count
 	// number of colons.
-
-	// Read up to the first colon. If trees were passed to the command,
-	// git-diff-tree(1) will print them, but are swallowed.
-	_, err := reader.ReadBytes(':')
-	if err != nil {
-		return nil, err
-	}
 
 	line, err := reader.ReadBytes(numStatDelimiter)
 	if err != nil {
@@ -302,6 +322,7 @@ func nextPath(reader *bufio.Reader) ([]*gitalypb.ChangedPaths, error) {
 			NewMode:   int32(newMode),
 			OldBlobId: string(split[srcCount+i+1]),
 			NewBlobId: newBlobID,
+			CommitId:  currentCommitID,
 		}
 	}
 
