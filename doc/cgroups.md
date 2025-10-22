@@ -63,8 +63,10 @@ This means that if there are 5 processes that collectively use up 10gb, and a
 OOM killer will target the process with the highest memory usage to be killed.
 
 This is an oversimplification of how the OOM killer works. A more detailed
-picture can be found [here](https://blog.crunchydata.com/blog/deep-postgresql-thoughts-the-linux-assassin#:~:text=CGroup%20Level%20OOM%20Killer%20Mechanics&text=First%20of%20all%2C%20the%20OOM,%2Fcgroup%2Fmemory%2Fmemory.)
-and [here](https://lwn.net/Kernel/Index/#OOM_killer).
+picture can be found at:
+
+- [This Crunchy Data blog post](https://blog.crunchydata.com/blog/deep-postgresql-thoughts-the-linux-assassin#:~:text=CGroup%20Level%20OOM%20Killer%20Mechanics&text=First%20of%20all%2C%20the%20OOM,%2Fcgroup%2Fmemory%2Fmemory.)
+- [This Linux Weekly News resource](https://lwn.net/Kernel/Index/#OOM_killer).
 
 This provides baseline protection from processes running haywire, such as a
 memory leak. However, this only provides limited protection because there are
