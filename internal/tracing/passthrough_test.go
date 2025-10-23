@@ -7,120 +7,152 @@ import (
 	"net"
 	"testing"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
-	"github.com/uber/jaeger-client-go"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
-	grpctracing "gitlab.com/gitlab-org/labkit/tracing/grpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/interop/grpc_testing"
 )
 
 func TestExtractSpanContextFromEnv(t *testing.T) {
-	_, cleanup := testhelper.StubTracingReporter(t)
-	defer cleanup()
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer testhelper.MustClose(t, reporter)
 
-	injectedSpan := opentracing.StartSpan("test", opentracing.Tag{Key: "do-not-carry", Value: "value"})
-	injectedSpan.SetBaggageItem("hi", "hello")
+	ctx := context.Background()
 
-	jaegerInjectedSpan := injectedSpan.(*jaeger.Span)
-	jaegerInjectedSpanContext := jaegerInjectedSpan.SpanContext()
+	tracer := reporter.TracerProvider().Tracer(t.Name())
+	initSpanCtx, span := tracer.Start(ctx, "test",
+		trace.WithAttributes(attribute.String("do-not-carry", "value")),
+	)
+	defer span.End()
 
-	createSpanContext := func() []string {
-		env := envMap{}
-		err := opentracing.GlobalTracer().Inject(injectedSpan.Context(), opentracing.TextMap, env)
-		require.NoError(t, err)
-		return env.toSlice()
+	testBaggage, err := baggage.NewMember("hi", "hello")
+	require.NoError(t, err)
+
+	bg, err := baggage.New(testBaggage)
+	require.NoError(t, err)
+
+	// Set baggage into a new immutable context
+	initSpanCtx = baggage.ContextWithBaggage(initSpanCtx, bg)
+
+	createSpanContextAsEnv := func() []string {
+		envs := map[string]string{}
+		carrier := propagation.MapCarrier(envs)
+		otel.GetTextMapPropagator().Inject(initSpanCtx, carrier)
+		return envMapToSlice(envs)
 	}
 
 	tests := []struct {
-		desc            string
-		envs            []string
-		expectedContext opentracing.SpanContext
-		expectedError   string
+		desc          string
+		envs          []string
+		expectedError error
 	}{
 		{
 			desc:          "empty environment map",
 			envs:          []string{},
-			expectedError: "opentracing: SpanContext not found in Extract carrier",
+			expectedError: errNoSpanContextInEnv,
 		},
 		{
 			desc:          "irrelevant environment map",
 			envs:          []string{"SOME_THING=A", "SOMETHING_ELSE=B"},
-			expectedError: "opentracing: SpanContext not found in Extract carrier",
+			expectedError: errNoSpanContextInEnv,
 		},
 		{
-			desc: "environment variable includes span context",
-			envs: createSpanContext(),
+			desc:          "environment variable includes span context",
+			envs:          createSpanContextAsEnv(),
+			expectedError: nil,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			spanContext, err := ExtractSpanContextFromEnv(tc.envs)
-			if tc.expectedError != "" {
-				require.Equal(t, tc.expectedError, err.Error())
+			rootSpanCtx, err := PropagateFromEnv(tc.envs)
+			if err != nil {
+				require.Equal(t, tc.expectedError, err)
 			} else {
 				require.NoError(t, err)
-				require.NotNil(t, spanContext)
+				require.NotNil(t, rootSpanCtx)
 
-				span := opentracing.StartSpan("test", opentracing.ChildOf(spanContext))
-				jaegerSpan := span.(*jaeger.Span)
-				jaegerSpanContext := jaegerSpan.SpanContext()
+				rootSpan := trace.SpanFromContext(rootSpanCtx)
+				require.True(t, rootSpan.SpanContext().IsValid())
 
-				require.Equal(t, jaegerInjectedSpanContext.TraceID(), jaegerSpanContext.TraceID())
-				require.Equal(t, jaegerInjectedSpanContext.SpanID(), jaegerSpanContext.ParentID())
-				require.Equal(t, opentracing.Tags{}, jaegerSpan.Tags())
-				require.Equal(t, "hello", jaegerSpan.BaggageItem("hi"))
+				// We need a span to verify the propagation and parent-child relationship
+				// so it is safe to close it just after starting it.
+				childSpanCtx, childSpan := tracer.Start(rootSpanCtx, tc.desc)
+				childSpan.End()
+
+				require.Equal(t, rootSpan.SpanContext().TraceID().String(), childSpan.SpanContext().TraceID().String())
+
+				// Baggage should have been propagated
+				childBaggage := baggage.FromContext(childSpanCtx)
+				require.Equal(t, childBaggage.Member(testBaggage.Key()).Value(), testBaggage.Value())
+
+				// Attributes on a span are not propagated since they are
+				// not a span context.
+				recordedSpan := reporter.GetSpanByName(tc.desc)
+				require.True(t, recordedSpan.SpanContext.IsValid())
+				require.Nil(t, recordedSpan.Attributes)
 			}
 		})
 	}
 }
 
 func TestUnaryPassthroughInterceptor(t *testing.T) {
-	reporter, cleanup := testhelper.StubTracingReporter(t)
-	defer cleanup()
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer testhelper.MustClose(t, reporter)
+
+	tracer := reporter.TracerProvider().Tracer(t.Name())
 
 	tests := []struct {
 		desc          string
-		setup         func(*testing.T) (jaeger.SpanID, opentracing.SpanContext, func())
+		setup         func(*testing.T) (traceID trace.TraceID, spanContext context.Context, finish func())
 		expectedSpans []string
 	}{
 		{
 			desc: "empty span context",
-			setup: func(t *testing.T) (jaeger.SpanID, opentracing.SpanContext, func()) {
-				return 0, nil, func() {}
+			setup: func(t *testing.T) (traceID trace.TraceID, spanContext context.Context, finish func()) {
+				emptyCtx := context.Background()
+				nullTraceID := trace.TraceID{}
+				return nullTraceID, emptyCtx, func() {}
 			},
 			expectedSpans: []string{
-				"/grpc.testing.TestService/UnaryCall",
+				"grpc.testing.TestService/UnaryCall",
 			},
 		},
 		{
-			desc: "span context with a simple span",
-			setup: func(t *testing.T) (jaeger.SpanID, opentracing.SpanContext, func()) {
-				span := opentracing.GlobalTracer().StartSpan("root")
-				return span.(*jaeger.Span).SpanContext().SpanID(), span.Context(), span.Finish
+			desc: "span context with a single span",
+			setup: func(t *testing.T) (traceID trace.TraceID, spanContext context.Context, finish func()) {
+				initCtx := context.Background()
+				spanCtx, span := tracer.Start(initCtx, "init")
+				spanTraceID := span.SpanContext().TraceID()
+				return spanTraceID, spanCtx, func() { span.End() }
 			},
 			expectedSpans: []string{
-				"/grpc.testing.TestService/UnaryCall",
-				"root",
+				"grpc.testing.TestService/UnaryCall",
+				"init",
 			},
 		},
 		{
-			desc: "span context with a trace chain",
-			setup: func(t *testing.T) (jaeger.SpanID, opentracing.SpanContext, func()) {
-				root := opentracing.GlobalTracer().StartSpan("root")
-				child := opentracing.GlobalTracer().StartSpan("child", opentracing.ChildOf(root.Context()))
-				grandChild := opentracing.GlobalTracer().StartSpan("grandChild", opentracing.ChildOf(child.Context()))
+			desc: "span context with a multi-span trace chain",
+			setup: func(t *testing.T) (traceID trace.TraceID, spanContext context.Context, finish func()) {
+				initCtx := context.Background()
+				rootCtx, rootSpan := tracer.Start(initCtx, "root")
+				childCtx, childSpan := tracer.Start(rootCtx, "child")
+				grandchildCtx, grandchildSpan := tracer.Start(childCtx, "grandChild")
 
-				return grandChild.(*jaeger.Span).SpanContext().SpanID(), grandChild.Context(), func() {
-					grandChild.Finish()
-					child.Finish()
-					root.Finish()
+				spanTraceID := grandchildSpan.SpanContext().TraceID()
+				return spanTraceID, grandchildCtx, func() {
+					grandchildSpan.End()
+					childSpan.End()
+					rootSpan.End()
 				}
 			},
 			expectedSpans: []string{
-				"/grpc.testing.TestService/UnaryCall",
+				"grpc.testing.TestService/UnaryCall",
 				"grandChild",
 				"child",
 				"root",
@@ -131,72 +163,92 @@ func TestUnaryPassthroughInterceptor(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			reporter.Reset()
 
-			var parentID jaeger.SpanID
+			ctx := testhelper.Context(t)
+
+			var traceID trace.TraceID
 			service := &testSvc{
 				unaryCall: func(ctx context.Context, request *grpc_testing.SimpleRequest) (*grpc_testing.SimpleResponse, error) {
-					if span := opentracing.SpanFromContext(ctx); span != nil {
-						parentID = span.(*jaeger.Span).SpanContext().ParentID()
+					if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+						traceID = span.SpanContext().TraceID()
 					}
 					return &grpc_testing.SimpleResponse{}, nil
 				},
 			}
-			expectedParentID, spanContext, finishFunc := tc.setup(t)
 
-			client := startFakeGitalyServer(t, service, spanContext)
-			_, err := client.UnaryCall(testhelper.Context(t), &grpc_testing.SimpleRequest{})
+			expectedTraceID, contextToInject, finishFunc := tc.setup(t)
+
+			grpcClient := startFakeGitalyServer(t, contextToInject, service)
+			_, err := grpcClient.UnaryCall(ctx, &grpc_testing.SimpleRequest{})
 			require.NoError(t, err)
 
+			// In the case where there is no root span to inject into
+			// the incoming rRPC calls, we cannot know in advance what the
+			// traceID of the span created by the gRPC middleware will be.
+			// So in that special case, when we cannot know in advance what
+			// traceID to expect, we return the empty one. That's why this check
+			// is needed.
+			if expectedTraceID.IsValid() {
+				require.Equal(t, expectedTraceID.String(), traceID.String())
+			}
+
 			finishFunc()
-			require.Equal(t, expectedParentID, parentID)
-			require.Equal(t, tc.expectedSpans, reportedSpans(t, reporter))
+			require.Equal(t, tc.expectedSpans, reportedSpanNames(t, reporter))
 		})
 	}
 }
 
 func TestStreamPassthroughInterceptor(t *testing.T) {
-	reporter, cleanup := testhelper.StubTracingReporter(t)
-	defer cleanup()
+	reporter := testhelper.NewStubTracingReporter(t)
+	defer func() { _ = reporter.Close() }()
+
+	tracer := reporter.TracerProvider().Tracer(t.Name())
 
 	tests := []struct {
 		desc          string
-		setup         func(*testing.T) (jaeger.SpanID, opentracing.SpanContext, func())
+		setup         func(*testing.T) (traceID trace.TraceID, spanContext context.Context, finish func())
 		expectedSpans []string
 	}{
 		{
 			desc: "empty span context",
-			setup: func(t *testing.T) (jaeger.SpanID, opentracing.SpanContext, func()) {
-				return 0, nil, func() {}
+			setup: func(t *testing.T) (traceID trace.TraceID, spanContext context.Context, finish func()) {
+				emptyCtx := context.Background()
+				nullTraceID := trace.TraceID{}
+				return nullTraceID, emptyCtx, func() {}
 			},
 			expectedSpans: []string{
-				"/grpc.testing.TestService/FullDuplexCall",
+				"grpc.testing.TestService/FullDuplexCall",
 			},
 		},
 		{
-			desc: "span context with a simple span",
-			setup: func(t *testing.T) (jaeger.SpanID, opentracing.SpanContext, func()) {
-				span := opentracing.GlobalTracer().StartSpan("root")
-				return span.(*jaeger.Span).SpanContext().SpanID(), span.Context(), span.Finish
+			desc: "span context with a single span",
+			setup: func(t *testing.T) (traceID trace.TraceID, spanContext context.Context, finish func()) {
+				initCtx := context.Background()
+				spanCtx, span := tracer.Start(initCtx, "init")
+				spanTraceID := span.SpanContext().TraceID()
+				return spanTraceID, spanCtx, func() { span.End() }
 			},
 			expectedSpans: []string{
-				"/grpc.testing.TestService/FullDuplexCall",
-				"root",
+				"grpc.testing.TestService/FullDuplexCall",
+				"init",
 			},
 		},
 		{
-			desc: "span context with a trace chain",
-			setup: func(t *testing.T) (jaeger.SpanID, opentracing.SpanContext, func()) {
-				root := opentracing.GlobalTracer().StartSpan("root")
-				child := opentracing.GlobalTracer().StartSpan("child", opentracing.ChildOf(root.Context()))
-				grandChild := opentracing.GlobalTracer().StartSpan("grandChild", opentracing.ChildOf(child.Context()))
+			desc: "span context with a multi-span trace chain",
+			setup: func(t *testing.T) (traceID trace.TraceID, spanContext context.Context, finish func()) {
+				initCtx := context.Background()
+				rootCtx, rootSpan := tracer.Start(initCtx, "root")
+				childCtx, childSpan := tracer.Start(rootCtx, "child")
+				grandchildCtx, grandchildSpan := tracer.Start(childCtx, "grandChild")
 
-				return grandChild.(*jaeger.Span).SpanContext().SpanID(), grandChild.Context(), func() {
-					grandChild.Finish()
-					child.Finish()
-					root.Finish()
+				spanTraceID := grandchildSpan.SpanContext().TraceID()
+				return spanTraceID, grandchildCtx, func() {
+					grandchildSpan.End()
+					childSpan.End()
+					rootSpan.End()
 				}
 			},
 			expectedSpans: []string{
-				"/grpc.testing.TestService/FullDuplexCall",
+				"grpc.testing.TestService/FullDuplexCall",
 				"grandChild",
 				"child",
 				"root",
@@ -207,42 +259,48 @@ func TestStreamPassthroughInterceptor(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			reporter.Reset()
 
-			var parentID jaeger.SpanID
+			var traceID trace.TraceID
 			service := &testSvc{
 				fullDuplexCall: func(stream grpc_testing.TestService_FullDuplexCallServer) error {
 					_, err := stream.Recv()
-					require.NoError(t, err)
-					if span := opentracing.SpanFromContext(stream.Context()); span != nil {
-						parentID = span.(*jaeger.Span).SpanContext().ParentID()
+					require.Equal(t, err, io.EOF)
+					if span := trace.SpanFromContext(stream.Context()); span.SpanContext().IsValid() {
+						traceID = span.SpanContext().TraceID()
 					}
 					require.NoError(t, stream.Send(&grpc_testing.StreamingOutputCallResponse{}))
 					return nil
 				},
 			}
-			expectedParentID, spanContext, finishFunc := tc.setup(t)
 
-			client := startFakeGitalyServer(t, service, spanContext)
-			stream, err := client.FullDuplexCall(testhelper.Context(t))
+			expectedTraceID, contextToInject, finishFunc := tc.setup(t)
+
+			grpcClient := startFakeGitalyServer(t, contextToInject, service)
+			stream, err := grpcClient.FullDuplexCall(testhelper.Context(t))
 			require.NoError(t, err)
-
-			require.NoError(t, stream.Send(&grpc_testing.StreamingOutputCallRequest{}))
+			require.NoError(t, stream.CloseSend())
 
 			resp, err := stream.Recv()
 			require.NoError(t, err)
 			testhelper.ProtoEqual(t, &grpc_testing.StreamingOutputCallResponse{}, resp)
 
-			resp, err = stream.Recv()
-			require.Equal(t, io.EOF, err)
-			require.Nil(t, resp)
-
 			finishFunc()
 
-			require.Equal(t, expectedParentID, parentID)
-			require.Equal(t, tc.expectedSpans, reportedSpans(t, reporter))
+			// In the case where there is no root span to inject into
+			// the incoming rRPC calls, we cannot know in advance what the
+			// traceID of the span created by the gRPC middleware will be.
+			// So in that special case, when we cannot know in advance what
+			// traceID to expect, we return the empty one. That's why this check
+			// is needed.
+			if expectedTraceID.IsValid() {
+				require.Equal(t, expectedTraceID.String(), traceID.String())
+			}
+
+			require.Equal(t, tc.expectedSpans, reportedSpanNames(t, reporter))
 		})
 	}
 }
 
+// testSvc is the gRPC server implementation for the fake server initialized below
 type testSvc struct {
 	grpc_testing.UnimplementedTestServiceServer
 	unaryCall      func(context.Context, *grpc_testing.SimpleRequest) (*grpc_testing.SimpleResponse, error)
@@ -257,16 +315,15 @@ func (ts *testSvc) FullDuplexCall(stream grpc_testing.TestService_FullDuplexCall
 	return ts.fullDuplexCall(stream)
 }
 
-func startFakeGitalyServer(t *testing.T, svc *testSvc, spanContext opentracing.SpanContext) grpc_testing.TestServiceClient {
+// startFakeGitalyServer starts a test Gitaly server and returns a client already configured to
+// communicate with the server.
+func startFakeGitalyServer(t *testing.T, spanContext context.Context, svc *testSvc) grpc_testing.TestServiceClient {
 	t.Helper()
 
 	listener, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 
-	srv := grpc.NewServer(
-		grpc.StreamInterceptor(grpctracing.StreamServerTracingInterceptor()),
-		grpc.UnaryInterceptor(grpctracing.UnaryServerTracingInterceptor()),
-	)
+	srv := grpc.NewServer(grpc.StatsHandler(NewGRPCServerStatsHandler()))
 	grpc_testing.RegisterTestServiceServer(srv, svc)
 
 	go testhelper.MustServe(t, srv, listener)
@@ -285,26 +342,12 @@ func startFakeGitalyServer(t *testing.T, svc *testSvc, spanContext opentracing.S
 	return grpc_testing.NewTestServiceClient(conn)
 }
 
-// envMap implements opentracing.TextMapReader and opentracing.TextMapWriter. It is used to create
-// testing environment maps used in below tests
-type envMap map[string]string
-
-func (e envMap) Set(key, val string) {
-	e[key] = val
-}
-
-func (e envMap) ForeachKey(handler func(key string, val string) error) error {
-	for key, val := range e {
-		if err := handler(key, val); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (e envMap) toSlice() []string {
+// envMapToSlice takes a map of key/value string pair and converts them into
+// a slice where each key. and value are delimited with a `=` sign, the same
+// way environment variables are defined in a .env file.
+func envMapToSlice(envs map[string]string) []string {
 	var envSlice []string
-	for key, value := range e {
+	for key, value := range envs {
 		envSlice = append(envSlice, fmt.Sprintf("%s=%s", key, value))
 	}
 	return envSlice

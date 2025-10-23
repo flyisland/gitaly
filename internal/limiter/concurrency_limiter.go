@@ -11,6 +11,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -197,9 +198,11 @@ func (c *ConcurrencyLimiter) Limit(ctx context.Context, limitingKey string, f Li
 	span, ctx := tracing.StartSpanIfHasParent(
 		ctx,
 		"limiter.ConcurrencyLimiter.Limit",
-		tracing.Tags{"key": limitingKey},
+		[]attribute.KeyValue{
+			attribute.String("key", limitingKey),
+		},
 	)
-	defer span.Finish()
+	defer span.End()
 
 	if c.currentLimit() <= 0 {
 		return f()

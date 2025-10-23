@@ -96,6 +96,9 @@ func serveAction(ctx context.Context, cmd *cli.Command) error {
 func run(conf config.Config, appName string, logger log.Logger) error {
 	configure(logger, appName, conf)
 
+	tracerCloser := tracing.Initialize(tracing.WithServiceName(appName))
+	defer func() { _ = tracerCloser.Close() }()
+
 	starterConfigs, err := getStarterConfigs(conf)
 	if err != nil {
 		return cli.Exit(err, 1)
@@ -140,8 +143,6 @@ func readConfig(path string) (config.Config, error) {
 }
 
 func configure(logger log.Logger, appName string, conf config.Config) {
-	tracing.Initialize(tracing.WithServiceName(appName))
-
 	if conf.PrometheusListenAddr != "" {
 		conf.Prometheus.Configure(logger)
 	}
@@ -149,17 +150,12 @@ func configure(logger log.Logger, appName string, conf config.Config) {
 	sentry.ConfigureSentry(logger, version.GetVersion(), conf.Sentry)
 }
 
-func server(
-	cfgs []starter.Config,
-	conf config.Config,
-	logger log.Logger,
-	b bootstrap.Listener,
-	promreg prometheus.Registerer,
-	dbPromRegistry interface {
-		prometheus.Registerer
-		prometheus.Gatherer
-	},
-) error {
+type dbPromRegistryWrapper interface {
+	prometheus.Registerer
+	prometheus.Gatherer
+}
+
+func server(cfgs []starter.Config, conf config.Config, logger log.Logger, b bootstrap.Listener, promreg prometheus.Registerer, dbPromRegistry dbPromRegistryWrapper) error {
 	nodeLatencyHistogram, err := metrics.RegisterNodeLatency(conf.Prometheus, promreg)
 	if err != nil {
 		return err

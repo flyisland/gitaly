@@ -25,6 +25,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/time/rate"
 )
 
@@ -949,8 +950,10 @@ func TestTrace2TracingExporter(t *testing.T) {
 		{
 			desc: "active span is sampled",
 			setup: func(t *testing.T, ctx context.Context) context.Context {
-				_, ctx = tracing.StartSpan(ctx, "root", nil)
-				return ctx
+				tr := otel.GetTracerProvider().Tracer(t.Name())
+				spanCtx, span := tr.Start(ctx, "root")
+				span.End()
+				return spanCtx
 			},
 			assert: func(t *testing.T, spans []string, statFields map[string]any) {
 				require.Equal(t, statFields["trace2.activated"], "true")
@@ -968,8 +971,10 @@ func TestTrace2TracingExporter(t *testing.T) {
 			desc:          "active span is not sampled",
 			tracerOptions: []testhelper.StubTracingReporterOption{testhelper.NeverSampled()},
 			setup: func(t *testing.T, ctx context.Context) context.Context {
-				_, ctx = tracing.StartSpan(ctx, "root", nil)
-				return ctx
+				tr := otel.GetTracerProvider().Tracer(t.Name())
+				spanCtx, span := tr.Start(ctx, "root")
+				span.End()
+				return spanCtx
 			},
 			assert: func(t *testing.T, spans []string, statFields map[string]any) {
 				require.NotContains(t, statFields, "trace2.activated")
@@ -981,8 +986,8 @@ func TestTrace2TracingExporter(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			reporter, cleanup := testhelper.StubTracingReporter(t, tc.tracerOptions...)
-			defer cleanup()
+			reporter := testhelper.NewStubTracingReporter(t, tc.tracerOptions...)
+			defer func() { _ = reporter.Close() }()
 
 			ctx := tc.setup(t, log.InitContextCustomFields(testhelper.Context(t)))
 			performRevList(t, ctx)
@@ -992,8 +997,8 @@ func TestTrace2TracingExporter(t *testing.T) {
 			statFields := customFields.Fields()
 
 			var spans []string
-			for _, span := range testhelper.ReportedSpans(t, reporter) {
-				spans = append(spans, span.Operation)
+			for _, span := range reporter.GetSpans() {
+				spans = append(spans, span.Name)
 			}
 
 			tc.assert(t, spans, statFields)
@@ -1085,7 +1090,8 @@ func TestDefaultTrace2HooksFor(t *testing.T) {
 			desc:   "active span is sampled",
 			subCmd: "status",
 			setup: func(t *testing.T) (context.Context, []trace2.Hook) {
-				_, ctx := tracing.StartSpan(testhelper.Context(t), "root", nil)
+				span, ctx := tracing.StartSpan(testhelper.Context(t), "root", nil)
+				defer span.End()
 				return ctx, []trace2.Hook{
 					trace2hooks.NewTracingExporter(),
 				}
@@ -1095,7 +1101,8 @@ func TestDefaultTrace2HooksFor(t *testing.T) {
 			desc:   "active span is not sampled",
 			subCmd: "status",
 			setup: func(t *testing.T) (context.Context, []trace2.Hook) {
-				_, ctx := tracing.StartSpan(testhelper.Context(t), "root", nil)
+				span, ctx := tracing.StartSpan(testhelper.Context(t), "root", nil)
+				defer span.End()
 				return ctx, []trace2.Hook{}
 			},
 			tracerOptions: []testhelper.StubTracingReporterOption{testhelper.NeverSampled()},
@@ -1113,7 +1120,8 @@ func TestDefaultTrace2HooksFor(t *testing.T) {
 			desc:   "subcmd is pack-objects and active span is sampled",
 			subCmd: "pack-objects",
 			setup: func(t *testing.T) (context.Context, []trace2.Hook) {
-				_, ctx := tracing.StartSpan(testhelper.Context(t), "root", nil)
+				span, ctx := tracing.StartSpan(testhelper.Context(t), "root", nil)
+				defer span.End()
 				hooks := []trace2.Hook{
 					trace2hooks.NewTracingExporter(),
 					trace2hooks.NewPackObjectsMetrics(),
@@ -1128,8 +1136,8 @@ func TestDefaultTrace2HooksFor(t *testing.T) {
 			setup: func(t *testing.T) (context.Context, []trace2.Hook) {
 				ctx := testhelper.Context(t)
 				ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LogGitTraces, true)
-				_, ctx = tracing.StartSpan(ctx, "root", nil)
-
+				span, ctx := tracing.StartSpan(ctx, "root", nil)
+				defer span.End()
 				hooks := []trace2.Hook{
 					trace2hooks.NewTracingExporter(),
 					trace2hooks.NewPackObjectsMetrics(),
@@ -1141,8 +1149,8 @@ func TestDefaultTrace2HooksFor(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			_, cleanup := testhelper.StubTracingReporter(t, tc.tracerOptions...)
-			defer cleanup()
+			reporter := testhelper.NewStubTracingReporter(t, tc.tracerOptions...)
+			defer func() { _ = reporter.Close() }()
 
 			ctx, expectedHooks := tc.setup(t)
 			hooks := gitcmd.DefaultTrace2HooksFor(ctx, tc.subCmd, testhelper.SharedLogger(t), rate.NewLimiter(1, 1))

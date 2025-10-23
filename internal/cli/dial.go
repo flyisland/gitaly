@@ -6,6 +6,7 @@ import (
 
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v18/auth"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	"google.golang.org/grpc"
 )
 
@@ -16,6 +17,7 @@ func Dial(ctx context.Context, addr, token string, timeout time.Duration, opts .
 	defer cancel()
 
 	opts = append(opts,
+		grpc.WithStatsHandler(tracing.NewGRPCClientStatsHandler()),
 		client.UnaryInterceptor(),
 		client.StreamInterceptor(),
 	)

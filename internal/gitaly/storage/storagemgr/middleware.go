@@ -209,7 +209,7 @@ func nonTransactionalRequest(ctx context.Context, firstMessage proto.Message) tr
 // transaction. The returned values are valid even if the request should not run transactionally.
 func transactionalizeRequest(ctx context.Context, logger log.Logger, txRegistry *TransactionRegistry, node storage.Node, locator storage.Locator, methodInfo protoregistry.MethodInfo, req proto.Message) (_ transactionalizedRequest, returnedErr error) {
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.transactionalizeRequest", nil)
-	defer span.Finish()
+	defer span.End()
 
 	switch methodInfo.Scope {
 	case protoregistry.ScopeRepository:

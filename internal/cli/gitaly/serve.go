@@ -61,7 +61,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/version"
 	"gitlab.com/gitlab-org/labkit/fips"
 	"gitlab.com/gitlab-org/labkit/monitoring"
-	labkittracing "gitlab.com/gitlab-org/labkit/tracing"
 	"go.uber.org/automaxprocs/maxprocs"
 	"gocloud.dev/blob"
 	"google.golang.org/grpc"
@@ -110,6 +109,12 @@ func serveAction(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return cli.Exit(err, 1)
 	}
+
+	_, tracingCloser, err := tracing.InitializeTracerProvider(context.Background(), "gitaly")
+	if err != nil {
+		logger.WithError(err).Error("error initializing distributed tracing")
+	}
+	defer func() { _ = tracingCloser.Close() }()
 
 	if cfg.Auth.Transitioning && len(cfg.Auth.Token) > 0 {
 		logger.Warn("Authentication is enabled but not enforced because transitioning=true. Gitaly will accept unauthenticated requests.")
@@ -163,7 +168,6 @@ func configure(configPath string) (config.Cfg, log.Logger, error) {
 
 	sentry.ConfigureSentry(logger, version.GetVersion(), sentry.Config(cfg.Logging.Sentry))
 	cfg.Prometheus.Configure(logger)
-	labkittracing.Initialize(labkittracing.WithServiceName("gitaly"))
 	preloadLicenseDatabase(logger)
 
 	return cfg, logger, nil
@@ -189,7 +193,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	beganRun := time.Now()
 
 	bootstrapSpan, ctx := tracing.StartSpan(ctx, "gitaly-bootstrap", nil)
-	defer bootstrapSpan.Finish()
+	defer bootstrapSpan.End()
 
 	if cfg.RuntimeDir != "" {
 		if err := config.PruneOldGitalyProcessDirectories(logger, cfg.RuntimeDir); err != nil {
@@ -277,6 +281,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			},
 		)),
 		client.WithDialOptions(
+			grpc.WithStatsHandler(tracing.NewGRPCClientStatsHandler()),
 			client.UnaryInterceptor(),
 			client.StreamInterceptor(),
 		),
@@ -773,7 +778,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	if err := b.Start(); err != nil {
 		return fmt.Errorf("unable to start the bootstrap: %w", err)
 	}
-	bootstrapSpan.Finish()
+	bootstrapSpan.End()
 	// There are a few goroutines running async tasks that may still be in progress (i.e. preloading the license
 	// database), but this is a close enough indication of startup latency.
 	logger.WithField("duration_ms", time.Since(beganRun).Milliseconds()).Info("Started Gitaly")

@@ -159,6 +159,9 @@ func executeHook(ctx context.Context, cmd hookCommand, args []string) error {
 
 	ctx = injectMetadataIntoOutgoingCtx(ctx, payload)
 
+	tracerCloser := initializeTracing()
+	defer func() { _ = tracerCloser.Close() }()
+
 	conn, err := dialGitaly(ctx, payload)
 	if err != nil {
 		return fmt.Errorf("error when connecting to gitaly: %w", err)
@@ -209,15 +212,15 @@ func dialGitaly(ctx context.Context, payload gitcmd.HooksPayload) (*grpc.ClientC
 		),
 	}
 
-	// Setup tracing is possible
-	initializeTracing()
-	if spanContext, err := tracing.ExtractSpanContextFromEnv(os.Environ()); err == nil {
+	if spanContext, err := tracing.PropagateFromEnv(os.Environ()); err == nil {
 		unaryInterceptors = append(unaryInterceptors, tracing.UnaryPassthroughInterceptor(spanContext))
 		streamInterceptors = append(streamInterceptors, tracing.StreamPassthroughInterceptor(spanContext))
 	}
 
-	dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
-	dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(streamInterceptors...))
+	dialOpts = append(dialOpts,
+		grpc.WithChainUnaryInterceptor(unaryInterceptors...),
+		grpc.WithChainStreamInterceptor(streamInterceptors...),
+	)
 	conn, err := client.New(ctx, "unix://"+payload.InternalSocket, client.WithGrpcOptions(dialOpts))
 	if err != nil {
 		return nil, fmt.Errorf("error when dialing: %w", err)
@@ -226,13 +229,12 @@ func dialGitaly(ctx context.Context, payload gitcmd.HooksPayload) (*grpc.ClientC
 	return conn, nil
 }
 
-func initializeTracing() {
+func initializeTracing() io.Closer {
 	// All stdout and stderr are captured by Gitaly process. They may be sent back to users.
 	// We don't want to bother them with these redundant logs. As a result, all logs should be
-	// suppressed while labkit is in initialization phase.
+	// suppressed while tracing is in initialization phase.
 	//
-	//nolint:forbidigo // LabKit does not allow us to supply our own logger, so we must modify the standard logger
-	// instead.
+	//nolint:forbidigo
 	output := logrus.StandardLogger().Out
 	logrus.SetOutput(io.Discard)
 	defer logrus.SetOutput(output)
@@ -242,8 +244,9 @@ func initializeTracing() {
 	// or starting new span. This technique connects the parent span in parent Gitaly process
 	// and the remote spans when Gitaly handle subsequent gRPC calls issued by this hook.
 	// As tracing is a nice-to-have feature, it should not interrupt the main functionality
-	// of Gitaly hook. As a result, errors, if any, are ignored.
-	labkittracing.Initialize()
+	// of Gitaly hook. As a result, errors, if any, are logged but not returned.
+	_, closer, _ := tracing.InitializeTracerProvider(context.Background(), "gitaly-hooks")
+	return closer
 }
 
 func gitPushOptions() []string {

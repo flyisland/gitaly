@@ -57,7 +57,7 @@ func (m *RepositoryManager) OptimizeRepository(
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "housekeeping.OptimizeRepository", nil)
-	defer span.Finish()
+	defer span.End()
 
 	if err := m.maybeStartTransaction(ctx, repo, func(ctx context.Context, tx storage.Transaction, repo *localrepo.Repo) error {
 		originalRepo := &gitalypb.Repository{
@@ -465,7 +465,7 @@ func (m *RepositoryManager) packRefsIfNeeded(ctx context.Context, repo *localrep
 // CleanStaleData removes any stale data in the repository as per the provided configuration.
 func (m *RepositoryManager) CleanStaleData(ctx context.Context, repo *localrepo.Repo, cfg housekeeping.CleanStaleDataConfig) error {
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "housekeeping.CleanStaleData", nil)
-	defer span.Finish()
+	defer span.End()
 
 	repoPath, err := repo.Path(ctx)
 	if err != nil {

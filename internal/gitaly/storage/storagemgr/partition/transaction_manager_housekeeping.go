@@ -122,7 +122,7 @@ func (mgr *TransactionManager) prepareHousekeeping(ctx context.Context, transact
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareHousekeeping", nil)
-	defer span.Finish()
+	defer span.End()
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("total", "prepare")
 	defer finishTimer()
@@ -155,7 +155,7 @@ func (mgr *TransactionManager) preparePackRefs(ctx context.Context, transaction 
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.preparePackRefs", nil)
-	defer span.Finish()
+	defer span.End()
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("pack-refs", "prepare")
 	defer finishTimer()
@@ -204,7 +204,7 @@ func (mgr *TransactionManager) prepareRepacking(ctx context.Context, transaction
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareRepacking", nil)
-	defer span.Finish()
+	defer span.End()
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("repack", "prepare")
 	defer finishTimer()
@@ -392,7 +392,7 @@ func (mgr *TransactionManager) prepareCommitGraphs(ctx context.Context, transact
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareCommitGraphs", nil)
-	defer span.Finish()
+	defer span.End()
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("commit-graph", "prepare")
 	defer finishTimer()
@@ -471,7 +471,7 @@ func (mgr *TransactionManager) verifyHousekeeping(ctx context.Context, transacti
 	defer trace.StartRegion(ctx, "verifyHousekeeping").End()
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.verifyHousekeeping", nil)
-	defer span.Finish()
+	defer span.End()
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("total", "verify")
 	defer finishTimer()
@@ -529,7 +529,7 @@ func (mgr *TransactionManager) verifyPackRefs(ctx context.Context, transaction *
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.verifyPackRefs", nil)
-	defer span.Finish()
+	defer span.End()
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("pack-refs", "verify")
 	defer finishTimer()
@@ -576,7 +576,7 @@ func (mgr *TransactionManager) verifyRepacking(ctx context.Context, transaction 
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.verifyRepacking", nil)
-	defer span.Finish()
+	defer span.End()
 
 	finishTimer := mgr.metrics.housekeeping.ReportTaskLatency("repack", "verify")
 	defer finishTimer()
@@ -838,7 +838,7 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareOffloading", nil)
-	defer span.Finish()
+	defer span.End()
 
 	// Loading configurations for offloading
 	cfg := transaction.runHousekeeping.runOffloading.config
@@ -977,7 +977,7 @@ func (mgr *TransactionManager) prepareRehydrating(ctx context.Context, transacti
 	}
 
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "transaction.prepareRehydrating", nil)
-	defer span.Finish()
+	defer span.End()
 
 	workingRepository := mgr.repositoryFactory.Build(transaction.snapshot.RelativePath(transaction.relativePath))
 	// workingRepoPath is the current repository path which we are performing operations on.

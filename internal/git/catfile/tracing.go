@@ -4,13 +4,15 @@ import (
 	"context"
 	"sync"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 type trace struct {
-	span    opentracing.Span
+	span    oteltrace.Span
 	counter *prometheus.CounterVec
 
 	requestsLock sync.Mutex
@@ -25,9 +27,9 @@ func startTrace(
 	counter *prometheus.CounterVec,
 	methodName string,
 ) *trace {
-	var span opentracing.Span
+	var span oteltrace.Span
 	if methodName == "" {
-		span = &tracing.NoopSpan{}
+		span = noop.Span{}
 	} else {
 		span, _ = tracing.StartSpanIfHasParent(ctx, methodName, nil)
 	}
@@ -62,11 +64,11 @@ func (t *trace) finish() {
 			continue
 		}
 
-		t.span.SetTag(requestType, requestCount)
+		t.span.SetAttributes(attribute.Int(requestType, requestCount))
 		if t.counter != nil {
 			t.counter.WithLabelValues(requestType).Add(float64(requestCount))
 		}
 	}
 
-	t.span.Finish()
+	t.span.End()
 }

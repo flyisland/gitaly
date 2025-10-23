@@ -1,17 +1,21 @@
 package testhelper
 
 import (
-	"fmt"
+	"context"
 	"testing"
-	"time"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
-	"github.com/uber/jaeger-client-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	oteltracingsdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type stubTracingReporterConfig struct {
-	sampler jaeger.Sampler
+	sampler oteltracingsdk.Sampler
 }
 
 // StubTracingReporterOption is a function that modifies the config of stubbed tracing reporter
@@ -20,67 +24,94 @@ type StubTracingReporterOption func(*stubTracingReporterConfig)
 // NeverSampled is an option that makes the stubbed tracer never sample spans
 func NeverSampled() StubTracingReporterOption {
 	return func(conf *stubTracingReporterConfig) {
-		conf.sampler = jaeger.NewConstSampler(false)
+		conf.sampler = oteltracingsdk.NeverSample()
 	}
 }
 
-// StubTracingReporter stubs the distributed tracing's global tracer. It returns a reporter that
-// records all generated spans along the way. The data is cleaned up afterward after the test is
-// done. As there is only one global tracer, this stub is not safe to run in parallel.
-func StubTracingReporter(t *testing.T, opts ...StubTracingReporterOption) (*jaeger.InMemoryReporter, func()) {
+// StubTracingReporter is a tracing reporter to be sued in tests.
+// It uses a memory exporter to save all spans in memory, which
+// allows for inspection during tests.
+type StubTracingReporter struct {
+	exporter *tracetest.InMemoryExporter
+	tp       *oteltracingsdk.TracerProvider
+	old      trace.TracerProvider
+}
+
+// NewStubTracingReporter stubs the distributed tracing's global tracer. It returns a reporter that
+// records all generated spans along the way. The data is cleaned up afterward after the test is done.
+// The `StubTracingReporter` has a `TracerProvider()` method to get access to the tracer provider.
+// This allows tests using this stub to run in parallel.
+func NewStubTracingReporter(t *testing.T, opts ...StubTracingReporterOption) *StubTracingReporter {
 	conf := &stubTracingReporterConfig{
-		jaeger.NewConstSampler(true),
+		oteltracingsdk.AlwaysSample(),
 	}
 	for _, opt := range opts {
 		opt(conf)
 	}
 
-	reporter := jaeger.NewInMemoryReporter()
-	tracer, tracerCloser := jaeger.NewTracer("", conf.sampler, reporter)
+	res, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(t.Name()),
+			semconv.ServiceVersion("1.0.0"),
+		),
+	)
+	require.NoError(t, err)
 
-	old := opentracing.GlobalTracer()
-	opentracing.SetGlobalTracer(tracer)
+	exporter := tracetest.NewInMemoryExporter()
 
-	return reporter, func() {
-		MustClose(t, tracerCloser)
-		opentracing.SetGlobalTracer(old)
+	tp := oteltracingsdk.NewTracerProvider(
+		oteltracingsdk.WithSyncer(exporter),
+		oteltracingsdk.WithSampler(conf.sampler),
+		oteltracingsdk.WithResource(res),
+	)
+
+	old := otel.GetTracerProvider()
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{}),
+	)
+
+	return &StubTracingReporter{
+		exporter: exporter,
+		tp:       tp,
+		old:      old,
 	}
 }
 
-// Span is a struct that provides a more test-friendly way to assert distributed tracing spans.
-type Span struct {
-	// Operation is the name of the operation being traced.
-	Operation string
-	// StartTime is the point in time when the span started.
-	StartTime time.Time
-	// Duration captures the elapsed time of the operation traced by the span.
-	Duration time.Duration
-	// Tags is a map that contains key-value pairs of stringified tags associated with the span.
-	Tags map[string]string
+// TracerProvider returns the tracer provider associated with this reporter
+func (e *StubTracingReporter) TracerProvider() trace.TracerProvider {
+	return e.tp
 }
 
-// ReportedSpans function converts the spans that were captured by the stubbed reporter into an
-// assertable data structure. Initially, the collected traces are represented using opentracing's
-// Span interface. However, this interface is not suitable for testing purposes. Therefore, we must
-// cast them to a Jaeger Span, which contains a lot of information that is not relevant to testing.
-// The new span struct that is created contains only essential and safe-for-testing fields
-func ReportedSpans(t *testing.T, reporter *jaeger.InMemoryReporter) []*Span {
-	var reportedSpans []*Span
-	for _, span := range reporter.GetSpans() {
-		jaegerSpan, ok := span.(*jaeger.Span)
-		require.Truef(t, ok, "stubbed span must be a Jaeger span")
+// GetSpans returns all spans saved in memory
+func (e *StubTracingReporter) GetSpans() tracetest.SpanStubs {
+	return e.exporter.GetSpans()
+}
 
-		reportedSpan := &Span{
-			Operation: jaegerSpan.OperationName(),
-			StartTime: jaegerSpan.StartTime(),
-			Duration:  jaegerSpan.Duration(),
-			Tags:      map[string]string{},
-		}
+// Reset empties the memory buffer holding spans.
+// This is useful to reuse the same Reporter.
+func (e *StubTracingReporter) Reset() {
+	e.exporter.Reset()
+}
 
-		for key, value := range jaegerSpan.Tags() {
-			reportedSpan.Tags[key] = fmt.Sprintf("%s", value)
+// Close closes the underlying tracer provider
+func (e *StubTracingReporter) Close() error {
+	defer func() {
+		otel.SetTracerProvider(e.old)
+	}()
+	return e.tp.Shutdown(context.Background())
+}
+
+// GetSpanByName returns a span by its name
+func (e *StubTracingReporter) GetSpanByName(name string) tracetest.SpanStub {
+	for _, recordedSpan := range e.GetSpans() {
+		if recordedSpan.Name == name {
+			return recordedSpan
 		}
-		reportedSpans = append(reportedSpans, reportedSpan)
 	}
-	return reportedSpans
+	return tracetest.SpanStub{}
 }

@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/opentracing/opentracing-go"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/trace2"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // NewTracingExporter initializes TracingExporter, which is a hook to convert Trace2 events to
@@ -35,13 +36,13 @@ func (t *TracingExporter) Handle(rootCtx context.Context, trace *trace2.Trace) e
 		}
 
 		spanName := fmt.Sprintf("git:%s", trace.Name)
-		span, ctx := tracing.StartSpanIfHasParent(ctx, spanName, nil, opentracing.StartTime(trace.StartTime))
-		span.SetTag("thread", trace.Thread)
-		span.SetTag("childID", trace.ChildID)
+		span, ctx := tracing.StartSpanIfHasParent(ctx, spanName, nil, oteltrace.WithTimestamp(trace.StartTime))
+		span.SetAttributes(attribute.String("thread", trace.Thread))
+		span.SetAttributes(attribute.String("childID", trace.ChildID))
 		for key, value := range trace.Metadata {
-			span.SetTag(key, value)
+			span.SetAttributes(attribute.String(key, value))
 		}
-		span.FinishWithOptions(opentracing.FinishOptions{FinishTime: trace.FinishTime})
+		span.End(oteltrace.WithTimestamp(trace.FinishTime))
 
 		return ctx
 	})

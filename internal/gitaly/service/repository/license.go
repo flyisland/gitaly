@@ -72,7 +72,7 @@ func (s *server) FindLicense(ctx context.Context, req *gitalypb.FindLicenseReque
 
 func findLicense(ctx context.Context, repo *localrepo.Repo, commitID git.ObjectID) (*gitalypb.FindLicenseResponse, error) {
 	span, ctx := tracing.StartSpanIfHasParent(ctx, "repository.findLicense", nil)
-	defer span.Finish()
+	defer span.End()
 
 	repoFiler := &gitFiler{ctx: ctx, repo: repo, treeishID: commitID}
 	detectedLicenses, err := licensedb.Detect(repoFiler)

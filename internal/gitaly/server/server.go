@@ -25,8 +25,10 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
 	gitalylog "gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/tracing"
 	grpccorrelation "gitlab.com/gitlab-org/labkit/correlation/grpc"
-	grpctracing "gitlab.com/gitlab-org/labkit/tracing/grpc"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -162,7 +164,6 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 	}
 
 	streamServerInterceptors = append(streamServerInterceptors,
-		grpctracing.StreamServerTracingInterceptor(),
 		cache.StreamInvalidator(s.cacheInvalidator, protoregistry.GitalyProtoPreregistered, s.logger),
 		// Panic handler should remain last so that application panics will be
 		// converted to errors and logged
@@ -170,7 +171,6 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 	)
 
 	unaryServerInterceptors = append(unaryServerInterceptors,
-		grpctracing.UnaryServerTracingInterceptor(),
 		cache.UnaryInvalidator(s.cacheInvalidator, protoregistry.GitalyProtoPreregistered, s.logger),
 		// Panic handler should remain last so that application panics will be
 		// converted to errors and logged
@@ -204,6 +204,9 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 	}
 
 	serverOptions := []grpc.ServerOption{
+		grpc.StatsHandler(tracing.NewGRPCServerStatsHandler(
+			otelgrpc.WithTracerProvider(otel.GetTracerProvider()),
+		)),
 		grpc.StatsHandler(loghandler.PerRPCLogHandler{
 			Underlying:     &grpcstats.PayloadBytes{},
 			FieldProducers: []loghandler.FieldsProducer{grpcstats.FieldsProducer},
