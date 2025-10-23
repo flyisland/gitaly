@@ -42,3 +42,12 @@ To fix this, Gitaly has to bootstrap a Git execution environment on startup by:
 To tell Git where to find those symlinks, we run all Git commands with the
 `GIT_EXEC_PATH` environment variable that points into that temporary execution
 environment.
+
+## Switching between Git versions
+
+Gitaly bundles two versions of Git:
+
+- The latest version from the `master` branch (using a commit that's at least a week old), which is used when the `gitaly_git_master` feature flag is enabled.
+- The preceding stable version for rollback purposes, which is used when the feature flag is disabled.
+
+[`renovate-gitlab-bot`](https://gitlab.com/gitlab-org/frontend/renovate-gitlab-bot) is configured to update the Git versions defined in the Gitaly Makefile and create a merge request every two weeks.
