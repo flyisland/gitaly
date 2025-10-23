@@ -84,7 +84,6 @@ func TestNewCommandCgroupStable(t *testing.T) {
 	logger := testhelper.NewLogger(t)
 
 	t.Run("without transaction", func(t *testing.T) {
-		t.Skip()
 		gitCmdFactory, cleanup, err := gitcmd.NewExecCommandFactory(cfg, logger, gitcmd.WithCgroupsManager(&mgr))
 		require.NoError(t, err)
 		defer cleanup()
