@@ -53,6 +53,8 @@ The directory must have the minimum following files:
 1. Install Ansible: `python3 -m pip install -r requirements.txt`
 1. Create a `config.yml` to customize the machine types and repositories used
    for benchmarking. If you don't have access to the default GCP project, you can point the configuration to your own.
+1. Initialize terraform to install required dependencies `cd terraform && terraform init`.
+1. Intitalize `gcloud` and authenticate and set the project `gcloud auth login && gcloud auth application-default login && gcloud config set project <project_here>`.
 
 ### 2. Create instance
 
