@@ -425,6 +425,8 @@ message UserMergeBranchRequest {
   // When set to `true`, it merges only the squash commit without creating
   // the merge commit.
   bool squash = 9;
+  // sign signifies whether the commit is to be signed
+  bool sign = 10;
 }
 
 // UserMergeBranchResponse is a response for the UserMergeBranch RPC.
