@@ -582,6 +582,7 @@ start-rails-specs:
   rules:
     - changes:
         - .tool-versions
+    - if: $CI_MERGE_REQUEST_LABELS =~ /run-rails-specs/ && $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       when: manual
       allow_failure: true
