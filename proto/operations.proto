@@ -506,6 +506,8 @@ message UserMergeToRefRequest {
   // zero object ID in case the branch should be created. Otherwise, this RPC
   // will return an error.
   string expected_old_oid = 10;
+  // sign signifies whether the commit is to be signed
+  bool sign = 11;
 }
 
 // UserMergeToRefResponse is a response for the UserMergeToRef RPC.
