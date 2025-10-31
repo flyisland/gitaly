@@ -1012,6 +1012,8 @@ message UserSquashRequest {
   // timestamp is the optional timestamp to use for the squashed commit as
   // committer date. If it's not set, the current time will be used.
   google.protobuf.Timestamp timestamp = 9;
+  // sign signifies whether the commit is to be signed
+  bool sign = 10;
 
   reserved 3, 4;
   reserved "squash_id";
