@@ -1,32 +1,26 @@
 package raft
 
 import (
-	"context"
-	"path/filepath"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue/databasemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc/codes"
 )
 
 const (
-	testClusterID     = "test-cluster"
-	testStorageName   = "default"
-	testAuthorityName = "test-authority"
-	testMemberID      = uint64(3)
-	testRelativePath  = "relative/path/to/repo.git"
+	testStorageName      = "test-storage-1"
+	testStorageNameTwo   = "test-storage-2"
+	testStorageNameThree = "test-storage-3"
+	testMemberID         = uint64(3)
+	testRelativePath     = "relative/path/to/repo.git"
 )
 
 func TestJoinCluster(t *testing.T) {
@@ -246,43 +240,23 @@ func TestJoinCluster(t *testing.T) {
 	}
 }
 
-func TestJoinCluster_MemberIDAlreadyExists(t *testing.T) {
+func TestJoinCluster_WithSameParameters(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
-	cfg := testcfg.Build(t, testcfg.WithStorages(testStorageName))
-	cfg.Raft.ClusterID = testClusterID
-	logger := testhelper.SharedLogger(t)
-
-	dbPath := testhelper.TempDir(t)
-	dbMgr, err := databasemgr.NewDBManager(
-		ctx,
-		cfg.Storages,
-		func(logger log.Logger, path string) (keyvalue.Store, error) {
-			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
-		},
-		helper.NewNullTickerFactory(),
-		logger,
-	)
+	node, cfg, err := createRaftNodeWithStorage(t, testStorageName)
 	require.NoError(t, err)
-	t.Cleanup(dbMgr.Close)
+	conn := gittest.DialService(t, ctx, cfg)
+	client := gitalypb.NewRaftServiceClient(conn)
 
-	mockNode, err := raftmgr.NewNode(cfg, logger, dbMgr, nil)
-	require.NoError(t, err)
+	partitionKey := raftmgr.NewPartitionKey(testStorageName, 1)
 
-	_, client := runRaftServer(t, ctx, cfg, mockNode)
-
-	partitionKey := raftmgr.NewPartitionKey(testAuthorityName, 1)
-	storage, err := mockNode.GetStorage(testStorageName)
-	require.NoError(t, err)
-
-	raftStorage := storage.(*raftmgr.RaftEnabledStorage)
-
-	routingTable := raftStorage.GetRoutingTable()
-	require.NotNil(t, routingTable)
-
-	err = routingTable.UpsertEntry(raftmgr.RoutingTableEntry{
+	req := &gitalypb.JoinClusterRequest{
+		PartitionKey: partitionKey,
+		MemberId:     testMemberID,
+		StorageName:  testStorageName,
 		RelativePath: testRelativePath,
+		LeaderId:     1,
 		Replicas: []*gitalypb.ReplicaID{
 			{
 				PartitionKey: partitionKey,
@@ -290,51 +264,191 @@ func TestJoinCluster_MemberIDAlreadyExists(t *testing.T) {
 				StorageName:  testStorageName,
 				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 			},
-		},
-		Term:  1,
-		Index: 1,
-	})
-	require.NoError(t, err)
-
-	req := &gitalypb.JoinClusterRequest{
-		PartitionKey: partitionKey,
-		MemberId:     1,
-		Term:         2,
-		Index:        2,
-		StorageName:  testStorageName,
-		RelativePath: testRelativePath,
-		LeaderId:     testMemberID,
-		Replicas: []*gitalypb.ReplicaID{
 			{
 				PartitionKey: partitionKey,
-				MemberId:     1,
+				MemberId:     testMemberID,
 				StorageName:  testStorageName,
 				Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
 			},
 		},
 	}
 
+	// First call should succeed
 	resp, err := client.JoinCluster(ctx, req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	respTwo, err := client.JoinCluster(ctx, req)
 	require.Error(t, err)
-	require.Nil(t, resp)
+	require.Contains(t, err.Error(), "member ID 3 already exists in the cluster")
+	require.Nil(t, respTwo)
 
-	testhelper.RequireGrpcCode(t, err, codes.InvalidArgument)
-	require.Contains(t, err.Error(), "member ID 1 already exists in the cluster")
-}
-
-func setupDB(t *testing.T, ctx context.Context, logger log.Logger, cfg config.Cfg) *databasemgr.DBManager {
-	dbPath := testhelper.TempDir(t)
-	dbMgr, err := databasemgr.NewDBManager(
-		ctx,
-		cfg.Storages,
-		func(logger log.Logger, path string) (keyvalue.Store, error) {
-			return keyvalue.NewBadgerStore(logger, filepath.Join(dbPath, path))
-		},
-		helper.NewTimerTickerFactory(time.Minute),
-		logger,
-	)
-
+	storage, err := node.GetStorage(testStorageName)
 	require.NoError(t, err)
 
-	return dbMgr
+	raftStorage := storage.(*raftmgr.RaftEnabledStorage)
+	routingTable := raftStorage.GetRoutingTable()
+	require.NotNil(t, routingTable)
+
+	entry, err := routingTable.GetEntry(partitionKey)
+	require.NoError(t, err)
+	require.Equal(t, testRelativePath, entry.RelativePath)
+	require.Len(t, entry.Replicas, 2)
+
+	// Verify routing table has correct entry
+	require.True(t, slices.ContainsFunc(entry.Replicas, func(replica *gitalypb.ReplicaID) bool {
+		return replica.GetMemberId() == testMemberID &&
+			replica.GetStorageName() == testStorageName &&
+			replica.GetPartitionKey().GetValue() == partitionKey.GetValue()
+	}))
+}
+
+func TestJoinCluster_MultipleRequests_SamePartitionKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	node, cfg, err := createRaftNodeWithStorage(t, testStorageName, testStorageNameTwo, testStorageNameThree)
+	require.NoError(t, err)
+	conn := gittest.DialService(t, ctx, cfg)
+	client := gitalypb.NewRaftServiceClient(conn)
+
+	partitionKey := raftmgr.NewPartitionKey(testStorageName, 1)
+
+	numOfRequests := 5
+	requests := make([]*gitalypb.JoinClusterRequest, numOfRequests)
+	for i := range numOfRequests {
+		requests[i] = &gitalypb.JoinClusterRequest{
+			PartitionKey: partitionKey,
+			MemberId:     uint64(i + 1),
+			StorageName:  testStorageName,
+			RelativePath: testRelativePath,
+			LeaderId:     1,
+			Replicas: []*gitalypb.ReplicaID{
+				{
+					PartitionKey: partitionKey,
+					MemberId:     9,
+					StorageName:  testStorageNameTwo,
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				},
+				{
+					PartitionKey: partitionKey,
+					MemberId:     8,
+					StorageName:  testStorageNameThree,
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				},
+			},
+		}
+	}
+	successCount := 0
+
+	for i := range numOfRequests {
+		_, err := client.JoinCluster(ctx, requests[i])
+		if err == nil {
+			successCount++
+		} else {
+			require.ErrorContains(t, err, "stale entry")
+		}
+	}
+
+	require.Equal(t, 1, successCount, "only one join should succeed")
+
+	// Verify routing table has entry for the successful join
+	storage, err := node.GetStorage(testStorageName)
+	require.NoError(t, err)
+
+	raftStorage := storage.(*raftmgr.RaftEnabledStorage)
+	routingTable := raftStorage.GetRoutingTable()
+	require.NotNil(t, routingTable)
+
+	replicaRegistry := raftStorage.GetReplicaRegistry()
+	require.NotNil(t, replicaRegistry)
+
+	require.Eventually(t, func() bool {
+		entry, err := replicaRegistry.GetReplica(partitionKey)
+		if err != nil {
+			return false
+		}
+		return entry != nil
+	}, 5*time.Second, 5*time.Millisecond, "replica should be created")
+
+	require.Eventually(t, func() bool {
+		entry, err := routingTable.GetEntry(partitionKey)
+		if err != nil {
+			return false
+		}
+		return entry != nil && len(entry.Replicas) == 3
+	}, 5*time.Second, 5*time.Millisecond, "routing table should have entry for the successful join")
+}
+
+func TestJoinCluster_MultipleRequests_DifferentPartitions(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	node, cfg, err := createRaftNodeWithStorage(t, testStorageName, testStorageNameTwo, testStorageNameThree)
+	require.NoError(t, err)
+	conn := gittest.DialService(t, ctx, cfg)
+	client := gitalypb.NewRaftServiceClient(conn)
+
+	requests := make([]*gitalypb.JoinClusterRequest, 3)
+	for i := range 3 {
+		storageName := fmt.Sprintf("test-storage-%d", i+1)
+		partitionKey := raftmgr.NewPartitionKey(storageName, storage.PartitionID(i+1))
+		requests[i] = &gitalypb.JoinClusterRequest{
+			PartitionKey: partitionKey,
+			MemberId:     uint64(i + 3),
+			StorageName:  storageName,
+			RelativePath: testRelativePath,
+			LeaderId:     uint64(i + 1),
+			Replicas: []*gitalypb.ReplicaID{
+				{
+					PartitionKey: partitionKey,
+					MemberId:     uint64(i + 1),
+					StorageName:  fmt.Sprintf("test-storage-%d", i+2),
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				},
+				{
+					PartitionKey: partitionKey,
+					MemberId:     uint64(i + 2),
+					StorageName:  fmt.Sprintf("test-storage-%d", i+3),
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				},
+			},
+		}
+	}
+
+	for _, req := range requests {
+		resp, err := client.JoinCluster(ctx, req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+	}
+
+	for i, storageName := range []string{testStorageName, testStorageNameTwo, testStorageNameThree} {
+		partitionKey := raftmgr.NewPartitionKey(storageName, storage.PartitionID(i+1))
+		storage, err := node.GetStorage(storageName)
+		require.NoError(t, err)
+
+		raftStorage := storage.(*raftmgr.RaftEnabledStorage)
+
+		// check if replica exist in the registry
+		require.Eventually(t, func() bool {
+			replicaRegistry := raftStorage.GetReplicaRegistry()
+			require.NotNil(t, replicaRegistry)
+			replica, err := replicaRegistry.GetReplica(partitionKey)
+			return err == nil && replica != nil
+		}, 5*time.Second, 5*time.Millisecond, "replica should be created")
+
+		routingTable := raftStorage.GetRoutingTable()
+		require.NotNil(t, routingTable)
+
+		entry, err := routingTable.GetEntry(partitionKey)
+		require.NoError(t, err)
+		require.Equal(t, testRelativePath, entry.RelativePath)
+		require.Len(t, entry.Replicas, 3)
+
+		// Verify that the newly joined replica is in the routing table
+		found := slices.ContainsFunc(entry.Replicas, func(replica *gitalypb.ReplicaID) bool {
+			return replica.GetStorageName() == storageName && replica.GetMemberId() == uint64(i+3)
+		})
+		require.True(t, found, "replica with storage %s and member ID %d should be in routing table", storageName, uint64(i+3))
+	}
 }

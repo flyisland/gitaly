@@ -2,6 +2,7 @@ package raft
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,12 +13,16 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/keyvalue/databasemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/node"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition"
 	partitionlog "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testserver"
@@ -113,12 +118,12 @@ func createRaftReplica(t *testing.T, ctx context.Context, partitionID storage.Pa
 }
 
 // createRaftNodeWithStorage creates a Raft enabled Gitaly node with a base storage.
-func createRaftNodeWithStorage(t *testing.T, storageName string) (*raftmgr.Node, config.Cfg, error) {
+func createRaftNodeWithStorage(t *testing.T, storageName string, storageNames ...string) (*raftmgr.Node, config.Cfg, error) {
 	t.Helper()
 	ctx := testhelper.Context(t)
 	logger := testhelper.SharedLogger(t)
 
-	cfg := testcfg.Build(t, testcfg.WithStorages(storageName))
+	cfg := testcfg.Build(t, testcfg.WithStorages(storageName, storageNames...))
 	cfg.Raft = raftConfigsForTest(t)
 
 	dbMgr := setupDB(t, ctx, logger, cfg)
@@ -163,4 +168,19 @@ func createRaftNodeWithStorage(t *testing.T, storageName string) (*raftmgr.Node,
 	}, testserver.WithDisablePraefect())
 
 	return raftNode, cfg, nil
+}
+
+func setupDB(t *testing.T, ctx context.Context, logger log.Logger, cfg config.Cfg) *databasemgr.DBManager {
+	t.Helper()
+	dbMgr, err := databasemgr.NewDBManager(
+		ctx,
+		cfg.Storages,
+		func(logger log.Logger, path string) (keyvalue.Store, error) {
+			return keyvalue.NewBadgerStore(logger, filepath.Join(testhelper.TempDir(t), path))
+		},
+		helper.NewNullTickerFactory(),
+		logger,
+	)
+	require.NoError(t, err)
+	return dbMgr
 }
