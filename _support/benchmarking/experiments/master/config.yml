@@ -73,6 +73,7 @@ repositories:
     reference_backend: files
     remote: "https://gitlab.com/gitlab-org/git.git"
     revision: "2462961280690837670d997bde64bd4ebf8ae66d"
+    additional_refs: 200000
     # Test data to be used as RPC inputs. The K6 script will randomly choose out of these available
     # inputs.
     testdata:
@@ -97,6 +98,7 @@ repositories:
     reference_backend: reftable
     remote: "https://gitlab.com/gitlab-org/git.git"
     revision: "2462961280690837670d997bde64bd4ebf8ae66d"
+    additional_refs: 200000
     testdata:
       commits:
         - "fea9d18c534a445ef6e488d8ee711fa92fa0e6bd"
@@ -119,6 +121,7 @@ repositories:
     reference_backend: files
     remote: "https://gitlab.com/gitlab-org/gitlab.git"
     revision: "8f3978675aa4df643cff5a01a8e1896ae754685a"
+    additional_refs: 1000000
     testdata:
       commits:
         - "875ffb690e25eb8c98797b5641c6c16c71454b73"
@@ -141,6 +144,7 @@ repositories:
     reference_backend: files
     remote: "https://gitlab.com/gitlab-org/gitaly.git"
     revision: "4d78df8cb5c6b3abfef5530830dba6c67d9d4c53"
+    additional_refs: 500000
     testdata:
       commits:
         - "765d81272feb53bcc0c50199183b4514c5ef7a73"
