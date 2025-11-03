@@ -2,6 +2,7 @@ package diff
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -543,6 +544,54 @@ func TestCommitDiff(t *testing.T) {
 							ToPath:   []byte("huge"),
 							Binary:   true,
 							Patch:    []byte("Binary files a/huge and b/huge differ\n"),
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "with submodule",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				blob1 := gittest.WriteBlob(t, cfg, repoPath, []byte("foo\n"))
+				commit1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: ".gitmodules", Mode: "100644", OID: blob1},
+				))
+
+				blob2 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar\n"))
+				submodule := gittest.WriteCommit(t, cfg, repoPath)
+				commit2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: ".gitmodules", Mode: "100644", OID: blob2},
+					gittest.TreeEntry{Path: "submodule", Mode: "160000", OID: submodule},
+				))
+
+				return setupData{
+					request: &gitalypb.CommitDiffRequest{
+						Repository:        repoProto,
+						LeftCommitId:      commit1.String(),
+						RightCommitId:     commit2.String(),
+						WhitespaceChanges: gitalypb.CommitDiffRequest_WHITESPACE_CHANGES_IGNORE_ALL,
+						DiffMode:          gitalypb.CommitDiffRequest_DEFAULT,
+					},
+					expectedDiff: []*diff.Diff{
+						{
+							OldMode:  0o100644,
+							NewMode:  0o100644,
+							FromID:   blob1.String(),
+							ToID:     blob2.String(),
+							FromPath: []byte(".gitmodules"),
+							ToPath:   []byte(".gitmodules"),
+							Patch:    []byte("@@ -1 +1 @@\n-foo\n+bar\n"),
+						},
+						{
+							OldMode:  0o0,
+							NewMode:  0o160000,
+							FromID:   gittest.DefaultObjectHash.ZeroOID.String(),
+							ToID:     submodule.String(),
+							FromPath: []byte("submodule"),
+							ToPath:   []byte("submodule"),
+							Patch:    fmt.Appendf(nil, "@@ -0,0 +1 @@\n+Subproject commit %s\n", submodule.String()),
 						},
 					},
 				}
