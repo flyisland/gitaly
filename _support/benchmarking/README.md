@@ -111,7 +111,26 @@ EXPERIMENT=master ./destroy-benchmark-instance
 All nodes will be destroyed. As GCP will frequently reuse public IP addresses,
 the addresses of the now destroyed instances are automatically removed from
 your `~/.ssh/known_hosts` file to prevent connection failures on future runs.
-    
+
+## Automatic cleanup of resources
+
+Destroying resources using the `destroy-benchmark-instance` is a manual step. People can sometimes
+forget to run the step, which can lead to higher cost. The `cleanup` directory contains the code
+to create a scheduled function in GCP to delete leftover resources.
+
+Creating the scheduled function is a one time thing and must be run manually.
+
+It can be done by running:
+
+```shell
+cd ./cleanup/infra
+terraform init
+terraform apply
+```
+
+The `tfstate` is stored in a bucket on the GCP benchmarking project. This allows multiple
+team member to update the function using the same centralized state.
+
 ## FAQs
 ### How do we change the k6 test duration time? 
 1. Directly inside the `k6-benchmark.js` there are timings to be changed for read/write RPCs and that control the ramping times of these RPC. By default we are using the ramping option. 

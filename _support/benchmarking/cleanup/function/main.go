@@ -20,7 +20,7 @@ var (
 
 	// cutOffDate is the date before which resources are deleted
 	// Currently this is set to a week ago (ie: minus 7 days)
-	cutOffDate = time.Now().AddDate(0, 0, -7)
+	cutOffDate = time.Now().AddDate(0, 0, -14)
 
 	// labelFilter is the filter used to find resources to delete. This label
 	// is set by the Terraform project in /_support/benchmark/terraform
