@@ -66,7 +66,11 @@ type Manager struct {
 	currentLSN storage.LSN
 	// metrics contains the metrics the manager gathers.
 	metrics ManagerMetrics
-
+	// activeSnapshotsPerKey tracks the number of inflight snapshots
+	// for a key (a set of one or more relative paths). This incorporates
+	// both shared and exclusive snapshots, and is mainly used as a
+	// performance debugging metric.
+	activeSnapshotsPerKey map[string]int
 	// mutex covers access to sharedSnapshots.
 	mutex sync.Mutex
 	// activeSharedSnapshots tracks all of the open shared snapshots
@@ -108,6 +112,7 @@ func NewManager(logger log.Logger, storageDir, workingDir string, metrics Manage
 		logger:                     logger.WithField("component", "snapshot_manager"),
 		storageDir:                 storageDir,
 		workingDir:                 workingDir,
+		activeSnapshotsPerKey:      make(map[string]int),
 		activeSharedSnapshots:      make(map[storage.LSN]map[string]*sharedSnapshot),
 		maxInactiveSharedSnapshots: maxInactiveSharedSnapshots,
 		inactiveSharedSnapshots:    cache,
@@ -147,6 +152,23 @@ func (mgr *Manager) closeSnapshots(snapshots []*sharedSnapshot) {
 	}
 }
 
+func (mgr *Manager) decrementActiveSnapshots(relativePaths []string) {
+	if len(relativePaths) == 0 {
+		return
+	}
+
+	// The first relative path is the target repository, as documented
+	// in storage.BeginOptions
+	key := relativePaths[0]
+
+	mgr.mutex.Lock()
+	mgr.activeSnapshotsPerKey[key]--
+	if mgr.activeSnapshotsPerKey[key] == 0 {
+		delete(mgr.activeSnapshotsPerKey, key)
+	}
+	mgr.mutex.Unlock()
+}
+
 // GetSnapshot returns a file system snapshot. If exclusive is set, the snapshot is a new one and not shared with
 // any other caller. If exclusive is not set, the snapshot is a shared one and may be shared with other callers.
 //
@@ -154,6 +176,7 @@ func (mgr *Manager) closeSnapshots(snapshots []*sharedSnapshot) {
 // snapshotted file system is not modified while the snapshot is taken.
 func (mgr *Manager) GetSnapshot(ctx context.Context, relativePaths []string, exclusive bool) (_ FileSystem, returnedErr error) {
 	defer trace.StartRegion(ctx, "GetSnapshot").End()
+
 	if exclusive {
 		mgr.metrics.createdExclusiveSnapshotTotal.Inc()
 		snapshot, err := mgr.newSnapshot(ctx, relativePaths, false)
@@ -161,13 +184,14 @@ func (mgr *Manager) GetSnapshot(ctx context.Context, relativePaths []string, exc
 			return nil, fmt.Errorf("new exclusive snapshot: %w", err)
 		}
 
-		mgr.logSnapshotCreation(ctx, exclusive, snapshot.stats)
+		mgr.logSnapshotCreation(ctx, exclusive, snapshot.stats, relativePaths)
 
 		return closeWrapper{
 			snapshot: snapshot,
 			close: func() error {
 				defer trace.StartRegion(ctx, "close exclusive snapshot").End()
 
+				mgr.decrementActiveSnapshots(relativePaths)
 				mgr.metrics.destroyedExclusiveSnapshotTotal.Inc()
 				// Exclusive snapshots are not shared, so it can be removed as soon
 				// as the user finishes with it.
@@ -267,6 +291,7 @@ func (mgr *Manager) GetSnapshot(ctx context.Context, relativePaths []string, exc
 		mgr.mutex.Unlock()
 
 		if snapshotToRemove != nil {
+			mgr.decrementActiveSnapshots(relativePaths)
 			mgr.metrics.destroyedSharedSnapshotTotal.Inc()
 			if err := snapshotToRemove.snapshot.Close(); err != nil {
 				return fmt.Errorf("close shared snapshot: %w", err)
@@ -293,7 +318,7 @@ func (mgr *Manager) GetSnapshot(ctx context.Context, relativePaths []string, exc
 		close(wrapper.ready)
 
 		if wrapper.snapshotErr == nil {
-			mgr.logSnapshotCreation(ctx, exclusive, wrapper.snapshot.stats)
+			mgr.logSnapshotCreation(ctx, exclusive, wrapper.snapshot.stats, relativePaths)
 		}
 	} else {
 		mgr.metrics.reusedSharedSnapshotTotal.Inc()
@@ -321,17 +346,30 @@ func (mgr *Manager) Close() error {
 	return mgr.deletionWorkers.Wait()
 }
 
-func (mgr *Manager) logSnapshotCreation(ctx context.Context, exclusive bool, stats snapshotStatistics) {
+func (mgr *Manager) logSnapshotCreation(ctx context.Context, exclusive bool, stats snapshotStatistics, relativePaths []string) {
 	mgr.metrics.snapshotCreationDuration.Observe(stats.creationDuration.Seconds())
 	mgr.metrics.snapshotDirectoryEntries.Observe(float64(stats.directoryCount + stats.fileCount))
-	mgr.logger.WithFields(log.Fields{
+
+	fields := log.Fields{
 		"snapshot": map[string]any{
 			"exclusive":       exclusive,
 			"duration_ms":     float64(stats.creationDuration) / float64(time.Millisecond),
 			"directory_count": stats.directoryCount,
 			"file_count":      stats.fileCount,
 		},
-	}).InfoContext(ctx, "created transaction snapshot")
+	}
+
+	if len(relativePaths) > 0 {
+		// The first relative path is the target repository, as documented
+		// in storage.BeginOptions
+		key := relativePaths[0]
+		mgr.mutex.Lock()
+		mgr.activeSnapshotsPerKey[key]++
+		fields["active_snapshots"] = mgr.activeSnapshotsPerKey[key]
+		mgr.mutex.Unlock()
+	}
+
+	mgr.logger.WithFields(fields).InfoContext(ctx, "created transaction snapshot")
 }
 
 func (mgr *Manager) newSnapshot(ctx context.Context, relativePaths []string, readOnly bool) (*snapshot, error) {
