@@ -748,3 +748,133 @@ func TestPersistentRoutingTable_ListEntries(t *testing.T) {
 		require.Len(t, allEntries, 3) // All entries returned
 	})
 }
+
+func TestDeleteEntry(t *testing.T) {
+	t.Parallel()
+
+	createMetadata := func(address string) *gitalypb.ReplicaID_Metadata {
+		return &gitalypb.ReplicaID_Metadata{
+			Address: address,
+		}
+	}
+
+	t.Run("delete existing entry", func(t *testing.T) {
+		t.Parallel()
+
+		dir := testhelper.TempDir(t)
+		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, kvStore.Close())
+		}()
+
+		rt := NewKVRoutingTable(kvStore)
+
+		partitionKey := NewPartitionKey("test-authority", 1)
+		entry := RoutingTableEntry{
+			Replicas: []*gitalypb.ReplicaID{
+				{
+					PartitionKey: partitionKey,
+					MemberId:     1,
+					StorageName:  "test-storage",
+					Metadata:     createMetadata("localhost:1234"),
+				},
+			},
+			Term:  1,
+			Index: 1,
+		}
+
+		err = rt.UpsertEntry(entry)
+		require.NoError(t, err)
+
+		// Verify entry exists
+		retrievedEntry, err := rt.GetEntry(partitionKey)
+		require.NoError(t, err)
+		require.Equal(t, uint64(1), retrievedEntry.Term)
+		require.Equal(t, uint64(1), retrievedEntry.Index)
+
+		err = rt.DeleteEntry(partitionKey)
+		require.NoError(t, err)
+
+		// Verify entry no longer exists
+		_, err = rt.GetEntry(partitionKey)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Key not found")
+	})
+
+	t.Run("delete non-existent entry", func(t *testing.T) {
+		t.Parallel()
+
+		dir := testhelper.TempDir(t)
+		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, kvStore.Close())
+		}()
+
+		rt := NewKVRoutingTable(kvStore)
+
+		partitionKey := NewPartitionKey("test-authority", 999)
+
+		// Deleting non-existent entry shouldn't error
+		err = rt.DeleteEntry(partitionKey)
+		require.NoError(t, err)
+	})
+
+	t.Run("delete one entry among multiple", func(t *testing.T) {
+		t.Parallel()
+
+		dir := testhelper.TempDir(t)
+		kvStore, err := keyvalue.NewBadgerStore(testhelper.NewLogger(t), dir)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, kvStore.Close())
+		}()
+
+		rt := NewKVRoutingTable(kvStore)
+
+		// Create multiple entries
+		addrs := []string{"localhost:1234", "localhost:5678", "localhost:9999"}
+		for i, addr := range addrs {
+			partitionKey := NewPartitionKey("test-authority", storage.PartitionID(
+				i+1))
+			entry := RoutingTableEntry{
+				Replicas: []*gitalypb.ReplicaID{
+					{
+						PartitionKey: partitionKey,
+						MemberId:     uint64(i + 1),
+						StorageName:  "test-storage",
+						Metadata:     createMetadata(addr),
+					},
+				},
+				Term:  1,
+				Index: 1,
+			}
+			require.NoError(t, rt.UpsertEntry(entry))
+		}
+
+		entries, err := rt.ListEntries()
+		require.NoError(t, err)
+		require.Len(t, entries, 3)
+
+		// Delete the middle entry
+		middleEntry := NewPartitionKey("test-authority", storage.PartitionID(2))
+		err = rt.DeleteEntry(middleEntry)
+		require.NoError(t, err)
+
+		entries, err = rt.ListEntries()
+		require.NoError(t, err)
+		require.Len(t, entries, 2)
+
+		// Verify middle is deleted but others remain
+		_, err = rt.GetEntry(middleEntry)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Key not found")
+
+		_, err = rt.GetEntry(NewPartitionKey("test-authority", storage.PartitionID(1)))
+		require.NoError(t, err)
+
+		_, err = rt.GetEntry(NewPartitionKey("test-authority", storage.PartitionID(3)))
+		require.NoError(t, err)
+	})
+}

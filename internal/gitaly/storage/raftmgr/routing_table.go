@@ -32,6 +32,7 @@ type RoutingTable interface {
 	Translate(partitionKey *gitalypb.RaftPartitionKey, memberID uint64) (*gitalypb.ReplicaID, error)
 	GetEntry(partitionKey *gitalypb.RaftPartitionKey) (*RoutingTableEntry, error)
 	UpsertEntry(entry RoutingTableEntry) error
+	DeleteEntry(partitionKey *gitalypb.RaftPartitionKey) error
 	ApplyReplicaConfChange(partitionKey *gitalypb.RaftPartitionKey, changes *ReplicaConfChanges) error
 	ListEntries() (map[string]*RoutingTableEntry, error)
 }
@@ -96,6 +97,22 @@ func (r *kvRoutingTable) UpsertEntry(entry RoutingTableEntry) error {
 
 		if err := txn.Set(key, data); err != nil {
 			return fmt.Errorf("set entry: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// DeleteEntry deletes a routing table entry based on the partition key
+func (r *kvRoutingTable) DeleteEntry(partitionKey *gitalypb.RaftPartitionKey) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	return r.kvStore.Update(func(txn keyvalue.ReadWriter) error {
+		key := routingKey(partitionKey)
+
+		if err := txn.Delete(key); err != nil {
+			return fmt.Errorf("delete entry: %w", err)
 		}
 
 		return nil
