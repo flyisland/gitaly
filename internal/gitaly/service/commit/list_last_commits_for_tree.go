@@ -9,9 +9,10 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/git/log"
+	gitlog "gitlab.com/gitlab-org/gitaly/v18/internal/git/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
@@ -67,15 +68,35 @@ func (s *server) listLastCommitsForTree(in *gitalypb.ListLastCommitsForTreeReque
 		limit = len(entries)
 	}
 
-	for _, entry := range entries[offset:limit] {
-		commit, err := log.LastCommitForPath(ctx, objectReader, repo, git.Revision(in.GetRevision()), entry.Path, in.GetGlobalOptions())
-		if err != nil {
-			return err
-		}
+	entries = entries[offset:limit]
+	paths := make([]string, 0, len(entries))
+	for _, e := range entries {
+		paths = append(paths, e.Path)
+	}
 
+	// GitLab rails expects the paths in order. This is the case since
+	// gitlab-org/gitlab@66052c17a9cba2bf72bc342d7823565b501a479
+	// Here a limit of `limit + 1` is taken, but later they call
+	// #first(limit) on the results.
+	// log.EachPathLastCommit uses git-last-modified(1), which returns paths
+	// in reverse-chronological order. This means the oldest entry gets
+	// dropped, leaving the tree behind with missing data.
+	commitsForPaths := make(map[string]*gitalypb.GitCommit, len(paths))
+	err = gitlog.EachPathLastCommit(ctx, objectReader, repo, git.Revision(in.GetRevision()), paths, in.GetGlobalOptions(), func(path string, commit *catfile.Commit) error {
+		commitsForPaths[path] = commit.GitCommit
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		commit, ok := commitsForPaths[path]
+		if !ok {
+			return fmt.Errorf("commit not resolved for %q", path)
+		}
 		commitForTree := &gitalypb.ListLastCommitsForTreeResponse_CommitForTree{
-			PathBytes: []byte(entry.Path),
-			Commit:    commit.GitCommit,
+			PathBytes: []byte(path),
+			Commit:    commit,
 		}
 
 		batch = append(batch, commitForTree)
