@@ -337,6 +337,9 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Enable trace2 logs for receive pack
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.ReceivePackTrace2Hook, true)
 
+	// Enable unauthenticated limiter
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LimitUnauthenticated, true)
+
 	for _, opt := range opts {
 		ctx = opt(ctx)
 	}
