@@ -179,7 +179,8 @@ func NewDryRunStreamInterceptor(logger log.Logger, registry *protoregistry.Regis
 func collectDryRunStatsForRPC(ctx context.Context, logger log.Logger, registry *protoregistry.Registry, locator storage.Locator, fullMethod string, req proto.Message, cache *DryRunLogCache) (returnErr error) {
 	methodInfo, err := registry.LookupMethod(fullMethod)
 	if err != nil {
-		return fmt.Errorf("lookup method: %w", err)
+		// Health check endpoints are not part of gitaly proto, we should simply ignore them.
+		return nil
 	}
 
 	// Only collect stats for repository-scoped RPCs

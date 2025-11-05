@@ -1,6 +1,7 @@
 package storagemgr_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -38,9 +39,10 @@ func TestDryRunMiddleware(t *testing.T) {
 			desc      string
 			rpcMethod string
 			// Creating separate repository for each test case to prevent cache hit.
-			repo        func() *gitalypb.Repository
-			shouldRun   bool
-			expectedErr error
+			repo           func() *gitalypb.Repository
+			shouldRun      bool
+			expectedErr    error
+			expectedErrMsg string
 		}{
 			{
 				desc:      "repository scoped rpc",
@@ -56,6 +58,18 @@ func TestDryRunMiddleware(t *testing.T) {
 			},
 			{
 				desc:      "non-repository-scoped RPC",
+				rpcMethod: gitalypb.InternalGitaly_WalkRepos_FullMethodName,
+				repo: func() *gitalypb.Repository {
+					repoProto, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+						SkipCreationViaService: true,
+					})
+
+					return repoProto
+				},
+				shouldRun: false,
+			},
+			{
+				desc:      "lookup error should be ignored",
 				rpcMethod: grpc_health_v1.Health_Check_FullMethodName,
 				repo: func() *gitalypb.Repository {
 					repoProto, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
@@ -75,8 +89,9 @@ func TestDryRunMiddleware(t *testing.T) {
 						RelativePath: "test-repo",
 					}
 				},
-				shouldRun:   false,
-				expectedErr: errors.New("handler error"),
+				shouldRun:      false,
+				expectedErr:    errors.New("handler error"),
+				expectedErrMsg: "resolve storage path:",
 			},
 		}
 		for _, tc := range testCases {
@@ -97,9 +112,11 @@ func TestDryRunMiddleware(t *testing.T) {
 
 				if tc.expectedErr != nil {
 					require.Equal(t, tc.expectedErr, err, "handler error should be preserved")
-					return
+					require.True(t, verifyErrMsg(t, hook.AllEntries(), tc.expectedErrMsg), "should have logged warning about failed dry-run statistics collection")
+				} else {
+					require.NoError(t, err)
 				}
-				require.NoError(t, err)
+
 				require.True(t, handlerCalled, "handler should be called")
 				require.Equal(t, tc.shouldRun, verifyDryRunLog(t, hook.AllEntries()))
 			})
@@ -131,7 +148,7 @@ func TestDryRunMiddleware(t *testing.T) {
 			},
 			{
 				desc:      "non-repository-scoped RPC",
-				rpcMethod: grpc_health_v1.Health_Check_FullMethodName,
+				rpcMethod: gitalypb.InternalGitaly_WalkRepos_FullMethodName,
 				repo: func() *gitalypb.Repository {
 					repoProto, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 						SkipCreationViaService: true,
@@ -292,6 +309,17 @@ func verifyDryRunLog(t *testing.T, entries []*logrus.Entry) bool {
 	}
 
 	return foundDryRunLog
+}
+
+func verifyErrMsg(t *testing.T, entries []*logrus.Entry, msg string) bool {
+	for _, entry := range entries {
+		value, err := entry.Bytes()
+		require.NoError(t, err)
+		if bytes.Contains(value, []byte(msg)) {
+			return true
+		}
+	}
+	return false
 }
 
 // mockServerStream implements grpc.ServerStream for testing
