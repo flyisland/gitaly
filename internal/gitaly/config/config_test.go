@@ -1950,18 +1950,18 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 		PackObjectsLimiting{MaxConcurrency: -1, MaxQueueLength: 1}.Validate(),
 	)
 
-	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 0, MinLimit: 0, MaxLimit: 100, MaxQueueLength: 100}.Validate())
-	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 10, MinLimit: 0, MaxLimit: 100, MaxQueueLength: 100}.Validate())
-	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 100, MinLimit: 0, MaxLimit: 100, MaxQueueLength: 100}.Validate())
+	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 1, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}.Validate())
+	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 10, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}.Validate())
+	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 100, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
 			cfgerror.NewValidationError(
-				fmt.Errorf("%w: -1 is not greater than or equal to 0", cfgerror.ErrNotInRange),
+				fmt.Errorf("%w: -1 is not greater than or equal to 1", cfgerror.ErrNotInRange),
 				"initial_limit",
 			),
 		},
-		PackObjectsLimiting{Adaptive: true, InitialLimit: -1, MinLimit: 0, MaxLimit: 100, MaxQueueLength: 100}.Validate(),
+		PackObjectsLimiting{Adaptive: true, InitialLimit: -1, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -1987,11 +1987,21 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 		t,
 		cfgerror.ValidationErrors{
 			cfgerror.NewValidationError(
-				fmt.Errorf("%w: -1 is not greater than or equal to 0", cfgerror.ErrNotInRange),
+				fmt.Errorf("%w: -1 is not greater than 0", cfgerror.ErrNotInRange),
 				"min_limit",
 			),
 		},
 		PackObjectsLimiting{Adaptive: true, InitialLimit: 5, MinLimit: -1, MaxLimit: 99, MaxQueueLength: 100}.Validate(),
+	)
+	require.Equal(
+		t,
+		cfgerror.ValidationErrors{
+			cfgerror.NewValidationError(
+				fmt.Errorf("%w: 0 is not greater than 0", cfgerror.ErrNotInRange),
+				"min_limit",
+			),
+		},
+		PackObjectsLimiting{Adaptive: true, InitialLimit: 5, MinLimit: 0, MaxLimit: 99, MaxQueueLength: 100}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -2056,9 +2066,11 @@ func TestConcurrency(t *testing.T) {
 			max_per_repo = 20
 			`,
 			expectedCfg: []Concurrency{{
-				RPC:          "/gitaly.CommitService/ListCommitsByOid",
-				MaxPerRepo:   20,
-				MaxQueueSize: 500,
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxPerRepo:   20,
+					MaxQueueSize: 500,
+				},
+				RPC: "/gitaly.CommitService/ListCommitsByOid",
 			}},
 		},
 		{
@@ -2070,10 +2082,12 @@ func TestConcurrency(t *testing.T) {
 			max_queue_wait = "10s"
 			`,
 			expectedCfg: []Concurrency{{
-				RPC:          "/gitaly.CommitService/ListCommitsByOid",
-				MaxPerRepo:   20,
-				MaxQueueSize: 100,
-				MaxQueueWait: duration.Duration(10 * time.Second),
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxPerRepo:   20,
+					MaxQueueSize: 100,
+					MaxQueueWait: duration.Duration(10 * time.Second),
+				},
+				RPC: "/gitaly.CommitService/ListCommitsByOid",
 			}},
 		},
 		{
@@ -2085,10 +2099,12 @@ func TestConcurrency(t *testing.T) {
 			max_queue_wait = "1m"
 			`,
 			expectedCfg: []Concurrency{{
-				RPC:          "/gitaly.CommitService/ListCommitsByOid",
-				MaxPerRepo:   20,
-				MaxQueueSize: 100,
-				MaxQueueWait: duration.Duration(1 * time.Minute),
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxPerRepo:   20,
+					MaxQueueSize: 100,
+					MaxQueueWait: duration.Duration(1 * time.Minute),
+				},
+				RPC: "/gitaly.CommitService/ListCommitsByOid",
 			}},
 		},
 		{
@@ -2106,15 +2122,19 @@ func TestConcurrency(t *testing.T) {
 			`,
 			expectedCfg: []Concurrency{
 				{
-					RPC:          "/gitaly.CommitService/ListCommits",
-					MaxPerRepo:   20,
-					MaxQueueSize: 20,
+					ConcurrencyLimits: ConcurrencyLimits{
+						MaxPerRepo:   20,
+						MaxQueueSize: 20,
+					},
+					RPC: "/gitaly.CommitService/ListCommits",
 				},
 				{
-					RPC:          "/gitaly.CommitService/ListCommitsByOid",
-					MaxPerRepo:   30,
-					MaxQueueSize: 500,
-					MaxQueueWait: duration.Duration(10 * time.Second),
+					ConcurrencyLimits: ConcurrencyLimits{
+						MaxPerRepo:   30,
+						MaxQueueSize: 500,
+						MaxQueueWait: duration.Duration(10 * time.Second),
+					},
+					RPC: "/gitaly.CommitService/ListCommitsByOid",
 				},
 			},
 		},
@@ -2130,13 +2150,15 @@ func TestConcurrency(t *testing.T) {
 			initial_limit = 40
 			`,
 			expectedCfg: []Concurrency{{
-				RPC:          "/gitaly.SmartHTTPService/PostUploadPack",
-				MaxQueueSize: 100,
-				MaxQueueWait: duration.Duration(1 * time.Minute),
-				Adaptive:     true,
-				MinLimit:     10,
-				MaxLimit:     60,
-				InitialLimit: 40,
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxQueueSize: 100,
+					MaxQueueWait: duration.Duration(1 * time.Minute),
+					Adaptive:     true,
+					MinLimit:     10,
+					MaxLimit:     60,
+					InitialLimit: 40,
+				},
+				RPC: "/gitaly.SmartHTTPService/PostUploadPack",
 			}},
 		},
 	}
@@ -2160,9 +2182,9 @@ func TestConcurrency(t *testing.T) {
 func TestConcurrency_Validate(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, Concurrency{MaxPerRepo: 0, MaxQueueSize: 1}.Validate())
-	require.NoError(t, Concurrency{MaxPerRepo: 1, MaxQueueSize: 1}.Validate())
-	require.NoError(t, Concurrency{MaxPerRepo: 100, MaxQueueSize: 100}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxPerRepo: 0, MaxQueueSize: 1}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxPerRepo: 1, MaxQueueSize: 1}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxPerRepo: 100, MaxQueueSize: 100}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
@@ -2171,22 +2193,12 @@ func TestConcurrency_Validate(t *testing.T) {
 				"max_per_repo",
 			),
 		},
-		Concurrency{MaxPerRepo: -1, MaxQueueSize: 1}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxPerRepo: -1, MaxQueueSize: 1}}.Validate(),
 	)
 
-	require.NoError(t, Concurrency{Adaptive: true, InitialLimit: 1, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}.Validate())
-	require.NoError(t, Concurrency{Adaptive: true, InitialLimit: 10, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}.Validate())
-	require.NoError(t, Concurrency{Adaptive: true, InitialLimit: 100, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}.Validate())
-	require.Equal(
-		t,
-		cfgerror.ValidationErrors{
-			cfgerror.NewValidationError(
-				fmt.Errorf("%w: 0 is not greater than 0", cfgerror.ErrNotInRange),
-				"min_limit",
-			),
-		},
-		Concurrency{Adaptive: true, InitialLimit: 0, MinLimit: 0, MaxLimit: 100, MaxQueueSize: 100}.Validate(),
-	)
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 1, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 10, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 100, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
@@ -2195,7 +2207,7 @@ func TestConcurrency_Validate(t *testing.T) {
 				"initial_limit",
 			),
 		},
-		Concurrency{Adaptive: true, InitialLimit: -1, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: -1, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -2205,7 +2217,7 @@ func TestConcurrency_Validate(t *testing.T) {
 				"initial_limit",
 			),
 		},
-		Concurrency{Adaptive: true, InitialLimit: 10, MinLimit: 11, MaxLimit: 100, MaxQueueSize: 100}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 10, MinLimit: 11, MaxLimit: 100, MaxQueueSize: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -2215,7 +2227,7 @@ func TestConcurrency_Validate(t *testing.T) {
 				"max_limit",
 			),
 		},
-		Concurrency{Adaptive: true, InitialLimit: 10, MinLimit: 5, MaxLimit: 3, MaxQueueSize: 100}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 10, MinLimit: 5, MaxLimit: 3, MaxQueueSize: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -2225,7 +2237,17 @@ func TestConcurrency_Validate(t *testing.T) {
 				"min_limit",
 			),
 		},
-		Concurrency{Adaptive: true, InitialLimit: 5, MinLimit: -1, MaxLimit: 99, MaxQueueSize: 100}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 5, MinLimit: -1, MaxLimit: 99, MaxQueueSize: 100}}.Validate(),
+	)
+	require.Equal(
+		t,
+		cfgerror.ValidationErrors{
+			cfgerror.NewValidationError(
+				fmt.Errorf("%w: 0 is not greater than 0", cfgerror.ErrNotInRange),
+				"min_limit",
+			),
+		},
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 5, MinLimit: 0, MaxLimit: 99, MaxQueueSize: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -2235,11 +2257,11 @@ func TestConcurrency_Validate(t *testing.T) {
 				"max_limit",
 			),
 		},
-		Concurrency{Adaptive: true, InitialLimit: 10, MinLimit: 5, MaxLimit: -1, MaxQueueSize: 100}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 10, MinLimit: 5, MaxLimit: -1, MaxQueueSize: 100}}.Validate(),
 	)
 
-	require.NoError(t, Concurrency{MaxQueueSize: 1}.Validate())
-	require.NoError(t, Concurrency{MaxQueueSize: 100}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxQueueSize: 1}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxQueueSize: 100}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
@@ -2248,7 +2270,7 @@ func TestConcurrency_Validate(t *testing.T) {
 				"max_queue_size",
 			),
 		},
-		Concurrency{MaxQueueSize: 0}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxQueueSize: 0}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -2258,10 +2280,10 @@ func TestConcurrency_Validate(t *testing.T) {
 				"max_queue_size",
 			),
 		},
-		Concurrency{MaxQueueSize: -1}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxQueueSize: -1}}.Validate(),
 	)
 
-	require.NoError(t, Concurrency{MaxQueueWait: duration.Duration(1), MaxQueueSize: 1}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxQueueWait: duration.Duration(1), MaxQueueSize: 1}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
@@ -2270,7 +2292,7 @@ func TestConcurrency_Validate(t *testing.T) {
 				"max_queue_wait",
 			),
 		},
-		Concurrency{MaxQueueWait: duration.Duration(-time.Minute), MaxQueueSize: 1}.Validate(),
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxQueueWait: duration.Duration(-time.Minute), MaxQueueSize: 1}}.Validate(),
 	)
 }
 

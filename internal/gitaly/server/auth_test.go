@@ -360,8 +360,10 @@ func TestAuthBeforeLimit(t *testing.T) {
 	cfg := testcfg.Build(t, testcfg.WithBase(config.Cfg{
 		Auth: auth.Config{Token: "abc123"},
 		Concurrency: []config.Concurrency{{
-			RPC:        "/gitaly.OperationService/UserCreateTag",
-			MaxPerRepo: 1,
+			RPC: "/gitaly.OperationService/UserCreateTag",
+			ConcurrencyLimits: config.ConcurrencyLimits{
+				MaxPerRepo: 1,
+			},
 		}},
 	},
 	))

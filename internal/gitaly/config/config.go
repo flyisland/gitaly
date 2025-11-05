@@ -525,8 +525,24 @@ type Logging struct {
 // Requests that come in after the maximum number of concurrent requests are in progress will wait
 // in a queue that is bounded by MaxQueueSize.
 type Concurrency struct {
+	ConcurrencyLimits
 	// RPC is the name of the RPC to set concurrency limits for
 	RPC string `json:"rpc" toml:"rpc"`
+	// Unauthenticated sets the limits for unauthenticated requests
+	Unauthenticated ConcurrencyLimits `json:"unauthenticated" toml:"unauthenticated"`
+}
+
+// ConcurrencyLimits sets the limits for adaptive limiting
+type ConcurrencyLimits struct {
+	// MaxPerRepo is the maximum number of concurrent calls for a given repository. This config is used only
+	// if Adaptive is false.
+	MaxPerRepo int `json:"max_per_repo" toml:"max_per_repo"`
+	// MaxQueueSize is the maximum number of requests in the queue waiting to be picked up
+	// after which subsequent requests will return with an error.
+	MaxQueueSize int `json:"max_queue_size" toml:"max_queue_size"`
+	// MaxQueueWait is the maximum time a request can remain in the concurrency queue
+	// waiting to be picked up by Gitaly
+	MaxQueueWait duration.Duration `json:"max_queue_wait" toml:"max_queue_wait"`
 	// Adaptive determines the behavior of the concurrency limit. If set to true, the concurrency limit is dynamic
 	// and starts at InitialLimit, then adjusts within the range [MinLimit, MaxLimit] based on current resource
 	// usage. If set to false, the concurrency limit is static and is set to MaxPerRepo.
@@ -537,19 +553,15 @@ type Concurrency struct {
 	MaxLimit int `json:"max_limit,omitempty" toml:"max_limit,omitempty"`
 	// MinLimit is the mini adaptive concurrency limit.
 	MinLimit int `json:"min_limit,omitempty" toml:"min_limit,omitempty"`
-	// MaxPerRepo is the maximum number of concurrent calls for a given repository. This config is used only
-	// if Adaptive is false.
-	MaxPerRepo int `json:"max_per_repo" toml:"max_per_repo"`
-	// MaxQueueSize is the maximum number of requests in the queue waiting to be picked up
-	// after which subsequent requests will return with an error.
-	MaxQueueSize int `json:"max_queue_size" toml:"max_queue_size"`
-	// MaxQueueWait is the maximum time a request can remain in the concurrency queue
-	// waiting to be picked up by Gitaly
-	MaxQueueWait duration.Duration `json:"max_queue_wait" toml:"max_queue_wait"`
+}
+
+// IsSet indicates whether or not ConcurrencyLimits has been configured
+func (c ConcurrencyLimits) IsSet() bool {
+	return c.Adaptive || c.MaxPerRepo > 0
 }
 
 // Validate runs validation on all fields and compose all found errors.
-func (c Concurrency) Validate() error {
+func (c ConcurrencyLimits) Validate() cfgerror.ValidationErrors {
 	errs := cfgerror.New().
 		Append(cfgerror.Comparable(c.MaxPerRepo).GreaterOrEqual(0), "max_per_repo").
 		Append(cfgerror.Comparable(c.MaxQueueSize).GreaterThan(0), "max_queue_size").
@@ -561,6 +573,16 @@ func (c Concurrency) Validate() error {
 			Append(cfgerror.Comparable(c.MaxLimit).GreaterOrEqual(c.InitialLimit), "max_limit").
 			Append(cfgerror.Comparable(c.InitialLimit).GreaterOrEqual(c.MinLimit), "initial_limit")
 	}
+	return errs
+}
+
+// Validate runs validation on all fields and compose all found errors.
+func (c Concurrency) Validate() error {
+	errs := c.ConcurrencyLimits.Validate()
+	if c.Unauthenticated.IsSet() {
+		errs = errs.Append(c.Unauthenticated.Validate(), "unauthenticated")
+	}
+
 	return errs.AsError()
 }
 
@@ -612,14 +634,19 @@ type PackObjectsLimiting struct {
 
 // Validate runs validation on all fields and compose all found errors.
 func (pol PackObjectsLimiting) Validate() error {
-	return cfgerror.New().
+	errs := cfgerror.New().
 		Append(cfgerror.Comparable(pol.MaxConcurrency).GreaterOrEqual(0), "max_concurrency").
 		Append(cfgerror.Comparable(pol.MaxQueueLength).GreaterThan(0), "max_queue_length").
-		Append(cfgerror.Comparable(pol.MaxQueueWait.Duration()).GreaterOrEqual(0), "max_queue_wait").
-		Append(cfgerror.Comparable(pol.MinLimit).GreaterOrEqual(0), "min_limit").
-		Append(cfgerror.Comparable(pol.MaxLimit).GreaterOrEqual(pol.InitialLimit), "max_limit").
-		Append(cfgerror.Comparable(pol.InitialLimit).GreaterOrEqual(pol.MinLimit), "initial_limit").
-		AsError()
+		Append(cfgerror.Comparable(pol.MaxQueueWait.Duration()).GreaterOrEqual(0), "max_queue_wait")
+
+	if pol.Adaptive {
+		errs = errs.
+			Append(cfgerror.Comparable(pol.MinLimit).GreaterThan(0), "min_limit").
+			Append(cfgerror.Comparable(pol.MaxLimit).GreaterOrEqual(pol.InitialLimit), "max_limit").
+			Append(cfgerror.Comparable(pol.InitialLimit).GreaterOrEqual(pol.MinLimit), "initial_limit")
+	}
+
+	return errs.AsError()
 }
 
 // BackupConfig configures server-side and write-ahead log backups.
