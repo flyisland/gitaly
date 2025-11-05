@@ -687,7 +687,11 @@ func (sm *StorageManager) MaybeUpdateRepositoryKey(relativePath string, ptnID st
 		return fmt.Errorf("begin partition transaction: %w", err)
 	}
 	defer func() {
-		returnErr = errors.Join(returnErr, txn.Rollback(ctx))
+		if returnErr != nil {
+			if err := txn.Rollback(ctx); err != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("rollback: %w", err))
+			}
+		}
 	}()
 
 	// Verify the repository still exists on disk within the transaction
