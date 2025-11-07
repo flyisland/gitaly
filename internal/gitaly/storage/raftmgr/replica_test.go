@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	waitTimeout = 5 * time.Second
+	waitTimeout = 10 * time.Second
 )
 
 func raftConfigsForTest(t *testing.T) config.Raft {
@@ -232,15 +232,16 @@ func TestReplica_Initialize(t *testing.T) {
 		require.NoError(t, localLog.Close())
 
 		// Now create a Raft log store pointing to the same directories
-		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
 		require.NoError(t, err)
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
 
-		mgr, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
+		mgr, err := raftFactory(ctx, storageName, logStore, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
@@ -310,7 +311,7 @@ func TestReplica_Initialize(t *testing.T) {
 		require.NoError(t, localLog.Close())
 
 		// Now create a Raft log store pointing to the same directories
-		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -318,7 +319,8 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
+		mgr, err := raftFactory(ctx, storageName, logStore, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, mgr.Close()) }()
 
@@ -355,7 +357,7 @@ func TestReplica_Initialize(t *testing.T) {
 		metrics := NewMetrics()
 
 		// PHASE 1: Create a new partition with Raft enabled
-		logStore1, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		logStore1, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -363,7 +365,8 @@ func TestReplica_Initialize(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
-		mgr1, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore1, logger, metrics)
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
+		mgr1, err := raftFactory(ctx, storageName, logStore1, logger, metrics)
 		require.NoError(t, err)
 
 		// Initialize the raft replica
@@ -422,10 +425,11 @@ func TestReplica_Initialize(t *testing.T) {
 		}
 
 		// PHASE 3: Re-enable Raft
-		logStore2, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		logStore2, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
-		mgr2, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore2, logger, metrics)
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
+		mgr2, err := raftFactory(ctx, storageName, logStore2, logger, metrics)
 		require.NoError(t, err)
 
 		// Re-initialize Raft with the highest LSN
@@ -700,7 +704,7 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 
 		db, dbMgr := dbSetup(t, ctx, cfg, testhelper.TempDir(t), storageName, logger)
 		// Create a Raft log store
-		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, metrics)
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -709,11 +713,10 @@ func TestReplica_AppendLogEntry(t *testing.T) {
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder), WithOpTimeout(1*time.Nanosecond))
 
 		// Create replica with very short operation timeout
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
 		mgr, err := raftFactory(
 			ctx,
-			1,
 			storageName,
-			NewPartitionKey(storageName, partitionID),
 			logStore,
 			logger,
 			metrics,
@@ -822,7 +825,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		db, err := dbMgr.GetDB(cfg.Storages[0].Name)
 		require.NoError(t, err)
 
-		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, metrics)
+		logStore, err := NewReplicaLogStore(storageName, partitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, metrics)
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(cfg, logger, dbMgr, nil)
@@ -831,7 +834,8 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(recorder))
 
 		// Configure replica
-		mgr, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, metrics)
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
+		mgr, err := raftFactory(ctx, storageName, logStore, logger, metrics)
 		require.NoError(t, err)
 
 		for _, f := range setupFuncs {
@@ -876,7 +880,7 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 		db, err := dbMgr.GetDB(env.cfg.Storages[0].Name)
 		require.NoError(t, err)
 
-		logStore, err := NewReplicaLogStore(env.storageName, env.partitionID, raftCfg, db, env.stagingDir, env.stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, env.metrics)
+		logStore, err := NewReplicaLogStore(env.storageName, env.partitionID, raftCfg, db, env.stagingDir, env.stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, env.metrics)
 		require.NoError(t, err)
 
 		raftNode, err := NewNode(env.cfg, logger, dbMgr, nil)
@@ -884,7 +888,8 @@ func TestReplica_AppendLogEntry_CrashRecovery(t *testing.T) {
 
 		raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, WithEntryRecorder(env.recorder))
 
-		recoveryMgr, err := raftFactory(ctx, 1, env.storageName, NewPartitionKey(env.storageName, env.partitionID), logStore, logger, env.metrics)
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(env.storageName, env.partitionID), 1, "")
+		recoveryMgr, err := raftFactory(ctx, env.storageName, logStore, logger, env.metrics)
 		require.NoError(t, err)
 
 		// Initialize with the last known LSN
@@ -1665,7 +1670,8 @@ func TestReplica_StorageConnection(t *testing.T) {
 	// Create factory that connects replicas to storage
 	raftFactory := DefaultFactoryWithNode(cfg.Raft, raftNode)
 
-	replica, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
+	ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
+	replica, err := raftFactory(ctx, storageName, logStore, logger, NewMetrics())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, replica.Close()) })
 
@@ -1696,14 +1702,16 @@ func TestReplica_StorageConnection(t *testing.T) {
 	})
 
 	t.Run("multiple replicas for same partition key", func(t *testing.T) {
-		duplicateReplica, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
+		duplicateReplica, err := raftFactory(ctx, storageName, logStore, logger, NewMetrics())
 		require.NoError(t, err)
 		require.NotNil(t, duplicateReplica)
 	})
 
 	t.Run("Register different replicas for different partition keys", func(t *testing.T) {
 		partitionID := storage.PartitionID(2)
-		replicaTwo, err := raftFactory(ctx, 1, storageName, NewPartitionKey(storageName, partitionID), logStore, logger, NewMetrics())
+		ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), 1, "")
+		replicaTwo, err := raftFactory(ctx, storageName, logStore, logger, NewMetrics())
 		require.NoError(t, err)
 		require.NotNil(t, replicaTwo)
 	})
@@ -1743,11 +1751,11 @@ func TestReplica_AddNode(t *testing.T) {
 		}, timeout, 5*time.Millisecond, "replica should become leader")
 	}
 
-	// waitForVoters waits for both replicas to have the expected number of voters
-	waitForReplicaLeader := func(t *testing.T, replicaOne, replicaTwo *Replica, expectedVoters int, timeout time.Duration) {
+	// waitForReplicaLeader waits for both replicas to have the same leader
+	waitForReplicaLeader := func(t *testing.T, replicaOne, replicaTwo *Replica, timeout time.Duration) {
 		require.Eventually(t, func() bool {
 			return replicaTwo.leadership.GetLeaderID() == replicaOne.memberID
-		}, timeout, 5*time.Millisecond, "configuration should stabilize with %d voters", expectedVoters)
+		}, timeout, 5*time.Millisecond, "replica two should have the same leader as replica one")
 	}
 
 	drainNotificationQueues := func(t *testing.T, replicas ...*Replica) {
@@ -1836,7 +1844,7 @@ func TestReplica_AddNode(t *testing.T) {
 
 		drainNotificationQueues(t, replica, replicaTwo)
 
-		waitForReplicaLeader(t, replica, replicaTwo, 2, waitTimeout)
+		waitForReplicaLeader(t, replica, replicaTwo, waitTimeout)
 
 		testhelper.RequirePromMetrics(t, metrics, `
 			# HELP gitaly_raft_log_entries_processed Rate of log entries processed.
@@ -1977,7 +1985,7 @@ func TestReplica_AddNode(t *testing.T) {
 		addedReplica := addressesToReplicas[addedAddress]
 
 		// Wait for voters count to stabilize between both replicas
-		waitForReplicaLeader(t, replica, addedReplica, 2, waitTimeout)
+		waitForReplicaLeader(t, replica, addedReplica, waitTimeout)
 
 		drainNotificationQueues(t, replica, addedReplica)
 
@@ -2019,7 +2027,7 @@ func TestReplica_AddNode(t *testing.T) {
 		// Wait for the replica to elect itself as leader
 		waitForLeadership(t, replica, waitTimeout)
 
-		err := replica.RemoveNode(ctx, 999)
+		err := replica.RemoveNode(ctx, 999, storageName)
 		require.EqualError(t, err, "translating member ID: no address found for memberID 999")
 	})
 
@@ -2041,9 +2049,7 @@ func TestReplica_AddNode(t *testing.T) {
 		// Set a random leader ID to simulate a non-leader
 		replica.leadership.SetLeader(999, false)
 
-		destination := "default"
-
-		err := replica.AddNode(ctx, "gitaly-node-2:8075", destination)
+		err := replica.AddNode(ctx, "gitaly-node-2:8075", storageName)
 		require.EqualError(t, err, "replica is not the leader", "adding node should fail when not leader")
 
 		testhelper.RequirePromMetrics(t, metrics, `

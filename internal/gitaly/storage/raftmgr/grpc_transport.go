@@ -131,27 +131,20 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 				t.mutex.Unlock()
 
 			}
-			replica, err := t.routingTable.Translate(partitionKey, msg.To)
+			replicaID, err := t.routingTable.Translate(partitionKey, msg.To)
 			if err != nil {
 				return fmt.Errorf("translate memberID %d: %w", msg.To, err)
 			}
 
-			addr := replica.GetMetadata().GetAddress()
+			addr := replicaID.GetMetadata().GetAddress()
 
 			messagesByAddressMutex.Lock()
 			// We are not adding address in the request because it will increase the payload size, and
 			// is not needed on the receiver end.
 			messagesByAddress[addr] = append(messagesByAddress[addr], &gitalypb.RaftMessageRequest{
 				ClusterId: t.cfg.Raft.ClusterID,
-				ReplicaId: &gitalypb.ReplicaID{
-					PartitionKey: partitionKey,
-					MemberId:     msg.To,
-					StorageName:  replica.GetStorageName(),
-					Metadata: &gitalypb.ReplicaID_Metadata{
-						Address: replica.GetMetadata().GetAddress(),
-					},
-				},
-				Message: &msg,
+				ReplicaId: replicaID,
+				Message:   &msg,
 			})
 			messagesByAddressMutex.Unlock()
 			return nil
@@ -213,13 +206,13 @@ func (t *GrpcTransport) packLogData(ctx context.Context, lsn storage.LSN, messag
 // Receive receives a stream of Raft messages and processes them.
 func (t *GrpcTransport) Receive(ctx context.Context, partitionKey *gitalypb.RaftPartitionKey, raftMsg raftpb.Message) error {
 	// Retrieve the replica from the registry, assumption is that all the messages are from the same partition key.
+	var replica RaftReplica
 	replica, err := t.registry.GetReplica(partitionKey)
 	if err != nil {
-		// If the replica is not found, return nil until we add a way to bootstrap the replica - https://gitlab.com/gitlab-org/gitaly/-/issues/6304
-		if errors.Is(err, errNoReplicaFound) {
-			return nil
-		}
-		return err
+		t.logger.WithFields(log.Fields{
+			"raft.partition_key": partitionKey.GetValue(),
+		}).Error("replica has not been created yet")
+		return nil
 	}
 
 	for _, entry := range raftMsg.Entries {

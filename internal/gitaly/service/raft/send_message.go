@@ -33,7 +33,7 @@ func (s *Server) SendMessage(stream gitalypb.RaftService_SendMessageServer) erro
 
 		storageManager, err := node.GetStorage(storageName)
 		if err != nil {
-			return structerr.NewInternal("get storage manager: %w", err)
+			return structerr.NewInternal("get storage manager: storage name %s, %w", storageName, err)
 		}
 
 		raftStorage, ok := storageManager.(*raftmgr.RaftEnabledStorage)

@@ -24,7 +24,7 @@ func setupLogStore(t *testing.T, ctx context.Context, cfg config.Cfg) *ReplicaLo
 	logger := testhelper.NewLogger(t)
 	db := getTestDBManager(t, ctx, cfg, logger)
 	posTracker := log.NewPositionTracker()
-	logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+	logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 	require.NoError(t, err)
 
 	initStatus, err := logStore.initialize(ctx, 0)
@@ -69,7 +69,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		canceledCtx, cancel := context.WithCancel(ctx)
 		cancel() // Cancel immediately to force failure
 
-		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// Initialize with canceled context should fail with InitStatusUnknown
@@ -98,7 +98,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		// to verify it properly bootstraps from the saved state
 		// Use a new position tracker to avoid "already registered" errors
 		posTracker2 := log.NewPositionTracker()
-		rs2, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker2, logger, NewMetrics())
+		rs2, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, posTracker2, logger, NewMetrics())
 		require.NoError(t, err)
 
 		// It should now initialize as bootstrapped
@@ -121,7 +121,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		// Pre-populate n entries
 		prepopulateEntries(t, ctx, cfg, stagingDir, stateDir, appended)
 
-		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 
 		_, err = logStore.initialize(ctx, 0)
@@ -147,7 +147,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		db := getTestDBManager(t, ctx, cfg, logger)
 		posTracker := log.NewPositionTracker()
 
-		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 		defer func() { require.NoError(t, logStore.close()) }()
 
@@ -163,7 +163,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, uint64(0), lastIndex)
 
-		require.Empty(t, logStore.consumer.(*mockConsumer).GetNotifications())
+		require.Empty(t, logStore.consumer.(*MockConsumer).GetNotifications())
 	})
 
 	t.Run("raft log store was bootstrapped, no left-over log entries after restart", func(t *testing.T) {
@@ -179,7 +179,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		db, stateDir := prepopulateLogStore(t, ctx, cfg, 3, 3)
 
 		// Restart the log store using the same state dir
-		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, testhelper.TempDir(t), stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		defer func() { require.NoError(t, logStore.close()) }()
@@ -211,7 +211,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 				lowWaterMark:  storage.LSN(4),
 				highWaterMark: storage.LSN(3),
 			},
-		}, logStore.consumer.(*mockConsumer).GetNotifications())
+		}, logStore.consumer.(*MockConsumer).GetNotifications())
 	})
 
 	t.Run("raft log store was bootstrapped, some log entries are left over", func(t *testing.T) {
@@ -226,7 +226,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 		// Simulate a prior session
 		db, stateDir := prepopulateLogStore(t, ctx, cfg, 5, 3)
 
-		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, testhelper.TempDir(t), stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, testhelper.TempDir(t), stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		defer func() { require.NoError(t, logStore.close()) }()
@@ -254,7 +254,7 @@ func TestReplicaLogStore_Initialize(t *testing.T) {
 				lowWaterMark:  storage.LSN(3),
 				highWaterMark: storage.LSN(3),
 			},
-		}, logStore.consumer.(*mockConsumer).GetNotifications())
+		}, logStore.consumer.(*MockConsumer).GetNotifications())
 	})
 }
 
@@ -314,7 +314,7 @@ func TestReplicaLogStore_InitializeExistingPartition(t *testing.T) {
 		require.NoError(t, localLog.Close())
 
 		// Now initialize a raft log store on the same directories
-		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, metrics)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, logStore.close()) }()
 
@@ -368,7 +368,7 @@ func TestReplicaLogStore_InitializeExistingPartition(t *testing.T) {
 		metrics := NewMetrics()
 
 		// PHASE 1: Initialize with Raft enabled
-		logStore1, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+		logStore1, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, metrics)
 		require.NoError(t, err)
 
 		initStatus, err := logStore1.initialize(ctx, 0)
@@ -433,7 +433,7 @@ func TestReplicaLogStore_InitializeExistingPartition(t *testing.T) {
 			db,
 			stagingDir,
 			stateDir,
-			&mockConsumer{},
+			&MockConsumer{},
 			log.NewPositionTracker(), // Create a new position tracker
 			logger,
 			metrics,
@@ -912,7 +912,7 @@ func TestReplicaLogStore_Term(t *testing.T) {
 		logger := testhelper.NewLogger(t)
 		db := getTestDBManager(t, ctx, cfg, logger)
 
-		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 
 		_, err = logStore.initialize(ctx, 0)
@@ -925,7 +925,7 @@ func TestReplicaLogStore_Term(t *testing.T) {
 		require.NoError(t, logStore.close())
 
 		// Now restart the log store
-		logStore, err = NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
+		logStore, err = NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, log.NewPositionTracker(), logger, NewMetrics())
 		require.NoError(t, err)
 		defer func() { require.NoError(t, logStore.close()) }()
 
@@ -1242,7 +1242,7 @@ func testAppendLogEntry(t *testing.T, appendFunc func(*testing.T, context.Contex
 
 		prepopulateEntries(t, ctx, cfg, stagingDir, stateDir, 10)
 
-		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, NewMetrics())
+		logStore, err := NewReplicaLogStore("test-storage", 1, cfg.Raft, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, NewMetrics())
 		require.NoError(t, err)
 		_, err = logStore.initialize(ctx, 0)
 		require.NoError(t, err)
@@ -1295,7 +1295,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 		}
 
 		// Has not received any notification, yet. Highest appendedLSN is 3.
-		require.Empty(t, logStore.consumer.(*mockConsumer).GetNotifications())
+		require.Empty(t, logStore.consumer.(*MockConsumer).GetNotifications())
 
 		// Committed set to 1
 		require.NoError(t, logStore.saveHardState(raftpb.HardState{Commit: 1, Vote: 1, Term: 1}))
@@ -1309,7 +1309,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
-		}, logStore.consumer.(*mockConsumer).GetNotifications())
+		}, logStore.consumer.(*MockConsumer).GetNotifications())
 
 		// Committed set to 2
 		require.NoError(t, logStore.saveHardState(raftpb.HardState{Commit: 2, Vote: 1, Term: 1}))
@@ -1329,7 +1329,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(2),
 			},
-		}, logStore.consumer.(*mockConsumer).GetNotifications())
+		}, logStore.consumer.(*MockConsumer).GetNotifications())
 
 		// Committed set to 3
 		require.NoError(t, logStore.saveHardState(raftpb.HardState{Commit: 3, Vote: 1, Term: 1}))
@@ -1355,7 +1355,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(3),
 			},
-		}, logStore.consumer.(*mockConsumer).GetNotifications())
+		}, logStore.consumer.(*MockConsumer).GetNotifications())
 	})
 
 	t.Run("notify consumer since the low water mark", func(t *testing.T) {
@@ -1377,7 +1377,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 		}
 
 		// Has not received any notification, yet. Highest appendedLSN is 3.
-		require.Empty(t, logStore.consumer.(*mockConsumer).GetNotifications())
+		require.Empty(t, logStore.consumer.(*MockConsumer).GetNotifications())
 
 		// Committed set to 1
 		require.NoError(t, logStore.saveHardState(raftpb.HardState{Commit: 1, Vote: 1, Term: 1}))
@@ -1391,7 +1391,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 				lowWaterMark:  storage.LSN(1),
 				highWaterMark: storage.LSN(1),
 			},
-		}, logStore.consumer.(*mockConsumer).GetNotifications())
+		}, logStore.consumer.(*MockConsumer).GetNotifications())
 
 		// Simulate applying up to log entry 1
 		require.NoError(t, logStore.localLog.AcknowledgePosition(log.AppliedPosition, storage.LSN(1)))
@@ -1415,7 +1415,7 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 				lowWaterMark:  storage.LSN(2),
 				highWaterMark: storage.LSN(2),
 			},
-		}, logStore.consumer.(*mockConsumer).GetNotifications())
+		}, logStore.consumer.(*MockConsumer).GetNotifications())
 
 		// Committed set to 3, but don't update low water mark
 		require.NoError(t, logStore.saveHardState(raftpb.HardState{Commit: 3, Vote: 1, Term: 1}))
@@ -1441,14 +1441,14 @@ func TestReplicaLogStore_SaveHardState(t *testing.T) {
 				lowWaterMark:  storage.LSN(2),
 				highWaterMark: storage.LSN(3),
 			},
-		}, logStore.consumer.(*mockConsumer).GetNotifications())
+		}, logStore.consumer.(*MockConsumer).GetNotifications())
 
 		// Simulate applying up to log entry 3
 		require.NoError(t, logStore.localLog.AcknowledgePosition(log.AppliedPosition, storage.LSN(3)))
 		require.Equal(t, storage.LSN(4), logStore.localLog.LowWaterMark())
 
 		// No new notifications are sent.
-		require.Equal(t, 3, len(logStore.consumer.(*mockConsumer).GetNotifications()))
+		require.Equal(t, 3, len(logStore.consumer.(*MockConsumer).GetNotifications()))
 	})
 
 	t.Run("reject LSN beyond appendedLSN", func(t *testing.T) {

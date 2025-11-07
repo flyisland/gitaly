@@ -130,12 +130,6 @@ func (s *mockRaftServer) JoinCluster(ctx context.Context, req *gitalypb.JoinClus
 	if len(req.GetReplicas()) == 0 {
 		return nil, structerr.NewInvalidArgument("cluster_members is required")
 	}
-	if req.GetTerm() == 0 {
-		return nil, structerr.NewInvalidArgument("term is required")
-	}
-	if req.GetIndex() == 0 {
-		return nil, structerr.NewInvalidArgument("index is required")
-	}
 
 	return nil, nil
 }

@@ -56,13 +56,16 @@ type RaftReplica interface {
 
 	// RemoveNode removes a node from the Raft cluster.
 	// This operation can only be performed by the leader.
-	RemoveNode(ctx context.Context, memberID uint64) error
+	RemoveNode(ctx context.Context, memberID uint64, destinationStorageName string) error
 
 	// AddLearner adds a new non-voting learner node to the Raft cluster.
 	// Learner nodes receive log entries but don't participate in elections.
 	// This is typically used to bring new nodes up to speed before promoting them to voters.
 	// This operation can only be performed by the leader.
-	AddLearner(ctx context.Context, address string) error
+	AddLearner(ctx context.Context, address, destinationStorageName string) error
+
+	// IsStarted returns true if the replica has been started.
+	IsStarted() bool
 
 	// GetCurrentState returns comprehensive current state information including term, index, and Raft state.
 	// This provides an efficient way to get multiple state values with consistent locking.
@@ -234,9 +237,7 @@ func applyOptions(raftCfg config.Raft, opts []OptionFunc) (ReplicaOptions, error
 // This factory is used to create and initialize Replica objects for partitions.
 type RaftReplicaFactory func(
 	ctx context.Context,
-	memberID uint64,
 	storageName string,
-	partitionKey *gitalypb.RaftPartitionKey,
 	logStore *ReplicaLogStore,
 	logger logging.Logger,
 	metrics *Metrics,
@@ -247,24 +248,26 @@ type RaftReplicaFactory func(
 func DefaultFactoryWithNode(raftCfg config.Raft, raftNode *Node, opts ...OptionFunc) RaftReplicaFactory {
 	return func(
 		ctx context.Context,
-		memberID uint64,
 		storageName string,
-		partitionKey *gitalypb.RaftPartitionKey,
 		logStore *ReplicaLogStore,
 		logger logging.Logger,
 		metrics *Metrics,
 	) (*Replica, error) {
-		storage, err := raftNode.GetStorage(storageName)
+		raftStorage, err := raftNode.GetStorage(storageName)
 		if err != nil {
 			return nil, fmt.Errorf("get storage %q: %w", storageName, err)
 		}
 
-		raftEnabledStorage, ok := storage.(*RaftEnabledStorage)
+		raftEnabledStorage, ok := raftStorage.(*RaftEnabledStorage)
 		if !ok {
 			return nil, fmt.Errorf("storage %q is not a RaftEnabledStorage", storageName)
 		}
+		partitionInfo := storage.ExtractPartitionInfo(ctx)
+		partitionKey := partitionInfo.PartitionKey
+		memberID := partitionInfo.MemberID
+		relativePath := partitionInfo.RelativePath
 
-		replica, err := NewReplica(ctx, memberID, partitionKey, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
+		replica, err := NewReplica(ctx, memberID, partitionKey, relativePath, raftCfg, logStore, raftEnabledStorage, logger, metrics, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("create replica %q: %w", storageName, err)
 		}
@@ -286,6 +289,7 @@ func NewReplica(
 	ctx context.Context,
 	memberID uint64,
 	partitionKey *gitalypb.RaftPartitionKey,
+	relativePath string,
 	raftCfg config.Raft,
 	logStore *ReplicaLogStore,
 	raftEnabledStorage *RaftEnabledStorage,
@@ -295,11 +299,6 @@ func NewReplica(
 ) (*Replica, error) {
 	if !raftCfg.Enabled {
 		return nil, fmt.Errorf("raft is not enabled")
-	}
-
-	relativePath, err := storage.ExtractPartitioningHint(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("extract partitioning hint: %w", err)
 	}
 
 	options, err := applyOptions(raftCfg, opts)
@@ -928,8 +927,14 @@ func (replica *Replica) processConfChange(entry raftpb.Entry) error {
 
 	routingTable := replica.raftEnabledStorage.GetRoutingTable()
 
+	// If the destination storage name is not set, we use the storage name of the current node
+	// When the node is bootstrapped, the destination storage name is not set.
+	if replicaChanges.DestinationStorageName() == "" {
+		replicaChanges.destinationStorageName = replica.logStore.storageName
+	}
+
 	// Apply the changes to the routing table
-	if err := routingTable.ApplyReplicaConfChange(replica.logStore.storageName, replica.partitionKey, replicaChanges); err != nil {
+	if err := routingTable.ApplyReplicaConfChange(replica.partitionKey, replicaChanges); err != nil {
 		return fmt.Errorf("applying conf changes: %w", err)
 	}
 
@@ -1018,6 +1023,11 @@ func (replica *Replica) signalError(err error) {
 	replica.ready.set(err)
 }
 
+// IsStarted implements RaftReplica.IsStarted
+func (replica *Replica) IsStarted() bool {
+	return replica.started
+}
+
 // Step processes a Raft message from a remote node
 func (replica *Replica) Step(ctx context.Context, msg raftpb.Message) error {
 	if !replica.started {
@@ -1036,14 +1046,14 @@ func (replica *Replica) AddNode(ctx context.Context, address, destinationStorage
 }
 
 // RemoveNode implements RaftReplica.RemoveNode
-func (replica *Replica) RemoveNode(ctx context.Context, memberID uint64) error {
-	return replica.proposeMembershipChange(ctx, string(removeNode), "", memberID, ConfChangeRemoveNode, nil)
+func (replica *Replica) RemoveNode(ctx context.Context, memberID uint64, destinationStorageName string) error {
+	return replica.proposeMembershipChange(ctx, string(removeNode), destinationStorageName, memberID, ConfChangeRemoveNode, nil)
 }
 
 // AddLearner implements RaftReplica.AddLearner
-func (replica *Replica) AddLearner(ctx context.Context, address string) error {
+func (replica *Replica) AddLearner(ctx context.Context, address, destinationStorageName string) error {
 	memberID := uint64(replica.AppendedLSN() + 1)
-	return replica.proposeMembershipChange(ctx, string(addLearner), "", memberID, ConfChangeAddLearnerNode, &gitalypb.ReplicaID_Metadata{
+	return replica.proposeMembershipChange(ctx, string(addLearner), destinationStorageName, memberID, ConfChangeAddLearnerNode, &gitalypb.ReplicaID_Metadata{
 		Address: address,
 	})
 }
@@ -1086,12 +1096,12 @@ func (replica *Replica) proposeRemoveNode(ctx context.Context, changeType string
 		return err
 	}
 
-	return replica.proposeConfChange(ctx, changeType, memberID, ConfChangeRemoveNode, nil)
+	return replica.proposeConfChange(ctx, changeType, memberID, "", ConfChangeRemoveNode, nil)
 }
 
 func (replica *Replica) proposeAddNode(ctx context.Context, changeType, destinationStorageName string, memberID uint64, metadata *gitalypb.ReplicaID_Metadata) (returnedErr error) {
 	// First, propose the configuration change
-	if err := replica.proposeConfChange(ctx, changeType, memberID, ConfChangeAddNode, metadata); err != nil {
+	if err := replica.proposeConfChange(ctx, changeType, memberID, destinationStorageName, ConfChangeAddNode, metadata); err != nil {
 		return err
 	}
 
@@ -1100,7 +1110,7 @@ func (replica *Replica) proposeAddNode(ctx context.Context, changeType, destinat
 		// If join fails, attempt to remove the node from the cluster
 		replica.logger.WithError(err).Warn("join cluster failed, attempting to remove node")
 
-		if removeErr := replica.proposeConfChange(ctx, string(removeNode), memberID, ConfChangeRemoveNode, nil); removeErr != nil {
+		if removeErr := replica.proposeConfChange(ctx, string(removeNode), memberID, "", ConfChangeRemoveNode, nil); removeErr != nil {
 			replica.logger.WithError(removeErr).Error("failed to remove node after join failure")
 		}
 
@@ -1111,13 +1121,14 @@ func (replica *Replica) proposeAddNode(ctx context.Context, changeType, destinat
 }
 
 func (replica *Replica) proposeAddLearner(ctx context.Context, changeType string, memberID uint64, metadata *gitalypb.ReplicaID_Metadata) error {
-	return replica.proposeConfChange(ctx, changeType, memberID, ConfChangeAddLearnerNode, metadata)
+	return replica.proposeConfChange(ctx, changeType, memberID, "", ConfChangeAddLearnerNode, metadata)
 }
 
 func (replica *Replica) proposeConfChange(
 	ctx context.Context,
 	changeType string,
 	memberID uint64,
+	destinationStorageName string,
 	confChangeType ConfChangeType,
 	metadata *gitalypb.ReplicaID_Metadata,
 ) (returnedErr error) {
@@ -1132,6 +1143,7 @@ func (replica *Replica) proposeConfChange(
 		replica.node.Status().Term,
 		uint64(replica.AppendedLSN()),
 		replica.leadership.GetLeaderID(),
+		destinationStorageName,
 		waiter.ID,
 		metadata,
 	)
@@ -1189,8 +1201,6 @@ func (replica *Replica) joinCluster(ctx context.Context, targetMemberID uint64, 
 		PartitionKey: replica.partitionKey,
 		LeaderId:     replica.leadership.GetLeaderID(),
 		MemberId:     targetMemberID,
-		Term:         replica.node.Status().Term,
-		Index:        replica.node.Status().Applied,
 		StorageName:  destination,
 		RelativePath: replica.relativePath,
 		Replicas:     routingEntry.Replicas,
@@ -1200,6 +1210,23 @@ func (replica *Replica) joinCluster(ctx context.Context, targetMemberID uint64, 
 	}
 
 	return nil
+}
+
+// GetLeaderID returns the leader ID of the replica.
+func (replica *Replica) GetLeaderID() (uint64, error) {
+	if !replica.started {
+		return 0, fmt.Errorf("raft replica not started")
+	}
+	leaderID := replica.leadership.GetLeaderID()
+	return leaderID, nil
+}
+
+// GetMemberID returns the member ID of the replica.
+func (replica *Replica) GetMemberID() (uint64, error) {
+	if !replica.started {
+		return 0, fmt.Errorf("raft replica not started")
+	}
+	return replica.memberID, nil
 }
 
 func checkMemberID(replica *Replica, memberID uint64, routingTable RoutingTable) error {

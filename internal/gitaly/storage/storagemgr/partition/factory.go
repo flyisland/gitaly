@@ -65,12 +65,21 @@ func (f Factory) New(
 	if f.raftCfg.Enabled {
 		factory := f.raftFactory
 
-		// TODO: The PartitionKey will be retrieved from the incoming context when a Raft
-		//       replica is booted up. This allows us to maintain a persistent key across
-		//       all replicas of the partition.
-		//       storageName will then represent the target storage where we intend on
-		//       placing the new replicated partition.
-		partitionKey := raftmgr.NewPartitionKey(storageName, partitionID)
+		partitionInfo := storage.ExtractPartitionInfo(ctx)
+		if partitionInfo.PartitionKey == nil {
+			// If partitionKey is not set, it means:
+			// -  It's a first self bootstrapped node in the cluster,
+			//   so we need to set the  partitionKey using local storage and partitionID
+			//   and we will set the memberID to 1.
+			// - A node was previously part of a cluster (with a different member ID)
+			//   and later becomes leader through normal Raft leader election
+			//   and receives requests from Rails without partition context
+			//   so we need a way to retrieve the partitionKey and memberID which was
+			//   originally used by the replica before it became leader.
+			// https://gitlab.com/gitlab-org/gitaly/-/issues/6877
+			partitionKey := raftmgr.NewPartitionKey(storageName, partitionID)
+			ctx = storage.ContextWithPartitionInfo(ctx, partitionKey, 1, partitionInfo.RelativePath)
+		}
 
 		absoluteStateDir = getRaftPartitionPath(storageName, partitionID, absoluteStateDir)
 
@@ -91,9 +100,7 @@ func (f Factory) New(
 		}
 		raftReplica, err := factory(
 			ctx,
-			1,
 			storageName,
-			partitionKey,
 			replicaLogStore,
 			logger,
 			f.partitionMetrics.raft,

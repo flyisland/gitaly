@@ -29,18 +29,21 @@ type ReplicaConfChange struct {
 // a consistent interface for configuration changes regardless of the underlying
 // implementation (ConfChange or ConfChangeV2).
 type ReplicaConfChanges struct {
-	changes  []ReplicaConfChange
-	metadata *gitalypb.ReplicaID_Metadata
-	term     uint64
-	index    uint64
-	leaderID uint64
-	eventID  EventID
+	changes                []ReplicaConfChange
+	metadata               *gitalypb.ReplicaID_Metadata
+	term                   uint64
+	index                  uint64
+	leaderID               uint64
+	destinationStorageName string
+	eventID                EventID
 }
 
 // ConfChangeContext wraps both event ID and metadata for config changes
 type ConfChangeContext struct {
 	EventID  EventID                      `json:"event_id,omitempty"`
 	Metadata *gitalypb.ReplicaID_Metadata `json:"metadata,omitempty"`
+	// DestinationStorageName is the name of the storage where the replica will be hosted.
+	DestinationStorageName string `json:"destination_storage_name,omitempty"`
 }
 
 // NewReplicaConfChanges creates a new ReplicaConfChanges instance.
@@ -48,16 +51,18 @@ func NewReplicaConfChanges(
 	term uint64,
 	index uint64,
 	leaderID uint64,
+	destinationStorageName string,
 	eventID EventID,
 	metadata *gitalypb.ReplicaID_Metadata,
 ) *ReplicaConfChanges {
 	return &ReplicaConfChanges{
-		changes:  make([]ReplicaConfChange, 0),
-		metadata: metadata,
-		term:     term,
-		index:    index,
-		leaderID: leaderID,
-		eventID:  eventID,
+		changes:                make([]ReplicaConfChange, 0),
+		metadata:               metadata,
+		destinationStorageName: destinationStorageName,
+		term:                   term,
+		index:                  index,
+		leaderID:               leaderID,
+		eventID:                eventID,
 	}
 }
 
@@ -77,6 +82,11 @@ func (r *ReplicaConfChanges) Changes() []ReplicaConfChange {
 // Metadata returns the metadata associated with the configuration changes.
 func (r *ReplicaConfChanges) Metadata() *gitalypb.ReplicaID_Metadata {
 	return r.metadata
+}
+
+// DestinationStorageName returns the destination storage name associated with the configuration changes.
+func (r *ReplicaConfChanges) DestinationStorageName() string {
+	return r.destinationStorageName
 }
 
 // Term returns the term of the configuration changes.
@@ -144,8 +154,9 @@ func (r *ReplicaConfChanges) ToConfChangeV2() (raftpb.ConfChangeV2, error) {
 
 func (r *ReplicaConfChanges) encodeContext() ([]byte, error) {
 	context := &ConfChangeContext{
-		EventID:  r.eventID,
-		Metadata: r.metadata,
+		EventID:                r.eventID,
+		Metadata:               r.metadata,
+		DestinationStorageName: r.destinationStorageName,
 	}
 
 	return json.Marshal(context)
@@ -167,17 +178,17 @@ func parseChangeType(ccType raftpb.ConfChangeType) (ConfChangeType, error) {
 	}
 }
 
-func parseContext(context []byte) (EventID, *gitalypb.ReplicaID_Metadata, error) {
+func parseContext(context []byte) (EventID, string, *gitalypb.ReplicaID_Metadata, error) {
 	if len(context) == 0 {
-		return 0, nil, nil
+		return 0, "", nil, nil
 	}
 
 	var confChangeContext ConfChangeContext
 	if err := json.Unmarshal(context, &confChangeContext); err != nil {
-		return 0, nil, fmt.Errorf("unmarshal context: %w", err)
+		return 0, "", nil, fmt.Errorf("unmarshal context: %w", err)
 	}
 
-	return confChangeContext.EventID, confChangeContext.Metadata, nil
+	return confChangeContext.EventID, confChangeContext.DestinationStorageName, confChangeContext.Metadata, nil
 }
 
 // ParseConfChange parses a raftpb.Entry containing a configuration change directly into a ReplicaConfChanges.
@@ -190,7 +201,7 @@ func ParseConfChange(entry raftpb.Entry, leaderID uint64) (*ReplicaConfChanges, 
 			return nil, fmt.Errorf("unmarshalling EntryConfChange: %w", err)
 		}
 
-		eventID, metadata, err := parseContext(cc.Context)
+		eventID, destinationStorageName, metadata, err := parseContext(cc.Context)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +211,7 @@ func ParseConfChange(entry raftpb.Entry, leaderID uint64) (*ReplicaConfChanges, 
 			return nil, err
 		}
 
-		result := NewReplicaConfChanges(entry.Term, entry.Index, leaderID, eventID, metadata)
+		result := NewReplicaConfChanges(entry.Term, entry.Index, leaderID, destinationStorageName, eventID, metadata)
 		result.AddChange(cc.NodeID, nodeType)
 		return result, nil
 	} else if entry.Type == raftpb.EntryConfChangeV2 {
@@ -213,12 +224,12 @@ func ParseConfChange(entry raftpb.Entry, leaderID uint64) (*ReplicaConfChanges, 
 			return nil, fmt.Errorf("no changes in ConfChangeV2")
 		}
 
-		eventID, metadata, err := parseContext(cc.Context)
+		eventID, destinationStorageName, metadata, err := parseContext(cc.Context)
 		if err != nil {
 			return nil, err
 		}
 
-		result := NewReplicaConfChanges(entry.Term, entry.Index, leaderID, eventID, metadata)
+		result := NewReplicaConfChanges(entry.Term, entry.Index, leaderID, destinationStorageName, eventID, metadata)
 
 		for _, change := range cc.Changes {
 			nodeType, err := parseChangeType(change.Type)

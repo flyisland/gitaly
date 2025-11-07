@@ -3,7 +3,6 @@ package raftmgr
 import (
 	"context"
 	"net"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,33 +41,9 @@ func (m *mockReplica) Step(ctx context.Context, msg raftpb.Message) error {
 	return nil
 }
 
-type mockConsumer struct {
-	notifications []mockNotification
-	mutex         sync.Mutex
-}
-
-type mockNotification struct {
-	storageName   string
-	partitionID   storage.PartitionID
-	lowWaterMark  storage.LSN
-	highWaterMark storage.LSN
-}
-
-func (mc *mockConsumer) NotifyNewEntries(storageName string, partitionID storage.PartitionID, lowWaterMark, committedLSN storage.LSN) {
-	mc.mutex.Lock()
-	defer mc.mutex.Unlock()
-	mc.notifications = append(mc.notifications, mockNotification{
-		storageName:   storageName,
-		partitionID:   partitionID,
-		lowWaterMark:  lowWaterMark,
-		highWaterMark: committedLSN,
-	})
-}
-
-func (mc *mockConsumer) GetNotifications() []mockNotification {
-	mc.mutex.Lock()
-	defer mc.mutex.Unlock()
-	return mc.notifications
+// IsStarted is a mock implementation of RaftReplica.IsStarted
+func (m *mockReplica) IsStarted() bool {
+	return true
 }
 
 func openTestDB(t *testing.T, ctx context.Context, cfg config.Cfg, logger logger.Logger) *databasemgr.DBManager {
@@ -103,6 +78,10 @@ func createRaftReplica(t *testing.T, ctx context.Context, memberID uint64, addre
 		Address:     address,
 		Options:     opts,
 	}
+	relativePath := "git.git"
+	storageName := "default"
+
+	ctx = storage.ContextWithPartitionInfo(ctx, NewPartitionKey(storageName, partitionID), memberID, relativePath)
 
 	return createRaftReplicaWithConfig(t, ctx, raftCfg, config, metrics)
 }
@@ -124,7 +103,7 @@ func createRaftReplicaWithConfig(t *testing.T, ctx context.Context, raftCfg conf
 	stateDir := testhelper.TempDir(t)
 	posTracker := log.NewPositionTracker()
 
-	logStore, err := NewReplicaLogStore(storageName, config.PartitionID, raftCfg, db, stagingDir, stateDir, &mockConsumer{}, posTracker, logger, metrics)
+	logStore, err := NewReplicaLogStore(storageName, config.PartitionID, raftCfg, db, stagingDir, stateDir, &MockConsumer{}, posTracker, logger, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +120,7 @@ func createRaftReplicaWithConfig(t *testing.T, ctx context.Context, raftCfg conf
 	}
 
 	raftFactory := DefaultFactoryWithNode(raftCfg, raftNode, config.Options...)
-	return raftFactory(ctx, config.MemberID, storageName, NewPartitionKey(storageName, config.PartitionID), logStore, logger, metrics)
+	return raftFactory(ctx, storageName, logStore, logger, metrics)
 }
 
 func createTempServer(t *testing.T, transport *GrpcTransport) (string, *grpc.Server) {

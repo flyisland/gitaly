@@ -32,6 +32,7 @@ import (
 
 type mockPartitionFactory struct {
 	new func(
+		ctx context.Context,
 		logger log.Logger,
 		partitionID storage.PartitionID,
 		db keyvalue.Transactioner,
@@ -47,6 +48,7 @@ type mockPartitionFactory struct {
 func newStubPartitionFactory() PartitionFactory {
 	return mockPartitionFactory{
 		new: func(
+			ctx context.Context,
 			logger log.Logger,
 			partitionID storage.PartitionID,
 			db keyvalue.Transactioner,
@@ -129,6 +131,7 @@ func (m mockPartitionFactory) New(
 	stagingDir string,
 ) Partition {
 	return m.new(
+		ctx,
 		logger,
 		partitionID,
 		db,

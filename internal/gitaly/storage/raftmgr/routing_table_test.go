@@ -12,6 +12,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
+var destinationStorageName = "test-storage"
+
 func TestPersistentRoutingTable(t *testing.T) {
 	t.Parallel()
 
@@ -34,7 +36,7 @@ func TestPersistentRoutingTable(t *testing.T) {
 				{
 					PartitionKey: partitionKey,
 					MemberId:     uint64(memberID),
-					StorageName:  "test-storage",
+					StorageName:  destinationStorageName,
 					Metadata: &gitalypb.ReplicaID_Metadata{
 						Address: address,
 					},
@@ -50,7 +52,6 @@ func TestPersistentRoutingTable(t *testing.T) {
 		replica, err := rt.Translate(partitionKey, uint64(memberID))
 		require.NoError(t, err)
 		require.Equal(t, address, replica.GetMetadata().GetAddress())
-		require.Equal(t, "test-storage", replica.GetStorageName())
 	})
 
 	t.Run("stale entry rejected", func(t *testing.T) {
@@ -112,10 +113,10 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		partitionKey := NewPartitionKey("test-authority", 1)
 
-		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 1, destinationStorageName, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -166,10 +167,10 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		changes := NewReplicaConfChanges(2, 2, 1, 1, nil)
+		changes := NewReplicaConfChanges(2, 2, 1, destinationStorageName, 1, nil)
 		changes.AddChange(2, ConfChangeRemoveNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -196,10 +197,10 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		partitionKey := NewPartitionKey("test-authority", 1)
 
-		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 1, destinationStorageName, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddLearnerNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -223,10 +224,10 @@ func TestApplyReplicaConfChange(t *testing.T) {
 
 		partitionKey := NewPartitionKey("test-authority", 1)
 
-		changes := NewReplicaConfChanges(1, 1, 0, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 0, destinationStorageName, 1, createMetadata("localhost:1234"))
 		changes.AddChange(0, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "member ID should be non-zero")
 	})
@@ -246,21 +247,25 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		partitionKey := NewPartitionKey("test-authority", 1)
 
 		// First add a node
-		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 1, destinationStorageName, 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		// Try to add the same node ID again
-		changes = NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
+		changes = NewReplicaConfChanges(2, 2, 1, destinationStorageName, 1, createMetadata("localhost:5678"))
 		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "member ID 1 already exists")
-	})
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
+		require.NoError(t, err)
 
+		updatedEntry, err := rt.GetEntry(partitionKey)
+		require.NoError(t, err)
+		require.Len(t, updatedEntry.Replicas, 1)
+		require.Equal(t, uint64(1), updatedEntry.Replicas[0].GetMemberId())
+		require.Equal(t, "localhost:1234", updatedEntry.Replicas[0].GetMetadata().GetAddress())
+	})
 	t.Run("should error when updating non-existent member ID", func(t *testing.T) {
 		t.Parallel()
 
@@ -276,17 +281,17 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		partitionKey := NewPartitionKey("test-authority", 1)
 
 		// Add a node with ID 1
-		changes := NewReplicaConfChanges(1, 1, 1, 1, createMetadata("localhost:1234"))
+		changes := NewReplicaConfChanges(1, 1, 1, "test-storage", 1, createMetadata("localhost:1234"))
 		changes.AddChange(1, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		// Try to update a non-existent node with ID 2
-		changes = NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
+		changes = NewReplicaConfChanges(2, 2, 1, "test-storage", 1, createMetadata("localhost:5678"))
 		changes.AddChange(2, ConfChangeUpdateNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "member ID 2 not found for update")
 	})
@@ -321,10 +326,10 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		err = rt.UpsertEntry(*entry)
 		require.NoError(t, err)
 
-		changes := NewReplicaConfChanges(entry.Term, entry.Index, 1, 1, nil)
+		changes := NewReplicaConfChanges(entry.Term, entry.Index, 1, "test-storage", 1, nil)
 		changes.AddChange(1, ConfChangeRemoveNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no replicas to upsert")
 	})
@@ -360,10 +365,10 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		changes := NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:5678"))
+		changes := NewReplicaConfChanges(2, 2, 1, "test-storage", 1, createMetadata("localhost:5678"))
 		changes.AddChange(1, ConfChangeUpdateNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)
@@ -405,11 +410,11 @@ func TestApplyReplicaConfChange(t *testing.T) {
 		err = rt.UpsertEntry(*initialEntry)
 		require.NoError(t, err)
 
-		changes := NewReplicaConfChanges(2, 2, 1, 1, createMetadata("localhost:8888"))
+		changes := NewReplicaConfChanges(2, 2, 1, "test-storage", 1, createMetadata("localhost:8888"))
 		changes.AddChange(1, ConfChangeRemoveNode)
 		changes.AddChange(2, ConfChangeAddNode)
 
-		err = rt.ApplyReplicaConfChange("test-authority", partitionKey, changes)
+		err = rt.ApplyReplicaConfChange(partitionKey, changes)
 		require.NoError(t, err)
 
 		updatedEntry, err := rt.GetEntry(partitionKey)

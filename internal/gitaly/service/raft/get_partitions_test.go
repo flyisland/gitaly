@@ -371,6 +371,7 @@ func TestServer_GetClusterInfo_LiveStateVsRoutingTable(t *testing.T) {
 		ctx,
 		1, // memberID
 		partitionKey,
+		"@hashed/test/repo.git",
 		cfg.Raft,
 		logStore,
 		raftStorage,
