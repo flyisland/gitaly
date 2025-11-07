@@ -25,14 +25,20 @@ resource "google_compute_disk" "repository-disk" {
   name = format("%s-repo-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
   type = each.value.disk_type
   size = each.value.disk_size
+  labels = {
+    "benchmark": "gitaly"
+  }
 }
 
 resource "google_compute_region_disk" "repository-region-disk" {
-for_each = { for idx, instance in local.config.gitaly_instances : instance.name => instance if local.config.use_regional_disk }
+  for_each = { for idx, instance in local.config.gitaly_instances : instance.name => instance if local.config.use_regional_disk }
   name          = format("%s-repository-region-disk-%s", var.gitaly_benchmarking_deployment_name, each.value.name)
   type          = each.value.disk_type
   size          = each.value.disk_size
   replica_zones = local.config.regional_disk_replica_zones
+  labels = {
+    "benchmark": "gitaly"
+  }
 }
 
 resource "google_compute_instance" "gitaly" {
@@ -65,6 +71,10 @@ resource "google_compute_instance" "gitaly" {
   }
 
   tags = ["gitaly"]
+
+  labels = {
+    "benchmark": "gitaly"
+  }
 }
 
 resource "google_compute_instance" "client" {
@@ -86,6 +96,10 @@ resource "google_compute_instance" "client" {
 
   metadata = {
     ssh-keys = format("gitaly_bench:%s", var.ssh_pubkey)
+  }
+
+  labels = {
+    "benchmark": "gitaly"
   }
 }
 

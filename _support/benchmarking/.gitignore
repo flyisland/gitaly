@@ -9,3 +9,8 @@ hosts.ini
 /results/*
 /env/*
 /experiments/*/results/*
+/cleanup/*.zip
+/cleanup/infra/*
+!/cleanup/infra/*.tf
+!/cleanup/infra/*.tfvars
+

@@ -38,7 +38,7 @@ gitaly_instances:
     # filesystem: "btrfs"  # Options: ext4, xfs, btrfs
     # fs_mount_opts: "noatime,compress=zstd,space_cache=v2,ssd,discard=async"
     # fs_format_opts: "-f -n 16k"
-    # XFS setup 
+    # XFS setup
     # filesystem: "xfs"  # Options: ext4, xfs, btrfs
     # fs_mount_opts: "defaults,discard"
     # fs_format_opts: "-f"
