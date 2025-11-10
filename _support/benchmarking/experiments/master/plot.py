@@ -158,6 +158,60 @@ def stats_snapshot(df, outdir):
     p.save(f"{outdir}/snapshot_creation_latency_by_repo.png")
 
 
+def stats_snapshot_and_rpc(df, outdir):
+    if "snapshot.duration_ms" not in df.columns:
+        print("No snapshot creation events found in the log")
+        return
+
+    df = df[
+        df["grpc.request.glRepository"].notna() &
+        (df["grpc.request.glRepository"].str.strip() != "")
+    ]
+
+    df = (
+        df.groupby(["time_interval", "grpc.request.glRepository"])[
+            ["snapshot.duration_ms", "grpc.time_ms"]
+        ]
+        .quantile(0.95)
+        .reset_index()
+    )
+
+    df_long = pd.melt(
+        df,
+        id_vars=["time_interval", "grpc.request.glRepository"],
+        value_vars=["snapshot.duration_ms", "grpc.time_ms"],
+        var_name="metric",
+        value_name="latency_ms"
+    )
+
+    with open(f"{outdir}/snapshot_creation_and_rpc_latency_by_repo.txt", "w") as f:
+        f.write(df.to_string(index=False))
+
+    p = (
+        ggplot(df, aes(x="time_interval"))
+        + geom_area(aes(y="grpc.time_ms", fill="'Total RPC'"))
+        + geom_area(aes(y="snapshot.duration_ms", fill="'Snapshot'"))
+        + scale_x_datetime(date_labels="%H:%M:%S", date_breaks="5 seconds")
+        + scale_fill_manual(values={"Total RPC": "#1f77b4", "Snapshot": "#ff7f0e"})
+        + theme_seaborn(
+            style="darkgrid", context="notebook", font="sans-serif", font_scale=1
+        )
+        + theme(
+            axis_text_x=element_text(rotation=45, hjust=1),
+            figure_size=(12, 8),
+            dpi=200
+        )
+        + labs(
+            title="RPC and Snapshot Latency by Repository (p95)",
+            x="Time",
+            y="Latency (ms)",
+            fill="Component"
+        )
+        + facet_wrap("grpc.request.glRepository", ncol=1)
+    )
+    p.save(f"{outdir}/snapshot_creation_and_rpc_latency_by_repo.png")
+
+
 def analyze_snapshot_creation_rate(df, outdir):
     if "snapshot.duration_ms" not in df.columns:
         print("No snapshot creation events found in the log")
@@ -332,6 +386,7 @@ if __name__ == "__main__":
     stats_snapshot(df, output_directory)
     stats_rpc_latency(df, output_directory)
     stats_rpc_count(df, output_directory)
+    stats_snapshot_and_rpc(df, output_directory)
     analyze_snapshot_creation_rate(df, output_directory)
     analyze_snapshot_duration_by_repository(df, output_directory)
     analyze_snapshot_by_files_dirs(df, output_directory)
