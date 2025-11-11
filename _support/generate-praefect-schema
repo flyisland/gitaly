@@ -77,4 +77,7 @@ EOF
 # database version such that the output doesn't change based on the the
 # Postgres version.
 pg_dump --create --schema-only --no-owner --dbname "$DBNAME" |
-    sed -e 's/^\(-- Dumped .* version\) [0-9]\+\(.[0-9]\+\).*/\1 REPLACED/'
+    sed -e 's/^\(-- Dumped .* version\) [0-9]\+\(.[0-9]\+\).*/\1 REPLACED/' |
+    sed -e '/^\\restrict /d' -e '/^\\unrestrict /d' |
+    sed -e '/^-- PostgreSQL database dump$/,/^$/ { /^$/d; }' \
+        -e '/^-- PostgreSQL database dump complete$/,/^$/ { /^$/d; }'
