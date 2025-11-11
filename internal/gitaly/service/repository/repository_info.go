@@ -103,8 +103,11 @@ func convertRepositoryInfo(repoSize uint64, repoInfo stats.RepositoryInfo) (*git
 	// Only set MultiPackIndex if it exists
 	if repoInfo.Packfiles.MultiPackIndex.Exists {
 		response.MultiPackIndex = &gitalypb.RepositoryInfoResponse_MultiPackIndexInfo{
-			PackfileCount: repoInfo.Packfiles.MultiPackIndex.PackfileCount,
-			Version:       uint64(repoInfo.Packfiles.MultiPackIndex.Version),
+			PackfileCount:     repoInfo.Packfiles.MultiPackIndex.PackfileCount,
+			Version:           uint64(repoInfo.Packfiles.MultiPackIndex.Version),
+			HasLargeOffsets:   repoInfo.Packfiles.MultiPackIndex.HasLargeOffsets,
+			HasBitmappedPacks: repoInfo.Packfiles.MultiPackIndex.HasBitmappedPacks,
+			HasReverseIndex:   repoInfo.Packfiles.MultiPackIndex.HasReverseIndex,
 		}
 	}
 
