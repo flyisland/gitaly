@@ -27,7 +27,9 @@ const optionsStatic = () => {
       getTreeEntries: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'getTreeEntries' },
       treeEntry: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'treeEntry' },
       listCommitsByOid: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'listCommitsByOid' },
-      writeAndDeleteRefs: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'writeAndDeleteRefs' }
+      writeAndDeleteRefs: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'writeAndDeleteRefs' },
+      userCommitFiles: { ...SCENARIO_DEFAULTS, rate: 50, exec: 'userCommitFiles' },
+      userMergeBranch: { ...SCENARIO_DEFAULTS, rate: 50, exec: 'userMergeBranch' },
     },
     setupTimeout: '5m'
   }
@@ -75,7 +77,17 @@ const optionsRamping = () => {
         ...SCENARIO_DEFAULTS,
         stages: stages_write,
         exec: 'writeAndDeleteRefs'
-      }
+      },
+      userCommitFiles: {
+        ...SCENARIO_DEFAULTS,
+        stages: stages_write,
+        exec: 'userCommitFiles'
+      },
+      userMergeBranch: {
+        ...SCENARIO_DEFAULTS,
+        stages: stages_write,
+        exec: 'userMergeBranch'
+      },
     },
     setupTimeout: '5m'
   }
@@ -116,13 +128,86 @@ export function setup () {
   }
 }
 
+const teardownClient = new Client()
+teardownClient.load([gitalyProtoDir], 'ref.proto')
+
 export function teardown (context) {
+  console.log('Teardown: cleaning up benchmark branches...')
+  const testRepos = repos.filter(r => r.include_in_test)
+  const totalRepos = testRepos.length
+
+  let currentRepo = 0
+  teardownClient.connect(gitalyAddress, {
+    plaintext: true
+  })
+
+  for (const repo of testRepos) {
+    const repository = {
+      storageName: 'default',
+      relativePath: repo.name,
+      glRepository: repo.name,
+      glProjectPath: `foo/bar/${repo.name}`,
+    }
+
+    const stream = new Stream(teardownClient, 'gitaly.RefService/FindLocalBranches')
+    const branchesToDelete = []
+
+    stream.on('data', data => {
+      if (data.localBranches) {
+        for (const branch of data.localBranches) {
+          const branchName = encoding.b64decode(branch.name, 'std', 's')
+          if (branchName.startsWith('refs/heads/benchmark-')) {
+            branchesToDelete.push(branchName)
+          }
+        }
+      }
+    })
+
+    stream.on('end', function () {
+      currentRepo++
+      if (branchesToDelete.length > 0) {
+        console.log(`Found ${branchesToDelete.length} branches to delete`)
+        const BATCH_SIZE = 100
+        const batches = []
+        for (let i = 0; i < branchesToDelete.length; i += BATCH_SIZE) {
+          batches.push(branchesToDelete.slice(i, i + BATCH_SIZE))
+        }
+
+        for (let i = 0; i < batches.length; i++) {
+          const deleteReq = {
+            repository: repository,
+            refs: batches[i].map(name => encoding.b64encode(name))
+          }
+
+          const deleteRes = teardownClient.invoke('gitaly.RefService/DeleteRefs', deleteReq)
+          check(deleteRes, {
+            'DeleteRefs - StatusOK': r => r && r.status === StatusOK
+          })
+        }
+        console.log(`Completed ${currentRepo} of ${totalRepos} repositories`)
+        if (currentRepo === totalRepos) {
+          console.log('Teardown: all repositories cleaned')
+          teardownClient.close()
+        }
+
+      } else {
+        console.log(`No benchmark branches found`)
+      }
+    })
+
+    stream.on('error', function(err) {
+      console.error(`Error cleaning ${repo.name}:`, err)
+    })
+
+    stream.write({ repository: repository })
+  }
+
   exec.command('rm', [context.setupCompletionSentinel])
 }
 
 const client = new Client()
 // k6 provides no easy way to list directory contents.
-client.load([gitalyProtoDir], 'commit.proto', 'blob.proto', 'ref.proto', 'repository.proto')
+client.load([gitalyProtoDir], 'commit.proto', 'blob.proto', 'ref.proto', 'repository.proto', 'operations.proto')
 
 export function findCommit () {
   client.connect(gitalyAddress, {
@@ -297,4 +382,187 @@ export function writeAndDeleteRefs () {
   })
 
   client.close()
+}
+
+export function userCommitFiles () {
+  client.connect(gitalyAddress, {
+    plaintext: true
+  })
+
+  const testRepo = selectTestRepo();
+  const branchName = 'benchmark-commit-' + generateRandom()
+  const fileName = `benchmark-${generateRandom()}.txt`
+
+  const stream = new Stream(client, 'gitaly.OperationService/UserCommitFiles')
+
+  let responseReceived = false
+  stream.on('data', data => {
+    responseReceived = true
+    check(data, {
+      'UserCommitFiles - branch_update returned': r => r && r.branchUpdate
+    })
+  })
+
+  stream.on('end', function () {
+    check(responseReceived, {
+      'UserCommitFiles - received response': r => r === true
+    })
+    client.close()
+  })
+
+  stream.on('error', function(err) {
+    console.error('UserCommitFiles error:', err)
+    client.close()
+  })
+
+  stream.write({
+    header: {
+      repository: testRepo.repository,
+      user: {
+        glId: 'user-1',
+        name: encoding.b64encode('Benchmark User'),
+        email: encoding.b64encode('benchmark@example.com'),
+        glUsername: 'benchmark'
+      },
+      branchName: encoding.b64encode(branchName),
+      startBranchName: encoding.b64encode('master'),
+      commitMessage: encoding.b64encode('Benchmark commit')
+    }
+  })
+
+  // action header
+  stream.write({
+    action: {
+      header: {
+        action: 'CREATE',
+        filePath: encoding.b64encode(fileName),
+        base64Content: false
+      }
+    }
+  })
+
+  // action content
+  stream.write({
+    action: {
+      content: encoding.b64encode('Benchmark file content for testing')
+    }
+  })
+
+  stream.end()
+}
+
+export function userMergeBranch () {
+  client.connect(gitalyAddress, {
+    plaintext: true
+  })
+
+  const testRepo = selectTestRepo();
+  const sourceBranch = 'benchmark-source-' + generateRandom()
+  const targetBranch = 'benchmark-target-' + generateRandom()
+
+  // Create unique target branch from master to avoid race conditions
+  const createTargetReq = {
+    repository: testRepo.repository,
+    ref: encoding.b64encode(`refs/heads/${targetBranch}`),
+    revision: encoding.b64encode('master')
+  }
+  const writeRefRes = client.invoke('gitaly.RepositoryService/WriteRef', createTargetReq)
+  check(writeRefRes, {
+    'WriteRef - StatusOK': r => r && r.status === StatusOK
+  })
+
+  // Create a new commit with master as parent
+  const commitStream = new Stream(client, 'gitaly.OperationService/UserCommitFiles')
+
+  let newCommitId = null
+
+  commitStream.on('data', data => {
+    if (data.branchUpdate) {
+      newCommitId = data.branchUpdate.commitId
+    }
+  })
+
+  commitStream.on('end', function () {
+    const mergeStream = new Stream(client, 'gitaly.OperationService/UserMergeBranch')
+
+    let messagesReceived = 0
+
+    mergeStream.on('data', data => {
+      messagesReceived++
+      if (messagesReceived === 1) {
+        check(data, {
+          'UserMergeBranch - commit_id returned': r => r && r.commitId
+        })
+        mergeStream.write({ apply: true })
+      } else {
+        check(data, {
+          'UserMergeBranch - branch_update returned': r => r && r.branchUpdate
+        })
+      }
+    })
+
+    mergeStream.on('end', function () {
+      check(messagesReceived, {
+        'UserMergeBranch - received both responses': r => r === 2
+      })
+      client.close()
+    })
+
+    mergeStream.on('error', function(err) {
+      console.error('UserMergeBranch error:', err)
+      client.close()
+    })
+
+    mergeStream.write({
+      repository: testRepo.repository,
+      user: {
+        glId: 'user-1',
+        name: encoding.b64encode('Benchmark User'),
+        email: encoding.b64encode('benchmark@example.com'),
+        glUsername: 'benchmark'
+      },
+      commitId: newCommitId,
+      branch: encoding.b64encode(targetBranch),
+      message: encoding.b64encode('Benchmark merge')
+    })
+  })
+
+  commitStream.on('error', function(err) {
+    console.error('UserCommitFiles error:', err)
+    client.close()
+  })
+
+  // Create commit with master as parent
+  commitStream.write({
+    header: {
+      repository: testRepo.repository,
+      user: {
+        glId: 'user-1',
+        name: encoding.b64encode('Benchmark User'),
+        email: encoding.b64encode('benchmark@example.com'),
+        glUsername: 'benchmark'
+      },
+      branchName: encoding.b64encode(sourceBranch),
+      startBranchName: encoding.b64encode('master'),
+      commitMessage: encoding.b64encode('Benchmark commit for merge')
+    }
+  })
+
+  commitStream.write({
+    action: {
+      header: {
+        action: 'CREATE',
+        filePath: encoding.b64encode(`benchmark-${generateRandom()}.txt`),
+        base64Content: false
+      }
+    }
+  })
+
+  commitStream.write({
+    action: {
+      content: encoding.b64encode('Benchmark content')
+    }
+  })
+
+  commitStream.end()
 }
