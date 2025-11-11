@@ -53,6 +53,11 @@ func (s *Server) JoinCluster(ctx context.Context, req *gitalypb.JoinClusterReque
 	replicaRegistry := raftEnabledStorage.GetReplicaRegistry()
 	err = s.createReplicaViaTransaction(ctx, req.GetRelativePath(), raftEnabledStorage, replicaRegistry, req.GetPartitionKey())
 	if err != nil {
+		// Clean up the routing table if replica creation fails
+		if rollbackErr := s.rollbackRoutingTableEntry(req.GetPartitionKey(), routingTable); rollbackErr != nil {
+			return nil, structerr.NewInternal("%w: failed to create replica: %w", rollbackErr, err)
+		}
+
 		return nil, structerr.NewInternal("failed to create replica: %w", err)
 	}
 
@@ -124,4 +129,15 @@ func (s *Server) createReplicaViaTransaction(ctx context.Context, relativePath s
 	}()
 
 	return returnedErr
+}
+
+// rollbackRoutingTableEntry restores the routing table to its previous state after a failed operation
+func (s *Server) rollbackRoutingTableEntry(partitionKey *gitalypb.RaftPartitionKey, routingTable raftmgr.RoutingTable) error {
+	if err := routingTable.DeleteEntry(partitionKey); err != nil {
+		s.logger.WithField("partition_key", partitionKey).WithError(err).Error(
+			"delete routing table entry during rollback",
+		)
+		return fmt.Errorf("delete routing table entry during rollback: %w", err)
+	}
+	return nil
 }
