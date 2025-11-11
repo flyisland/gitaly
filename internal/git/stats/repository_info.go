@@ -734,6 +734,15 @@ type MultiPackIndexInfo struct {
 	Version uint8 `json:"version"`
 	// PackfileCount is the count of packfiles that the multi-pack-index tracks.
 	PackfileCount uint64 `json:"packfile_count"`
+	// HasLargeOffsets determines whether the MIDX contains LOFF chunks. This may be required in case the indexed
+	// packfiles are so large that offsets are larger than 32 bytes.
+	HasLargeOffsets bool `json:"has_large_offsets"`
+	// HasBitmappedPacks determines whether the MIDX contains BTMP chunks, which are used as bitmaps for individual
+	// packfiles contained in the MIDX.
+	HasBitmappedPacks bool `json:"has_bitmapped_packs"`
+	// HasReverseIndex determines whether the MIDX contains RIDX chunks, which are used as reverse indices for
+	// individual packfiles contained in the MIDX.
+	HasReverseIndex bool `json:"has_reverse_index"`
 }
 
 // MultiPackIndexInfoForPath reads the multi-pack-index at the given path and returns information on
@@ -775,9 +784,35 @@ func MultiPackIndexInfoForPath(path string) (MultiPackIndexInfo, error) {
 
 	packfileCount := binary.BigEndian.Uint32(midxHeader[8:12])
 
-	return MultiPackIndexInfo{
+	midx := MultiPackIndexInfo{
 		Exists:        true,
 		Version:       version,
 		PackfileCount: uint64(packfileCount),
-	}, nil
+	}
+
+	// The table of contents contains offsets to every section of chunks stored in the MIDX. It thus allows us to
+	// figure out whether a specific type of chunk exists. Every entry in the TOC consists of a 4 byte chunk ID as
+	// well as an 8 byte chunk offset.
+	chunkCount := midxHeader[6]
+	midxTOC := make([]byte, 12*chunkCount)
+	if _, err := io.ReadFull(file, midxTOC); err != nil {
+		return MultiPackIndexInfo{}, fmt.Errorf("reading table of contents: %w", err)
+	}
+
+	// There's a couple of optional chunks in an MIDX, but the existence of those chunks is of relevance to us in
+	// some contexts. We thus extract the existence of these optional chunks, but ignore the existence of mandatory
+	// chunks.
+	for i := byte(0); i < chunkCount; i++ {
+		chunkID := binary.BigEndian.Uint32(midxTOC[i*12 : i*12+4])
+		switch chunkID {
+		case 0x4c4f4646: // LOFF
+			midx.HasLargeOffsets = true
+		case 0x52494458: // RIDX
+			midx.HasReverseIndex = true
+		case 0x42544d50: // BTMP
+			midx.HasBitmappedPacks = true
+		}
+	}
+
+	return midx, nil
 }
