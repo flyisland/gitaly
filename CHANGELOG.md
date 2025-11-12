@@ -1,10 +1,18 @@
 # Gitaly changelog
 
+## 18.5.2 (2025-11-11)
+
+No changes.
+
 ## 18.5.1 (2025-10-21)
 
 No changes.
 
 ## 18.5.0 (2025-10-15)
+
+No changes.
+
+## 18.4.4 (2025-11-11)
 
 No changes.
 
@@ -29,6 +37,10 @@ No changes.
 ### Fixed (1 change)
 
 - [Handle ErrPathTraversal error](gitlab-org/gitaly@6749c86ccfe5fc53f0a5ce4a3c7549d6d491609e) ([merge request](gitlab-org/gitaly!8119))
+
+## 18.3.6 (2025-11-11)
+
+No changes.
 
 ## 18.3.5 (2025-10-21)
 
