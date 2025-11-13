@@ -452,3 +452,51 @@ func TestJoinCluster_MultipleRequests_DifferentPartitions(t *testing.T) {
 		require.True(t, found, "replica with storage %s and member ID %d should be in routing table", storageName, uint64(i+3))
 	}
 }
+
+func TestJoinCluster_RollbackOnReplicaCreationFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	t.Run("replica creation fails", func(t *testing.T) {
+		node, cfg, err := createRaftNodeWithStorage(t, testStorageName)
+		require.NoError(t, err)
+		conn := gittest.DialService(t, ctx, cfg)
+		client := gitalypb.NewRaftServiceClient(conn)
+
+		partitionKey := raftmgr.NewPartitionKey(testStorageName, 1)
+
+		req := &gitalypb.JoinClusterRequest{
+			PartitionKey: partitionKey,
+			MemberId:     testMemberID,
+			StorageName:  testStorageName,
+			RelativePath: "", // Empty relative path should cause transaction to fail
+			LeaderId:     testMemberID,
+			Replicas: []*gitalypb.ReplicaID{
+				{
+					PartitionKey: partitionKey,
+					MemberId:     testMemberID,
+					StorageName:  testStorageName,
+					Type:         gitalypb.ReplicaID_REPLICA_TYPE_VOTER,
+				},
+			},
+		}
+
+		resp, err := client.JoinCluster(ctx, req)
+		require.Error(t, err)
+		require.Nil(t, resp)
+		testhelper.RequireGrpcCode(t, err, codes.Internal)
+		require.Contains(t, err.Error(), "failed to create replica")
+
+		storageInterface, err := node.GetStorage(testStorageName)
+		require.NoError(t, err)
+		raftEnabledStorage := storageInterface.(*raftmgr.RaftEnabledStorage)
+		routingTable := raftEnabledStorage.GetRoutingTable()
+		require.NotNil(t, routingTable)
+
+		// Verify routing table entry was deleted
+		_, err = routingTable.GetEntry(partitionKey)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Key not found", "routing table entry should be deleted after rollback")
+	})
+}
