@@ -1,0 +1,27 @@
+[Unit]
+Description=Mock GitLab Internal API for Gitaly Benchmarking
+Documentation=https://gitlab.com/gitlab-org/gitaly
+After=network.target
+Before=gitaly.service
+
+[Service]
+Type=simple
+User=git
+Group=git
+ExecStart=/usr/bin/python3 /usr/local/bin/mock-gitlab-api.py
+Restart=on-failure
+RestartSec=5s
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mock-gitlab-api
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
+

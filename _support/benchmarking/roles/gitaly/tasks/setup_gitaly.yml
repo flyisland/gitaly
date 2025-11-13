@@ -92,6 +92,44 @@
     group: git
     mode: '0600'
 
+# Install and start mock GitLab API before Gitaly
+- name: Install mock GitLab API server script
+  copy:
+    src: mock-gitlab-api.py
+    dest: /usr/local/bin/mock-gitlab-api.py
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install mock GitLab API systemd service
+  template:
+    src: mock-gitlab-api.service.j2
+    dest: /etc/systemd/system/mock-gitlab-api.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Reload systemd daemon for mock API
+  systemd:
+    daemon_reload: true
+
+- name: Enable and start mock GitLab API service
+  systemd:
+    name: mock-gitlab-api
+    enabled: true
+    state: started
+
+- name: Wait for mock GitLab API to be responding
+  uri:
+    url: "http://127.0.0.1:3001/api/v4/internal/check"
+    method: GET
+    status_code: 200
+  register: api_check
+  until: api_check.status == 200
+  retries: 10
+  delay: 2
+
+# Now install and configure Gitaly (which will connect to the mock API)
 - name: Install Gitaly systemd service
   template:
     src: gitaly.service.j2
