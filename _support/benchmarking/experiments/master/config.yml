@@ -25,7 +25,7 @@ client:
 # Configuration parameters for a collection of N Gitaly nodes. Benchmarks will execute for each Gitaly
 # node.
 gitaly_instances:
-    # Try to use a short name, otherwise we'll exceed the GCP resource name length of 63 characters
+  # Try to use a short name, otherwise we'll exceed the GCP resource name length of 63 characters
   - name: "large"
     machine_type: "n2d-standard-16"
     boot_disk_type: "pd-balanced"
@@ -43,7 +43,7 @@ gitaly_instances:
     # fs_mount_opts: "defaults,discard"
     # fs_format_opts: "-f"
     # ext4 setup
-    filesystem: "ext4"  # Options: ext4, xfs, btrfs
+    filesystem: "ext4" # Options: ext4, xfs, btrfs
     fs_mount_opts: "defaults,discard"
     fs_format_opts: ""
 
@@ -55,6 +55,9 @@ gitaly_instances:
       # Arbitrary environment variables. Note that SNAPSHOT_DRIVER doesn't actually do anything; it
       # just serves as an example.
       SNAPSHOT_DRIVER: deepclone
+      # Enabling all feature flags, will enable housekeeping via the 'housekeeping_middleware'
+      # featureflag.
+      GITALY_TESTING_ENABLE_ALL_FEATURE_FLAGS: true
 
 # A list of repositories to be cloned onto the repositories disk, along with test inputs to be used
 # for RPC calls. This section of the configuration is re-serialised into JSON and provided to the
