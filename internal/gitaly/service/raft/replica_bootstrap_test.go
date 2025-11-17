@@ -18,6 +18,7 @@ const (
 var timeout = 5 * time.Second
 
 func TestRaftReplicaCreation(t *testing.T) {
+	testhelper.SkipQuarantinedTest(t, "https://gitlab.com/gitlab-org/gitaly/-/issues/6978")
 	t.Parallel()
 	ctxOne := testhelper.Context(t)
 	replicaOne, partitionKey, err := createRaftReplica(t, ctxOne, 1)
