@@ -5,6 +5,7 @@
       - linux-tools-common
       - "linux-tools-{{ ansible_kernel }}"
       - "linux-headers-{{ ansible_kernel }}"
+      - libc6-dbg
     state: present
 
 - name: Install bpftrace
