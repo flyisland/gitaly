@@ -20,7 +20,7 @@ usage() {
 profile() {
 	# Profile on-CPU time for Gitaly and child processes
 	perf record --freq=99 -g --pid="$(pidof -s gitaly)" \
-	    --output="${gitaly_perf_data}" -- sleep "${seconds}" &
+		--output="${gitaly_perf_data}" -- sleep "${seconds}" &
 
 	# Profile on-CPU time for whole system
 	perf record --freq=97 -g --all-cpus \
@@ -40,7 +40,7 @@ generate_flamegraphs() {
 	gitaly_perf_svg="${out_dir}/gitaly-perf.svg"
 	perf script --header --input="${gitaly_perf_data}" \
 	  | gzip > "${gitaly_perf_txt}"
-    zcat "${gitaly_perf_txt}" \
+	zcat "${gitaly_perf_txt}" \
 	  | stackcollapse-perf --kernel \
 	  | flamegraph --hash --colors=perl > "${gitaly_perf_svg}"
 
@@ -48,11 +48,15 @@ generate_flamegraphs() {
 	all_perf_svg="${out_dir}/all-perf.svg"
 	perf script --header --input="${all_perf_data}" \
 		| gzip > "${all_perf_txt}"
-    zcat "${all_perf_txt}" \
+	zcat "${all_perf_txt}" \
 		| stackcollapse-perf --kernel \
 		| flamegraph --hash --colors=perl > "${all_perf_svg}"
 
 	/usr/local/gitaly_offcpu_profiler/offcpu_profile_postprocessing.sh "${offcpu_profile_raw_output_file}"
+
+	cpu_usage_summary_txt="${out_dir}/cpu_usage_summary.txt"
+	zcat "${all_perf_txt}" \
+		| summarize_cpu_usage.pl > "${cpu_usage_summary_txt}"
 }
 
 main() {

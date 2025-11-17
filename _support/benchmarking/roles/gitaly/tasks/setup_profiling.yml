@@ -53,6 +53,12 @@
     mode: preserve
     directory_mode: 0755
 
+- name: Install summarize_cpu_usage.pl
+  copy:
+    src: summarize_cpu_usage.pl
+    dest: /usr/local/bin/summarize_cpu_usage.pl
+    mode: 0755
+
 - name: Install profile-gitaly.sh as profile-gitaly
   copy:
     src: "{{ playbook_dir }}/experiments/{{ gitaly_benchmarking_experiment_name }}/profile-gitaly.sh"
