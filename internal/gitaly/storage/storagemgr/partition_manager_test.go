@@ -40,6 +40,7 @@ type mockPartitionFactory struct {
 		storagePath string,
 		absoluteStateDir string,
 		stagingDir string,
+		snapshotDir string,
 	) Partition
 }
 
@@ -56,6 +57,7 @@ func newStubPartitionFactory() PartitionFactory {
 			storagePath string,
 			absoluteStateDir string,
 			stagingDir string,
+			snapshotDir string,
 		) Partition {
 			var closeOnce sync.Once
 			closing := make(chan struct{})
@@ -129,6 +131,7 @@ func (m mockPartitionFactory) New(
 	storagePath string,
 	absoluteStateDir string,
 	stagingDir string,
+	snapshotDir string,
 ) Partition {
 	return m.new(
 		ctx,
@@ -139,6 +142,7 @@ func (m mockPartitionFactory) New(
 		storagePath,
 		absoluteStateDir,
 		stagingDir,
+		snapshotDir,
 	)
 }
 

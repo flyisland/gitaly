@@ -41,6 +41,7 @@ func (f Factory) New(
 	storageName string, storagePath string,
 	absoluteStateDir string,
 	stagingDir string,
+	snapshotDir string,
 ) storagemgr.Partition {
 	// ScopeByStorage takes in context to pass it to the locator. This may be useful in the
 	// RPC handlers to rewrite the storage in the future but never here. Requiring a context
@@ -121,6 +122,7 @@ func (f Factory) New(
 		StoragePath:       storagePath,
 		StateDir:          absoluteStateDir,
 		StagingDir:        stagingDir,
+		SnapshotDir:       snapshotDir,
 		OffloadingSink:    f.offloadingSink,
 		CmdFactory:        f.cmdFactory,
 		RepositoryFactory: repoFactory,

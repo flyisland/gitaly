@@ -48,6 +48,7 @@ type PartitionFactory interface {
 		storagePath string,
 		absoluteStateDir string,
 		stagingDir string,
+		snapshotDir string,
 	) Partition
 }
 
@@ -69,6 +70,9 @@ type StorageManager struct {
 	// stagingDirectory is the directory where all of the partition staging directories
 	// should be created.
 	stagingDirectory string
+	// snapshotDirectory is the directory where all of the partition snapshot directories
+	// should be created.
+	snapshotDirectory string
 	// closed tracks whether the storageManager has been closed. If it is closed,
 	// no new transactions are allowed to begin.
 	closed bool
@@ -119,14 +123,26 @@ func NewStorageManager(
 ) (*StorageManager, error) {
 	internalDir := internalDirectoryPath(path)
 	stagingDir := stagingDirectoryPath(internalDir)
+	snapshotDir := snapshotDirectoryPath(internalDir)
+
 	// Remove a possible already existing staging directory as it may contain stale files
 	// if the previous process didn't shutdown gracefully.
-	if err := clearStagingDirectory(stagingDir); err != nil {
+	if err := clearWorkingDirectory(stagingDir); err != nil {
 		return nil, fmt.Errorf("failed clearing storage's staging directory: %w", err)
 	}
 
 	if err := os.MkdirAll(stagingDir, mode.Directory); err != nil {
 		return nil, fmt.Errorf("create storage's staging directory: %w", err)
+	}
+
+	// Remove a possible already existing snapshot directory as it may contain stale files
+	// if the previous process didn't shutdown gracefully.
+	if err := clearWorkingDirectory(snapshotDir); err != nil {
+		return nil, fmt.Errorf("failed clearing storage's snapshot directory: %w", err)
+	}
+
+	if err := os.MkdirAll(snapshotDir, mode.Directory); err != nil {
+		return nil, fmt.Errorf("create storage's snapshot directory: %w", err)
 	}
 
 	storageLogger := logger.WithField("storage", name)
@@ -150,6 +166,7 @@ func NewStorageManager(
 		name:                  name,
 		path:                  path,
 		stagingDirectory:      stagingDir,
+		snapshotDirectory:     snapshotDir,
 		database:              db,
 		partitionAssigner:     pa,
 		activePartitions:      map[storage.PartitionID]*partition{},
@@ -284,7 +301,7 @@ func (ptn *partition) isClosing() bool {
 	}
 }
 
-func clearStagingDirectory(stagingDir string) error {
+func clearWorkingDirectory(stagingDir string) error {
 	// Shared snapshots don't have write permissions on them to prevent accidental writes
 	// into them. If Gitaly terminated uncleanly and didn't clean up all of the shared snapshots,
 	// their directories would still be missing the write permission and fail the below
@@ -315,6 +332,10 @@ func internalDirectoryPath(storagePath string) string {
 
 func stagingDirectoryPath(storagePath string) string {
 	return filepath.Join(storagePath, "staging")
+}
+
+func snapshotDirectoryPath(storagePath string) string {
+	return filepath.Join(storagePath, "snapshots")
 }
 
 // Begin gets the Partition for the specified repository and starts a transaction. If a
@@ -540,6 +561,11 @@ func (sm *StorageManager) startPartition(ctx context.Context, partitionID storag
 					return fmt.Errorf("create staging directory: %w", err)
 				}
 
+				snapshotDir, err := os.MkdirTemp(sm.snapshotDirectory, "")
+				if err != nil {
+					return fmt.Errorf("create snapshot directory: %w", err)
+				}
+
 				logger := sm.logger.WithField("partition_id", partitionID)
 				mgr := sm.partitionFactory.New(
 					ctx,
@@ -550,6 +576,7 @@ func (sm *StorageManager) startPartition(ctx context.Context, partitionID storag
 					sm.path,
 					absoluteStateDir,
 					stagingDir,
+					snapshotDir,
 				)
 
 				ptn.Partition = mgr
@@ -590,6 +617,10 @@ func (sm *StorageManager) startPartition(ctx context.Context, partitionID storag
 
 					if err := os.RemoveAll(stagingDir); err != nil {
 						logger.WithError(err).Error("failed removing partition's staging directory")
+					}
+
+					if err := os.RemoveAll(snapshotDir); err != nil {
+						logger.WithError(err).Error("failed removing partition's snapshot directory")
 					}
 
 					sm.mu.Lock()

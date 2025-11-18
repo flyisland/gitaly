@@ -1211,6 +1211,9 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 	stagingDir := filepath.Join(storagePath, "staging")
 	require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
+	snapshotDir := filepath.Join(storagePath, "snapshots")
+	require.NoError(t, os.Mkdir(snapshotDir, mode.Directory))
+
 	newMetrics := func() Metrics {
 		return NewMetrics(housekeeping.NewMetrics(setup.Config.Prometheus))
 	}
@@ -1247,7 +1250,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		)
 
 		// transactionManager is the current TransactionManager instance.
-		transactionManager = factory.New(ctx, logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
+		transactionManager = factory.New(ctx, logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir, snapshotDir).(*TransactionManager)
 		// managerErr is used for synchronizing manager closing and returning
 		// the error from Run.
 		managerErr chan error
@@ -1296,7 +1299,10 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			require.NoError(t, os.RemoveAll(stagingDir))
 			require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
-			transactionManager = factory.New(ctx, logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
+			require.NoError(t, os.RemoveAll(snapshotDir))
+			require.NoError(t, os.Mkdir(snapshotDir, mode.Directory))
+
+			transactionManager = factory.New(ctx, logger, setup.PartitionID, database, storageName, storagePath, stateDir, stagingDir, snapshotDir).(*TransactionManager)
 			if step.OverridingSink != nil {
 				// Typically, transactionManager.offloadingSink is properly set by Factory.New().
 				// We override it here only in case when we need to simulate custom sink behaviors
@@ -1354,7 +1360,7 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 			}
 			require.Equalf(t, step.ExpectedSnapshotLSN, actualSnapshotLSN, "mismatched ExpectedSnapshotLSN")
 			require.NotEmpty(t, tx.Root(), "empty Root")
-			require.Contains(t, tx.Root(), transactionManager.snapshotsDir())
+			require.Contains(t, tx.Root(), transactionManager.snapshotDirectory)
 
 			if step.ReadOnly {
 				require.Empty(t,
@@ -1804,15 +1810,18 @@ func runTransactionTest(t *testing.T, ctx context.Context, tc transactionTestCas
 		"/": {Mode: mode.Directory},
 	}
 
-	// Snapshots directory may not exist if the manager failed to initialize. Check if it exists, and if so,
+	testhelper.RequireDirectoryState(t, transactionManager.stagingDirectory, "", expectedStagingDirState)
+
+	// Snapshot directory may not exist if the manager failed to initialize. Check if it exists, and if so,
 	// ensure that it is empty.
-	if _, err := os.Stat(transactionManager.snapshotsDir()); err == nil {
-		expectedStagingDirState["/snapshots"] = testhelper.DirectoryEntry{Mode: mode.Directory}
+	if _, err := os.Stat(transactionManager.snapshotDirectory); err == nil {
+		expectedSnapshotDirState := testhelper.DirectoryState{
+			"/": {Mode: mode.Directory},
+		}
+		testhelper.RequireDirectoryState(t, transactionManager.snapshotDirectory, "", expectedSnapshotDirState)
 	} else {
 		require.ErrorIs(t, err, fs.ErrNotExist)
 	}
-
-	testhelper.RequireDirectoryState(t, transactionManager.stagingDirectory, "", expectedStagingDirState)
 }
 
 // modifyDirectoryStateForRaft modifies log entry directory. It does three major things:
