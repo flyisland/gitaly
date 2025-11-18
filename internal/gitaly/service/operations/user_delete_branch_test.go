@@ -14,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/updateref"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/backchannel"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/text"
@@ -312,6 +313,15 @@ func TestUserDeleteBranch_allowed(t *testing.T) {
 						},
 					},
 				)
+			},
+		},
+		{
+			desc: "rate-limiting error",
+			allowed: func(context.Context, gitlab.AllowedParams) (bool, string, error) {
+				return false, "", client.RailsRateLimitedError{}
+			},
+			expectedErr: func(commitID git.ObjectID) error {
+				return structerr.NewResourceExhausted("running pre-receive hooks: GitLab: rate limited")
 			},
 		},
 	} {
