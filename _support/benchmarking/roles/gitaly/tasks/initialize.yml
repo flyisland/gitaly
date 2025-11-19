@@ -79,6 +79,40 @@
   async: 900
   poll: 30
 
+- name: Add additional refs if required
+  shell: |
+    COMMIT_SHA="$(git -C {{ item.name }} rev-parse HEAD)"
+    BATCH_SIZE=250000
+    TOTAL_REFS={{ item.additional_refs }}
+
+    for batch_start in $(seq 1 $BATCH_SIZE $TOTAL_REFS); do
+      batch_end=$((batch_start + BATCH_SIZE - 1))
+      if [ $batch_end -gt $TOTAL_REFS ]; then
+        batch_end=$TOTAL_REFS
+      fi
+
+      echo "Processing batch: refs $batch_start to $batch_end"
+
+      > base_refs  # Clear the file for each batch
+      for i in $(seq $batch_start $batch_end); do
+        echo "create refs/refs/zzz-$i $COMMIT_SHA" >> base_refs
+      done
+
+      git -C {{ item.name }} update-ref --stdin < base_refs
+
+      if [[ "{{ item.reference_backend }}" = "files" ]]; then
+        git -C {{ item.name }} pack-refs --all --auto
+      fi
+
+      rm base_refs
+    done
+  loop: "{{ config.repositories }}"
+  when:
+    - item.additional_refs is defined
+    - item.additional_refs is number
+  async: 900
+  poll: 30
+
 - name: Set git as owner of repositories directory
   file:
     path: /mnt/git-repositories
