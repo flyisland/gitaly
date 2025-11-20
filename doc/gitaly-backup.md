@@ -39,7 +39,7 @@ transfers the received data to the specified storage destination, as defined by 
 1. Direct Gitaly Server-Side Backup – This approach prioritizes direct transfer from Gitaly server to the destination sink.
    CLI initiates Remote Procedure Calls (RPCs) to the Gitaly server requesting backup data for one or more repositories.
    The Gitaly server generates the backup data and streams this directly to the storage backend configured in the Gitaly configuration file.
-   in the Gitaly [`config.toml`](/gitlab-org/gitaly/-/blob/master/config.toml.example)
+   in the Gitaly [`config.toml`](https://gitlab.com/gitlab-org/gitaly/-/blob/master/config.toml.example)
 
    ```plaintext
     +------------------+         1. Repository         +------------------+
