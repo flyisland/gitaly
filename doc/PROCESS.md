@@ -518,7 +518,7 @@ bundled Git binaries. This is because the binaries are now embedded into the
 Gitaly binary, thus an upgrade can be performed atomically. A Gitaly process
 is in complete control of its Git execution environment when using bundled Git.
 
-[bundled-git]: git-execution-environments.md#bundled-git-recommended
+[bundled-git]: git-execution-environments.md
 
 ### Detailed Process
 
