@@ -81,6 +81,8 @@
 
 - name: Add additional refs if required
   shell: |
+    set -euo pipefail
+
     COMMIT_SHA="$(git -C {{ item.name }} rev-parse HEAD)"
     BATCH_SIZE=250000
     TOTAL_REFS={{ item.additional_refs }}
@@ -114,6 +116,7 @@
   poll: 30
   args:
     chdir: /mnt/git-repositories
+    executable: /bin/bash
 
 - name: Set git as owner of repositories directory
   file:
