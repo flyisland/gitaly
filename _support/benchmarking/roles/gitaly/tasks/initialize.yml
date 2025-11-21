@@ -112,8 +112,6 @@
     - item.additional_refs is number
   async: 900
   poll: 30
-  become: yes
-  become_user: git
   args:
     chdir: /mnt/git-repositories
 
