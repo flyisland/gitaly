@@ -191,6 +191,9 @@ func TestReftableMigration(t *testing.T) {
 			stagingDir := filepath.Join(storagePath, "staging")
 			require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
+			snapshotDir := filepath.Join(storagePath, "snapshots")
+			require.NoError(t, os.Mkdir(snapshotDir, mode.Directory))
+
 			p := newPartition(
 				partitionFactory.New(
 					ctx,
@@ -201,6 +204,7 @@ func TestReftableMigration(t *testing.T) {
 					storagePath,
 					stateDir,
 					stagingDir,
+					snapshotDir,
 				),
 				logger,
 				NewMetrics(),

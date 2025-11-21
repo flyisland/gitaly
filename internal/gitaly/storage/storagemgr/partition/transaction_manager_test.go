@@ -2180,6 +2180,9 @@ func BenchmarkTransactionManager(b *testing.B) {
 				stagingDir := filepath.Join(storagePath, "staging", strconv.Itoa(i))
 				require.NoError(b, os.MkdirAll(stagingDir, mode.Directory))
 
+				snapshotDir := filepath.Join(storagePath, "snapshots", strconv.Itoa(i))
+				require.NoError(b, os.MkdirAll(snapshotDir, mode.Directory))
+
 				m := NewMetrics(housekeeping.NewMetrics(cfg.Prometheus))
 
 				// Valid partition IDs are >=1.
@@ -2193,7 +2196,7 @@ func BenchmarkTransactionManager(b *testing.B) {
 				}
 				factory := NewFactory(partitionFactoryOptions...)
 				// transactionManager is the current TransactionManager instance.
-				manager := factory.New(ctx, logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir).(*TransactionManager)
+				manager := factory.New(ctx, logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir, snapshotDir).(*TransactionManager)
 
 				managers = append(managers, manager)
 

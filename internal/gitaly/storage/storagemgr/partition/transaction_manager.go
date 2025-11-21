@@ -931,6 +931,8 @@ type TransactionManager struct {
 	// left around after crashes. The files are temporary and any leftover files are expected to be cleaned up when
 	// Gitaly starts.
 	stagingDirectory string
+	// snapshotDirectory is a path to a directory where this TransactionManager should create the transaction snapshots.
+	snapshotDirectory string
 	// commandFactory is used to spawn git commands without a repository.
 	commandFactory gitcmd.CommandFactory
 	// repositoryFactory is used to build localrepo.Repo instances.
@@ -1022,6 +1024,7 @@ type transactionManagerParameters struct {
 	DB                       keyvalue.Transactioner
 	StorageName, StoragePath string
 	StateDir, StagingDir     string
+	SnapshotDir              string
 	OffloadingSink           *offloading.Sink
 	CmdFactory               gitcmd.CommandFactory
 	RepositoryFactory        localrepo.StorageScopedFactory
@@ -1056,6 +1059,7 @@ func NewTransactionManager(parameters *transactionManagerParameters) *Transactio
 		conflictMgr:         conflict.NewManager(),
 		fsHistory:           fshistory.New(),
 		stagingDirectory:    parameters.StagingDir,
+		snapshotDirectory:   parameters.SnapshotDir,
 		cleanupWorkers:      cleanupWorkers,
 		cleanupWorkerFailed: make(chan struct{}),
 		committedEntries:    list.New(),
@@ -2051,11 +2055,6 @@ func (mgr *TransactionManager) CloseSnapshots() error {
 	return mgr.snapshotManager.Close()
 }
 
-// snapshotsDir returns the directory where the transactions' snapshots are stored.
-func (mgr *TransactionManager) snapshotsDir() string {
-	return filepath.Join(mgr.stagingDirectory, "snapshots")
-}
-
 // initialize initializes the TransactionManager's state from the database. It initializes WAL log manager and the
 // applied LSNs and initializes the notification channels that synchronize transaction beginning with log entry
 // applying.
@@ -2074,12 +2073,9 @@ func (mgr *TransactionManager) initialize(ctx context.Context) error {
 	if err := mgr.logManager.Initialize(ctx, mgr.appliedLSN); err != nil {
 		return fmt.Errorf("initialize log management: %w", err)
 	}
-	if err := os.Mkdir(mgr.snapshotsDir(), mode.Directory); err != nil {
-		return fmt.Errorf("create snapshot manager directory: %w", err)
-	}
 
 	var err error
-	if mgr.snapshotManager, err = snapshot.NewManager(mgr.logger, mgr.storagePath, mgr.snapshotsDir(), mgr.metrics.snapshot); err != nil {
+	if mgr.snapshotManager, err = snapshot.NewManager(mgr.logger, mgr.storagePath, mgr.snapshotDirectory, mgr.metrics.snapshot); err != nil {
 		return fmt.Errorf("new snapshot manager: %w", err)
 	}
 

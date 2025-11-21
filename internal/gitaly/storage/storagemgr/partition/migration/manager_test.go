@@ -175,6 +175,9 @@ func TestMigrationManager_Begin(t *testing.T) {
 			stagingDir := filepath.Join(storagePath, "staging")
 			require.NoError(t, os.Mkdir(stagingDir, mode.Directory))
 
+			snapshotDir := filepath.Join(storagePath, "snapshots")
+			require.NoError(t, os.Mkdir(snapshotDir, mode.Directory))
+
 			cmdFactory := gittest.NewCommandFactory(t, cfg)
 			cache := catfile.NewCache(cfg)
 			defer cache.Stop()
@@ -195,7 +198,7 @@ func TestMigrationManager_Begin(t *testing.T) {
 				partition.WithRaftFactory(raftFactory),
 			}
 			factory := partition.NewFactory(partitionFactoryOptions...)
-			tm := factory.New(ctx, logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir)
+			tm := factory.New(ctx, logger, testPartitionID, database, storageName, storagePath, stateDir, stagingDir, snapshotDir)
 
 			ctx, cancel := context.WithCancel(ctx)
 
