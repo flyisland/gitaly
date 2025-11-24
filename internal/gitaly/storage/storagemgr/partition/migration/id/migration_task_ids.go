@@ -6,7 +6,7 @@ import "math"
 // the last migration it performed. Subsequent migration jobs should always use increasing numbers.
 const (
 	// LeftoverFile is the migration ID of a leftover file migration.
-	LeftoverFile = 1
+	LeftoverFile = 2
 
 	// Reftable is a placeholder value. The Reftable migration uses a special ID marked as math.MaxUint64 because
 	// retable migration isn't wired into the migration manager like other migrations.
