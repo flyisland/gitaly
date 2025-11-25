@@ -8,6 +8,10 @@ No changes.
 
 No changes.
 
+## 18.5.3 (2025-11-25)
+
+No changes.
+
 ## 18.5.2 (2025-11-11)
 
 No changes.
