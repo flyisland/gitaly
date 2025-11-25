@@ -22,14 +22,14 @@ const optionsStatic = () => {
 
   return {
     scenarios: {
-      findCommit: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'findCommit' },
-      getBlobs: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'getBlobs' },
-      getTreeEntries: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'getTreeEntries' },
-      treeEntry: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'treeEntry' },
-      listCommitsByOid: { ...SCENARIO_DEFAULTS, rate: 200, exec: 'listCommitsByOid' },
-      writeAndDeleteRefs: { ...SCENARIO_DEFAULTS, rate: 100, exec: 'writeAndDeleteRefs' },
-      userCommitFiles: { ...SCENARIO_DEFAULTS, rate: 50, exec: 'userCommitFiles' },
-      userMergeBranch: { ...SCENARIO_DEFAULTS, rate: 50, exec: 'userMergeBranch' },
+      findCommit:         { ...SCENARIO_DEFAULTS, rate: 90, exec: 'findCommit' },
+      listCommitsByOid:   { ...SCENARIO_DEFAULTS, rate: 90, exec: 'listCommitsByOid' },
+      getBlobs:           { ...SCENARIO_DEFAULTS, rate: 90, exec: 'getBlobs' },
+      getTreeEntries:     { ...SCENARIO_DEFAULTS, rate: 90, exec: 'getTreeEntries' },
+      treeEntry:          { ...SCENARIO_DEFAULTS, rate: 40, exec: 'treeEntry' },
+      writeAndDeleteRefs: { ...SCENARIO_DEFAULTS, rate: 1, exec: 'writeAndDeleteRefs' },
+      userCommitFiles:    { ...SCENARIO_DEFAULTS, rate: 2, exec: 'userCommitFiles' },
+      userMergeBranch:    { ...SCENARIO_DEFAULTS, rate: 1, exec: 'userMergeBranch' },
     },
     setupTimeout: '5m'
   }
@@ -94,7 +94,7 @@ const optionsRamping = () => {
 
 }
 
-export const options = optionsRamping()
+export const options = optionsStatic()
 
 const repos = JSON.parse(open("/opt/benchmark-gitaly/repositories.json"));
 
