@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"google.golang.org/grpc"
@@ -112,6 +113,16 @@ func TestStatushandler(t *testing.T) {
 		"no errors": {
 			ctx:         ctx,
 			expectedErr: status.New(codes.OK, "").Err(),
+		},
+		"rate limiting error": {
+			ctx:         ctx,
+			err:         client.RailsRateLimitedError{},
+			expectedErr: status.Error(codes.ResourceExhausted, "rate limited"),
+		},
+		"context timed out with rate limiting error": {
+			ctx:         timeoutCtx,
+			err:         client.RailsRateLimitedError{},
+			expectedErr: status.Error(codes.DeadlineExceeded, "rate limited"),
 		},
 	} {
 		t.Run(desc, func(t *testing.T) {

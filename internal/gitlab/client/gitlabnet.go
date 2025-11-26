@@ -43,6 +43,13 @@ type APIError struct {
 	Msg string
 }
 
+// RailsRateLimitedError represents a rate-limited error from a Rails endpoint.
+type RailsRateLimitedError struct{}
+
+func (e RailsRateLimitedError) Error() string {
+	return "rate limited"
+}
+
 // OriginalRemoteIPContextKey is to be used as the key in a Context
 // to set an X-Forwarded-For header in a request
 type OriginalRemoteIPContextKey struct{}
@@ -186,6 +193,11 @@ func (c *GitlabNetClient) DoRequest(ctx context.Context, method, path string, da
 
 	if response != nil {
 		logger = logger.WithField("status", response.StatusCode)
+		if response.StatusCode == http.StatusTooManyRequests {
+			// This error is unwrapped in statushandler.go to return an
+			// appropriate gRPC status code.
+			return nil, RailsRateLimitedError{}
+		}
 	}
 	if err := parseError(response); err != nil {
 		logger.WithError(err).Error("Internal API error")
