@@ -9,6 +9,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/hook"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/hook/updateref"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
@@ -65,6 +66,11 @@ func (s *Server) UserDeleteBranch(ctx context.Context, req *gitalypb.UserDeleteB
 		var notAllowedError hook.NotAllowedError
 		var customHookErr updateref.CustomHookError
 		var updateRefError updateref.Error
+
+		// Allow the statushandler middleware to sort this out.
+		if errors.Is(err, client.RailsRateLimitedError{}) {
+			return nil, err
+		}
 
 		if errors.As(err, &notAllowedError) {
 			return nil, structerr.NewPermissionDenied("deletion denied by access checks: %w", err).WithDetail(

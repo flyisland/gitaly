@@ -27,10 +27,15 @@ type NotAllowedError struct {
 	UserID string
 	// Changes is the changes we have requested.
 	Changes []byte
+	cause   error
 }
 
 func (e NotAllowedError) Error() string {
 	return fmt.Sprintf("GitLab: %s", e.Message)
+}
+
+func (e NotAllowedError) Unwrap() error {
+	return e.cause
 }
 
 func getRelativeObjectDirs(repoPath, gitObjectDir, gitAlternateObjectDirs string) (string, []string, error) {
@@ -153,6 +158,7 @@ func (m *GitLabHookManager) preReceiveHook(ctx context.Context, payload gitcmd.H
 			UserID:   payload.UserDetails.UserID,
 			Protocol: payload.UserDetails.Protocol,
 			Changes:  changes,
+			cause:    err,
 		}
 	}
 	// Due to above comment, it means that this code won't ever be executed: when there

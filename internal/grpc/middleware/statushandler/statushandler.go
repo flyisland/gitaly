@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -13,7 +14,7 @@ import (
 // response status returned as an error.
 func Unary(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	resp, err := handler(ctx, req)
-	return resp, wrapCtxErr(ctx, err)
+	return resp, wrapCtxErr(ctx, wrapResourceExhaustedErr(err))
 }
 
 // Stream is a server interceptor that converts error happened during the call into a
@@ -21,7 +22,18 @@ func Unary(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, han
 func Stream(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	ctx := stream.Context()
 	err := handler(srv, stream)
-	return wrapCtxErr(ctx, err)
+	return wrapCtxErr(ctx, wrapResourceExhaustedErr(err))
+}
+
+// wrapResourceExhaustedErr ensures that we return the appropriate RESOURCE_EXHAUSTED gRPC status
+// code in the event that internal calls to Rails have returned an HTTP 429 status.
+func wrapResourceExhaustedErr(err error) error {
+	switch {
+	case errors.Is(err, client.RailsRateLimitedError{}):
+		return structerr.NewResourceExhausted("%w", err)
+	default:
+		return err
+	}
 }
 
 // wrapCtxErr returns an error as an instance of the google.golang.org/grpc/status package or nil.

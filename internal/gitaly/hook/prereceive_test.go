@@ -19,6 +19,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/backchannel"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
@@ -389,6 +390,7 @@ func TestPrereceive_gitlab(t *testing.T) {
 				Protocol: "web",
 				UserID:   "1234",
 				Changes:  []byte("changes\n"),
+				cause:    errors.New("oops"),
 			},
 		},
 		{
@@ -416,6 +418,24 @@ func TestPrereceive_gitlab(t *testing.T) {
 			},
 			expectHookCall: true,
 			expectedErr:    structerr.NewInternal("calling pre_receive endpoint: %w", errors.New("prereceive oops")),
+		},
+		{
+			desc:    "prereceive rate-limiting errors",
+			env:     standardEnv,
+			changes: "changes\n",
+			allowed: func(t *testing.T, ctx context.Context, params gitlab.AllowedParams) (bool, string, error) {
+				return false, "", client.RailsRateLimitedError{}
+			},
+			prereceive: func(t *testing.T, ctx context.Context, glRepo string) (bool, error) {
+				return false, errors.New("prereceive oops")
+			},
+			expectedErr: NotAllowedError{
+				Message:  "rate limited",
+				Protocol: "web",
+				UserID:   "1234",
+				Changes:  []byte("changes\n"),
+				cause:    client.RailsRateLimitedError{},
+			},
 		},
 	}
 
