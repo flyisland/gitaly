@@ -32,6 +32,12 @@ profile() {
 	bpftrace /usr/local/gitaly_offcpu_profiler/offcpu_profile.bt "${seconds}" "${min_stall_duration_us}" \
 		| gzip > "${offcpu_profile_raw_output_file}" &
 
+	# Hitting the pprof/profile endpoint first will turn on CPU profiling, which will
+	# then be embedded automatically into the CPU trace.
+	# See https://github.com/golang/go/issues/66679 for a discussion on why.
+	curl -o "${out_dir}/pprof-profile.out" "localhost:9236/debug/pprof/profile?seconds=${seconds}" &
+	curl -o "${out_dir}/pprof-trace.out" "localhost:9236/debug/pprof/trace?seconds=${seconds}" &
+
 	wait
 }
 
