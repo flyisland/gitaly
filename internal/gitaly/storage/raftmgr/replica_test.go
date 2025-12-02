@@ -1729,6 +1729,10 @@ func TestReplica_AddNode(t *testing.T) {
 
 		transport := NewGrpcTransport(logger, cfg, routingTable, registry, nil)
 		socketPath, srv := createTempServer(t, transport)
+		cfg.SocketPath = socketPath
+
+		address, err := cfg.GetAddressWithScheme()
+		require.NoError(t, err)
 
 		replica, err := createRaftReplica(t, ctx, memberID, socketPath, raftCfg, partitionID, metrics, opts...)
 		require.NoError(t, err)
@@ -1741,7 +1745,7 @@ func TestReplica_AddNode(t *testing.T) {
 		err = replica.Initialize(ctx, 0)
 		require.NoError(t, err)
 
-		return replica, socketPath, srv
+		return replica, address, srv
 	}
 
 	// waitForLeadership waits for the replica to become leader
@@ -1783,8 +1787,7 @@ func TestReplica_AddNode(t *testing.T) {
 		metrics := NewMetrics()
 		partitionID := storage.PartitionID(1)
 
-		replica, socketPath, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
-		replicaAddress := "unix://" + socketPath
+		replica, replicaAddress, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
 		defer func() {
 			srv.Stop()
 			require.NoError(t, replica.Close())
@@ -1799,9 +1802,21 @@ func TestReplica_AddNode(t *testing.T) {
 		routingTable := raftEnabledStorage.GetRoutingTable()
 		partitionKey := replica.partitionKey
 
+		// verify the routing table is updated
+		require.Eventually(t, func() bool {
+			entry, err := routingTable.GetEntry(partitionKey)
+			if err != nil {
+				return false
+			}
+			leaderEntry := entry.Replicas[0]
+			require.Equal(t, uint64(1), leaderEntry.GetMemberId())
+			require.Equal(t, replicaAddress, leaderEntry.GetMetadata().GetAddress())
+			require.Equal(t, replica.logStore.storageName, leaderEntry.GetStorageName())
+			return len(entry.Replicas) == 1
+		}, waitTimeout, 5*time.Millisecond, "routing table should be updated")
+
 		// Create second node
-		replicaTwo, socketPathTwo, srvTwo := createTestNode(t, ctx, 3, partitionID, raftCfg, metrics)
-		replicaTwoAddress := "unix://" + socketPathTwo
+		replicaTwo, replicaTwoAddress, srvTwo := createTestNode(t, ctx, 3, partitionID, raftCfg, metrics)
 		defer func() {
 			srvTwo.Stop()
 			require.NoError(t, replicaTwo.Close())
@@ -1870,13 +1885,11 @@ func TestReplica_AddNode(t *testing.T) {
 		metrics := NewMetrics()
 		partitionID := storage.PartitionID(1)
 
-		replica, socketPath, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
+		replica, replicaOneAddress, srv := createTestNode(t, ctx, 1, partitionID, raftCfg, metrics)
 		defer func() {
 			srv.Stop()
 			require.NoError(t, replica.Close())
 		}()
-
-		replicaOneAddress := "unix://" + socketPath
 
 		waitForLeadership(t, replica, waitTimeout)
 
@@ -1904,10 +1917,9 @@ func TestReplica_AddNode(t *testing.T) {
 
 		for i := uint64(2); i <= lastMemberID; i++ {
 			// create multiple replicas with new addresses
-			replica, socketPath, srv := createTestNode(t, ctx, i, partitionID, raftCfg, metrics)
+			replica, address, srv := createTestNode(t, ctx, i, partitionID, raftCfg, metrics)
 
 			servers = append(servers, srv)
-			address := "unix://" + socketPath
 			destinationAddresses = append(destinationAddresses, address)
 			addressesToReplicas[address] = replica
 

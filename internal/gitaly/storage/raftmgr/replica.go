@@ -3,6 +3,7 @@ package raftmgr
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -414,7 +415,20 @@ func (replica *Replica) Initialize(ctx context.Context, appliedLSN storage.LSN) 
 	switch initStatus {
 	case InitStatusUnbootstrapped:
 		// For first-time bootstrap, initialize with self as the only peer
-		peers := []raft.Peer{{ID: replica.memberID}}
+		nodeAddress := replica.raftEnabledStorage.GetNodeAddress()
+
+		metadata := &gitalypb.ReplicaID_Metadata{
+			Address: nodeAddress,
+		}
+		ctx := ConfChangeContext{
+			Metadata: metadata,
+		}
+		contextBytes, err := json.Marshal(ctx)
+		if err != nil {
+			return fmt.Errorf("marshalling conf change context: %w", err)
+		}
+		peers := []raft.Peer{{ID: replica.memberID, Context: contextBytes}}
+
 		replica.node = raft.StartNode(config, peers)
 	case InitStatusBootstrapped:
 		// For restarts, set Applied to latest committed LSN

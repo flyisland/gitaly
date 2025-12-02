@@ -13,6 +13,7 @@ import (
 // RaftEnabledStorage wraps a storage.Storage instance with Raft functionality
 type RaftEnabledStorage struct {
 	storage.Storage
+	address         string
 	transport       Transport
 	routingTable    RoutingTable
 	replicaRegistry ReplicaRegistry
@@ -31,6 +32,11 @@ func (s *RaftEnabledStorage) GetRoutingTable() RoutingTable {
 // GetReplicaRegistry returns the replica registry for this storage
 func (s *RaftEnabledStorage) GetReplicaRegistry() ReplicaRegistry {
 	return s.replicaRegistry
+}
+
+// GetNodeAddress returns the node's address.
+func (s *RaftEnabledStorage) GetNodeAddress() string {
+	return s.address
 }
 
 // RegisterReplica registers a replica with this RaftEnabledStorage
@@ -74,11 +80,17 @@ func NewNode(cfg config.Cfg, logger log.Logger, dbMgr *databasemgr.DBManager, co
 		replicaRegistry := NewReplicaRegistry()
 		transport := NewGrpcTransport(logger, cfg, routingTable, replicaRegistry, connsPool)
 
+		address, err := cfg.GetAddressWithScheme()
+		if err != nil {
+			return nil, fmt.Errorf("get address with scheme: %w", err)
+		}
+
 		n.storages[cfgStorage.Name] = &RaftEnabledStorage{
 			Storage:         baseStorage, // storage.Storage would be nil initially
 			transport:       transport,
 			routingTable:    routingTable,
 			replicaRegistry: replicaRegistry,
+			address:         address,
 		}
 	}
 
