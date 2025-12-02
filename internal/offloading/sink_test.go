@@ -113,7 +113,7 @@ func TestSink_Upload(t *testing.T) {
 		expectedErrored    map[string]error
 	}{
 		{
-			desc:   "Upload objects",
+			desc:   "Upload objects with metadata",
 			prefix: "jerry",
 			filesToUpload: map[string]string{
 				"C-131": "I am Mr. Frundles",
@@ -172,13 +172,22 @@ func TestSink_Upload(t *testing.T) {
 				}
 
 				objectName := fileName
-				err := sink.Upload(ctx, filepath.Join(localDir, objectName), tc.prefix)
+				testMetadata := map[string]string{
+					"storage-name":  "default",
+					"storage-path":  "/var/opt/gitlab/git-data",
+					"relative-path": "gitlab/gitaly.git",
+					"partition-id":  "partition-1",
+				}
+
+				err := sink.Upload(ctx, filepath.Join(localDir, objectName), tc.prefix, testMetadata)
 				if err == nil {
 					objKey := tc.prefix + "/" + objectName
 					attr, err := sink.bucket.Attributes(ctx, objKey)
 					require.NoError(t, err)
 					require.Equal(t, attr.CacheControl, "no-store, no-transform")
 					require.Equal(t, attr.ContentType, "application/octet-stream")
+					require.NotNil(t, attr.Metadata, "metadata should be stored with the object")
+					require.Equal(t, testMetadata, attr.Metadata, "stored metadata should match uploaded metadata for object %s", objectName)
 
 					var builder strings.Builder
 					err = sink.bucket.Download(ctx, objKey, &builder, nil)
@@ -202,9 +211,9 @@ func TestSink_Upload(t *testing.T) {
 
 		sink := setupEmptyLocalBucket(t)
 
-		err = sink.Upload(ctx, filepath.Join(localDirLoser, "i_am_key"), "some/prefix")
+		err = sink.Upload(ctx, filepath.Join(localDirLoser, "i_am_key"), "some/prefix", nil)
 		require.NoError(t, err)
-		err = sink.Upload(ctx, filepath.Join(localDirWinner, "i_am_key"), "some/prefix")
+		err = sink.Upload(ctx, filepath.Join(localDirWinner, "i_am_key"), "some/prefix", nil)
 		require.NoError(t, err)
 
 		var builder strings.Builder
@@ -218,7 +227,7 @@ func TestSink_Upload(t *testing.T) {
 		sink := setupEmptyLocalBucket(t)
 		defer closeBucket(t, sink)
 
-		err := sink.Upload(ctx, "", "some/prefix")
+		err := sink.Upload(ctx, "", "some/prefix", nil)
 		require.Error(t, err)
 	})
 }
@@ -327,7 +336,7 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 			err = os.WriteFile(filepath.Join(localDir, tc.objectName), []byte("Go long!"), mode.File)
 			require.NoError(t, err)
 
-			err = sink.Upload(ctx, filepath.Join(localDir, tc.objectName), prefix)
+			err = sink.Upload(ctx, filepath.Join(localDir, tc.objectName), prefix, nil)
 
 			if tc.expectedError != nil {
 				require.ErrorIs(t, err, errSimulationCanceled)
@@ -374,7 +383,7 @@ func TestSink_Upload_Timeout_Cancellation_And_Retry(t *testing.T) {
 
 		errCh := make(chan error)
 		go func() {
-			errCh <- sink.Upload(ctx, filepath.Join(localDir, objectName), prefix)
+			errCh <- sink.Upload(ctx, filepath.Join(localDir, objectName), prefix, nil)
 		}()
 
 		// Add a small delay before cancellation to ensure operation has started
