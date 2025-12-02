@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/server/auth"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/requestinfohandler"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
 	"google.golang.org/grpc"
@@ -25,10 +27,11 @@ func LimitConcurrencyByRepo(ctx context.Context) string {
 
 // LimiterMiddleware contains rate limiter state
 type LimiterMiddleware struct {
-	methodLimiters        map[string]limiter.Limiter
-	getLockKey            GetLockKey
-	requestsDroppedMetric *prometheus.CounterVec
-	collect               func(metrics chan<- prometheus.Metric)
+	methodLimiters                map[string]limiter.Limiter
+	methodLimitersUnauthenticated map[string]limiter.Limiter
+	getLockKey                    GetLockKey
+	requestsDroppedMetric         *prometheus.CounterVec
+	collect                       func(metrics chan<- prometheus.Metric)
 }
 
 // New creates a new middleware that limits requests. SetupFunc sets up the
@@ -76,7 +79,19 @@ func (c *LimiterMiddleware) UnaryInterceptor() grpc.UnaryServerInterceptor {
 			return handler(ctx, req)
 		}
 
+		// Check if request is authenticated
 		limiter := c.methodLimiters[info.FullMethod]
+
+		if featureflag.LimitUnauthenticated.IsEnabled(ctx) {
+			unauthLimiter, ok := c.methodLimitersUnauthenticated[info.FullMethod]
+			// Use auth.IsAuthenticated to check if the token was cryptographically validated,
+			// not just whether a token was present in metadata. This prevents spoofed tokens
+			// from bypassing unauthenticated rate limits.
+			if !auth.IsAuthenticated(ctx) && ok {
+				limiter = unauthLimiter
+			}
+		}
+
 		if limiter == nil {
 			// No concurrency limiting
 			return handler(ctx, req)
@@ -125,7 +140,20 @@ func (w *wrappedStream) RecvMsg(m interface{}) error {
 		return nil
 	}
 
+	// Check if request is authenticated
 	limiter := w.limiterMiddleware.methodLimiters[w.info.FullMethod]
+
+	if featureflag.LimitUnauthenticated.IsEnabled(ctx) {
+		unauthLimiter, ok := w.limiterMiddleware.methodLimitersUnauthenticated[w.info.FullMethod]
+		// Use auth.IsAuthenticated to check if the token was cryptographically validated,
+		// not just whether a token was present in metadata. This prevents spoofed tokens
+		// from bypassing unauthenticated rate limits.
+		if !auth.IsAuthenticated(ctx) && ok {
+			// Unauthenticated request
+			limiter = unauthLimiter
+		}
+	}
+
 	if limiter == nil {
 		// No concurrency limiting
 		return nil
@@ -158,7 +186,10 @@ func (w *wrappedStream) RecvMsg(m interface{}) error {
 // requests based on RPC and repository
 func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit, SetupFunc) {
 	perRPCLimits := map[string]*limiter.AdaptiveLimit{}
+	perRPCLimitsUnauthenticated := map[string]*limiter.AdaptiveLimit{}
+
 	for _, concurrency := range cfg.Concurrency {
+		// Create authenticated limiter
 		limitName := fmt.Sprintf("perRPC%s", concurrency.RPC)
 		if concurrency.Adaptive {
 			perRPCLimits[concurrency.RPC] = limiter.NewAdaptiveLimit(limitName, limiter.AdaptiveSetting{
@@ -171,6 +202,24 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 			perRPCLimits[concurrency.RPC] = limiter.NewAdaptiveLimit(limitName, limiter.AdaptiveSetting{
 				Initial: concurrency.MaxPerRepo,
 			})
+		}
+
+		// Create unauthenticated limiter if configured
+		unauthLimits := concurrency.Unauthenticated
+		if unauthLimits.IsSet() {
+			limitNameUnauth := fmt.Sprintf("perRPC%s-unauthenticated", concurrency.RPC)
+			if unauthLimits.Adaptive {
+				perRPCLimitsUnauthenticated[concurrency.RPC] = limiter.NewAdaptiveLimit(limitNameUnauth, limiter.AdaptiveSetting{
+					Initial:       unauthLimits.InitialLimit,
+					Max:           unauthLimits.MaxLimit,
+					Min:           unauthLimits.MinLimit,
+					BackoffFactor: limiter.DefaultBackoffFactor,
+				})
+			} else if unauthLimits.MaxPerRepo > 0 {
+				perRPCLimitsUnauthenticated[concurrency.RPC] = limiter.NewAdaptiveLimit(limitNameUnauth, limiter.AdaptiveSetting{
+					Initial: unauthLimits.MaxPerRepo,
+				})
+			}
 		}
 	}
 	return perRPCLimits, func(cfg config.Cfg, middleware *LimiterMiddleware) {
@@ -210,7 +259,10 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 		}
 
 		result := make(map[string]limiter.Limiter)
+		resultUnauthenticated := make(map[string]limiter.Limiter)
+
 		for _, concurrency := range cfg.Concurrency {
+			// Create authenticated limiter
 			result[concurrency.RPC] = limiter.NewConcurrencyLimiter(
 				perRPCLimits[concurrency.RPC],
 				concurrency.MaxQueueSize,
@@ -220,6 +272,20 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 					queuedMetric, inProgressMetric, acquiringSecondsMetric, middleware.requestsDroppedMetric,
 				),
 			)
+
+			// Create unauthenticated limiter if configured
+			if adaptiveLimit, ok := perRPCLimitsUnauthenticated[concurrency.RPC]; ok {
+				unauthLimits := concurrency.Unauthenticated
+				resultUnauthenticated[concurrency.RPC] = limiter.NewConcurrencyLimiter(
+					adaptiveLimit,
+					unauthLimits.MaxQueueSize,
+					unauthLimits.MaxQueueWait.Duration(),
+					limiter.NewPerRPCPromMonitor(
+						"gitaly", concurrency.RPC+"-unauthenticated",
+						queuedMetric, inProgressMetric, acquiringSecondsMetric, middleware.requestsDroppedMetric,
+					),
+				)
+			}
 		}
 
 		// Set default for ReplicateRepository.
@@ -237,5 +303,6 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 		}
 
 		middleware.methodLimiters = result
+		middleware.methodLimitersUnauthenticated = resultUnauthenticated
 	}
 }

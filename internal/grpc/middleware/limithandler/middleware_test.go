@@ -11,9 +11,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	gitalyauth "gitlab.com/gitlab-org/gitaly/v18/auth"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	gitalycfgauth "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/auth"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/server/auth"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/limithandler"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/requestinfohandler"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/duration"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
@@ -22,6 +27,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/interop/grpc_testing"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -35,19 +42,25 @@ func TestWithConcurrencyLimiters(t *testing.T) {
 	cfg := config.Cfg{
 		Concurrency: []config.Concurrency{
 			{
-				RPC:        "/grpc.testing.TestService/UnaryCall",
-				MaxPerRepo: 1,
+				RPC: "/grpc.testing.TestService/UnaryCall",
+				ConcurrencyLimits: config.ConcurrencyLimits{
+					MaxPerRepo: 1,
+				},
 			},
 			{
-				RPC:        "/grpc.testing.TestService/FullDuplexCall",
-				MaxPerRepo: 99,
+				RPC: "/grpc.testing.TestService/FullDuplexCall",
+				ConcurrencyLimits: config.ConcurrencyLimits{
+					MaxPerRepo: 99,
+				},
 			},
 			{
-				RPC:          "/grpc.testing.TestService/AnotherUnaryCall",
-				Adaptive:     true,
-				MinLimit:     5,
-				InitialLimit: 10,
-				MaxLimit:     15,
+				RPC: "/grpc.testing.TestService/AnotherUnaryCall",
+				ConcurrencyLimits: config.ConcurrencyLimits{
+					Adaptive:     true,
+					MinLimit:     5,
+					InitialLimit: 10,
+					MaxLimit:     15,
+				},
 			},
 		},
 	}
@@ -81,7 +94,12 @@ func TestUnaryLimitHandler(t *testing.T) {
 
 	cfg := config.Cfg{
 		Concurrency: []config.Concurrency{
-			{RPC: "/grpc.testing.TestService/UnaryCall", MaxPerRepo: 2},
+			{
+				RPC: "/grpc.testing.TestService/UnaryCall",
+				ConcurrencyLimits: config.ConcurrencyLimits{
+					MaxPerRepo: 2,
+				},
+			},
 		},
 	}
 
@@ -141,23 +159,25 @@ func TestUnaryLimitHandler_queueing(t *testing.T) {
 		cfg := config.Cfg{
 			Concurrency: []config.Concurrency{
 				{
-					RPC:          "/grpc.testing.TestService/UnaryCall",
-					MaxPerRepo:   1,
-					MaxQueueSize: 1,
-					// This test setups two requests:
-					// - The first one is eligible. It enters the handler and blocks the queue.
-					// - The second request is blocked until timeout.
-					// Both of them shares this timeout. Internally, the limiter creates a context
-					// deadline to reject timed out requests. If it's set too low, there's a tiny
-					// possibility that the context reaches the deadline when the limiter checks the
-					// request. Thus, setting a reasonable timeout here and adding some retry
-					// attempts below make the test stable.
-					// Another approach is to implement a hooking mechanism that allows us to
-					// override context deadline setup. However, that approach exposes the internal
-					// implementation of the limiter. It also adds unnecessarily logics.
-					// Congiuring the timeout is more straight-forward and close to the expected
-					// behavior.
-					MaxQueueWait: duration.Duration(100 * time.Millisecond),
+					RPC: "/grpc.testing.TestService/UnaryCall",
+					ConcurrencyLimits: config.ConcurrencyLimits{
+						MaxPerRepo:   1,
+						MaxQueueSize: 1,
+						// This test setups two requests:
+						// - The first one is eligible. It enters the handler and blocks the queue.
+						// - The second request is blocked until timeout.
+						// Both of them shares this timeout. Internally, the limiter creates a context
+						// deadline to reject timed out requests. If it's set too low, there's a tiny
+						// possibility that the context reaches the deadline when the limiter checks the
+						// request. Thus, setting a reasonable timeout here and adding some retry
+						// attempts below make the test stable.
+						// Another approach is to implement a hooking mechanism that allows us to
+						// override context deadline setup. However, that approach exposes the internal
+						// implementation of the limiter. It also adds unnecessarily logics.
+						// Congiuring the timeout is more straight-forward and close to the expected
+						// behavior.
+						MaxQueueWait: duration.Duration(100 * time.Millisecond),
+					},
 				},
 			},
 		}
@@ -221,13 +241,17 @@ func TestUnaryLimitHandler_queueing(t *testing.T) {
 				// that has no wait limit. We of course expect that the actual
 				// config should not have any maximum queueing time.
 				{
-					RPC:          "dummy",
-					MaxPerRepo:   1,
-					MaxQueueWait: duration.Duration(1 * time.Nanosecond),
+					RPC: "dummy",
+					ConcurrencyLimits: config.ConcurrencyLimits{
+						MaxPerRepo:   1,
+						MaxQueueWait: duration.Duration(1 * time.Nanosecond),
+					},
 				},
 				{
-					RPC:        "/grpc.testing.TestService/UnaryCall",
-					MaxPerRepo: 1,
+					RPC: "/grpc.testing.TestService/UnaryCall",
+					ConcurrencyLimits: config.ConcurrencyLimits{
+						MaxPerRepo: 1,
+					},
 				},
 			},
 		}
@@ -487,9 +511,11 @@ func TestStreamLimitHandler(t *testing.T) {
 			cfg := config.Cfg{
 				Concurrency: []config.Concurrency{
 					{
-						RPC:          tc.fullname,
-						MaxPerRepo:   tc.maxConcurrency,
-						MaxQueueSize: maxQueueSize,
+						RPC: tc.fullname,
+						ConcurrencyLimits: config.ConcurrencyLimits{
+							MaxPerRepo:   tc.maxConcurrency,
+							MaxQueueSize: maxQueueSize,
+						},
 					},
 				},
 			}
@@ -540,7 +566,13 @@ func TestStreamLimitHandler_error(t *testing.T) {
 
 	cfg := config.Cfg{
 		Concurrency: []config.Concurrency{
-			{RPC: "/grpc.testing.TestService/FullDuplexCall", MaxPerRepo: 1, MaxQueueSize: 1},
+			{
+				RPC: "/grpc.testing.TestService/FullDuplexCall",
+				ConcurrencyLimits: config.ConcurrencyLimits{
+					MaxPerRepo:   1,
+					MaxQueueSize: 1,
+				},
+			},
 		},
 	}
 
@@ -660,7 +692,13 @@ func TestConcurrencyLimitHandlerMetrics(t *testing.T) {
 	methodName := "/grpc.testing.TestService/UnaryCall"
 	cfg := config.Cfg{
 		Concurrency: []config.Concurrency{
-			{RPC: methodName, MaxPerRepo: 1, MaxQueueSize: 1},
+			{
+				RPC: methodName,
+				ConcurrencyLimits: config.ConcurrencyLimits{
+					MaxPerRepo:   1,
+					MaxQueueSize: 1,
+				},
+			},
 		},
 	}
 
@@ -737,6 +775,237 @@ func TestConcurrencyLimitHandlerMetrics(t *testing.T) {
 	<-respCh
 }
 
+func TestAuthenticatedVsUnauthenticatedLimiting(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unary: authenticated and unauthenticated requests use separate limiters", func(t *testing.T) {
+		t.Parallel()
+
+		s := &queueTestServer{
+			server: server{
+				blockCh: make(chan struct{}),
+			},
+			reqArrivedCh: make(chan struct{}, 10),
+		}
+
+		cfg := config.Cfg{
+			Concurrency: []config.Concurrency{
+				{
+					RPC: "/grpc.testing.TestService/UnaryCall",
+					ConcurrencyLimits: config.ConcurrencyLimits{
+						MaxPerRepo:   2, // Authenticated: 2 concurrent
+						MaxQueueSize: 10,
+					},
+					Unauthenticated: config.ConcurrencyLimits{
+						MaxPerRepo:   1, // Unauthenticated: 1 concurrent
+						MaxQueueSize: 10,
+					},
+				},
+			},
+		}
+
+		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+		lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
+		srv, serverSocketPath := runServerWithAuth(t, s, lh.UnaryInterceptor(), nil)
+		defer srv.Stop()
+
+		client, conn := newClient(t, serverSocketPath)
+		defer conn.Close()
+
+		authClient, authConn := newAuthenticatedClient(t, serverSocketPath, "test-secret")
+		defer authConn.Close()
+
+		ctx := featureflag.ContextWithFeatureFlag(testhelper.Context(t), featureflag.LimitUnauthenticated, true)
+
+		// First, send 2 authenticated requests - both should be accepted (limit is 2)
+		var wg sync.WaitGroup
+		wg.Add(2)
+		for i := 0; i < 2; i++ {
+			go func() {
+				defer wg.Done()
+				_, err := authClient.UnaryCall(ctx, &grpc_testing.SimpleRequest{})
+				require.NoError(t, err)
+			}()
+		}
+
+		// Wait for both authenticated requests to arrive
+		<-s.reqArrivedCh
+		<-s.reqArrivedCh
+
+		// Now send an unauthenticated request - it should also be accepted
+		// because it uses a separate limiter
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := client.UnaryCall(ctx, &grpc_testing.SimpleRequest{})
+			require.NoError(t, err)
+		}()
+
+		// Wait for the unauthenticated request to arrive
+		<-s.reqArrivedCh
+
+		// Verify no more requests can get through (both limiters saturated)
+		select {
+		case <-s.reqArrivedCh:
+			require.FailNow(t, "received unexpected fourth request")
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		// Unblock all requests
+		close(s.blockCh)
+		wg.Wait()
+	})
+
+	t.Run("unary: unauthenticated falls back to authenticated limiter when not configured", func(t *testing.T) {
+		t.Parallel()
+
+		s := &queueTestServer{
+			server: server{
+				blockCh: make(chan struct{}),
+			},
+			reqArrivedCh: make(chan struct{}, 10),
+		}
+
+		cfg := config.Cfg{
+			Concurrency: []config.Concurrency{
+				{
+					RPC: "/grpc.testing.TestService/UnaryCall",
+					ConcurrencyLimits: config.ConcurrencyLimits{
+						MaxPerRepo:   2, // Only authenticated limiter configured
+						MaxQueueSize: 10,
+					},
+					// No unauthenticated limiter configured
+				},
+			},
+		}
+
+		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+		lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
+		srv, serverSocketPath := runServerWithAuth(t, s, lh.UnaryInterceptor(), nil)
+		defer srv.Stop()
+
+		client, conn := newClient(t, serverSocketPath)
+		defer conn.Close()
+
+		authClient, authConn := newAuthenticatedClient(t, serverSocketPath, "test-secret")
+		defer authConn.Close()
+
+		ctx := featureflag.ContextWithFeatureFlag(testhelper.Context(t), featureflag.LimitUnauthenticated, true)
+
+		var wg sync.WaitGroup
+
+		// Send 1 authenticated and 1 unauthenticated request
+		// Both should be accepted (they share the same limiter with limit 2)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, err := authClient.UnaryCall(ctx, &grpc_testing.SimpleRequest{})
+			require.NoError(t, err)
+		}()
+		go func() {
+			defer wg.Done()
+			_, err := client.UnaryCall(ctx, &grpc_testing.SimpleRequest{})
+			require.NoError(t, err)
+		}()
+
+		// Wait for both requests to arrive
+		<-s.reqArrivedCh
+		<-s.reqArrivedCh
+
+		// Verify no more requests can get through (shared limiter saturated)
+		select {
+		case <-s.reqArrivedCh:
+			require.FailNow(t, "received unexpected third request")
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		// Unblock all requests
+		close(s.blockCh)
+		wg.Wait()
+	})
+
+	t.Run("stream: authenticated and unauthenticated requests use separate limiters", func(t *testing.T) {
+		t.Parallel()
+
+		s := &queueTestServer{
+			server: server{
+				blockCh: make(chan struct{}),
+			},
+			reqArrivedCh: make(chan struct{}, 10),
+		}
+
+		cfg := config.Cfg{
+			Concurrency: []config.Concurrency{
+				{
+					RPC: "/grpc.testing.TestService/FullDuplexCall",
+					ConcurrencyLimits: config.ConcurrencyLimits{
+						MaxPerRepo:   2, // Authenticated: 2 concurrent
+						MaxQueueSize: 10,
+					},
+					Unauthenticated: config.ConcurrencyLimits{
+						MaxPerRepo:   1, // Unauthenticated: 1 concurrent
+						MaxQueueSize: 10,
+					},
+				},
+			},
+		}
+
+		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+		lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
+		srv, serverSocketPath := runServerWithAuth(t, s, nil, lh.StreamInterceptor())
+		defer srv.Stop()
+
+		client, conn := newClient(t, serverSocketPath)
+		defer conn.Close()
+
+		authClient, authConn := newAuthenticatedClient(t, serverSocketPath, "test-secret")
+		defer authConn.Close()
+
+		ctx := featureflag.ContextWithFeatureFlag(testhelper.Context(t), featureflag.LimitUnauthenticated, true)
+
+		respChan := make(chan *grpc_testing.StreamingOutputCallResponse)
+
+		// Send 2 authenticated streams
+		for i := 0; i < 2; i++ {
+			go func() {
+				stream, err := authClient.FullDuplexCall(ctx)
+				require.NoError(t, err)
+				require.NoError(t, stream.Send(&grpc_testing.StreamingOutputCallRequest{}))
+				require.NoError(t, stream.CloseSend())
+				resp, err := stream.Recv()
+				require.NoError(t, err)
+				respChan <- resp
+			}()
+		}
+
+		// Wait for both authenticated streams to arrive
+		<-s.reqArrivedCh
+		<-s.reqArrivedCh
+
+		// Send 1 unauthenticated stream - should be accepted with separate limiter
+		go func() {
+			stream, err := client.FullDuplexCall(ctx)
+			require.NoError(t, err)
+			require.NoError(t, stream.Send(&grpc_testing.StreamingOutputCallRequest{}))
+			require.NoError(t, stream.CloseSend())
+			resp, err := stream.Recv()
+			require.NoError(t, err)
+			respChan <- resp
+		}()
+
+		// Wait for the unauthenticated stream to arrive
+		<-s.reqArrivedCh
+
+		// Unblock all streams
+		close(s.blockCh)
+
+		// Collect all responses
+		for i := 0; i < 3; i++ {
+			<-respChan
+		}
+	})
+}
+
 func runServer(tb testing.TB, s grpc_testing.TestServiceServer, opt ...grpc.ServerOption) (*grpc.Server, string) {
 	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(tb)
 	grpcServer := grpc.NewServer(opt...)
@@ -750,8 +1019,82 @@ func runServer(tb testing.TB, s grpc_testing.TestServiceServer, opt ...grpc.Serv
 	return grpcServer, "unix://" + serverSocketPath
 }
 
+func runServerWithAuth(tb testing.TB, s grpc_testing.TestServiceServer, unaryInt grpc.UnaryServerInterceptor, streamInt grpc.StreamServerInterceptor) (*grpc.Server, string) {
+	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(tb)
+
+	var unaryInterceptors []grpc.UnaryServerInterceptor
+	var streamInterceptors []grpc.StreamServerInterceptor
+
+	// Add requestinfohandler first to extract authentication info
+	unaryInterceptors = append(unaryInterceptors, requestinfohandler.UnaryInterceptor)
+	streamInterceptors = append(streamInterceptors, requestinfohandler.StreamInterceptor)
+
+	// Add auth interceptor to validate tokens and set authenticated flag
+	// Use transitioning mode so invalid tokens don't block requests (for testing unauthenticated flow)
+	authCfg := gitalycfgauth.Config{
+		Token:         "test-secret",
+		Transitioning: true,
+	}
+	unaryInterceptors = append(unaryInterceptors, auth.UnaryServerInterceptor(authCfg))
+	streamInterceptors = append(streamInterceptors, auth.StreamServerInterceptor(authCfg))
+
+	// Then add the limiter interceptor
+	if unaryInt != nil {
+		unaryInterceptors = append(unaryInterceptors, unaryInt)
+	}
+	if streamInt != nil {
+		streamInterceptors = append(streamInterceptors, streamInt)
+	}
+
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    60 * time.Second,
+			Timeout: 20 * time.Second,
+		}),
+	)
+	grpc_testing.RegisterTestServiceServer(grpcServer, s)
+
+	lis, err := net.Listen("unix", serverSocketPath)
+	require.NoError(tb, err)
+
+	go testhelper.MustServe(tb, grpcServer, lis)
+
+	return grpcServer, "unix://" + serverSocketPath
+}
+
 func newClient(tb testing.TB, serverSocketPath string) (grpc_testing.TestServiceClient, *grpc.ClientConn) {
 	conn, err := client.New(testhelper.Context(tb), serverSocketPath)
+	if err != nil {
+		tb.Fatal(err)
+	}
+
+	return grpc_testing.NewTestServiceClient(conn), conn
+}
+
+func newAuthenticatedClient(tb testing.TB, serverSocketPath, secret string) (grpc_testing.TestServiceClient, *grpc.ClientConn) {
+	conn, err := client.New(
+		testhelper.Context(tb),
+		serverSocketPath,
+		client.WithGrpcOptions([]grpc.DialOption{
+			grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(secret)),
+			grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+				md := metadata.Pairs("username", "test-user")
+				ctx = metadata.NewOutgoingContext(ctx, md)
+				return invoker(ctx, method, req, reply, cc, opts...)
+			}),
+			grpc.WithStreamInterceptor(func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+				md := metadata.Pairs("username", "test-user")
+				ctx = metadata.NewOutgoingContext(ctx, md)
+				return streamer(ctx, desc, cc, method, opts...)
+			}),
+		}),
+	)
 	if err != nil {
 		tb.Fatal(err)
 	}

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -22,6 +23,17 @@ var authCount = promauto.NewCounterVec(
 	},
 	[]string{"enforced", "status"},
 )
+
+// IsAuthenticated returns true if the request has a username set in the gRPC metadata.
+func IsAuthenticated(ctx context.Context) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+
+	usernames := md.Get("username")
+	return len(usernames) > 0
+}
 
 // UnauthenticatedHealthService wraps the health server and disables authentication for all of its methods.
 type UnauthenticatedHealthService struct{ grpc_health_v1.HealthServer }
