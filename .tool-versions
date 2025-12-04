@@ -1,6 +1,6 @@
 # Versions of Gitaly dependencies managed by asdf.
 golang 1.24.5
-ruby 3.3.9
+ruby 3.3.10
 
 # For linting documentation
 nodejs 22.19.0 # Dependency for markdownlint-cli2
