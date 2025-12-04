@@ -1746,7 +1746,15 @@ func (mgr *TransactionManager) processTransaction(ctx context.Context) (returned
 	select {
 	case transaction = <-mgr.admissionQueue:
 		defer trace.StartRegion(ctx, "processTransaction").End()
-		defer prometheus.NewTimer(mgr.metrics.transactionProcessingDurationSeconds).ObserveDuration()
+
+		timer := prometheus.NewTimer(mgr.metrics.transactionProcessingDurationSeconds)
+		defer func() {
+			duration := timer.ObserveDuration()
+			// Log the transaction processing duration to the gRPC request log
+			if customFields := logging.CustomFieldsFromContext(ctx); customFields != nil {
+				customFields.RecordSum("transaction.processing_ms", int(duration.Milliseconds()))
+			}
+		}()
 
 		// The transaction does not finish itself anymore once it has been admitted for
 		// processing. This avoids the client concurrently removing the staged state
