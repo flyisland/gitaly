@@ -764,8 +764,8 @@ func TestCollectDryRunStatistics(t *testing.T) {
 					foundDryRunLog = true
 
 					// Verify the log contains expected fields
-					require.Contains(t, entry.Data, "dryrun_snapshot")
-					snapshotData := entry.Data["dryrun_snapshot"].(map[string]interface{})
+					require.Contains(t, entry.Data, "transaction.dryrun_snapshot")
+					snapshotData := entry.Data["transaction.dryrun_snapshot"].(map[string]interface{})
 
 					// Verify we counted the expected files and directories
 					require.Equal(t, tc.expectedDirs, snapshotData["directory_count"], "should have counted directories")

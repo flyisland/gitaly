@@ -298,8 +298,8 @@ func verifyDryRunLog(t *testing.T, entries []*logrus.Entry) bool {
 		if entry.Message == "collected dry-run snapshot statistics" {
 			foundDryRunLog = true
 			// Verify the log contains expected fields
-			require.Contains(t, entry.Data, "dryrun_snapshot")
-			snapshotData := entry.Data["dryrun_snapshot"].(map[string]interface{})
+			require.Contains(t, entry.Data, "transaction.dryrun_snapshot")
+			snapshotData := entry.Data["transaction.dryrun_snapshot"].(map[string]interface{})
 			require.Contains(t, snapshotData, "directory_count")
 			require.Contains(t, snapshotData, "file_count")
 			require.Contains(t, snapshotData, "max_directory_depth")
