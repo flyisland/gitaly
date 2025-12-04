@@ -68,3 +68,17 @@ type OffloadingConfig struct {
 	// the prefix will need to set because we need to know the prefix to look up the object beforehand.
 	Prefix string
 }
+
+// OperationType represents different housekeeping operations that can be scheduled independently.
+type OperationType string
+
+const (
+	// OpRepackRefs represents the pack-refs operation.
+	OpRepackRefs OperationType = "repack_refs"
+	// OpRepackObjects represents the object repacking operation.
+	OpRepackObjects OperationType = "repack_objects"
+	// OpPruneObjects represents the object pruning operation.
+	OpPruneObjects OperationType = "prune_objects"
+	// OpWriteCommitGraph represents the commit-graph writing operation.
+	OpWriteCommitGraph OperationType = "write_commit_graph"
+)
