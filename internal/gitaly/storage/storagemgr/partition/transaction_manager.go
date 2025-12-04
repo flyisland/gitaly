@@ -568,7 +568,18 @@ func (txn *Transaction) Commit(ctx context.Context) (commitLSN storage.LSN, retu
 		return 0, err
 	}
 
-	defer prometheus.NewTimer(txn.metrics.commitDuration(txn.write)).ObserveDuration()
+	commitTimer := prometheus.NewTimer(txn.metrics.commitDuration(txn.write))
+	defer func() {
+		duration := commitTimer.ObserveDuration()
+		// Log the commit duration to the gRPC request log
+		if customFields := logging.CustomFieldsFromContext(ctx); customFields != nil {
+			if txn.write {
+				customFields.RecordSum("transaction.commit.write_ms", int(duration.Milliseconds()))
+			} else {
+				customFields.RecordSum("transaction.commit.read_ms", int(duration.Milliseconds()))
+			}
+		}
+	}()
 
 	defer func() {
 		if err := txn.finishUnadmitted(); err != nil && returnedErr == nil {
