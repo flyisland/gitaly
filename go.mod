@@ -30,7 +30,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/mattn/go-isatty v0.0.20
 	github.com/miekg/dns v1.1.68
-	github.com/olekukonko/tablewriter v1.0.7
+	github.com/olekukonko/tablewriter v1.1.0
 	github.com/opencontainers/runtime-spec v1.2.1
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/prometheus/client_golang v1.23.2
@@ -192,8 +192,8 @@ require (
 	github.com/montanaflynn/stats v0.7.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
-	github.com/olekukonko/errors v0.0.0-20250405072817-4e6d85265da6 // indirect
-	github.com/olekukonko/ll v0.0.8 // indirect
+	github.com/olekukonko/errors v1.1.0 // indirect
+	github.com/olekukonko/ll v0.0.9 // indirect
 	github.com/olekukonko/ts v0.0.0-20171002115256-78ecb04241c0 // indirect
 	github.com/onsi/gomega v1.35.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
