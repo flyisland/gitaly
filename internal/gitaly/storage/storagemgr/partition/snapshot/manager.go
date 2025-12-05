@@ -351,7 +351,7 @@ func (mgr *Manager) logSnapshotCreation(ctx context.Context, exclusive bool, sta
 	mgr.metrics.snapshotDirectoryEntries.Observe(float64(stats.directoryCount + stats.fileCount))
 
 	fields := log.Fields{
-		"snapshot": map[string]any{
+		"transaction.snapshot": map[string]any{
 			"exclusive":       exclusive,
 			"duration_ms":     float64(stats.creationDuration) / float64(time.Millisecond),
 			"directory_count": stats.directoryCount,
@@ -417,7 +417,7 @@ func (mgr *Manager) CollectDryRunStatistics(ctx context.Context, relativePaths [
 // from regular snapshot creation logs.
 func (mgr *Manager) logDryRunStatistics(ctx context.Context, stats RepositoryStatistics) {
 	mgr.logger.WithFields(log.Fields{
-		"dryrun_snapshot": map[string]any{
+		"transaction.dryrun_snapshot": map[string]any{
 			"directory_count":               stats.DirectoryCount,
 			"file_count":                    stats.FileCount,
 			"max_directory_depth":           stats.MaxDirectoryDepth,
