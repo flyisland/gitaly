@@ -279,6 +279,9 @@ message ListCommitsRequest {
 message ListCommitsResponse {
   // commits is the list of commits found.
   repeated GitCommit commits = 1;
+  // pagination_cursor defines the offset for subsequent requests. Refer to PaginationCursor
+  // documentation for further info.
+  PaginationCursor pagination_cursor = 2;
 }
 
 // ListAllCommitsRequest is a request for the ListAllCommits RPC.

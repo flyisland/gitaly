@@ -127,11 +127,24 @@ func (s *server) ListCommits(
 		return err
 	}
 
+	var lastCommitID string
+	var sentCursor bool
+
 	chunker := chunk.New(&commitsSender{
 		send: func(commits []*gitalypb.GitCommit) error {
-			return stream.Send(&gitalypb.ListCommitsResponse{
+			response := &gitalypb.ListCommitsResponse{
 				Commits: commits,
-			})
+			}
+
+			// Send the pagination cursor only in the first response to save bandwidth
+			if !sentCursor && lastCommitID != "" {
+				response.PaginationCursor = &gitalypb.PaginationCursor{
+					NextCursor: lastCommitID,
+				}
+				sentCursor = true
+			}
+
+			return stream.Send(response)
 		},
 	})
 
@@ -151,6 +164,9 @@ func (s *server) ListCommits(
 		if err != nil {
 			return structerr.NewInternal("parsing commit: %w", err)
 		}
+
+		// Track the last commit ID for pagination cursor
+		lastCommitID = commit.GitCommit.GetId()
 
 		if err := chunker.Send(commit.GitCommit); err != nil {
 			return structerr.NewInternal("sending commit: %w", err)

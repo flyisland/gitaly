@@ -87,6 +87,21 @@ func TestListCommits(t *testing.T) {
 			},
 		},
 		{
+			desc: "pagination cursor is returned when limit is set",
+			request: &gitalypb.ListCommitsRequest{
+				Repository: repoProto,
+				Revisions: []string{
+					main3ID.String(),
+				},
+				PaginationParams: &gitalypb.PaginationParameter{
+					Limit: 2,
+				},
+			},
+			expectedCommits: []*gitalypb.GitCommit{
+				main3, main2,
+			},
+		},
+		{
 			desc: "revision range",
 			request: &gitalypb.ListCommitsRequest{
 				Repository: repoProto,
@@ -297,13 +312,73 @@ func TestListCommits(t *testing.T) {
 			stream, err := client.ListCommits(ctx, tc.request)
 			require.NoError(t, err)
 
+			var firstResponse *gitalypb.ListCommitsResponse
 			commits, err := testhelper.ReceiveAndFold(stream.Recv, func(result []*gitalypb.GitCommit, response *gitalypb.ListCommitsResponse) []*gitalypb.GitCommit {
+				if firstResponse == nil {
+					firstResponse = response
+				}
 				return append(result, response.GetCommits()...)
 			})
 			require.NoError(t, err)
 			testhelper.ProtoEqual(t, tc.expectedCommits, commits)
+
+			// Verify pagination cursor is set when limit is used and there are results
+			if tc.request.GetPaginationParams().GetLimit() > 0 && len(tc.expectedCommits) > 0 {
+				require.NotNil(t, firstResponse.GetPaginationCursor())
+				require.NotEmpty(t, firstResponse.GetPaginationCursor().GetNextCursor())
+				// The cursor should be the ID of the last commit in the response
+				require.Equal(t, tc.expectedCommits[len(tc.expectedCommits)-1].GetId(), firstResponse.GetPaginationCursor().GetNextCursor())
+			}
 		})
 	}
+
+	t.Run("pagination with cursor", func(t *testing.T) {
+		t.Parallel()
+
+		// First request with limit
+		stream, err := client.ListCommits(ctx, &gitalypb.ListCommitsRequest{
+			Repository: repoProto,
+			Revisions:  []string{main4ID.String()},
+			PaginationParams: &gitalypb.PaginationParameter{
+				Limit: 2,
+			},
+		})
+		require.NoError(t, err)
+
+		var firstResponse *gitalypb.ListCommitsResponse
+		firstPageCommits, err := testhelper.ReceiveAndFold(stream.Recv, func(result []*gitalypb.GitCommit, response *gitalypb.ListCommitsResponse) []*gitalypb.GitCommit {
+			if firstResponse == nil {
+				firstResponse = response
+			}
+			return append(result, response.GetCommits()...)
+		})
+		require.NoError(t, err)
+		require.Len(t, firstPageCommits, 2)
+		testhelper.ProtoEqual(t, []*gitalypb.GitCommit{main4, main3}, firstPageCommits)
+
+		// Verify cursor is returned
+		require.NotNil(t, firstResponse.GetPaginationCursor())
+		cursor := firstResponse.GetPaginationCursor().GetNextCursor()
+		require.Equal(t, main3.GetId(), cursor)
+
+		// Second request using the cursor
+		stream, err = client.ListCommits(ctx, &gitalypb.ListCommitsRequest{
+			Repository: repoProto,
+			Revisions:  []string{main4ID.String()},
+			PaginationParams: &gitalypb.PaginationParameter{
+				PageToken: cursor,
+				Limit:     2,
+			},
+		})
+		require.NoError(t, err)
+
+		secondPageCommits, err := testhelper.ReceiveAndFold(stream.Recv, func(result []*gitalypb.GitCommit, response *gitalypb.ListCommitsResponse) []*gitalypb.GitCommit {
+			return append(result, response.GetCommits()...)
+		})
+		require.NoError(t, err)
+		require.Len(t, secondPageCommits, 2)
+		testhelper.ProtoEqual(t, []*gitalypb.GitCommit{main2, main1}, secondPageCommits)
+	})
 }
 
 func TestListCommits_verify(t *testing.T) {
