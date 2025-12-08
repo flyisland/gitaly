@@ -1,17 +1,24 @@
 package operations
 
 import (
+	"bytes"
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/signature"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -31,7 +38,16 @@ func TestUserMergeToRef_successful(t *testing.T) {
 func testUserMergeToRefSuccessful(t *testing.T, ctx context.Context) {
 	t.Parallel()
 
-	ctx, cfg, client := setupOperationsService(t, ctx)
+	var opts []testserver.GitalyServerOpt
+	if featureflag.GPGSigning.IsEnabled(ctx) {
+		opts = append(opts, testserver.WithSigningKey(filepath.Join(testhelper.TestdataAbsolutePath(t), "signing_gpg_key")))
+	}
+
+	ctx, cfg, client := setupOperationsService(t, ctx, opts...)
+
+	if featureflag.GPGSigning.IsEnabled(ctx) {
+		testcfg.BuildGitalyGPG(t, cfg)
+	}
 	commitClient := gitalypb.NewCommitServiceClient(gittest.DialService(t, ctx, cfg))
 
 	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
@@ -62,6 +78,7 @@ func testUserMergeToRefSuccessful(t *testing.T, ctx context.Context) {
 		message        string
 		firstParentRef []byte
 		expectedOldOid string
+		sign           bool
 	}{
 		{
 			desc:           "empty target ref merge",
@@ -80,6 +97,16 @@ func testUserMergeToRefSuccessful(t *testing.T, ctx context.Context) {
 			sourceSha:      sourceSha,
 			message:        mergeCommitMessage,
 			firstParentRef: []byte(firstParentRef),
+		},
+		{
+			desc:           "existing target with sign",
+			user:           gittest.TestUser,
+			targetRef:      existingTargetRef,
+			emptyRef:       false,
+			sourceSha:      sourceSha,
+			message:        mergeCommitMessage,
+			firstParentRef: []byte(firstParentRef),
+			sign:           true,
 		},
 		{
 			desc:           "existing target ref with optimistic lock",
@@ -127,6 +154,7 @@ func testUserMergeToRefSuccessful(t *testing.T, ctx context.Context) {
 				Message:        []byte(testCase.message),
 				FirstParentRef: testCase.firstParentRef,
 				ExpectedOldOid: testCase.expectedOldOid,
+				Sign:           testCase.sign,
 			}
 
 			commitBeforeRefMerge, fetchRefBeforeMergeErr := repo.ReadCommit(ctx, git.Revision(testCase.targetRef))
@@ -158,6 +186,25 @@ func testUserMergeToRefSuccessful(t *testing.T, ctx context.Context) {
 			// commit will raise a null-pointer error.
 			if !testCase.emptyRef {
 				require.NotEqual(t, commit.GetId(), commitBeforeRefMerge.GetId())
+			}
+
+			objectData, err := repo.ReadObject(ctx, git.ObjectID(commit.GetId()))
+			require.NoError(t, err)
+			gpgsig, dataWithoutGpgSig := signature.ExtractSignature(t, ctx, objectData)
+			if featureflag.GPGSigning.IsEnabled(ctx) && request.GetSign() {
+				pubKey := testhelper.MustReadFile(t, "testdata/signing_gpg_key.pub")
+				keyring, err := openpgp.ReadKeyRing(bytes.NewReader(pubKey))
+				require.NoError(t, err)
+
+				_, err = openpgp.CheckArmoredDetachedSignature(
+					keyring,
+					strings.NewReader(dataWithoutGpgSig),
+					strings.NewReader(gpgsig),
+					&packet.Config{},
+				)
+				require.NoError(t, err)
+			} else {
+				require.Empty(t, gpgsig)
 			}
 		})
 	}
