@@ -28,7 +28,7 @@ var (
 			},
 		},
 		{
-			Suffix: "-v2.50",
+			Suffix: "-prev",
 		},
 	}
 
