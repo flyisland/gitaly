@@ -15,6 +15,14 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
+const (
+	// VirtualStorageKey is used to retrieve the virtual storage
+	// from the gRPC metadata of a request. It is a duplicate constant
+	// from here: /internal/praefect/coordinator.gp
+	// Importing it would produce cyclic dependency issue.
+	VirtualStorageKey = "virtual_storage"
+)
+
 // evaluateRequest is a helper struct to pass along multiple
 // related fields as one item into the `evaluateQueue`
 type evaluateRequest struct {
@@ -44,7 +52,7 @@ func newEvaluateRequest(ctx context.Context, repo *localrepo.Repo, t time.Time, 
 		repo: repo,
 		time: t,
 		cb:   cb,
-		key:  bundleRelativePath(repoProto, defaultBundle),
+		key:  bundleRelativePath(ctx, repoProto, defaultBundle),
 	}, nil
 }
 

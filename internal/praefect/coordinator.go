@@ -29,6 +29,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	// VirtualStorageKey is used to set the virtual storage name
+	// as an entry in a request's metadata
+	VirtualStorageKey = "virtual_storage"
+)
+
 // ErrRepositoryReadOnly is returned when the repository is in read-only mode. This happens
 // if the primary does not have the latest changes.
 var ErrRepositoryReadOnly = structerr.NewFailedPrecondition("repository is in read-only mode")
@@ -700,6 +706,8 @@ func (c *Coordinator) StreamDirector(ctx context.Context, fullMethodName string,
 			return nil, structerr.New("repo scoped: %w", err)
 		}
 
+		ctx = injectVirtualStorageInMetadata(ctx, targetRepo.GetStorageName())
+
 		if err := c.validateTargetRepo(targetRepo); err != nil {
 			return nil, structerr.NewInvalidArgument("%w", err)
 		}
@@ -1184,4 +1192,15 @@ func (c *Coordinator) validateTargetRepo(repo *gitalypb.Repository) error {
 	}
 
 	return nil
+}
+
+func injectVirtualStorageInMetadata(ctx context.Context, vs string) context.Context {
+	md, ok := grpc_metadata.FromIncomingContext(ctx)
+	if !ok {
+		md = grpc_metadata.New(nil)
+	}
+	// Make a copy so we don't modify the original
+	md = md.Copy()
+	md.Append(VirtualStorageKey, vs)
+	return grpc_metadata.NewIncomingContext(ctx, md)
 }
