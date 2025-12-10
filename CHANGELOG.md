@@ -32,6 +32,10 @@ No changes.
 
 No changes.
 
+## 18.4.6 (2025-12-10)
+
+No changes.
+
 ## 18.4.5 (2025-11-25)
 
 No changes.
