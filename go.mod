@@ -12,7 +12,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.1.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.63.1
 	github.com/cloudflare/tableflip v1.2.3
-	github.com/containerd/cgroups/v3 v3.0.5
+	github.com/containerd/cgroups/v3 v3.1.2
 	github.com/dgraph-io/badger/v4 v4.7.0
 	github.com/fatih/color v1.18.0
 	github.com/getsentry/sentry-go v0.36.1
@@ -31,7 +31,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/miekg/dns v1.1.68
 	github.com/olekukonko/tablewriter v1.1.0
-	github.com/opencontainers/runtime-spec v1.2.1
+	github.com/opencontainers/runtime-spec v1.3.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2

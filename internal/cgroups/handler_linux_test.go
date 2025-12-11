@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	cgrps "github.com/containerd/cgroups/v3"
+	"github.com/containerd/cgroups/v3/cgroup2"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
@@ -858,7 +859,7 @@ func requireCgroupComponents(t *testing.T, version int, root string, cgroupPath 
 		requireCgroupWithInt(t, memoryMaxPath, expected.wantMemoryBytes)
 
 		cpuWeightPath := filepath.Join(root, cgroupPath, "cpu.weight")
-		requireCgroupWithInt(t, cpuWeightPath, calculateWantCPUWeight(expected.wantCPUWeight))
+		requireCgroupWithInt(t, cpuWeightPath, int(cgroup2.ConvertCPUSharesToCgroupV2Value(uint64(expected.wantCPUWeight))))
 
 		cpuMaxPath := filepath.Join(root, cgroupPath, "cpu.max")
 		requireCgroupWithString(t, cpuMaxPath, expected.wantCPUMax)
@@ -899,13 +900,6 @@ func requireCgroupWithString(t *testing.T, cgroupFile string, want string) {
 		string(readCgroupFile(t, cgroupFile)),
 		want,
 	)
-}
-
-func calculateWantCPUWeight(wantCPUWeight int) int {
-	if wantCPUWeight == 0 {
-		return 0
-	}
-	return 1 + ((wantCPUWeight-2)*9999)/262142
 }
 
 func requireShards(t *testing.T, version int, mock mockCgroup, mgr *CGroupManager, pid int, expectedShards ...uint) {
