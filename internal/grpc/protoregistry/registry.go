@@ -2,6 +2,8 @@ package protoregistry
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/protoutil"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
@@ -15,8 +17,16 @@ import (
 var GitalyProtoPreregistered *Registry
 
 func init() {
-	var err error
-	GitalyProtoPreregistered, err = NewFromPaths(gitalypb.GitalyProtos...)
+	exePath, err := os.Executable()
+	if err != nil {
+		panic(fmt.Errorf("executable path: %w", err))
+	}
+
+	if strings.HasSuffix(exePath, "gitaly-hooks") {
+		GitalyProtoPreregistered, err = NewFromPaths("hook.proto")
+	} else {
+		GitalyProtoPreregistered, err = NewFromPaths(gitalypb.GitalyProtos...)
+	}
 	if err != nil {
 		panic(err)
 	}
