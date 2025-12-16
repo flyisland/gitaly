@@ -16,16 +16,22 @@ var statsIntData = map[string]string{
 	"data:pack-objects:stdin_packs_hints":                     "pack_objects.stdin_packs_hints",
 }
 
-var statsElapsedTimes = map[string]string{
-	"pack-objects:enumerate-objects": "pack_objects.enumerate_objects_ms",
-	"pack-objects:prepare-pack":      "pack_objects.prepare_pack_ms",
-	"pack-objects:write-pack-file":   "pack_objects.write_pack_file_ms",
-}
-
-var histogramStageNames = map[string]string{
-	"pack-objects:enumerate-objects": "enumerate-objects",
-	"pack-objects:prepare-pack":      "prepare-pack",
-	"pack-objects:write-pack-file":   "write-pack-file",
+var packObjectsStages = map[string]struct {
+	metricLabel string
+	logField    string
+}{
+	"pack-objects:enumerate-objects": {
+		metricLabel: "enumerate-objects",
+		logField:    "pack_objects.enumerate_objects_ms",
+	},
+	"pack-objects:prepare-pack": {
+		metricLabel: "prepare-pack",
+		logField:    "pack_objects.prepare_pack_ms",
+	},
+	"pack-objects:write-pack-file": {
+		metricLabel: "write-pack-file",
+		logField:    "pack_objects.write_pack_file_ms",
+	},
 }
 
 // PackObjectsMetrics is a trace2 hook that export pack-objects Prometheus metrics and stats log
@@ -65,14 +71,10 @@ func (p *PackObjectsMetrics) Handle(rootCtx context.Context, trace *trace2.Trace
 				}
 			}
 
-			if field, ok := statsElapsedTimes[trace.Name]; ok {
-				elapsedTime := trace.FinishTime.Sub(trace.StartTime).Milliseconds()
-				customFields.RecordSum(field, int(elapsedTime))
-			}
-
-			if stage, ok := histogramStageNames[trace.Name]; ok {
-				elapsedTime := trace.FinishTime.Sub(trace.StartTime).Seconds()
-				p.stagesHistogram.WithLabelValues(stage).Observe(elapsedTime)
+			if stage, ok := packObjectsStages[trace.Name]; ok {
+				elapsedTime := trace.FinishTime.Sub(trace.StartTime)
+				customFields.RecordSum(stage.logField, int(elapsedTime.Milliseconds()))
+				p.stagesHistogram.WithLabelValues(stage.metricLabel).Observe(elapsedTime.Seconds())
 			}
 
 			return ctx
