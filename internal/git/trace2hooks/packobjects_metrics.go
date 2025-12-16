@@ -13,7 +13,7 @@ var packObjectsStats = map[string]struct {
 	metricLabel string
 	logField    string
 }{
-	"data:pack-objects:write_pack_file/wrote": {
+	"data:pack-objects:written": {
 		metricLabel: "written-objects-total",
 		logField:    "pack_objects.written_object_count",
 	},
