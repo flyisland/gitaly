@@ -46,6 +46,11 @@ func TestPackObjectsMetrics(t *testing.T) {
 			},
 			assert: func(t *testing.T, statFields log.Fields) {
 				require.Equal(t, 11, statFields["pack_objects.written_object_count"])
+				require.Equal(t, 0, statFields["pack_objects.written_object_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_packfiles_count"])
 			},
 		},
 		{
@@ -66,6 +71,35 @@ func TestPackObjectsMetrics(t *testing.T) {
 			},
 			assert: func(t *testing.T, statFields log.Fields) {
 				require.Equal(t, 3, statFields["pack_objects.written_object_count"])
+				require.Equal(t, 1, statFields["pack_objects.written_object_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_packfiles_count"])
+			},
+		},
+		{
+			desc: "pack reuse with bitmap",
+			setupRepo: func(ctx context.Context) (*gitalypb.Repository, config.Cfg, bytes.Buffer) {
+				cfg := testcfg.Build(t)
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg,
+					gittest.CreateRepositoryConfig{SkipCreationViaService: true},
+				)
+
+				var input bytes.Buffer
+				input.WriteString(gittest.WriteCommit(t, cfg, repoPath, gittest.WithMessage("reachable"), gittest.WithBranch("reachable")).String())
+				input.WriteString("\n")
+				gittest.Exec(t, cfg, "-C", repoPath, "repack", "-Adbl")
+
+				return repoProto, cfg, input
+			},
+			assert: func(t *testing.T, statFields log.Fields) {
+				require.Equal(t, 2, statFields["pack_objects.written_object_count"])
+				require.Equal(t, 0, statFields["pack_objects.written_object_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_delta_count"])
+				require.Equal(t, 2, statFields["pack_objects.pack_reused_objects_count"])
+				require.Equal(t, 1, statFields["pack_objects.pack_reused_packfiles_count"])
 			},
 		},
 		{
@@ -89,6 +123,11 @@ func TestPackObjectsMetrics(t *testing.T) {
 			},
 			assert: func(t *testing.T, statFields log.Fields) {
 				require.Equal(t, 2, statFields["pack_objects.written_object_count"])
+				require.Equal(t, 0, statFields["pack_objects.written_object_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_packfiles_count"])
 			},
 		},
 		{
@@ -112,6 +151,11 @@ func TestPackObjectsMetrics(t *testing.T) {
 			},
 			assert: func(t *testing.T, statFields log.Fields) {
 				require.Equal(t, 2, statFields["pack_objects.written_object_count"])
+				require.Equal(t, 0, statFields["pack_objects.written_object_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_packfiles_count"])
 			},
 		},
 		{
@@ -163,6 +207,11 @@ func TestPackObjectsMetrics(t *testing.T) {
 			},
 			assert: func(t *testing.T, statFields log.Fields) {
 				require.Equal(t, 7, statFields["pack_objects.written_object_count"])
+				require.Equal(t, 0, statFields["pack_objects.written_object_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.reused_objects_delta_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_objects_count"])
+				require.Equal(t, 0, statFields["pack_objects.pack_reused_packfiles_count"])
 			},
 		},
 	} {

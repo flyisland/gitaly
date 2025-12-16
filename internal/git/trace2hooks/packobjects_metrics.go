@@ -17,6 +17,26 @@ var packObjectsStats = map[string]struct {
 		metricLabel: "written-objects-total",
 		logField:    "pack_objects.written_object_count",
 	},
+	"data:pack-objects:written/delta": {
+		metricLabel: "written-objects-delta",
+		logField:    "pack_objects.written_object_delta_count",
+	},
+	"data:pack-objects:reused": {
+		metricLabel: "reused-objects-total",
+		logField:    "pack_objects.reused_objects_count",
+	},
+	"data:pack-objects:reused/delta": {
+		metricLabel: "reused-objects-delta",
+		logField:    "pack_objects.reused_objects_delta_count",
+	},
+	"data:pack-objects:pack-reused": {
+		metricLabel: "pack-reused-objects",
+		logField:    "pack_objects.pack_reused_objects_count",
+	},
+	"data:pack-objects:packs-reused": {
+		metricLabel: "pack-reused-packfiles",
+		logField:    "pack_objects.pack_reused_packfiles_count",
+	},
 	"data:pack-objects:loosen_unused_packed_objects/loosened": {
 		metricLabel: "loosened-unused-pack-objects-total",
 		logField:    "pack_objects.loosened_unused_packed_objects",
