@@ -31,13 +31,13 @@ var histogramStageNames = map[string]string{
 // PackObjectsMetrics is a trace2 hook that export pack-objects Prometheus metrics and stats log
 // fields. This information is extracted by traversing the trace2 event tree.
 type PackObjectsMetrics struct {
-	metrics *prometheus.HistogramVec
+	stagesHistogram *prometheus.HistogramVec
 }
 
 // NewPackObjectsMetrics is the initializer for PackObjectsMetrics
 func NewPackObjectsMetrics() *PackObjectsMetrics {
 	return &PackObjectsMetrics{
-		metrics: prometheus.NewHistogramVec(
+		stagesHistogram: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "gitaly_pack_objects_stages_seconds",
 				Help: "Time of pack-objects command on different stage",
@@ -72,7 +72,7 @@ func (p *PackObjectsMetrics) Handle(rootCtx context.Context, trace *trace2.Trace
 
 			if stage, ok := histogramStageNames[trace.Name]; ok {
 				elapsedTime := trace.FinishTime.Sub(trace.StartTime).Seconds()
-				p.metrics.WithLabelValues(stage).Observe(elapsedTime)
+				p.stagesHistogram.WithLabelValues(stage).Observe(elapsedTime)
 			}
 
 			return ctx
@@ -89,5 +89,5 @@ func (p *PackObjectsMetrics) Describe(descs chan<- *prometheus.Desc) {
 
 // Collect collects Prometheus metrics exposed by the PackObjectsMetrics structure.
 func (p *PackObjectsMetrics) Collect(c chan<- prometheus.Metric) {
-	p.metrics.Collect(c)
+	p.stagesHistogram.Collect(c)
 }
