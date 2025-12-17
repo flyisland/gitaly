@@ -553,6 +553,15 @@ message RepositoryInfoResponse {
     uint64 packfile_count = 1;
     // version is the version of the multi-pack-index (currently only version 1 is supported by Git).
     uint64 version = 2;
+    // has_large_offsets determines whether the MIDX contains LOFF chunks. This may be required in case the indexed
+    // packfiles are so large that offsets are larger than 32 bytes.
+    bool has_large_offsets = 3;
+    // has_bitmapped_packs determines whether the MIDX contains BTMP chunks, which are used as bitmaps for individual
+    // packfiles contained in the MIDX.
+    bool has_bitmapped_packs = 4;
+    // has_reverse_index determines whether the MIDX contains RIDX chunks, which are used as reverse indices for
+    // individual packfiles contained in the MIDX.
+    bool has_reverse_index = 5;
   }
 
   // AlternatesInfo hosts information about alternate object directories.

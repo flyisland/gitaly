@@ -570,8 +570,10 @@ func TestRepositoryInfo(t *testing.T) {
 							ReverseIndexCount: repoStats.Packfiles.ReverseIndexCount,
 						},
 						MultiPackIndex: &gitalypb.RepositoryInfoResponse_MultiPackIndexInfo{
-							PackfileCount: repoStats.Packfiles.MultiPackIndex.PackfileCount,
-							Version:       1,
+							PackfileCount:     repoStats.Packfiles.MultiPackIndex.PackfileCount,
+							Version:           1,
+							HasBitmappedPacks: false,
+							HasReverseIndex:   false,
 						},
 						LastFullRepack: repoFullRepackTimestamp(t, repoPath),
 					},
@@ -621,8 +623,10 @@ func TestRepositoryInfo(t *testing.T) {
 							ReverseIndexCount: 1,
 						},
 						MultiPackIndex: &gitalypb.RepositoryInfoResponse_MultiPackIndexInfo{
-							PackfileCount: 1,
-							Version:       1,
+							PackfileCount:     1,
+							Version:           1,
+							HasBitmappedPacks: true,
+							HasReverseIndex:   true,
 						},
 						MultiPackIndexBitmap: &gitalypb.RepositoryInfoResponse_BitmapInfo{
 							HasHashCache:   true,
