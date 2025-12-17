@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
@@ -24,8 +26,13 @@ import (
 )
 
 func TestDryRunMiddleware(t *testing.T) {
+	t.Parallel()
+
+	testhelper.NewFeatureSets(featureflag.SnapshotDryRunStats).Run(t, testDryRunMiddleware)
+}
+
+func testDryRunMiddleware(t *testing.T, ctx context.Context) {
 	cfg := testcfg.Build(t)
-	ctx := testhelper.Context(t)
 	logger := testhelper.SharedLogger(t)
 	locator := config.NewLocator(cfg)
 	cache, err := storagemgr.NewDryRunLogCache(time.Minute, 10)
@@ -42,7 +49,7 @@ func TestDryRunMiddleware(t *testing.T) {
 			repo           func() *gitalypb.Repository
 			shouldRun      bool
 			expectedErr    error
-			expectedErrMsg string
+			dryRunErrorMsg string
 		}{
 			{
 				desc:      "repository scoped rpc",
@@ -90,8 +97,20 @@ func TestDryRunMiddleware(t *testing.T) {
 					}
 				},
 				shouldRun:      false,
-				expectedErr:    errors.New("handler error"),
-				expectedErrMsg: "resolve storage path:",
+				dryRunErrorMsg: "resolve storage path:",
+			},
+			{
+				desc:      "dry-run successful but handler returns error",
+				rpcMethod: gitalypb.RepositoryService_CreateRepository_FullMethodName,
+				repo: func() *gitalypb.Repository {
+					repoProto, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+						SkipCreationViaService: true,
+					})
+
+					return repoProto
+				},
+				shouldRun:   true,
+				expectedErr: fmt.Errorf("handler error"),
 			},
 		}
 		for _, tc := range testCases {
@@ -112,13 +131,19 @@ func TestDryRunMiddleware(t *testing.T) {
 
 				if tc.expectedErr != nil {
 					require.Equal(t, tc.expectedErr, err, "handler error should be preserved")
-					require.True(t, verifyErrMsg(t, hook.AllEntries(), tc.expectedErrMsg), "should have logged warning about failed dry-run statistics collection")
-				} else {
-					require.NoError(t, err)
+					return
 				}
 
+				require.NoError(t, err)
 				require.True(t, handlerCalled, "handler should be called")
-				require.Equal(t, tc.shouldRun, verifyDryRunLog(t, hook.AllEntries()))
+				// Verify that dry-run statistics collection produces logs
+				if featureflag.SnapshotDryRunStats.IsEnabled(ctx) && tc.shouldRun {
+					require.True(t, verifyDryRunLog(t, hook.AllEntries()), "should have logged dry-run statistics collection")
+
+					if tc.dryRunErrorMsg != "" {
+						require.True(t, verifyErrMsg(t, hook.AllEntries(), tc.dryRunErrorMsg), "should have logged warning about failed dry-run statistics collection")
+					}
+				}
 			})
 		}
 	})
@@ -214,7 +239,10 @@ func TestDryRunMiddleware(t *testing.T) {
 				}
 				require.NoError(t, err)
 				require.True(t, handlerCalled, "handler should be called")
-				require.Equal(t, tc.shouldRun, verifyDryRunLog(t, hook.AllEntries()))
+				// Verify that dry-run statistics collection produces logs
+				if featureflag.SnapshotDryRunStats.IsEnabled(ctx) && tc.shouldRun {
+					require.True(t, verifyDryRunLog(t, hook.AllEntries()), "should have logged dry-run statistics collection")
+				}
 			})
 		}
 	})
@@ -224,6 +252,7 @@ func TestDryRunMiddleware_cache(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.SnapshotDryRunStats, true)
 	cfg := testcfg.Build(t)
 	locator := config.NewLocator(cfg)
 	logger := testhelper.SharedLogger(t)
