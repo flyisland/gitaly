@@ -160,10 +160,6 @@ GIT_VERSION ?=
 GIT_VERSION_MASTER ?= aea8cc3a10c325a22a75e2d4f582db959d3854ae
 GIT_VERSION_PREV ?= 419c72cb8ada252b260efc38ff91fe201de7c8c3
 #
-# GIT_VERSION_x_xx defines versions for each instance of bundled Git we ship. When a new
-# major version is added, be sure to update GIT_PACKED_EXECUTABLES, the *-bundled-git targets,
-# and add new targets under the "# These targets build specific releases of Git." section.
-GIT_VERSION_2_50 ?= v2.50.1.gl1
 #
 # OVERRIDE_GIT_VERSION allows you to specify a custom semver value to be reported by the
 # `git --version` command. This affects bundled and non-bundled Git, and can be used whenever
@@ -172,9 +168,7 @@ GIT_VERSION_2_50 ?= v2.50.1.gl1
 OVERRIDE_GIT_VERSION ?=
 
 ifeq (${GIT_VERSION:default=},)
-	# GIT_VERSION should be overridden to the default version of bundled Git. This is only
-	# necessary until https://gitlab.com/gitlab-org/gitaly/-/issues/6195 is complete.
-    override GIT_VERSION := ${GIT_VERSION_2_50}
+    override GIT_VERSION := ${GIT_VERSION_MASTER}
     # When GIT_VERSION is not explicitly set, we default to bundled Git.
 	export WITH_BUNDLED_GIT = YesPlease
 else
@@ -278,7 +272,7 @@ endif
 
 # Git binaries that are eventually embedded into the Gitaly binary.
 GIT_PACKED_EXECUTABLES       = $(addprefix ${BUILD_DIR}/bin/gitaly-, $(addsuffix -master, ${GIT_EXECUTABLES})) \
-                                $(addprefix ${BUILD_DIR}/bin/gitaly-, $(addsuffix -v2.50, ${GIT_EXECUTABLES}))
+                                $(addprefix ${BUILD_DIR}/bin/gitaly-, $(addsuffix -prev, ${GIT_EXECUTABLES}))
 
 # All executables provided by Gitaly.
 GITALY_EXECUTABLES           = $(addprefix ${BUILD_DIR}/bin/,$(notdir $(shell find ${SOURCE_DIR}/cmd -mindepth 1 -maxdepth 1 -type d -print)))
@@ -367,16 +361,16 @@ install: build
 
 .PHONY: build-bundled-git
 ## Build bundled Git binaries.
-build-bundled-git: build-bundled-git-master build-bundled-git-v2.50
+build-bundled-git: build-bundled-git-master build-bundled-git-prev
 build-bundled-git-master: $(patsubst %,${BUILD_DIR}/bin/gitaly-%-master,${GIT_EXECUTABLES})
-build-bundled-git-v2.50: $(patsubst %,${BUILD_DIR}/bin/gitaly-%-v2.50,${GIT_EXECUTABLES})
+build-bundled-git-prev: $(patsubst %,${BUILD_DIR}/bin/gitaly-%-prev,${GIT_EXECUTABLES})
 
 .PHONY: install-bundled-git
 ## Install bundled Git binaries. The target directory can be modified by
 ## setting PREFIX and DESTDIR.
-install-bundled-git: install-bundled-git-master install-bundled-git-v2.50
+install-bundled-git: install-bundled-git-master install-bundled-git-prev
 install-bundled-git-master: $(patsubst %,${INSTALL_DEST_DIR}/gitaly-%-master,${GIT_EXECUTABLES})
-install-bundled-git-v2.50: $(patsubst %,${INSTALL_DEST_DIR}/gitaly-%-v2.50,${GIT_EXECUTABLES})
+install-bundled-git-prev: $(patsubst %,${INSTALL_DEST_DIR}/gitaly-%-prev,${GIT_EXECUTABLES})
 
 ifdef WITH_BUNDLED_GIT
 build: build-bundled-git
@@ -708,16 +702,16 @@ ${DEPENDENCY_DIR}/git-distribution/build/git: ${DEPENDENCY_DIR}/git-distribution
 	${Q}touch $@
 
 # These targets build specific releases of Git.
-${BUILD_DIR}/bin/gitaly-%-v2.50: override GIT_VERSION = ${GIT_VERSION_2_50}
+${BUILD_DIR}/bin/gitaly-%-prev: override GIT_VERSION = ${GIT_VERSION_PREV}
 ${BUILD_DIR}/bin/gitaly-%-master: override GIT_VERSION = ${GIT_VERSION_MASTER}
 
 ifdef USE_MESON
-${BUILD_DIR}/bin/gitaly-%-v2.50: ${DEPENDENCY_DIR}/git-v2.50/build/% | ${BUILD_DIR}/bin
+${BUILD_DIR}/bin/gitaly-%-prev: ${DEPENDENCY_DIR}/git-prev/build/% | ${BUILD_DIR}/bin
 	${Q}install $< $@
 ${BUILD_DIR}/bin/gitaly-%-master: ${DEPENDENCY_DIR}/git-master/build/% | ${BUILD_DIR}/bin
 	${Q}install $< $@
 else
-${BUILD_DIR}/bin/gitaly-%-v2.50: ${DEPENDENCY_DIR}/git-v2.50/% | ${BUILD_DIR}/bin
+${BUILD_DIR}/bin/gitaly-%-prev: ${DEPENDENCY_DIR}/git-prev/% | ${BUILD_DIR}/bin
 	${Q}install $< $@
 ${BUILD_DIR}/bin/gitaly-%-master: ${DEPENDENCY_DIR}/git-master/% | ${BUILD_DIR}/bin
 	${Q}install $< $@
