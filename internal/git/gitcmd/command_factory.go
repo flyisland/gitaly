@@ -682,9 +682,7 @@ func (cf *ExecCommandFactory) GlobalConfiguration(ctx context.Context) ([]Config
 		// packfile window anyway while it should on the other hand lead to lower memory consumption and faster
 		// computation of diffs when large blobs are involved.
 		{Key: "core.bigFileThreshold", Value: fmt.Sprintf("%dm", BigFileThresholdMB)},
-	}
 
-	if featureflag.MultiPackReuse.IsEnabled(ctx) {
 		// When generating packfiles, Git tries to reuse parts of the packfile verbatim so that it does not have
 		// to recompute deltas. The goal of this is to speed up the generation of the packfile while reducing
 		// computational resources required. This optimization only works for the preferred packfile though,
@@ -696,7 +694,7 @@ func (cf *ExecCommandFactory) GlobalConfiguration(ctx context.Context) ([]Config
 		// of objects work across multiple packfiles as long as those objects are mapped by a multi-pack index
 		// with an accompanying bitmap. As this is a recent addition to Git this feature is not enabled by
 		// default yet, but needs to be opted in with a configuration.
-		config = append(config, ConfigPair{Key: "pack.allowPackReuse", Value: "multi"})
+		{Key: "pack.allowPackReuse", Value: "multi"},
 	}
 
 	if cf.cfg.Transactions.Enabled {
