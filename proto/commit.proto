@@ -405,6 +405,11 @@ message CountCommitsRequest {
   bool first_parent = 8;
   // global_options contains the global options used to modify the behaviour of Git.
   GlobalOptions global_options = 9;
+  // revisions is the set of revisions which should be walked to enumerate
+  // commits. Accepts all notation as documented in gitrevisions(7) as well as
+  // the pseudo-revisions `--not` and `--all` as documented in git-rev-list(1).
+  // If set, this takes precedence over 'revision' and 'all' fields.
+  repeated bytes revisions = 10;
 }
 
 // CountCommitsResponse is the response for the CountCommits RPC.

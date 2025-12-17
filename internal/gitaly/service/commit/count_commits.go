@@ -22,7 +22,11 @@ func (s *server) CountCommits(ctx context.Context, in *gitalypb.CountCommitsRequ
 
 	subCmd := gitcmd.Command{Name: "rev-list", Flags: []gitcmd.Option{gitcmd.Flag{Name: "--count"}}}
 
-	if in.GetAll() {
+	if len(in.GetRevisions()) > 0 {
+		for _, revision := range in.GetRevisions() {
+			subCmd.Args = append(subCmd.Args, string(revision))
+		}
+	} else if in.GetAll() {
 		subCmd.Flags = append(subCmd.Flags, gitcmd.Flag{Name: "--all"})
 	} else {
 		subCmd.Args = []string{string(in.GetRevision())}
@@ -76,6 +80,15 @@ func (s *server) CountCommits(ctx context.Context, in *gitalypb.CountCommitsRequ
 func validateCountCommitsRequest(ctx context.Context, locator storage.Locator, in *gitalypb.CountCommitsRequest) error {
 	if err := locator.ValidateRepository(ctx, in.GetRepository()); err != nil {
 		return err
+	}
+
+	if len(in.GetRevisions()) > 0 {
+		for _, revision := range in.GetRevisions() {
+			if err := git.ValidateRevision(revision, git.AllowPseudoRevision()); err != nil {
+				return structerr.NewInvalidArgument("invalid revision: %w", err).WithMetadata("revision", string(revision))
+			}
+		}
+		return nil
 	}
 
 	if err := git.ValidateRevision(in.GetRevision(), git.AllowEmptyRevision()); err != nil {
