@@ -1,5 +1,11 @@
 # Gitaly changelog
 
+## 18.7.0 (2025-12-17)
+
+### Added (1 change)
+
+- [Add `pagination_cursor` to `ListCommitsResponse`](gitlab-org/gitaly@fdba978cadb7fcae6aa59bad30cf497d5d1a8be5) ([merge request](gitlab-org/gitaly!8303))
+
 ## 18.6.2 (2025-12-10)
 
 No changes.
