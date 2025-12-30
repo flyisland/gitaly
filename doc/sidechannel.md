@@ -3,7 +3,8 @@
 Since GitLab 14.4, Gitaly supports a custom protocol for RPCs that
 transfer a high volume of byte stream data. Currently, this only
 applies to `PostUploadPackWithSidechannel`, which is used for Git HTTP
-traffic.
+traffic, as well as `SSHUploadPackWithSidechannel` for SSH traffic, as well as
+`PackObjectsHookWithSidechannel`.
 
 Prior to sidechannel, the only way for Gitaly to serve a byte stream
 was to encapsulate the bytes in gRPC Protobuf messages. Because of the
@@ -15,7 +16,35 @@ The sidechannel protocol works around this by:
 1. Allowing the Gitaly server to establish a sidechannel to the Gitaly client during an RPC call.
 1. Performing the bulk data transfer on the sidechannel.
 
-The surrounding gRPC call is then only used for:
+## What is a sidechannel?
+
+A sidechannel is another byte stream sent over the same TCP connection.
+
+- Stream 1: gRPC connection (persistent, used for control)
+- Stream 2: Backchannel (persistent, used by Praefect for voting)
+- Stream 3: First sidechannel (short-lived)
+
+The data from these streams will then be interleaved into the TCP segments:
+
+```plaintext
+TCP Connection (byte stream):
+═══════════════════════════════════════════════════════════════════════════════════════
+
+┌────────────────┬────────────────┬────────────────┬────────────────┬────────────────┬────────────────┐
+│   Segment 1    │   Segment 2    │   Segment 3    │   Segment 4    │   Segment 5    │   Segment 6    │
+├────────────────┼────────────────┼────────────────┼────────────────┼────────────────┼────────────────┤
+│ gRPC Request   │ Sidechannel    │ Sidechannel    │ gRPC Request   │ Sidechannel    │ Sidechannel    │
+│ Stream 1       │ Stream 3       │ Stream 3       │ Stream 1       │ Stream 3       │ Stream 3       │
+│ Length: 100    │ Length: 0      │ Length: 8192   │ Length: 50     │ Length: 8192   │ Length: 8192   │
+├────────────────┼────────────────┼────────────────┼────────────────┼────────────────┼────────────────┤
+│ "PostUpload    │ (Open stream)  │ Packfile       │ Metadata       │ Packfile       │ Packfile       │
+│  Pack..."      │                │ bytes 0-8K     │                │ bytes 8K-16K   │ bytes 16K-24K  │
+└────────────────┴────────────────┴────────────────┴────────────────┴────────────────┴────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════════════
+```
+
+The gRPC call is then only used for:
 
 - Parameters such as which repository we're reading data from.
 - Control information such as the status code and possible error value returned by the server.
@@ -49,15 +78,26 @@ For more information about how and why we introduced sidechannels, see
 
 ## Implementation details
 
-Sidechannels piggy-back on the existing mechanism of `backchannel`
-connections that Praefect uses when connecting to one of its backend
-Gitaly nodes. Backchannel uses gRPC-Go "transport credentials" to
-intercept and replace outgoing (client) and incoming (server) gRPC
-connections. Backchannel only needs 2 Yamux streams:
+Sidechannels are built on top of the `backchannel` infrastructure that
+Praefect uses for server-to-client communication.
 
-- Client->server.
-- Server->client.
+### Connection Setup
 
-However, as a side effect it creates a Yamux session. Sidechannel uses
-the Yamux session already created by backchannel to establish the
-short-lived Yamux streams it needs.
+When a client connects to Gitaly with sidechannel support enabled:
+
+1. A **Yamux multiplexing session** is established on the TCP connection
+1. **Two persistent streams** are created:
+   - **Stream 1**: Client → Server gRPC connection (for regular RPC calls)
+   - **Stream 2**: Server → Client backchannel (for server-initiated RPC calls)
+
+NOTE: When Praefect is not in use, the backchannel stream does not actually get
+used. When Praefect is enabled, it is used for voting.
+
+### Sidechannel Usage
+
+When an RPC needs to transfer bulk data (e.g., `PostUploadPackWithSidechannel`):
+
+1. The server opens a **new short-lived Yamux stream**
+1. Bulk data flows over this stream without gRPC/Protobuf overhead
+1. The stream closes when the data transfer completes
+1. The gRPC call returns with status and metadata
