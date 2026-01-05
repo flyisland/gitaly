@@ -137,7 +137,7 @@ func TestPackObjectsMetrics_Handle(t *testing.T) {
 							},
 							{
 								Thread:  "main",
-								Name:    "data:pack-objects:write_pack_file/wrote",
+								Name:    "data:pack-objects:written",
 								ChildID: "0",
 								Metadata: map[string]string{
 									"data": "99",
@@ -283,7 +283,7 @@ gitaly_pack_objects_stages_seconds_count{stage="write-pack-file"} 1
 						Children: []*trace2.Trace{
 							{
 								Thread:  "main",
-								Name:    "data:pack-objects:write_pack_file/wrote",
+								Name:    "data:pack-objects:written",
 								ChildID: "0",
 								Metadata: map[string]string{
 									"data": "99",
@@ -300,7 +300,7 @@ gitaly_pack_objects_stages_seconds_count{stage="write-pack-file"} 1
 						Children: []*trace2.Trace{
 							{
 								Thread:  "main",
-								Name:    "data:pack-objects:write_pack_file/wrote",
+								Name:    "data:pack-objects:written",
 								ChildID: "0",
 								Metadata: map[string]string{
 									"data": "2",

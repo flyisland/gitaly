@@ -9,40 +9,90 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
-var statsIntData = map[string]string{
-	"data:pack-objects:write_pack_file/wrote":                 "pack_objects.written_object_count",
-	"data:pack-objects:loosen_unused_packed_objects/loosened": "pack_objects.loosened_unused_packed_objects",
-	"data:pack-objects:stdin_packs_found":                     "pack_objects.stdin_packs_found",
-	"data:pack-objects:stdin_packs_hints":                     "pack_objects.stdin_packs_hints",
+var packObjectsStats = map[string]struct {
+	metricLabel string
+	logField    string
+}{
+	"data:pack-objects:written": {
+		metricLabel: "written-objects-total",
+		logField:    "pack_objects.written_object_count",
+	},
+	"data:pack-objects:written/delta": {
+		metricLabel: "written-objects-delta",
+		logField:    "pack_objects.written_object_delta_count",
+	},
+	"data:pack-objects:reused": {
+		metricLabel: "reused-objects-total",
+		logField:    "pack_objects.reused_objects_count",
+	},
+	"data:pack-objects:reused/delta": {
+		metricLabel: "reused-objects-delta",
+		logField:    "pack_objects.reused_objects_delta_count",
+	},
+	"data:pack-objects:pack-reused": {
+		metricLabel: "pack-reused-objects",
+		logField:    "pack_objects.pack_reused_objects_count",
+	},
+	"data:pack-objects:packs-reused": {
+		metricLabel: "pack-reused-packfiles",
+		logField:    "pack_objects.pack_reused_packfiles_count",
+	},
+	"data:pack-objects:loosen_unused_packed_objects/loosened": {
+		metricLabel: "loosened-unused-pack-objects-total",
+		logField:    "pack_objects.loosened_unused_packed_objects",
+	},
+	"data:pack-objects:stdin_packs_found": {
+		metricLabel: "stdin-packs-found",
+		logField:    "pack_objects.stdin_packs_found",
+	},
+	"data:pack-objects:stdin_packs_hints": {
+		metricLabel: "stdin-packs-hints",
+		logField:    "pack_objects.stdin_packs_hints",
+	},
 }
 
-var statsElapsedTimes = map[string]string{
-	"pack-objects:enumerate-objects": "pack_objects.enumerate_objects_ms",
-	"pack-objects:prepare-pack":      "pack_objects.prepare_pack_ms",
-	"pack-objects:write-pack-file":   "pack_objects.write_pack_file_ms",
-}
-
-var histogramStageNames = map[string]string{
-	"pack-objects:enumerate-objects": "enumerate-objects",
-	"pack-objects:prepare-pack":      "prepare-pack",
-	"pack-objects:write-pack-file":   "write-pack-file",
+var packObjectsStages = map[string]struct {
+	metricLabel string
+	logField    string
+}{
+	"pack-objects:enumerate-objects": {
+		metricLabel: "enumerate-objects",
+		logField:    "pack_objects.enumerate_objects_ms",
+	},
+	"pack-objects:prepare-pack": {
+		metricLabel: "prepare-pack",
+		logField:    "pack_objects.prepare_pack_ms",
+	},
+	"pack-objects:write-pack-file": {
+		metricLabel: "write-pack-file",
+		logField:    "pack_objects.write_pack_file_ms",
+	},
 }
 
 // PackObjectsMetrics is a trace2 hook that export pack-objects Prometheus metrics and stats log
 // fields. This information is extracted by traversing the trace2 event tree.
 type PackObjectsMetrics struct {
-	metrics *prometheus.HistogramVec
+	stagesHistogram *prometheus.HistogramVec
+	statsHistogram  *prometheus.HistogramVec
 }
 
 // NewPackObjectsMetrics is the initializer for PackObjectsMetrics
 func NewPackObjectsMetrics() *PackObjectsMetrics {
 	return &PackObjectsMetrics{
-		metrics: prometheus.NewHistogramVec(
+		stagesHistogram: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "gitaly_pack_objects_stages_seconds",
 				Help: "Time of pack-objects command on different stage",
 			},
 			[]string{"stage"},
+		),
+		statsHistogram: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "gitaly_pack_objects_stats",
+				Help:    "Various statistics about pack-objects",
+				Buckets: prometheus.ExponentialBuckets(1, 10, 10),
+			},
+			[]string{"type"},
 		),
 	}
 }
@@ -58,21 +108,18 @@ func (p *PackObjectsMetrics) Handle(rootCtx context.Context, trace *trace2.Trace
 	trace.Walk(rootCtx, func(ctx context.Context, trace *trace2.Trace) context.Context {
 		customFields := log.CustomFieldsFromContext(ctx)
 		if customFields != nil {
-			if field, ok := statsIntData[trace.Name]; ok {
+			if stat, ok := packObjectsStats[trace.Name]; ok {
 				data, err := strconv.Atoi(trace.Metadata["data"])
 				if err == nil {
-					customFields.RecordSum(field, data)
+					customFields.RecordSum(stat.logField, data)
+					p.statsHistogram.WithLabelValues(stat.metricLabel).Observe(float64(data))
 				}
 			}
 
-			if field, ok := statsElapsedTimes[trace.Name]; ok {
-				elapsedTime := trace.FinishTime.Sub(trace.StartTime).Milliseconds()
-				customFields.RecordSum(field, int(elapsedTime))
-			}
-
-			if stage, ok := histogramStageNames[trace.Name]; ok {
-				elapsedTime := trace.FinishTime.Sub(trace.StartTime).Seconds()
-				p.metrics.WithLabelValues(stage).Observe(elapsedTime)
+			if stage, ok := packObjectsStages[trace.Name]; ok {
+				elapsedTime := trace.FinishTime.Sub(trace.StartTime)
+				customFields.RecordSum(stage.logField, int(elapsedTime.Milliseconds()))
+				p.stagesHistogram.WithLabelValues(stage.metricLabel).Observe(elapsedTime.Seconds())
 			}
 
 			return ctx
@@ -89,5 +136,6 @@ func (p *PackObjectsMetrics) Describe(descs chan<- *prometheus.Desc) {
 
 // Collect collects Prometheus metrics exposed by the PackObjectsMetrics structure.
 func (p *PackObjectsMetrics) Collect(c chan<- prometheus.Metric) {
-	p.metrics.Collect(c)
+	p.stagesHistogram.Collect(c)
+	p.statsHistogram.Collect(c)
 }
