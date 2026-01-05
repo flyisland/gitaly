@@ -646,10 +646,7 @@ func TestExecCommandFactory_config(t *testing.T) {
 		"core.autocrlf=false",
 		"core.usereplacerefs=false",
 		"core.bigfilethreshold=50m",
-	}
-
-	if featureflag.MultiPackReuse.IsEnabled(ctx) {
-		expectedEnv = append(expectedEnv, "pack.allowpackreuse=multi")
+		"pack.allowpackreuse=multi",
 	}
 
 	if testhelper.IsWALEnabled() {
