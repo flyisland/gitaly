@@ -9,6 +9,7 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/snapshot"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
@@ -139,6 +140,10 @@ func cacheKey(storageName, relativePath string) string {
 // are disabled and the SnapshotDryRunStats feature flag is enabled.
 func NewDryRunUnaryInterceptor(logger log.Logger, registry *protoregistry.Registry, locator storage.Locator, cache *DryRunLogCache) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, returnedErr error) {
+		if !featureflag.SnapshotDryRunStats.IsEnabled(ctx) {
+			return handler(ctx, req)
+		}
+
 		if err := collectDryRunStatsForRPC(ctx, logger, registry, locator, info.FullMethod, req.(proto.Message), cache); err != nil {
 			logger.WithError(err).Warn("failed to collect dry-run snapshot statistics")
 		}
@@ -151,6 +156,10 @@ func NewDryRunUnaryInterceptor(logger log.Logger, registry *protoregistry.Regist
 // for repository-scoped streaming RPCs without creating actual snapshots.
 func NewDryRunStreamInterceptor(logger log.Logger, registry *protoregistry.Registry, locator storage.Locator, cache *DryRunLogCache) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if !featureflag.SnapshotDryRunStats.IsEnabled(ss.Context()) {
+			return handler(srv, ss)
+		}
+
 		methodInfo, err := registry.LookupMethod(info.FullMethod)
 		if err != nil {
 			// If we can't lookup the method, proceed without collecting stats
