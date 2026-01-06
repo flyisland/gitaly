@@ -916,8 +916,17 @@ func (mgr *TransactionManager) prepareOffloading(ctx context.Context, transactio
 			}
 		}
 	}()
+
+	// Prepare metadata for offloading
+	metadataMap := map[string]string{
+		"storage-name":  originalRepo.GetStorageName(),
+		"storage-path":  mgr.storagePath,
+		"relative-path": originalRepo.GetRelativePath(),
+		"partition-id":  mgr.partitionID.String(),
+	}
+
 	for file := range packFilesToUpload {
-		if err := mgr.offloadingSink.Upload(ctx, filepath.Join(filterToDir, file), cfg.Prefix); err != nil {
+		if err := mgr.offloadingSink.Upload(ctx, filepath.Join(filterToDir, file), cfg.Prefix, metadataMap); err != nil {
 			return errors.Join(errOffloadingObjectUpload, err)
 		}
 		uploadedPackFiles = append(uploadedPackFiles, file)

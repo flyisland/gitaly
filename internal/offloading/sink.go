@@ -86,7 +86,7 @@ func NewSink(bucket Bucket, options ...SinkOption) (*Sink, error) {
 
 // Upload uploads a file located at fullFilePath to the bucket under the specified prefix.
 // The fullFilePath include the file name, e.g. /tmp/foo.txt.
-func (r *Sink) Upload(ctx context.Context, fullFilePath string, prefix string) (returnErr error) {
+func (r *Sink) Upload(ctx context.Context, fullFilePath string, prefix string, metadata map[string]string) (returnErr error) {
 	ctx, cancel := context.WithTimeout(ctx, r.overallTimeout)
 	defer cancel()
 
@@ -110,6 +110,7 @@ func (r *Sink) Upload(ctx context.Context, fullFilePath string, prefix string) (
 			// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#other
 			CacheControl: "no-store, no-transform",
 			ContentType:  "application/octet-stream",
+			Metadata:     metadata,
 		})
 	}); err != nil {
 		return fmt.Errorf("upload object %q: %w", objectKey, err)
