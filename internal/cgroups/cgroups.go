@@ -97,13 +97,14 @@ type Manager interface {
 
 // NewManager returns the appropriate Cgroups manager
 func NewManager(cfg cgroups.Config, logger log.Logger, pid int) Manager {
-	if cfg.Repositories.Count > 0 {
-		if manager := newCgroupManager(cfg, logger, pid); manager != nil {
-			return manager
+	if cfg.Repositories.Count < 1 {
+		if cfg.CPUShares > 0 || cfg.MemoryBytes > 0 {
+			logger.Warn("cgroups repositories.count value was not configured or set to 0. Cgroup support will be disabled. Please set a positive value for repositories.count")
 		}
+		return &NoopManager{}
 	}
 
-	return &NoopManager{}
+	return newCgroupManager(cfg, logger, pid)
 }
 
 // StartPruningOldCgroups prunes old cgroups for both the memory and cpu subsystems
