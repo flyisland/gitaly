@@ -14,6 +14,15 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// Helper: convert revision strings into bytes
+func revisions(strs ...string) [][]byte {
+	result := make([][]byte, len(strs))
+	for i, s := range strs {
+		result[i] = []byte(s)
+	}
+	return result
+}
+
 func TestCountCommits(t *testing.T) {
 	t.Parallel()
 
@@ -178,6 +187,153 @@ func TestCountCommits(t *testing.T) {
 			desc:        "revision is invalid",
 			request:     &gitalypb.CountCommitsRequest{Repository: repo, Revision: []byte("--output=/meow"), All: false},
 			expectedErr: status.Error(codes.InvalidArgument, "revision can't start with '-'"),
+		},
+		{
+			desc: "with revisions field - single revision",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("branch-2"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 13},
+		},
+		{
+			desc: "with revisions field - multiple revisions",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("branch-1", "branch-2"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 14},
+		},
+		{
+			desc: "with revisions field - revision range",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("branch-2", "^branch-1"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 13},
+		},
+		{
+			desc: "with revisions field - pseudo-revision --all",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("--all"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 14},
+		},
+		{
+			desc: "with revisions field - pseudo-revision --branches",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("--branches"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 14},
+		},
+		{
+			desc: "with revisions field - pseudo-revision --not",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("branch-2", "--not", "branch-1"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 13},
+		},
+		{
+			desc: "with revisions field and max count",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("--all"),
+				MaxCount:   5,
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 5},
+		},
+		{
+			desc: "with revisions field and before",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("branch-2"),
+				Before: &timestamppb.Timestamp{
+					Seconds: time.Date(2005, 1, 1, 0, 0, 0, 0, time.UTC).Unix(),
+				},
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 2},
+		},
+		{
+			desc: "with revisions field and after",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("branch-2"),
+				After: &timestamppb.Timestamp{
+					Seconds: time.Date(2005, 1, 1, 0, 0, 0, 0, time.UTC).Unix(),
+				},
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 11},
+		},
+		{
+			desc: "with revisions field and path",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  revisions("branch-2"),
+				Path:       []byte("files/"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 1},
+		},
+		{
+			desc: "with revisions field and first parent",
+			request: &gitalypb.CountCommitsRequest{
+				Repository:  repo,
+				Revisions:   revisions("branch-2"),
+				FirstParent: true,
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 13},
+		},
+		{
+			desc: "revisions field takes precedence over revision field",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revision:   []byte("branch-1"),
+				Revisions:  revisions("branch-2"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 13},
+		},
+		{
+			desc: "revisions field takes precedence over all field",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				All:        true,
+				Revisions:  revisions("branch-1"),
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 1},
+		},
+		{
+			desc:    "revisions field with invalid pseudo-revision",
+			request: &gitalypb.CountCommitsRequest{Repository: repo, Revisions: revisions("--invalid-pseudo")},
+			expectedErr: testhelper.WithInterceptedMetadata(
+				structerr.NewInvalidArgument("invalid revision: revision can't start with '-'"),
+				"revision", "--invalid-pseudo",
+			),
+		},
+		{
+			desc:    "revisions field with empty string",
+			request: &gitalypb.CountCommitsRequest{Repository: repo, Revisions: revisions("")},
+			expectedErr: testhelper.WithInterceptedMetadata(
+				structerr.NewInvalidArgument("invalid revision: empty revision"),
+				"revision", "",
+			),
+		},
+		{
+			desc:    "revisions field with invalid revision containing NUL",
+			request: &gitalypb.CountCommitsRequest{Repository: repo, Revisions: revisions("branch\x00-1")},
+			expectedErr: testhelper.WithInterceptedMetadata(
+				structerr.NewInvalidArgument("invalid revision: revision can't contain NUL"),
+				"revision", "branch\x00-1",
+			),
+		},
+		{
+			desc: "with revisions field - non-UTF-8 characters in branch name",
+			request: &gitalypb.CountCommitsRequest{
+				Repository: repo,
+				Revisions:  [][]byte{[]byte("branch-\xFF\xFE")},
+			},
+			expectedResponse: &gitalypb.CountCommitsResponse{Count: 0},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
