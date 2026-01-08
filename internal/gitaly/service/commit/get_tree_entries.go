@@ -1,6 +1,7 @@
 package commit
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -260,26 +261,32 @@ func (s *server) sendTreeEntriesUnified(
 }
 
 func sortTrees(entries []*gitalypb.TreeEntry, sortBy gitalypb.GetTreeEntriesRequest_SortBy) ([]*gitalypb.TreeEntry, error) {
-	if sortBy == gitalypb.GetTreeEntriesRequest_DEFAULT {
+	switch sortBy {
+	case gitalypb.GetTreeEntriesRequest_DEFAULT:
+		return entries, nil
+	case gitalypb.GetTreeEntriesRequest_TREES_FIRST:
+		var err error
+		sort.SliceStable(entries, func(i, j int) bool {
+			a, firstError := toLsTreeEnum(entries[i].GetType())
+			b, secondError := toLsTreeEnum(entries[j].GetType())
+
+			if firstError != nil {
+				err = firstError
+			} else if secondError != nil {
+				err = secondError
+			}
+
+			return a < b
+		})
+		return entries, err
+	case gitalypb.GetTreeEntriesRequest_FILESYSTEM:
+		sort.SliceStable(entries, func(i, j int) bool {
+			return bytes.Compare(entries[i].GetPath(), entries[j].GetPath()) < 0
+		})
+		return entries, nil
+	default:
 		return entries, nil
 	}
-
-	var err error
-
-	sort.SliceStable(entries, func(i, j int) bool {
-		a, firstError := toLsTreeEnum(entries[i].GetType())
-		b, secondError := toLsTreeEnum(entries[j].GetType())
-
-		if firstError != nil {
-			err = firstError
-		} else if secondError != nil {
-			err = secondError
-		}
-
-		return a < b
-	})
-
-	return entries, err
 }
 
 // This is used to match the sorting order given by getLSTreeEntries

@@ -482,6 +482,8 @@ message GetTreeEntriesRequest {
     DEFAULT = 0; // protolint:disable:this ENUM_FIELD_NAMES_PREFIX ENUM_FIELD_NAMES_ZERO_VALUE_END_WITH
     // TREES_FIRST sorts the entries by trees, blobs and submodules.
     TREES_FIRST = 1; // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
+    // FILESYSTEM sorts the tree entries lexicographically, mirroring the `ls` command.
+    FILESYSTEM = 2; // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
   }
 
   // repository is the repository to get the tree entries from.
