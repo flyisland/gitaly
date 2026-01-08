@@ -2074,6 +2074,38 @@ func TestConcurrency(t *testing.T) {
 			}},
 		},
 		{
+			desc: "max_concurrency is set",
+			rawCfg: `[[concurrency]]
+			rpc = "/gitaly.CommitService/ListCommitsByOid"
+			max_concurrency = 25
+			max_queue_size = 100
+			`,
+			expectedCfg: []Concurrency{{
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxConcurrency: 25,
+					MaxQueueSize:   100,
+				},
+				RPC: "/gitaly.CommitService/ListCommitsByOid",
+			}},
+		},
+		{
+			desc: "both max_concurrency and max_per_repo are set",
+			rawCfg: `[[concurrency]]
+			rpc = "/gitaly.CommitService/ListCommitsByOid"
+			max_concurrency = 30
+			max_per_repo = 20
+			max_queue_size = 100
+			`,
+			expectedCfg: []Concurrency{{
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxConcurrency: 30,
+					MaxPerRepo:     20,
+					MaxQueueSize:   100,
+				},
+				RPC: "/gitaly.CommitService/ListCommitsByOid",
+			}},
+		},
+		{
 			desc: "max_queue_wait is set to 10s",
 			rawCfg: `[[concurrency]]
 			rpc = "/gitaly.CommitService/ListCommitsByOid"
@@ -2185,6 +2217,10 @@ func TestConcurrency_Validate(t *testing.T) {
 	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxPerRepo: 0, MaxQueueSize: 1}}.Validate())
 	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxPerRepo: 1, MaxQueueSize: 1}}.Validate())
 	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxPerRepo: 100, MaxQueueSize: 100}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: 0, MaxQueueSize: 1}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: 1, MaxQueueSize: 1}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: 100, MaxQueueSize: 100}}.Validate())
+	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: 50, MaxPerRepo: 100, MaxQueueSize: 100}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
@@ -2194,6 +2230,16 @@ func TestConcurrency_Validate(t *testing.T) {
 			),
 		},
 		Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxPerRepo: -1, MaxQueueSize: 1}}.Validate(),
+	)
+	require.Equal(
+		t,
+		cfgerror.ValidationErrors{
+			cfgerror.NewValidationError(
+				fmt.Errorf("%w: -1 is not greater than or equal to 0", cfgerror.ErrNotInRange),
+				"max_concurrency",
+			),
+		},
+		Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: -1, MaxQueueSize: 1}}.Validate(),
 	)
 
 	require.NoError(t, Concurrency{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 1, MinLimit: 1, MaxLimit: 100, MaxQueueSize: 100}}.Validate())
@@ -2294,6 +2340,85 @@ func TestConcurrency_Validate(t *testing.T) {
 		},
 		Concurrency{ConcurrencyLimits: ConcurrencyLimits{MaxQueueWait: duration.Duration(-time.Minute), MaxQueueSize: 1}}.Validate(),
 	)
+}
+
+func TestConcurrencyLimits_Concurrency(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		desc               string
+		limits             ConcurrencyLimits
+		expectedConcurrency int
+	}{
+		{
+			desc:               "neither set",
+			limits:             ConcurrencyLimits{},
+			expectedConcurrency: 0,
+		},
+		{
+			desc:               "only MaxPerRepo set",
+			limits:             ConcurrencyLimits{MaxPerRepo: 10},
+			expectedConcurrency: 10,
+		},
+		{
+			desc:               "only MaxConcurrency set",
+			limits:             ConcurrencyLimits{MaxConcurrency: 20},
+			expectedConcurrency: 20,
+		},
+		{
+			desc:               "both set, MaxConcurrency takes precedence",
+			limits:             ConcurrencyLimits{MaxConcurrency: 30, MaxPerRepo: 10},
+			expectedConcurrency: 30,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			require.Equal(t, tc.expectedConcurrency, tc.limits.Concurrency())
+		})
+	}
+}
+
+func TestConcurrencyLimits_IsSet(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		desc     string
+		limits   ConcurrencyLimits
+		expected bool
+	}{
+		{
+			desc:     "neither set",
+			limits:   ConcurrencyLimits{},
+			expected: false,
+		},
+		{
+			desc:     "only MaxPerRepo set",
+			limits:   ConcurrencyLimits{MaxPerRepo: 10},
+			expected: true,
+		},
+		{
+			desc:     "only MaxConcurrency set",
+			limits:   ConcurrencyLimits{MaxConcurrency: 20},
+			expected: true,
+		},
+		{
+			desc:     "both set",
+			limits:   ConcurrencyLimits{MaxConcurrency: 30, MaxPerRepo: 10},
+			expected: true,
+		},
+		{
+			desc:     "adaptive set",
+			limits:   ConcurrencyLimits{Adaptive: true},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			require.Equal(t, tc.expected, tc.limits.IsSet())
+		})
+	}
 }
 
 func TestAdaptiveLimiting_Validate(t *testing.T) {
