@@ -1867,41 +1867,48 @@ func TestPackObjectsLimiting(t *testing.T) {
 		expectedCfg       PackObjectsLimiting
 	}{
 		{
-			desc: "max_queue_wait is set to 10s",
+			desc: "max_queue_size is set",
 			rawCfg: `[pack_objects_limiting]
 			max_concurrency = 20
- 			max_queue_length = 100
+ 			max_queue_size = 100
 			max_queue_wait = "10s"
 			`,
 			expectedCfg: PackObjectsLimiting{
-				MaxConcurrency: 20,
-				MaxQueueLength: 100,
-				MaxQueueWait:   duration.Duration(10 * time.Second),
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxConcurrency: 20,
+					MaxQueueSize:   100,
+					MaxQueueWait:   duration.Duration(10 * time.Second),
+				},
 			},
 		},
 		{
-			desc: "max_queue_wait is set to 1m",
+			desc: "max_queue_length is set (backwards compatibility)",
 			rawCfg: `[pack_objects_limiting]
 			max_concurrency = 10
 			max_queue_length = 100
 			max_queue_wait = "1m"
 			`,
 			expectedCfg: PackObjectsLimiting{
-				MaxConcurrency: 10,
-				MaxQueueLength: 100,
-				MaxQueueWait:   duration.Duration(1 * time.Minute),
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxConcurrency: 10,
+					MaxQueueSize:   100, // Sanitize() copies MaxQueueLength to MaxQueueSize
+					MaxQueueWait:   duration.Duration(1 * time.Minute),
+					MaxQueueLength: 100,
+				},
 			},
 		},
 		{
-			desc: "max_queue_length is missing",
+			desc: "neither queue field set, defaults applied",
 			rawCfg: `[pack_objects_limiting]
 			max_concurrency = 10
 			max_queue_wait = "1m"
 			`,
 			expectedCfg: PackObjectsLimiting{
-				MaxConcurrency: 10,
-				MaxQueueLength: 200,
-				MaxQueueWait:   duration.Duration(1 * time.Minute),
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxConcurrency: 10,
+					MaxQueueSize:   200, // Sanitize() sets default
+					MaxQueueWait:   duration.Duration(1 * time.Minute),
+				},
 			},
 		},
 	}
@@ -1927,18 +1934,64 @@ func TestPackObjectsLimiting_defaultPackObjectsLimiting(t *testing.T) {
 
 	cfg := defaultPackObjectsLimiting()
 	require.Equal(t, PackObjectsLimiting{
-		MaxConcurrency: 200,
-		MaxQueueWait:   0,
-		MaxQueueLength: 200,
+		ConcurrencyLimits: ConcurrencyLimits{
+			MaxConcurrency: 200,
+		},
 	}, cfg)
+}
+
+func TestPackObjectsLimiting_QueueSize(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		desc              string
+		limits            PackObjectsLimiting
+		expectedQueueSize int
+	}{
+		{
+			desc:              "neither set",
+			limits:            PackObjectsLimiting{},
+			expectedQueueSize: 0,
+		},
+		{
+			desc: "only MaxQueueLength set",
+			limits: PackObjectsLimiting{
+				ConcurrencyLimits: ConcurrencyLimits{MaxQueueLength: 100},
+			},
+			expectedQueueSize: 100,
+		},
+		{
+			desc: "only MaxQueueSize set",
+			limits: PackObjectsLimiting{
+				ConcurrencyLimits: ConcurrencyLimits{MaxQueueSize: 150},
+			},
+			expectedQueueSize: 150,
+		},
+		{
+			desc: "both set, MaxQueueSize takes precedence",
+			limits: PackObjectsLimiting{
+				ConcurrencyLimits: ConcurrencyLimits{
+					MaxQueueSize:   200,
+					MaxQueueLength: 100,
+				},
+			},
+			expectedQueueSize: 200,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			require.Equal(t, tc.expectedQueueSize, tc.limits.QueueMax())
+		})
+	}
 }
 
 func TestPackObjectsLimiting_Validate(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, PackObjectsLimiting{MaxConcurrency: 0, MaxQueueLength: 1}.Validate())
-	require.NoError(t, PackObjectsLimiting{MaxConcurrency: 1, MaxQueueLength: 1}.Validate())
-	require.NoError(t, PackObjectsLimiting{MaxConcurrency: 100, MaxQueueLength: 1}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: 0, MaxQueueLength: 1}}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: 1, MaxQueueLength: 1}}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: 100, MaxQueueLength: 1}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
@@ -1947,12 +2000,12 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 				"max_concurrency",
 			),
 		},
-		PackObjectsLimiting{MaxConcurrency: -1, MaxQueueLength: 1}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxConcurrency: -1, MaxQueueLength: 1}}.Validate(),
 	)
 
-	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 1, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}.Validate())
-	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 10, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}.Validate())
-	require.NoError(t, PackObjectsLimiting{Adaptive: true, InitialLimit: 100, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 1, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 10, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 100, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
@@ -1961,7 +2014,7 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 				"initial_limit",
 			),
 		},
-		PackObjectsLimiting{Adaptive: true, InitialLimit: -1, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: -1, MinLimit: 1, MaxLimit: 100, MaxQueueLength: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -1971,7 +2024,7 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 				"initial_limit",
 			),
 		},
-		PackObjectsLimiting{Adaptive: true, InitialLimit: 10, MinLimit: 11, MaxLimit: 100, MaxQueueLength: 100}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 10, MinLimit: 11, MaxLimit: 100, MaxQueueLength: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -1981,7 +2034,7 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 				"max_limit",
 			),
 		},
-		PackObjectsLimiting{Adaptive: true, InitialLimit: 10, MinLimit: 5, MaxLimit: 3, MaxQueueLength: 100}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 10, MinLimit: 5, MaxLimit: 3, MaxQueueLength: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -1991,7 +2044,7 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 				"min_limit",
 			),
 		},
-		PackObjectsLimiting{Adaptive: true, InitialLimit: 5, MinLimit: -1, MaxLimit: 99, MaxQueueLength: 100}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 5, MinLimit: -1, MaxLimit: 99, MaxQueueLength: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -2001,7 +2054,7 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 				"min_limit",
 			),
 		},
-		PackObjectsLimiting{Adaptive: true, InitialLimit: 5, MinLimit: 0, MaxLimit: 99, MaxQueueLength: 100}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 5, MinLimit: 0, MaxLimit: 99, MaxQueueLength: 100}}.Validate(),
 	)
 	require.Equal(
 		t,
@@ -2011,33 +2064,33 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 				"max_limit",
 			),
 		},
-		PackObjectsLimiting{Adaptive: true, InitialLimit: 10, MinLimit: 5, MaxLimit: -1, MaxQueueLength: 100}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{Adaptive: true, InitialLimit: 10, MinLimit: 5, MaxLimit: -1, MaxQueueLength: 100}}.Validate(),
 	)
 
-	require.NoError(t, PackObjectsLimiting{MaxQueueLength: 1}.Validate())
-	require.NoError(t, PackObjectsLimiting{MaxQueueLength: 100}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxQueueLength: 1}}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxQueueLength: 100}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
 			cfgerror.NewValidationError(
-				fmt.Errorf("%w: 0 is not greater than 0", cfgerror.ErrNotInRange),
-				"max_queue_length",
+				errors.New("at least one of max_queue_size or max_queue_length must be set"),
+				"max_queue_size",
 			),
 		},
-		PackObjectsLimiting{MaxQueueLength: 0}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxQueueLength: 0}}.Validate(),
 	)
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
 			cfgerror.NewValidationError(
-				fmt.Errorf("%w: -1 is not greater than 0", cfgerror.ErrNotInRange),
-				"max_queue_length",
+				errors.New("at least one of max_queue_size or max_queue_length must be set"),
+				"max_queue_size",
 			),
 		},
-		PackObjectsLimiting{MaxQueueLength: -1}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxQueueLength: -1}}.Validate(),
 	)
 
-	require.NoError(t, PackObjectsLimiting{MaxQueueWait: duration.Duration(1), MaxQueueLength: 1}.Validate())
+	require.NoError(t, PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxQueueWait: duration.Duration(1), MaxQueueLength: 1}}.Validate())
 	require.Equal(
 		t,
 		cfgerror.ValidationErrors{
@@ -2046,7 +2099,7 @@ func TestPackObjectsLimiting_Validate(t *testing.T) {
 				"max_queue_wait",
 			),
 		},
-		PackObjectsLimiting{MaxQueueWait: duration.Duration(-time.Minute), MaxQueueLength: 1}.Validate(),
+		PackObjectsLimiting{ConcurrencyLimits: ConcurrencyLimits{MaxQueueWait: duration.Duration(-time.Minute), MaxQueueLength: 1}}.Validate(),
 	)
 }
 
@@ -2346,28 +2399,28 @@ func TestConcurrencyLimits_Concurrency(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		desc               string
-		limits             ConcurrencyLimits
+		desc                string
+		limits              ConcurrencyLimits
 		expectedConcurrency int
 	}{
 		{
-			desc:               "neither set",
-			limits:             ConcurrencyLimits{},
+			desc:                "neither set",
+			limits:              ConcurrencyLimits{},
 			expectedConcurrency: 0,
 		},
 		{
-			desc:               "only MaxPerRepo set",
-			limits:             ConcurrencyLimits{MaxPerRepo: 10},
+			desc:                "only MaxPerRepo set",
+			limits:              ConcurrencyLimits{MaxPerRepo: 10},
 			expectedConcurrency: 10,
 		},
 		{
-			desc:               "only MaxConcurrency set",
-			limits:             ConcurrencyLimits{MaxConcurrency: 20},
+			desc:                "only MaxConcurrency set",
+			limits:              ConcurrencyLimits{MaxConcurrency: 20},
 			expectedConcurrency: 20,
 		},
 		{
-			desc:               "both set, MaxConcurrency takes precedence",
-			limits:             ConcurrencyLimits{MaxConcurrency: 30, MaxPerRepo: 10},
+			desc:                "both set, MaxConcurrency takes precedence",
+			limits:              ConcurrencyLimits{MaxConcurrency: 30, MaxPerRepo: 10},
 			expectedConcurrency: 30,
 		},
 	}
@@ -3356,8 +3409,10 @@ func TestLoadDefaults(t *testing.T) {
 			Backpressure:   true,
 		},
 		PackObjectsLimiting: PackObjectsLimiting{
-			MaxConcurrency: 200,
-			MaxQueueLength: 200,
+			ConcurrencyLimits: ConcurrencyLimits{
+				MaxConcurrency: 200,
+				MaxQueueSize:   200,
+			},
 		},
 		Backup: BackupConfig{
 			WALWorkerCount: 1,

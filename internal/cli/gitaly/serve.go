@@ -338,7 +338,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		adaptiveLimits = append(adaptiveLimits, packObjectLimit)
 	} else {
 		packObjectLimit = limiter.NewAdaptiveLimit("packObjects", limiter.AdaptiveSetting{
-			Initial: cfg.PackObjectsLimiting.MaxConcurrency,
+			Initial: cfg.PackObjectsLimiting.Concurrency(),
 		})
 	}
 
@@ -347,7 +347,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	)
 	packObjectsLimiter := limiter.NewConcurrencyLimiter(
 		packObjectLimit,
-		cfg.PackObjectsLimiting.MaxQueueLength,
+		cfg.PackObjectsLimiting.QueueMax(),
 		cfg.PackObjectsLimiting.MaxQueueWait.Duration(),
 		packObjectsMonitor,
 	)

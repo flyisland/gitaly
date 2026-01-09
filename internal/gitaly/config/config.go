@@ -629,32 +629,41 @@ func (c AdaptiveLimiting) Validate() error {
 // Requests that come in after the maximum number of concurrent pack objects
 // processes have been reached will wait.
 type PackObjectsLimiting struct {
-	// Adaptive determines the behavior of the concurrency limit. If set to true, the concurrency limit is dynamic
-	// and starts at InitialLimit, then adjusts within the range [MinLimit, MaxLimit] based on current resource
-	// usage. If set to false, the concurrency limit is static and is set to MaxConcurrency.
-	Adaptive bool `json:"adaptive,omitempty" toml:"adaptive,omitempty"`
-	// InitialLimit is the concurrency limit to start with.
-	InitialLimit int `json:"initial_limit,omitempty" toml:"initial_limit,omitempty"`
-	// MaxLimit is the minimum adaptive concurrency limit.
-	MaxLimit int `json:"max_limit,omitempty" toml:"max_limit,omitempty"`
-	// MinLimit is the mini adaptive concurrency limit.
-	MinLimit int `json:"min_limit,omitempty" toml:"min_limit,omitempty"`
-	// MaxConcurrency is the static maximum number of concurrent pack objects processes for a given key. This config
-	// is used only if Adaptive is false.
-	MaxConcurrency int `json:"max_concurrency,omitempty" toml:"max_concurrency,omitempty"`
-	// MaxQueueWait is the maximum time a request can remain in the concurrency queue
-	// waiting to be picked up by Gitaly.
-	MaxQueueWait duration.Duration `json:"max_queue_wait,omitempty" toml:"max_queue_wait,omitempty"`
-	// MaxQueueLength is the maximum length of the request queue
-	MaxQueueLength int `json:"max_queue_length,omitempty" toml:"max_queue_length,omitempty"`
+	ConcurrencyLimits
+}
+
+// QueueMax returns the effective queue size to use.
+// MaxQueueSize takes precedence over MaxQueueLength for backwards compatibility.
+func (pol PackObjectsLimiting) QueueMax() int {
+	if pol.MaxQueueSize > 0 {
+		return pol.MaxQueueSize
+	}
+	return pol.MaxQueueLength
 }
 
 // Validate runs validation on all fields and compose all found errors.
 func (pol PackObjectsLimiting) Validate() error {
+	// Validate the embedded ConcurrencyLimits fields manually to handle both MaxQueueSize and MaxQueueLength
 	errs := cfgerror.New().
 		Append(cfgerror.Comparable(pol.MaxConcurrency).GreaterOrEqual(0), "max_concurrency").
-		Append(cfgerror.Comparable(pol.MaxQueueLength).GreaterThan(0), "max_queue_length").
+		Append(cfgerror.Comparable(pol.MaxPerRepo).GreaterOrEqual(0), "max_per_repo").
 		Append(cfgerror.Comparable(pol.MaxQueueWait.Duration()).GreaterOrEqual(0), "max_queue_wait")
+
+	// Validate that at least one queue size field is set and valid
+	if pol.MaxQueueSize > 0 || pol.MaxQueueLength > 0 {
+		if pol.MaxQueueSize > 0 {
+			errs = errs.Append(cfgerror.Comparable(pol.MaxQueueSize).GreaterThan(0), "max_queue_size")
+		}
+		if pol.MaxQueueLength > 0 {
+			errs = errs.Append(cfgerror.Comparable(pol.MaxQueueLength).GreaterThan(0), "max_queue_length")
+		}
+	} else {
+		// Neither is set, which is invalid
+		errs = errs.Append(
+			fmt.Errorf("at least one of max_queue_size or max_queue_length must be set"),
+			"max_queue_size",
+		)
+	}
 
 	if pol.Adaptive {
 		errs = errs.
@@ -786,10 +795,10 @@ func defaultPackObjectsCacheConfig() StreamCacheConfig {
 
 func defaultPackObjectsLimiting() PackObjectsLimiting {
 	return PackObjectsLimiting{
-		MaxConcurrency: defaultPackObjectsLimitingConcurrency,
-		MaxQueueLength: defaultPackObjectsLimitingQueueSize,
-		// Requests can stay in the queue as long as they want
-		MaxQueueWait: 0,
+		ConcurrencyLimits: ConcurrencyLimits{
+			MaxConcurrency: defaultPackObjectsLimitingConcurrency,
+			MaxQueueWait:   0,
+		},
 	}
 }
 
@@ -953,8 +962,11 @@ func (cfg *Cfg) Sanitize() error {
 		}
 	}
 
-	if cfg.PackObjectsLimiting.MaxQueueLength == 0 {
-		cfg.PackObjectsLimiting.MaxQueueLength = defaultPackObjectsLimitingQueueSize
+	if cfg.PackObjectsLimiting.MaxQueueSize == 0 && cfg.PackObjectsLimiting.MaxQueueLength == 0 {
+		cfg.PackObjectsLimiting.MaxQueueSize = defaultPackObjectsLimitingQueueSize
+	} else if cfg.PackObjectsLimiting.MaxQueueSize == 0 && cfg.PackObjectsLimiting.MaxQueueLength > 0 {
+		// For backwards compatibility, copy MaxQueueLength to MaxQueueSize if only MaxQueueLength is set
+		cfg.PackObjectsLimiting.MaxQueueSize = cfg.PackObjectsLimiting.MaxQueueLength
 	}
 
 	if cfg.ArchiveCache.Enabled {
