@@ -133,13 +133,29 @@ func extractGitalyDirectives(f *modfile.File) ([]pinnedDependency, error) {
 	var dependencies []pinnedDependency
 
 	analyseDependencies := func(syntax *modfile.Line, mod module.Version) error {
+		// comments are all the comment lines that comes `before`
+		// declaring a module dependency.
 		comments := syntax.Before
 		if len(comments) == 0 {
 			return nil
 		}
 
+		// commentLine is a comment line parsed from the go.mod file.
+		// It is the first non-empty line of a comment block.
+		commentLine := ""
+
+		// In this loop, we loop over all comments and set
+		// `commentLine` to the first non-empty line.
+		for _, c := range comments {
+			if 0 == len(strings.TrimSpace(c.Token)) {
+				continue
+			}
+			commentLine = strings.TrimSpace(c.Token)
+			break
+		}
+
 		// Extract and validate the directive
-		directive := strings.TrimSpace(strings.TrimPrefix(comments[0].Token, "//"))
+		directive := strings.TrimSpace(strings.TrimPrefix(commentLine, "//"))
 		matches := pinVersionDirective.FindStringSubmatch(directive)
 		if len(matches) != 3 {
 			return nil
