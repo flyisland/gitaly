@@ -1025,10 +1025,10 @@ func TestPackObjects_concurrencyLimit(t *testing.T) {
 
 				expectedMetrics := bytes.NewBufferString(`# HELP gitaly_pack_objects_dropped_total Number of requests dropped from the queue
 	# TYPE gitaly_pack_objects_dropped_total counter
-	gitaly_pack_objects_dropped_total{reason="max_time"} 1
+	gitaly_pack_objects_dropped_total{auth="authenticated",reason="max_time"} 1
 	# HELP gitaly_pack_objects_queued Gauge of number of queued calls
 	# TYPE gitaly_pack_objects_queued gauge
-	gitaly_pack_objects_queued 0
+	gitaly_pack_objects_queued{auth="authenticated"} 0
 	`)
 
 				require.NoError(t,

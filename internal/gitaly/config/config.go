@@ -630,6 +630,8 @@ func (c AdaptiveLimiting) Validate() error {
 // processes have been reached will wait.
 type PackObjectsLimiting struct {
 	ConcurrencyLimits
+	// Unauthenticated sets the limits for unauthenticated requests
+	Unauthenticated ConcurrencyLimits `json:"unauthenticated" toml:"unauthenticated"`
 }
 
 // QueueMax returns the effective queue size to use.
@@ -649,16 +651,19 @@ func (pol PackObjectsLimiting) Validate() error {
 		Append(cfgerror.Comparable(pol.MaxPerRepo).GreaterOrEqual(0), "max_per_repo").
 		Append(cfgerror.Comparable(pol.MaxQueueWait.Duration()).GreaterOrEqual(0), "max_queue_wait")
 
-	// Validate that at least one queue size field is set and valid
-	if pol.MaxQueueSize > 0 || pol.MaxQueueLength > 0 {
-		if pol.MaxQueueSize > 0 {
-			errs = errs.Append(cfgerror.Comparable(pol.MaxQueueSize).GreaterThan(0), "max_queue_size")
-		}
-		if pol.MaxQueueLength > 0 {
-			errs = errs.Append(cfgerror.Comparable(pol.MaxQueueLength).GreaterThan(0), "max_queue_length")
-		}
-	} else {
-		// Neither is set, which is invalid
+	// Validate queue size fields
+	hasMaxQueueSize := pol.MaxQueueSize != 0
+	hasMaxQueueLength := pol.MaxQueueLength != 0
+
+	if hasMaxQueueSize {
+		errs = errs.Append(cfgerror.Comparable(pol.MaxQueueSize).GreaterThan(0), "max_queue_size")
+	}
+	if hasMaxQueueLength {
+		errs = errs.Append(cfgerror.Comparable(pol.MaxQueueLength).GreaterThan(0), "max_queue_length")
+	}
+
+	// If neither is set, that's an error
+	if !hasMaxQueueSize && !hasMaxQueueLength {
 		errs = errs.Append(
 			fmt.Errorf("at least one of max_queue_size or max_queue_length must be set"),
 			"max_queue_size",
@@ -670,6 +675,10 @@ func (pol PackObjectsLimiting) Validate() error {
 			Append(cfgerror.Comparable(pol.MinLimit).GreaterThan(0), "min_limit").
 			Append(cfgerror.Comparable(pol.MaxLimit).GreaterOrEqual(pol.InitialLimit), "max_limit").
 			Append(cfgerror.Comparable(pol.InitialLimit).GreaterOrEqual(pol.MinLimit), "initial_limit")
+	}
+
+	if pol.Unauthenticated.IsSet() {
+		errs = errs.Append(pol.Unauthenticated.Validate(), "unauthenticated")
 	}
 
 	return errs.AsError()
