@@ -23,6 +23,12 @@ const defaultDNSNameserverPort = "53"
 // the target URL.
 const dnsResolverScheme = "dns"
 
+// This scheme is used when DNS is used along with TLS, and indicates to the
+// custom dns resolver to take note of the host in the case of
+// dns+tls://authority/host:port in order to initiate an SNI override so the TLS
+// handshake works properly once the connection lands at the destination IP.
+const dnsPlusTLSResolverScheme = "dns+tls"
+
 // BuilderConfig defines the configuration for customizing the builder.
 type BuilderConfig struct {
 	// RefreshRate determines the periodic refresh rate of the resolver. The resolver may issue
@@ -54,10 +60,26 @@ func NewBuilder(opts *BuilderConfig) *Builder {
 	return &Builder{opts: opts}
 }
 
+// NewTLSPlusDNSBuilder creates a builder that wraps an existing DNS builder to handle the "dns+tls" scheme.
+// This allows the same DNS resolution logic to work for both "dns://" and "dns+tls://" URLs.
+func NewTLSPlusDNSBuilder(dnsBuilder *Builder) *tlsPlusDNSBuilder {
+	return &tlsPlusDNSBuilder{Builder: dnsBuilder}
+}
+
 // Scheme returns the scheme handled by this builder. Client connection queries the resolver based
 // on the target URL scheme. This builder handles dns://*/* targets.
 func (d *Builder) Scheme() string {
 	return dnsResolverScheme
+}
+
+// tlsPlusDNSBuilder wraps a DNS builder to handle the "dns+tls" scheme.
+type tlsPlusDNSBuilder struct {
+	*Builder
+}
+
+// Scheme returns "dns+tls" to handle dns+tls:// URLs.
+func (t *tlsPlusDNSBuilder) Scheme() string {
+	return dnsPlusTLSResolverScheme
 }
 
 // Build returns a resolver that periodically resolves the input target. Each client connection
@@ -70,7 +92,7 @@ func (d *Builder) Build(target resolver.Target, cc resolver.ClientConn, _ resolv
 	if path == "" {
 		path = target.URL.Opaque
 	}
-	host, port, err := parseTarget(strings.TrimPrefix(path, "/"), d.opts.DefaultGrpcPort)
+	host, port, err := ParseTarget(strings.TrimPrefix(path, "/"), d.opts.DefaultGrpcPort)
 	if err != nil {
 		return nil, structerr.New("building dns resolver: %w", err).WithMetadata("target", target.URL.String())
 	}

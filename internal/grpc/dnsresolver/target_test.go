@@ -154,7 +154,7 @@ func TestParseTarget(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("target: %s", tc.target), func(t *testing.T) {
-			host, port, err := parseTarget(tc.target, defaultPort)
+			host, port, err := ParseTarget(tc.target, defaultPort)
 
 			require.Equal(t, tc.expectedErr, err)
 			require.Equal(t, tc.expectedHost, host)

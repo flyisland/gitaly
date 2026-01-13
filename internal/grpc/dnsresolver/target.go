@@ -13,6 +13,9 @@ import (
 // * dns://authority-port:authority-host/host:port
 // * dns:///host:port
 // * dns:host:port
+// * dns+tls://authority-port:authority-host/host:port
+// * dns+tls:///host:port
+// * dns+tls:host:port
 // Either form, the real address is the URL's path
 func ValidateURL(rawAddress string) error {
 	if rawAddress == "" {
@@ -24,7 +27,7 @@ func ValidateURL(rawAddress string) error {
 		return structerr.New("fail to parse address: %w", err)
 	}
 
-	if uri.Scheme != "dns" {
+	if uri.Scheme != "dns" && uri.Scheme != dnsPlusTLSResolverScheme {
 		return structerr.New("unexpected scheme: %s", uri.Scheme)
 	}
 
@@ -33,15 +36,15 @@ func ValidateURL(rawAddress string) error {
 		// When "//" part is stripped
 		path = uri.Opaque
 	}
-	_, _, err = parseTarget(strings.TrimPrefix(path, "/"), "50051")
+	_, _, err = ParseTarget(strings.TrimPrefix(path, "/"), "50051")
 	return err
 }
 
-// parseTarget takes the user input target string and default port, returns formatted host and port info.
+// ParseTarget takes the user input target string and default port, returns formatted host and port info.
 // This is a shameless copy of built-in gRPC dns resolver, because we don't want to have any
 // inconsistency between our resolver and dns resolver.
 // Source: https://github.com/grpc/grpc-go/blob/eeb9afa1f6b6388152955eeca8926e36ca94c768/internal/resolver/dns/dns_resolver.go#L378-L378
-func parseTarget(target, defaultPort string) (string, string, error) {
+func ParseTarget(target, defaultPort string) (string, string, error) {
 	var err error
 
 	if target == "" {
@@ -84,7 +87,7 @@ func findDNSLookup(authority string) (dnsLookuper, error) {
 		return net.DefaultResolver, nil
 	}
 
-	host, port, err := parseTarget(authority, defaultDNSNameserverPort)
+	host, port, err := ParseTarget(authority, defaultDNSNameserverPort)
 	if err != nil {
 		return nil, err
 	}

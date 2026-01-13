@@ -142,3 +142,14 @@ func TestSchemeDNSBuilder(t *testing.T) {
 	d := &Builder{}
 	require.Equal(t, d.Scheme(), "dns")
 }
+
+func TestSchemeTLSBuilder(t *testing.T) {
+	t.Parallel()
+
+	dnsBuilder := &Builder{}
+	tlsBuilder := NewTLSPlusDNSBuilder(dnsBuilder)
+	require.Equal(t, "dns+tls", tlsBuilder.Scheme())
+
+	// Verify that the TLS builder wraps the DNS builder
+	require.Equal(t, dnsBuilder, tlsBuilder.Builder)
+}
