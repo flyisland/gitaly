@@ -48,9 +48,38 @@ func getConnectionType(rawAddress string) connectionType {
 		return tcpConnection
 	case "dns":
 		return dnsConnection
+	case "dns+tls":
+		return dnsPlusTLSConnection
 	default:
 		return invalidConnection
 	}
+}
+
+// extractHostFromDNSURL extracts the target host from a DNS URL for use in TLS ServerName.
+// For URLs like dns://[authority_host]:[authority_port]/[host]:[port], it returns the host portion.
+func extractHostFromDNSURL(rawAddress string) (string, error) {
+	u, err := url.Parse(rawAddress)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse DNS URL: %w", err)
+	}
+
+	path := u.Path
+	if path == "" {
+		path = u.Opaque
+	}
+
+	// Remove leading slash if present
+	if len(path) > 0 && path[0] == '/' {
+		path = path[1:]
+	}
+
+	// Parse the target to extract host and port
+	host, _, err := dnsresolver.ParseTarget(path, "50051")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse DNS target: %w", err)
+	}
+
+	return host, nil
 }
 
 // Handshaker is an interface that allows for wrapping the transport credentials
@@ -109,6 +138,7 @@ func New(_ context.Context, rawAddress string, opts ...DialOption) (*grpc.Client
 	var canonicalAddress string
 	var err error
 	var secure bool
+	var tlsServerName string
 
 	connType := getConnectionType(rawAddress)
 
@@ -133,6 +163,19 @@ func New(_ context.Context, rawAddress string, opts ...DialOption) (*grpc.Client
 			return nil, fmt.Errorf("failed to parse target for 'dns' connection: %w", err)
 		}
 		canonicalAddress = rawAddress // DNS Resolver will handle this
+	case dnsPlusTLSConnection:
+		err = dnsresolver.ValidateURL(rawAddress)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse target for 'dns+tls' connection: %w", err)
+		}
+		canonicalAddress = rawAddress // DNS Resolver will handle this
+		secure = true
+
+		// Extract the host from the DNS URL to use as TLS ServerName
+		tlsServerName, err = extractHostFromDNSURL(rawAddress)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract host for TLS ServerName: %w", err)
+		}
 	case unixConnection:
 		canonicalAddress = rawAddress
 	}
@@ -199,6 +242,10 @@ func New(_ context.Context, rawAddress string, opts ...DialOption) (*grpc.Client
 	// provide the grpc.WithNoProxy() option to workaround this bug.
 	if connType == unixConnection {
 		connOpts = append(connOpts, grpc.WithNoProxy())
+	}
+
+	if tlsServerName != "" {
+		connOpts = append(connOpts, grpc.WithAuthority(tlsServerName))
 	}
 
 	conn, err := grpc.NewClient(canonicalAddress, connOpts...)
