@@ -62,11 +62,6 @@ require (
 	golang.org/x/text v0.31.0
 	golang.org/x/time v0.14.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250922171735-9219d122eba9
-
-	// +gitaly pinVersion google.golang.org/grpc v1.71.1
-	// Please upgrade grpc-go with caution. Newer grpc-go versions contain some known issues:
-	// - https://gitlab.com/gitlab-com/request-for-help/-/issues/2127
-	// - https://gitlab.com/gitlab-org/gitaly/-/issues/6385
 	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.10
 )
