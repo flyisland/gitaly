@@ -221,7 +221,9 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	if err := cgroupMgr.Setup(); err != nil {
 		return fmt.Errorf("failed setting up cgroups: %w", err)
 	}
-	logger.WithField("duration_ms", time.Since(began).Milliseconds()).Info("finished initializing cgroups")
+	if cgroupMgr.Ready() {
+		logger.WithField("duration_ms", time.Since(began).Milliseconds()).Info("finished initializing cgroups")
+	}
 
 	defer func() {
 		if err := os.RemoveAll(cfg.RuntimeDir); err != nil {
