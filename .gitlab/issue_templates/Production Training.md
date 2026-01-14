@@ -35,6 +35,12 @@ Please edit this section like a workbook, adding not just the answer but also ho
 - [ ] Which Gitaly node had the most performance issues last week?
 - [ ] Which RPC handlers spent the most CPU time in the last week? Is there an overarching theme amongst them? Hint: we export profiling metrics to GCP.
 
+### Key Host Metrics
+
+- [ ] Be able to explain every graph in the [host stats](https://dashboards.gitlab.net/d/bd2Kl9Imk/host-stats?orgId=1&from=now-1h&to=now&timezone=utc&var-env=gprd&var-node=gitaly-04-stor-gprd.c.gitlab-gitaly-gprd-87a9.internal) dashboard:
+    - What is it?
+    - Why do we care?
+
 ### Feature flags
 
 - [ ] When was the last feature flag enabled on `gprd`?
