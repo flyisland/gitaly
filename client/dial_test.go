@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -629,6 +630,7 @@ func startUnixListener(tb testing.TB, factory func(credentials.TransportCredenti
 // startTLSListener will start a secure TLS listener on a random unused port
 //
 //go:generate openssl req -newkey rsa:4096 -new -nodes -x509 -days 3650 -out testdata/gitalycert.pem -keyout testdata/gitalykey.pem -subj "/C=US/ST=California/L=San Francisco/O=GitLab/OU=GitLab-Shell/CN=localhost" -addext "subjectAltName = IP:127.0.0.1, DNS:localhost"
+//go:generate openssl req -newkey rsa:4096 -new -nodes -x509 -days 3650 -out testdata/gitaly_snioverride_cert.pem -keyout testdata/gitaly_snioverride_key.pem -subj "/C=US/ST=California/L=San Francisco/O=GitLab/OU=GitLab-Shell/CN=localhost" -addext "subjectAltName = IP:127.0.0.1, DNS:localhost, DNS:sni.override.test"
 func startTLSListener(tb testing.TB, factory func(credentials.TransportCredentials) *grpc.Server) (func(), string) {
 	listener, err := net.Listen("tcp", "localhost:0")
 	require.NoError(tb, err)
@@ -778,6 +780,90 @@ func TestWithGitalyDNSResolver_loopbackAddresses(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestWithGitalyDNSResolver_dnsPlusTLS(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+
+	cert, err := tls.LoadX509KeyPair("testdata/gitaly_snioverride_cert.pem", "testdata/gitaly_snioverride_key.pem")
+	require.NoError(t, err)
+
+	tlsCreds := expcredentials.NewTLSWithALPNDisabled(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})
+
+	srv := grpc.NewServer(SidechannelServer(newLogger(t), tlsCreds))
+	gitalypb.RegisterCommitServiceServer(srv, &fakeCommitServer{})
+	go testhelper.MustServe(t, srv, listener)
+	t.Cleanup(srv.Stop)
+
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	require.NoError(t, err)
+
+	caCert, err := os.ReadFile("./testdata/gitaly_snioverride_cert.pem")
+	require.NoError(t, err)
+	caCertPool := x509.NewCertPool()
+	require.True(t, caCertPool.AppendCertsFromPEM(caCert))
+
+	clientTLSCreds := expcredentials.NewTLSWithALPNDisabled(&tls.Config{
+		RootCAs:    caCertPool,
+		MinVersion: tls.VersionTLS12,
+	})
+
+	urls := []string{
+		fmt.Sprintf("dns+tls:///localhost:%s", port),
+		fmt.Sprintf("dns+tls:localhost:%s", port),
+	}
+
+	for _, url := range urls {
+		t.Run(fmt.Sprintf("url = %s", url), func(t *testing.T) {
+			t.Parallel()
+
+			conn, err := internalclient.New(
+				testhelper.Context(t),
+				url,
+				internalclient.WithGrpcOptions([]grpc.DialOption{
+					WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()),
+				}),
+				internalclient.WithTransportCredentials(clientTLSCreds),
+			)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, conn)
+
+			client := gitalypb.NewCommitServiceClient(conn)
+			_, err = client.FindCommit(testhelper.Context(t), &gitalypb.FindCommitRequest{})
+			require.NoError(t, err)
+		})
+	}
+
+	dnsServer := testhelper.NewFakeDNSServer(t).WithHandler(dns.TypeA, func(host string) []string {
+		if host == "sni.override.test." {
+			return []string{"127.0.0.1"}
+		}
+		return nil
+	}).Start()
+
+	authorityURL := fmt.Sprintf("dns+tls://%s/sni.override.test:%s", dnsServer.Addr(), port)
+	t.Run(fmt.Sprintf("dial with authority, url = %s", authorityURL), func(t *testing.T) {
+		conn, err := internalclient.New(
+			testhelper.Context(t),
+			authorityURL,
+			internalclient.WithGrpcOptions([]grpc.DialOption{
+				WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()),
+			}),
+			internalclient.WithTransportCredentials(clientTLSCreds),
+		)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, conn)
+
+		client := gitalypb.NewCommitServiceClient(conn)
+		_, err = client.FindCommit(testhelper.Context(t), &gitalypb.FindCommitRequest{})
+		require.NoError(t, err)
+	})
 }
 
 func verifyDNSConnection(t *testing.T, dial func(*testing.T, string, []grpc.DialOption) (*grpc.ClientConn, error), target string) {
