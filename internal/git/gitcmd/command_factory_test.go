@@ -102,7 +102,10 @@ func TestExecCommandFactory_globalGitConfigIgnored(t *testing.T) {
 func TestExecCommandFactory_gitConfiguration(t *testing.T) {
 	t.Parallel()
 
-	defaultConfig := func(ctx context.Context, cfg config.Cfg) []string {
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	defaultConfig := func() []string {
 		commandFactory, cleanup, err := gitcmd.NewExecCommandFactory(cfg, testhelper.SharedLogger(t))
 		require.NoError(t, err)
 		defer cleanup()
@@ -118,23 +121,7 @@ func TestExecCommandFactory_gitConfiguration(t *testing.T) {
 		}
 
 		return configEntries
-	}
-
-	fsckSymlinkConfig := func(gitVersion git.Version) []string {
-		if (gitVersion.GreaterOrEqual(git.NewVersion(2, 45, 1, 0))) && gitVersion.LessThan(git.NewVersion(2, 45, 2, 0)) {
-			return []string{
-				"fsck.symlinkpointstogitdir=ignore",
-				"fetch.fsck.symlinkpointstogitdir=ignore",
-				"receive.fsck.symlinkpointstogitdir=ignore",
-			}
-		}
-
-		return []string{}
-	}
-
-	defaultConfigWithFsckSymlinkConfig := func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) []string {
-		return append(defaultConfig(ctx, cfg), fsckSymlinkConfig(gitVersion)...)
-	}
+	}()
 
 	type setupData struct {
 		config         []config.GitConfig
@@ -144,78 +131,75 @@ func TestExecCommandFactory_gitConfiguration(t *testing.T) {
 
 	for _, tc := range []struct {
 		desc  string
-		setup func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData
+		setup func() setupData
 	}{
 		{
 			desc: "without config",
-			setup: func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData {
+			setup: func() setupData {
 				return setupData{
-					expectedConfig: defaultConfigWithFsckSymlinkConfig(ctx, cfg, gitVersion),
+					expectedConfig: defaultConfig,
 				}
 			},
 		},
 		{
 			desc: "config with simple entry",
-			setup: func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData {
+			setup: func() setupData {
 				return setupData{
 					config: []config.GitConfig{
 						{Key: "core.foo", Value: "bar"},
 					},
-					expectedConfig: append(defaultConfigWithFsckSymlinkConfig(ctx, cfg, gitVersion), "core.foo=bar"),
+					expectedConfig: append(defaultConfig, "core.foo=bar"),
 				}
 			},
 		},
 		{
 			desc: "config with empty value",
-			setup: func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData {
+			setup: func() setupData {
 				return setupData{
 					config: []config.GitConfig{
 						{Key: "core.empty", Value: ""},
 					},
-					expectedConfig: append(defaultConfigWithFsckSymlinkConfig(ctx, cfg, gitVersion), "core.empty="),
+					expectedConfig: append(defaultConfig, "core.empty="),
 				}
 			},
 		},
 		{
 			desc: "config with subsection",
-			setup: func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData {
+			setup: func() setupData {
 				return setupData{
 					config: []config.GitConfig{
 						{Key: "http.http://example.com.proxy", Value: "http://proxy.example.com"},
 					},
-					expectedConfig: append(defaultConfigWithFsckSymlinkConfig(ctx, cfg, gitVersion), "http.http://example.com.proxy=http://proxy.example.com"),
+					expectedConfig: append(defaultConfig, "http.http://example.com.proxy=http://proxy.example.com"),
 				}
 			},
 		},
 		{
 			desc: "config with multiple keys",
-			setup: func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData {
+			setup: func() setupData {
 				return setupData{
 					config: []config.GitConfig{
 						{Key: "core.foo", Value: "initial"},
 						{Key: "core.foo", Value: "second"},
 					},
-					expectedConfig: append(defaultConfigWithFsckSymlinkConfig(ctx, cfg, gitVersion), "core.foo=initial", "core.foo=second"),
+					expectedConfig: append(defaultConfig, "core.foo=initial", "core.foo=second"),
 				}
 			},
 		},
 		{
 			desc: "option",
-			setup: func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData {
+			setup: func() setupData {
 				return setupData{
 					options: []gitcmd.CmdOpt{
 						gitcmd.WithConfig(gitcmd.ConfigPair{Key: "core.foo", Value: "bar"}),
 					},
-					expectedConfig: func() []string {
-						conf := append(defaultConfig(ctx, cfg), "core.foo=bar")
-						return append(conf, fsckSymlinkConfig(gitVersion)...)
-					}(),
+					expectedConfig: append(defaultConfig, "core.foo=bar"),
 				}
 			},
 		},
 		{
 			desc: "multiple options",
-			setup: func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData {
+			setup: func() setupData {
 				return setupData{
 					options: []gitcmd.CmdOpt{
 						gitcmd.WithConfig(
@@ -223,16 +207,13 @@ func TestExecCommandFactory_gitConfiguration(t *testing.T) {
 							gitcmd.ConfigPair{Key: "core.foo", Value: "second"},
 						),
 					},
-					expectedConfig: func() []string {
-						conf := append(defaultConfig(ctx, cfg), "core.foo=initial", "core.foo=second")
-						return append(conf, fsckSymlinkConfig(gitVersion)...)
-					}(),
+					expectedConfig: append(defaultConfig, "core.foo=initial", "core.foo=second"),
 				}
 			},
 		},
 		{
 			desc: "config comes after options",
-			setup: func(ctx context.Context, cfg config.Cfg, gitVersion git.Version) setupData {
+			setup: func() setupData {
 				return setupData{
 					options: []gitcmd.CmdOpt{
 						gitcmd.WithConfig(
@@ -242,33 +223,19 @@ func TestExecCommandFactory_gitConfiguration(t *testing.T) {
 					config: []config.GitConfig{
 						{Key: "from.config", Value: "value"},
 					},
-					expectedConfig: func() []string {
-						conf := append(defaultConfig(ctx, cfg), "from.option=value")
-						conf = append(conf, fsckSymlinkConfig(gitVersion)...)
-						return append(conf, "from.config=value")
-					}(),
+					expectedConfig: append(defaultConfig, "from.option=value", "from.config=value"),
 				}
 			},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			ctx := testhelper.Context(t)
-			cfg := testcfg.Build(t)
-
-			cf, cleanup, err := gitcmd.NewExecCommandFactory(cfg, testhelper.SharedLogger(t))
-			require.NoError(t, err)
-			defer cleanup()
-
-			gitVersion, err := cf.GitVersion(ctx)
-			require.NoError(t, err)
-
 			repo, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 				SkipCreationViaService: true,
 				ObjectFormat:           "sha256",
 			})
 			require.NoError(t, os.Remove(filepath.Join(repoPath, "config")))
 
-			setup := tc.setup(ctx, cfg, gitVersion)
+			setup := tc.setup()
 
 			cfg.Git.Config = setup.config
 
@@ -665,17 +632,6 @@ func TestExecCommandFactory_config(t *testing.T) {
 	expectedEnv = append(expectedEnv, fmt.Sprintf("attr.tree=%s", git.ObjectHashSHA1.EmptyTreeOID))
 
 	gitCmdFactory := gittest.NewCommandFactory(t, cfg)
-
-	gitVersion, err := gitCmdFactory.GitVersion(ctx)
-	require.NoError(t, err)
-
-	if (gitVersion.GreaterOrEqual(git.NewVersion(2, 45, 1, 0))) && gitVersion.LessThan(git.NewVersion(2, 45, 2, 0)) {
-		expectedEnv = append(expectedEnv,
-			"fsck.symlinkpointstogitdir=ignore",
-			"fetch.fsck.symlinkpointstogitdir=ignore",
-			"receive.fsck.symlinkpointstogitdir=ignore",
-		)
-	}
 
 	var stdout bytes.Buffer
 	cmd, err := gitCmdFactory.New(ctx, repo, gitcmd.Command{
