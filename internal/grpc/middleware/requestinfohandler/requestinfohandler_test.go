@@ -19,8 +19,10 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"gitlab.com/gitlab-org/labkit/correlation"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -701,7 +703,7 @@ func TestInterceptors(t *testing.T) {
 				require.NoError(t, stream.CloseSend())
 
 				_, err = stream.Recv()
-				testhelper.RequireGrpcError(t, structerr.New("%w", io.EOF), err)
+				testhelper.RequireGrpcError(t, structerr.New("%w", status.Error(codes.Unknown, "EOF")), err)
 			},
 			expectedInfo: &RequestInfo{
 				clientName:      "unknown",
@@ -741,7 +743,7 @@ func TestInterceptors(t *testing.T) {
 				}))
 
 				_, err = stream.CloseAndRecv()
-				require.Equal(t, err, io.EOF)
+				require.Nil(t, err)
 			},
 			expectedInfo: &RequestInfo{
 				clientName:      "unknown",
@@ -906,8 +908,8 @@ func (s *mockServer) FetchIntoObjectPool(ctx context.Context, _ *gitalypb.FetchI
 }
 
 func (s *mockServer) UserCommitFiles(stream gitalypb.OperationService_UserCommitFilesServer) error {
-	_, err := stream.Recv()
-	return err
+	_, _ = stream.Recv()
+	return stream.SendAndClose(&gitalypb.UserCommitFilesResponse{})
 }
 
 func (s *mockServer) CreateBundleFromRefList(stream gitalypb.RepositoryService_CreateBundleFromRefListServer) error {

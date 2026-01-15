@@ -317,7 +317,7 @@ func TestProxyErrorPropagation(t *testing.T) {
 		{
 			desc:          "err handler can swallow error",
 			backendError:  errBackend,
-			returnedError: io.EOF,
+			returnedError: nil,
 			errHandler: func(err error) error {
 				testhelper.RequireGrpcError(t, errBackend, err)
 				return nil
@@ -347,7 +347,8 @@ func TestProxyErrorPropagation(t *testing.T) {
 			var wg sync.WaitGroup
 			defer wg.Wait()
 
-			backendServer := grpc.NewServer(grpc.UnknownServiceHandler(func(interface{}, grpc.ServerStream) error {
+			backendServer := grpc.NewServer(grpc.UnknownServiceHandler(func(_ interface{}, s grpc.ServerStream) error {
+				_ = s.SendMsg(&grpc_testing.SimpleResponse{})
 				return tc.backendError
 			}))
 			wg.Add(1)
@@ -405,7 +406,9 @@ func TestProxyErrorPropagation(t *testing.T) {
 
 			resp, err := grpc_testing.NewTestServiceClient(proxyClientConn).UnaryCall(ctx, &grpc_testing.SimpleRequest{})
 			testhelper.RequireGrpcError(t, tc.returnedError, err)
-			require.Nil(t, resp)
+			if err != nil {
+				require.Nil(t, resp)
+			}
 		})
 	}
 }
