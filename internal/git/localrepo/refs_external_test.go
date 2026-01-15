@@ -159,14 +159,11 @@ func TestRepo_SetDefaultBranch_errors(t *testing.T) {
 		ref, err := repo.HeadReference(ctx)
 		require.NoError(t, err)
 
-		version, err := repo.GitVersion(ctx)
-		require.NoError(t, err)
-
 		updater, err := updateref.New(ctx, repo)
 		require.NoError(t, err)
 
 		require.NoError(t, updater.Start())
-		require.NoError(t, updater.UpdateSymbolicReference(version, "HEAD", "refs/heads/temp"))
+		require.NoError(t, updater.UpdateSymbolicReference("HEAD", "refs/heads/temp"))
 		require.NoError(t, updater.Prepare())
 		t.Cleanup(func() { require.NoError(t, updater.Close()) })
 
