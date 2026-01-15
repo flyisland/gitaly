@@ -750,6 +750,7 @@ ${DEPENDENCY_DIR}/protoc.version: dependency-version | ${DEPENDENCY_DIR}
 	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${PROTOC_VERSION} ${PROTOC_BUILD_OPTIONS}" ] || >$@ echo -n "${PROTOC_VERSION} ${PROTOC_BUILD_OPTIONS}"
 ${DEPENDENCY_DIR}/git-filter-repo.version: dependency-version | ${DEPENDENCY_DIR}
 	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${GIT_FILTER_REPO_VERSION}" ] || >$@ echo -n "${GIT_FILTER_REPO_VERSION}"
+
 # This target is responsible for checking out Git sources. In theory, we'd only
 # need to depend on the source directory. But given that the source directory
 # always changes when anything inside of it changes, like when we for example
@@ -763,8 +764,12 @@ ${DEPENDENCY_DIR}/git-%/Makefile: ${DEPENDENCY_DIR}/git-%.version
 	${Q}${GIT} -C "${@D}" fetch --depth 1 ${GIT_QUIET} origin ${GIT_VERSION}
 	${Q}${GIT} -C "${@D}" reset --hard
 	${Q}${GIT} -C "${@D}" checkout ${GIT_QUIET} --detach FETCH_HEAD
+	@ # We're doing a shallow clone without any tags, so Git's default way to figure out the version via git-describe(1)
+	@ # will fail. We thus have to help Git a bit: if we're asked to build from a commit directly we extract the
+	@ # current version of Git from "GIT-VERSION-GEN" and append the first 8 characters of the commit ID to it.
+	@ # Otherwise, we simply use the Git version passed by the user.
 ifeq ($(OVERRIDE_GIT_VERSION),)
-	${Q}rm -f "${@D}"/version
+	${Q}printf "%s.g%.8s\n" "$$(sed -n 's/^DEF_VER=v\(.*\)\(.GIT\)?/\1/p' <"${@D}"/GIT-VERSION-GEN)" "$$(${GIT} -C "${@D}" rev-parse --short HEAD)" >"${@D}"/version
 else
 	@ # We're writing the version into the "version" file in Git's own source
 	@ # directory. If it exists, Git's Makefile will pick it up and use it as
