@@ -34,6 +34,10 @@ func (ts *testService) WriteRef(context.Context, *gitalypb.WriteRefRequest) (*gi
 	return &gitalypb.WriteRefResponse{}, nil
 }
 
+func (ts *testService) RemoveRepository(context.Context, *gitalypb.RemoveRepositoryRequest) (*gitalypb.RemoveRepositoryResponse, error) {
+	return &gitalypb.RemoveRepositoryResponse{}, nil
+}
+
 // Mutator, Unary, Erroring
 func (ts *testService) CreateRepositoryFromBundle(grpc.ClientStreamingServer[gitalypb.CreateRepositoryFromBundleRequest, gitalypb.CreateRepositoryFromBundleResponse]) error {
 	return fmt.Errorf("designed to error")
@@ -197,6 +201,26 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 	)
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, conn)
+
+	t.Run("when the RemoveRepository RPC is invoked", func(t *testing.T) {
+		repo := &gitalypb.Repository{
+			RelativePath: "myrepo1",
+		}
+
+		sendFn := func() {
+			_, err = gitalypb.NewRepositoryServiceClient(conn).RemoveRepository(ctx, &gitalypb.RemoveRepositoryRequest{
+				Repository: repo,
+			})
+			require.NoError(t, err)
+		}
+
+		for range 2 {
+			sendFn()
+		}
+
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 0, 0), housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "another invocation after the interval")
+	})
 
 	t.Run("when unary mutator RPCs are intercepted", func(t *testing.T) {
 		repo := &gitalypb.Repository{
