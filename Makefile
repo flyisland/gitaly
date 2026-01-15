@@ -168,7 +168,7 @@ GIT_VERSION_PREV ?= aea8cc3a10c325a22a75e2d4f582db959d3854ae
 OVERRIDE_GIT_VERSION ?=
 
 ifeq (${GIT_VERSION:default=},)
-    override GIT_VERSION := ${GIT_VERSION_MASTER}
+    override GIT_VERSION := ${GIT_VERSION_PREV}
     # When GIT_VERSION is not explicitly set, we default to bundled Git.
 	export WITH_BUNDLED_GIT = YesPlease
 else
