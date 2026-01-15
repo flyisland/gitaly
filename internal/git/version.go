@@ -2,12 +2,9 @@ package git
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
-
-	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 )
 
 // Version represents the version of git itself.
@@ -65,12 +62,6 @@ func ParseVersionOutput(versionOutput []byte) (Version, error) {
 // String returns the string representation of the version.
 func (v Version) String() string {
 	return v.versionString
-}
-
-// UsesBatchedUpdates checks whether the current Git version uses batched updates in 'git-fetch(1)' and
-// 'git-receive-pack(1)'.
-func (v Version) UsesBatchedUpdates(ctx context.Context) bool {
-	return v.GreaterOrEqual(NewVersion(2, 51, 0, 0)) || featureflag.GitMaster.IsEnabled(ctx)
 }
 
 // LessThan determines whether the version is older than another version.

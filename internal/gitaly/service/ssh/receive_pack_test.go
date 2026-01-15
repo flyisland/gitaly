@@ -586,21 +586,6 @@ func TestReceivePack_transactional(t *testing.T) {
 	require.NoError(t, err)
 	ctx = metadata.IncomingToOutgoing(ctx)
 
-	cmdFactory, clean, err := gitcmd.NewExecCommandFactory(cfg, testhelper.SharedLogger(t))
-	require.NoError(t, err)
-	defer clean()
-
-	version, err := cmdFactory.GitVersion(ctx)
-	require.NoError(t, err)
-	// Newer versions of Git use batched reference updates. This means that 'git-fetch(1)' and
-	// 'git-receive-pack(1)' update references together in 2 batches. One for deletions and one
-	// for other updates. Unlike previous versions which would update reference one at time. This
-	// is much more performant especially when using the reftable backend.
-	//
-	// However, this means that the reference-transaction hook will only be invoked twice, so
-	// our expected votes would change.
-	withBatchedUpdates := version.UsesBatchedUpdates(ctx)
-
 	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
 	repo := localrepo.NewTestRepo(t, cfg, repoProto)
 	parentCommitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"))
@@ -698,7 +683,7 @@ func TestReceivePack_transactional(t *testing.T) {
 				"refs/heads/b": commitID,
 			},
 			expectedVotes: func() int {
-				if withBatchedUpdates && !testhelper.IsWALEnabled() {
+				if !testhelper.IsWALEnabled() {
 					return 7
 				}
 				return 9
@@ -718,7 +703,7 @@ func TestReceivePack_transactional(t *testing.T) {
 				"refs/heads/a": commitID,
 			},
 			expectedVotes: func() int {
-				if withBatchedUpdates && !testhelper.IsWALEnabled() {
+				if !testhelper.IsWALEnabled() {
 					return 5
 				}
 				return 3
@@ -743,7 +728,7 @@ func TestReceivePack_transactional(t *testing.T) {
 				"refs/heads/a": commitID,
 			},
 			expectedVotes: func() int {
-				if withBatchedUpdates && !testhelper.IsWALEnabled() {
+				if !testhelper.IsWALEnabled() {
 					return 9
 				}
 				return 7
