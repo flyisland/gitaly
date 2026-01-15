@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
@@ -136,7 +135,7 @@ func (f *InterceptingCommandFactory) HooksPath(ctx context.Context) string {
 }
 
 // GitVersion returns the Git version as returned by the intercepted command.
-func (f *InterceptingCommandFactory) GitVersion(ctx context.Context) (git.Version, error) {
+func (f *InterceptingCommandFactory) GitVersion(ctx context.Context) (string, error) {
 	if f.interceptVersion {
 		return f.interceptingCommandFactory.GitVersion(ctx)
 	}

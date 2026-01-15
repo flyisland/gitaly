@@ -31,7 +31,7 @@ type RepositoryExecutor interface {
 	storage.Repository
 	Exec(ctx context.Context, cmd Command, opts ...CmdOpt) (*command.Command, error)
 	ExecAndWait(ctx context.Context, cmd Command, opts ...CmdOpt) error
-	GitVersion(ctx context.Context) (git.Version, error)
+	GitVersion(ctx context.Context) (string, error)
 	ObjectHash(ctx context.Context) (git.ObjectHash, error)
 	ReferenceBackend(ctx context.Context) (git.ReferenceBackend, error)
 }

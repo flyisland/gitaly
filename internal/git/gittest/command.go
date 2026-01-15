@@ -161,7 +161,7 @@ func (e RepositoryPathExecutor) ExecAndWait(ctx context.Context, cmd gitcmd.Comm
 }
 
 // GitVersion determines the Git version used by the executor.
-func (e RepositoryPathExecutor) GitVersion(ctx context.Context) (git.Version, error) {
+func (e RepositoryPathExecutor) GitVersion(ctx context.Context) (string, error) {
 	return e.factory.GitVersion(ctx)
 }
 

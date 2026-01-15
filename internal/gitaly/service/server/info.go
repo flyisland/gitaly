@@ -40,7 +40,7 @@ func (s *server) ServerInfo(ctx context.Context, in *gitalypb.ServerInfoRequest)
 
 	return &gitalypb.ServerInfoResponse{
 		ServerVersion:   version.GetVersion(),
-		GitVersion:      gitVersion.String(),
+		GitVersion:      gitVersion,
 		StorageStatuses: storageStatuses,
 	}, nil
 }

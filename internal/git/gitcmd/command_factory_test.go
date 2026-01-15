@@ -522,16 +522,6 @@ func TestExecCommandFactory_GitVersion(t *testing.T) {
 			versionString:   "git version 2.33.1.gl1\n",
 			expectedVersion: "2.33.1.gl1",
 		},
-		{
-			desc:          "multi-line version",
-			versionString: "git version 2.33.1.gl1\nfoobar\n",
-			expectedErr:   "cannot parse git version: strconv.ParseUint: parsing \"1\\nfoobar\": invalid syntax",
-		},
-		{
-			desc:          "unexpected format",
-			versionString: "2.33.1\n",
-			expectedErr:   "invalid version format: \"2.33.1\\n\\n\"",
-		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			gitCmdFactory := gittest.NewInterceptingCommandFactory(
@@ -546,7 +536,7 @@ func TestExecCommandFactory_GitVersion(t *testing.T) {
 			} else {
 				require.EqualError(t, err, tc.expectedErr)
 			}
-			require.Equal(t, tc.expectedVersion, actualVersion.String())
+			require.Equal(t, tc.expectedVersion, actualVersion)
 		})
 	}
 
@@ -563,7 +553,7 @@ func TestExecCommandFactory_GitVersion(t *testing.T) {
 
 		version, err := gitCmdFactory.GitVersion(ctx)
 		require.NoError(t, err)
-		require.Equal(t, "1.2.3", version.String())
+		require.Equal(t, "1.2.3", version)
 
 		// We rewrite the file with the same content length and modification time such that
 		// its file information doesn't change. As a result, information returned by
@@ -578,7 +568,7 @@ func TestExecCommandFactory_GitVersion(t *testing.T) {
 		// change here.
 		version, err = gitCmdFactory.GitVersion(ctx)
 		require.NoError(t, err)
-		require.Equal(t, "1.2.3", version.String())
+		require.Equal(t, "1.2.3", version)
 
 		// If we really replace the Git binary with something else, then we should
 		// see a changed version.
@@ -590,7 +580,7 @@ func TestExecCommandFactory_GitVersion(t *testing.T) {
 
 		version, err = gitCmdFactory.GitVersion(ctx)
 		require.NoError(t, err)
-		require.Equal(t, "2.34.1", version.String())
+		require.Equal(t, "2.34.1", version)
 	})
 }
 

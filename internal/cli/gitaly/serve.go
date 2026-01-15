@@ -269,7 +269,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	}
 	logger.WithField("duration_ms", time.Since(began).Milliseconds()).Info("finished detecting git version")
 
-	logger.WithField("version", gitVersion.String()).Info("using Git version")
+	logger.WithField("version", gitVersion).Info("using Git version")
 
 	registry := backchannel.NewRegistry()
 	transactionManager := transaction.NewManager(cfg, logger, registry)
@@ -753,7 +753,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 				opts := []monitoring.Option{
 					monitoring.WithListener(l),
 					monitoring.WithBuildExtraLabels(
-						map[string]string{"git_version": gitVersion.String()},
+						map[string]string{"git_version": gitVersion},
 					),
 				}
 

@@ -173,7 +173,7 @@ func TestGitalyServerInfo(t *testing.T) {
 
 		expected := &gitalypb.ServerInfoResponse{
 			ServerVersion: version.GetVersion(),
-			GitVersion:    gitVersion.String(),
+			GitVersion:    gitVersion,
 			StorageStatuses: []*gitalypb.ServerInfoResponse_StorageStatus{
 				{
 					StorageName:       conf.VirtualStorages[0].Name,
