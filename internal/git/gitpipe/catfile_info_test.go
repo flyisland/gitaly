@@ -390,9 +390,6 @@ func TestCatfileInfoAllObjects(t *testing.T) {
 		}, it.Result())
 	})
 
-	gitVersion, err := gittest.NewCommandFactory(t, cfg).GitVersion(ctx)
-	require.NoError(t, err)
-
 	for _, objectType := range []ObjectType{
 		ObjectTypeBlob,
 		ObjectTypeCommit,
@@ -406,13 +403,7 @@ func TestCatfileInfoAllObjects(t *testing.T) {
 			for it.Next() {
 				results = append(results, it.Result())
 			}
-
-			if gitVersion.IsCatfileObjectTypeFilterSupported() {
-				require.NoError(t, it.Err())
-			} else {
-				require.ErrorContains(t, it.Err(), "error: option `filters' takes no value")
-				return
-			}
+			require.NoError(t, it.Err())
 
 			expectedResults := []CatfileInfoResult{}
 			for _, actualObject := range actualObjects {

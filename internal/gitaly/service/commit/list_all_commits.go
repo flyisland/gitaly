@@ -33,11 +33,6 @@ func (s *server) ListAllCommits(
 	}
 	defer cancel()
 
-	gitVersion, err := repo.GitVersion(ctx)
-	if err != nil {
-		return structerr.NewInternal("detecting availability of object type filter: %w", err)
-	}
-
 	// If we've got a pagination token, then we will only start to print commits as soon as
 	// we've seen the token.
 	token := request.GetPaginationParams().GetPageToken()
@@ -54,9 +49,7 @@ func (s *server) ListAllCommits(
 
 			return objectInfo.Type != "commit"
 		}),
-	}
-	if gitVersion.IsCatfileObjectTypeFilterSupported() {
-		catfileInfoOptions = append(catfileInfoOptions, gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeCommit))
+		gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeCommit),
 	}
 
 	catfileInfoIter := gitpipe.CatfileInfoAllObjects(ctx, repo, catfileInfoOptions...)

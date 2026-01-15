@@ -67,12 +67,6 @@ func (v Version) String() string {
 	return v.versionString
 }
 
-// IsCatfileObjectTypeFilterSupported checks whether the current Git version supports the `git cat-file --filter=`
-// option.
-func (v Version) IsCatfileObjectTypeFilterSupported() bool {
-	return v.GreaterOrEqual(NewVersion(2, 49, 0, 2))
-}
-
 // UsesBatchedUpdates checks whether the current Git version uses batched updates in 'git-fetch(1)' and
 // 'git-receive-pack(1)'.
 func (v Version) UsesBatchedUpdates(ctx context.Context) bool {

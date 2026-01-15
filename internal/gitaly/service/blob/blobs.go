@@ -243,11 +243,6 @@ func (s *server) ListAllBlobs(req *gitalypb.ListAllBlobsRequest, stream gitalypb
 
 	repo := s.localRepoFactory.Build(repository)
 
-	gitVersion, err := repo.GitVersion(ctx)
-	if err != nil {
-		return structerr.NewInternal("detecting availability of object type filter: %w", err)
-	}
-
 	chunker := chunk.New(&allBlobsSender{
 		send: func(blobs []*gitalypb.ListAllBlobsResponse_Blob) error {
 			return stream.Send(&gitalypb.ListAllBlobsResponse{
@@ -260,9 +255,7 @@ func (s *server) ListAllBlobs(req *gitalypb.ListAllBlobsRequest, stream gitalypb
 		gitpipe.WithSkipCatfileInfoResult(func(objectInfo *catfile.ObjectInfo) bool {
 			return objectInfo.Type != "blob"
 		}),
-	}
-	if gitVersion.IsCatfileObjectTypeFilterSupported() {
-		catfileInfoOptions = append(catfileInfoOptions, gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeBlob))
+		gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeBlob),
 	}
 
 	catfileInfoIter := gitpipe.CatfileInfoAllObjects(ctx, repo, catfileInfoOptions...)
