@@ -1799,6 +1799,416 @@ func TestGetTreeEntries(t *testing.T) {
 				}
 			},
 		},
+		{
+			desc: "sorted by filesystem lexicographically",
+			setup: func(t *testing.T, data TestData) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, data.cfg)
+
+				blobAOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("a"))
+				blobBOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("b"))
+
+				treeOID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{Path: "nested", Mode: "100644", Content: "nested"},
+				})
+
+				commitID := gittest.WriteCommit(t, data.cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{OID: blobAOID, Mode: "100644", Path: "aaa"},
+					gittest.TreeEntry{OID: treeOID, Mode: "040000", Path: "bbb"},
+					gittest.TreeEntry{OID: blobBOID, Mode: "100644", Path: "ccc"},
+				))
+
+				return setupData{
+					request: &gitalypb.GetTreeEntriesRequest{
+						Repository: repo,
+						Revision:   []byte(commitID),
+						Path:       []byte("."),
+						Recursive:  false,
+						Sort:       gitalypb.GetTreeEntriesRequest_FILESYSTEM,
+					},
+					// FILESYSTEM sort: entries sorted lexicographically by path
+					// aaa < bbb < ccc (regardless of type)
+					expectedTreeEntries: []*gitalypb.TreeEntry{
+						{
+							Oid:       blobAOID.String(),
+							Path:      []byte("aaa"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("aaa"),
+						},
+						{
+							Oid:       treeOID.String(),
+							Path:      []byte("bbb"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("bbb"),
+						},
+						{
+							Oid:       blobBOID.String(),
+							Path:      []byte("ccc"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("ccc"),
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "sorted by filesystem with dots and underscores",
+			setup: func(t *testing.T, data TestData) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, data.cfg)
+
+				fooOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("foo"))
+				fooAOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("foo.a"))
+				fooATestOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("foo.a.test"))
+				fooBOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("foo.b"))
+
+				fooBTestOID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{Path: "nested", Mode: "100644", Content: "nested"},
+				})
+
+				commitID := gittest.WriteCommit(t, data.cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{OID: fooOID, Mode: "100644", Path: "Foo"},
+					gittest.TreeEntry{OID: fooAOID, Mode: "100644", Path: "Foo.A"},
+					gittest.TreeEntry{OID: fooATestOID, Mode: "100644", Path: "Foo.A.Test"},
+					gittest.TreeEntry{OID: fooBOID, Mode: "100644", Path: "Foo.B"},
+					gittest.TreeEntry{OID: fooBTestOID, Mode: "040000", Path: "Foo.B.Test"},
+				))
+
+				return setupData{
+					request: &gitalypb.GetTreeEntriesRequest{
+						Repository: repo,
+						Revision:   []byte(commitID),
+						Path:       []byte("."),
+						Recursive:  false,
+						Sort:       gitalypb.GetTreeEntriesRequest_FILESYSTEM,
+					},
+					// Lexicographic order: Foo < Foo.A < Foo.A.Test < Foo.B < Foo.B.Test
+					expectedTreeEntries: []*gitalypb.TreeEntry{
+						{
+							Oid:       fooOID.String(),
+							Path:      []byte("Foo"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("Foo"),
+						},
+						{
+							Oid:       fooAOID.String(),
+							Path:      []byte("Foo.A"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("Foo.A"),
+						},
+						{
+							Oid:       fooATestOID.String(),
+							Path:      []byte("Foo.A.Test"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("Foo.A.Test"),
+						},
+						{
+							Oid:       fooBOID.String(),
+							Path:      []byte("Foo.B"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("Foo.B"),
+						},
+						{
+							Oid:       fooBTestOID.String(),
+							Path:      []byte("Foo.B.Test"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("Foo.B.Test"),
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "sorted by filesystem recursive",
+			setup: func(t *testing.T, data TestData) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, data.cfg)
+
+				blobOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("test"))
+				subFolderOID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{OID: blobOID, Mode: "100644", Path: "test"},
+				})
+				folderOID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{Path: "folder", Mode: "040000", OID: subFolderOID},
+				})
+
+				blob2OID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("test2"))
+				subSubFolderOID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{OID: blob2OID, Mode: "100644", Path: "test"},
+				})
+				subFolder2OID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{OID: subSubFolderOID, Mode: "040000", Path: "folder2"},
+				})
+				folder2OID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{Path: "folder", Mode: "040000", OID: subFolder2OID},
+				})
+
+				commitID := gittest.WriteCommit(t, data.cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{OID: folder2OID, Mode: "040000", Path: "bar"},
+					gittest.TreeEntry{OID: folderOID, Mode: "040000", Path: "foo"},
+				))
+
+				return setupData{
+					request: &gitalypb.GetTreeEntriesRequest{
+						Repository: repo,
+						Revision:   []byte(commitID),
+						Path:       []byte("."),
+						Recursive:  true,
+						Sort:       gitalypb.GetTreeEntriesRequest_FILESYSTEM,
+					},
+					expectedTreeEntries: []*gitalypb.TreeEntry{
+						{
+							Oid:       folder2OID.String(),
+							Path:      []byte("bar"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       subFolder2OID.String(),
+							Path:      []byte("bar/folder"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       subSubFolderOID.String(),
+							Path:      []byte("bar/folder/folder2"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       blob2OID.String(),
+							Path:      []byte("bar/folder/folder2/test"),
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       folderOID.String(),
+							Path:      []byte("foo"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       subFolderOID.String(),
+							Path:      []byte("foo/folder"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       blobOID.String(),
+							Path:      []byte("foo/folder/test"),
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "sorted by filesystem with pagination",
+			setup: func(t *testing.T, data TestData) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, data.cfg)
+
+				blob1OID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("1"))
+				blob2OID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("2"))
+				blob3OID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("3"))
+				blob4OID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("4"))
+
+				rootTreeOID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{OID: blob1OID, Mode: "100644", Path: "aaa"},
+					{OID: blob2OID, Mode: "100644", Path: "bbb"},
+					{OID: blob3OID, Mode: "100644", Path: "ccc"},
+					{OID: blob4OID, Mode: "100644", Path: "ddd"},
+				})
+				commitID := gittest.WriteCommit(t, data.cfg, repoPath, gittest.WithTree(rootTreeOID))
+
+				expectedFirstPage := []*gitalypb.TreeEntry{
+					{
+						Oid:       blob1OID.String(),
+						Path:      []byte("aaa"),
+						Type:      gitalypb.TreeEntry_BLOB,
+						Mode:      0o100644,
+						CommitOid: commitID.String(),
+						FlatPath:  []byte("aaa"),
+					},
+					{
+						Oid:       blob2OID.String(),
+						Path:      []byte("bbb"),
+						Type:      gitalypb.TreeEntry_BLOB,
+						Mode:      0o100644,
+						CommitOid: commitID.String(),
+						FlatPath:  []byte("bbb"),
+					},
+				}
+
+				cursor, err := encodePageToken(expectedFirstPage[1], rootTreeOID)
+				require.NoError(t, err)
+
+				return setupData{
+					request: &gitalypb.GetTreeEntriesRequest{
+						Repository: repo,
+						Revision:   []byte(commitID),
+						Path:       []byte("."),
+						Recursive:  false,
+						Sort:       gitalypb.GetTreeEntriesRequest_FILESYSTEM,
+						PaginationParams: &gitalypb.PaginationParameter{
+							Limit: 2,
+						},
+					},
+					expectedTreeEntries: expectedFirstPage,
+					expectedCursor: &gitalypb.PaginationCursor{
+						NextCursor: cursor,
+					},
+				}
+			},
+		},
+		{
+			desc: "sorted by filesystem with nested directory paths",
+			setup: func(t *testing.T, data TestData) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, data.cfg)
+
+				// Test sorting when shorter path is a prefix of longer path in directories.
+				// In byte order: "Foo.A/Bar" < "Foo.A.Test/Bar" because '/' (47) < '.' (46) is false,
+				// and '.' (46) < '/' (47), so "Foo.A.Test" < "Foo.A/" when compared byte-by-byte
+				// up to the differing character.
+				// Actually: "Foo.A.Test/Bar" vs "Foo.A/Bar" - at index 5, '.' (46) < '/' (47)
+				// So "Foo.A.Test/Bar" < "Foo.A/Bar"
+				barInFooAOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("bar in Foo.A"))
+				barInFooATestOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("bar in Foo.A.Test"))
+
+				fooATreeOID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{OID: barInFooAOID, Mode: "100644", Path: "Bar"},
+				})
+				fooATestTreeOID := gittest.WriteTree(t, data.cfg, repoPath, []gittest.TreeEntry{
+					{OID: barInFooATestOID, Mode: "100644", Path: "Bar"},
+				})
+
+				commitID := gittest.WriteCommit(t, data.cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{OID: fooATreeOID, Mode: "040000", Path: "Foo.A"},
+					gittest.TreeEntry{OID: fooATestTreeOID, Mode: "040000", Path: "Foo.A.Test"},
+				))
+
+				return setupData{
+					request: &gitalypb.GetTreeEntriesRequest{
+						Repository: repo,
+						Revision:   []byte(commitID),
+						Path:       []byte("."),
+						Recursive:  true,
+						Sort:       gitalypb.GetTreeEntriesRequest_FILESYSTEM,
+					},
+					expectedTreeEntries: []*gitalypb.TreeEntry{
+						{
+							Oid:       fooATreeOID.String(),
+							Path:      []byte("Foo.A"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       fooATestTreeOID.String(),
+							Path:      []byte("Foo.A.Test"),
+							Type:      gitalypb.TreeEntry_TREE,
+							Mode:      0o40000,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       barInFooATestOID.String(),
+							Path:      []byte("Foo.A.Test/Bar"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+						},
+						{
+							Oid:       barInFooAOID.String(),
+							Path:      []byte("Foo.A/Bar"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "sorted by filesystem case sensitivity",
+			setup: func(t *testing.T, data TestData) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, data.cfg)
+
+				blobAOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("A"))
+				blobZOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("Z"))
+				blobaOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("a"))
+				blobzOID := gittest.WriteBlob(t, data.cfg, repoPath, []byte("z"))
+
+				commitID := gittest.WriteCommit(t, data.cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{OID: blobAOID, Mode: "100644", Path: "Apple"},
+					gittest.TreeEntry{OID: blobZOID, Mode: "100644", Path: "Zebra"},
+					gittest.TreeEntry{OID: blobaOID, Mode: "100644", Path: "apple"},
+					gittest.TreeEntry{OID: blobzOID, Mode: "100644", Path: "zebra"},
+				))
+
+				return setupData{
+					request: &gitalypb.GetTreeEntriesRequest{
+						Repository: repo,
+						Revision:   []byte(commitID),
+						Path:       []byte("."),
+						Recursive:  false,
+						Sort:       gitalypb.GetTreeEntriesRequest_FILESYSTEM,
+					},
+					// ASCII byte order: Apple < Zebra < apple < zebra
+					expectedTreeEntries: []*gitalypb.TreeEntry{
+						{
+							Oid:       blobAOID.String(),
+							Path:      []byte("Apple"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("Apple"),
+						},
+						{
+							Oid:       blobZOID.String(),
+							Path:      []byte("Zebra"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("Zebra"),
+						},
+						{
+							Oid:       blobaOID.String(),
+							Path:      []byte("apple"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("apple"),
+						},
+						{
+							Oid:       blobzOID.String(),
+							Path:      []byte("zebra"),
+							Type:      gitalypb.TreeEntry_BLOB,
+							Mode:      0o100644,
+							CommitOid: commitID.String(),
+							FlatPath:  []byte("zebra"),
+						},
+					},
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
