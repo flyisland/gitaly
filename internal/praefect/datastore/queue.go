@@ -58,6 +58,8 @@ type ReplicationEventQueue interface {
 	//   'failed' - in case it has more attempts to be executed
 	//   'dead' - in case it has no more attempts to be executed
 	AcknowledgeStale(ctx context.Context, staleAfter time.Duration) (int64, error)
+	// CleanUp removes orphaned locks from the 'replication_queue_lock' table.
+	CleanUp(ctx context.Context) (int64, error)
 }
 
 func allowToAck(state JobState) error {
@@ -563,6 +565,36 @@ func (rq PostgresReplicationEventQueue) AcknowledgeStale(ctx context.Context, st
 	n, err := result.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("exec acknowledge stale: %w", err)
+	}
+
+	return n, nil
+}
+
+// CleanUp removes orphaned locks from the 'replication_queue_lock' table. It returns
+// the total number of locks deleted.
+func (rq PostgresReplicationEventQueue) CleanUp(ctx context.Context) (int64, error) {
+	query := `
+		WITH delete_locks AS (
+		DELETE FROM replication_queue_lock 
+		WHERE id IN (
+			SELECT id 
+			FROM replication_queue_lock
+			WHERE acquired = FALSE
+			AND id NOT IN (
+				SELECT DISTINCT lock_id FROM replication_queue_job_lock
+				UNION
+				SELECT DISTINCT lock_id FROM replication_queue
+			)
+			ORDER BY id
+			LIMIT 1000
+		)
+		RETURNING id
+	)
+	SELECT COUNT(*) FROM delete_locks;`
+
+	var n int64
+	if err := rq.qc.QueryRowContext(ctx, query).Scan(&n); err != nil {
+		return 0, fmt.Errorf("exec replication locks cleanup: %w", err)
 	}
 
 	return n, nil
