@@ -481,6 +481,12 @@ func server(cfgs []starter.Config, conf config.Config, logger log.Logger, b boot
 	repl.ProcessStale(ctx, staleTicker, time.Minute)
 	logger.Info("background started: processing of the stale replication events")
 
+	cleanUpTicker := helper.NewTimerTicker(30 * time.Minute)
+	defer cleanUpTicker.Stop()
+
+	repl.CleanUpLocks(ctx, cleanUpTicker)
+	logger.Info("background started: processing of the replication job locks clean up")
+
 	if interval := conf.Reconciliation.SchedulingInterval.Duration(); interval > 0 {
 		if conf.MemoryQueueEnabled {
 			logger.Warn("Disabled automatic reconciliation as it is only implemented using SQL queue and in-memory queue is configured.")
