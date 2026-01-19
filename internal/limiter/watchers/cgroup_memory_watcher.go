@@ -6,11 +6,13 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
 const (
 	cgroupMemoryWatcherName = "CgroupMemory"
 	defaultMemoryThreshold  = 0.9
+	anonMemoryThreshold     = 0.6
 )
 
 // CgroupMemoryWatcher implements ResourceWatcher interface. This watcher polls
@@ -21,6 +23,7 @@ const (
 type CgroupMemoryWatcher struct {
 	manager         cgroups.Manager
 	memoryThreshold float64
+	logger          log.Logger
 }
 
 // NewCgroupMemoryWatcher is the initializer of CgroupMemoryWatcher
@@ -32,6 +35,14 @@ func NewCgroupMemoryWatcher(manager cgroups.Manager, memoryThreshold float64) *C
 		manager:         manager,
 		memoryThreshold: memoryThreshold,
 	}
+}
+
+// WithLogger sets the logger for dry-run anonymous memory logging
+// It is added as a separate enricher to reduce code changes and make
+// the cleanup later easier.
+func (c *CgroupMemoryWatcher) WithLogger(logger log.Logger) *CgroupMemoryWatcher {
+	c.logger = logger
+	return c
 }
 
 // Name returns the name of CgroupMemoryWatcher
@@ -51,6 +62,11 @@ func (c *CgroupMemoryWatcher) Poll(context.Context) (*limiter.BackoffEvent, erro
 		return nil, fmt.Errorf("cgroup watcher: poll stats from cgroup manager: %w", err)
 	}
 	parentStats := stats.ParentStats
+
+	// Log anonymous memory pressure independently (dry-run, no backoff)
+	if c.logger != nil && exceedsAnonMemoryThreshold(parentStats) {
+		c.logger.WithFields(buildMemoryBackoffStats(parentStats, float64(anonMemoryThreshold))).Warn("Anonymous memory pressure detected")
+	}
 
 	// Whether the parent cgroup isthe memory cgroup is under OOM, tasks may be stopped. This stat is available in
 	// Cgroup V1 only.
@@ -87,11 +103,17 @@ func (c *CgroupMemoryWatcher) Poll(context.Context) (*limiter.BackoffEvent, erro
 
 // PSI metrics are only available on cgroups v2 (will be 0 on v1).
 func buildBackoffStats(stats cgroups.CgroupStats) map[string]any {
+	anonRatio := 0.0
+	if stats.MemoryLimit > 0 {
+		anonRatio = float64(stats.TotalAnon) / float64(stats.MemoryLimit)
+	}
+
 	return map[string]any{
 		"memory_usage":               stats.MemoryUsage,
 		"memory_limit":               stats.MemoryLimit,
 		"inactive_file":              stats.TotalInactiveFile,
 		"anon":                       stats.TotalAnon,
+		"anon_ratio":                 anonRatio,
 		"memory_high_events":         stats.MemoryHighEvents,
 		"memory_max_events":          stats.MemoryMaxEvents,
 		"oom_kills":                  stats.OOMKills,
@@ -111,4 +133,15 @@ func buildMemoryBackoffStats(stats cgroups.CgroupStats, memoryThreshold float64)
 	m := buildBackoffStats(stats)
 	m["memory_threshold"] = memoryThreshold
 	return m
+}
+
+// exceedsAnonMemoryThreshold reports whether the anonymous memory usage of the
+// cgroup exceeds the configured threshold relative to the memory limit.
+func exceedsAnonMemoryThreshold(stats cgroups.CgroupStats) bool {
+	if stats.MemoryLimit == 0 {
+		return false
+	}
+
+	anonRatio := float64(stats.TotalAnon) / float64(stats.MemoryLimit)
+	return anonRatio >= anonMemoryThreshold
 }
