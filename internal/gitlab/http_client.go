@@ -16,6 +16,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	gitalycfgprom "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/prometheus/metrics"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/version"
@@ -28,6 +29,15 @@ type HTTPClient struct {
 	*client.GitlabNetClient
 	latencyMetric metrics.HistogramVec
 	logger        log.Logger
+}
+
+func withOriginalRemoteIP(ctx context.Context) context.Context {
+	remoteIP := metadata.GetValue(ctx, "remote_ip")
+	if remoteIP == "" {
+		return ctx
+	}
+
+	return context.WithValue(ctx, client.OriginalRemoteIPContextKey{}, remoteIP)
 }
 
 // NewHTTPClient creates an HTTP client to talk to the Rails internal API
@@ -157,6 +167,7 @@ type allowedResponse struct {
 
 // Allowed checks if a ref change for a given repository is allowed through the gitlab internal api /allowed endpoint
 func (c *HTTPClient) Allowed(ctx context.Context, params AllowedParams) (bool, string, error) {
+	ctx = withOriginalRemoteIP(ctx)
 	defer prometheus.NewTimer(c.latencyMetric.WithLabelValues("allowed")).ObserveDuration()
 
 	gitObjDirVars, err := marshallGitObjectDirs(params.GitObjectDirectory, params.GitAlternateObjectDirectories)
@@ -217,6 +228,7 @@ type preReceiveResponse struct {
 
 // PreReceive increases the reference counter for a push for a given gl_repository through the gitlab internal API /pre_receive endpoint
 func (c *HTTPClient) PreReceive(ctx context.Context, glRepository string) (bool, error) {
+	ctx = withOriginalRemoteIP(ctx)
 	defer prometheus.NewTimer(c.latencyMetric.WithLabelValues("pre-receive")).ObserveDuration()
 
 	resp, err := c.Post(ctx, "/pre_receive", map[string]string{"gl_repository": glRepository})
@@ -256,6 +268,7 @@ type postReceiveResponse struct {
 
 // PostReceive decreases the reference counter for a push for a given gl_repository through the gitlab internal API /post_receive endpoint
 func (c *HTTPClient) PostReceive(ctx context.Context, glRepository, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []PostReceiveMessage, error) {
+	ctx = withOriginalRemoteIP(ctx)
 	defer prometheus.NewTimer(c.latencyMetric.WithLabelValues("post-receive")).ObserveDuration()
 
 	resp, err := c.Post(ctx, "/post_receive", map[string]interface{}{"gl_repository": glRepository, "identifier": glID, "changes": changes, "gitaly_client_context_bin": clientCtx, "push_options": pushOptions})
@@ -291,6 +304,7 @@ func (c *HTTPClient) PostReceive(ctx context.Context, glRepository, glID, change
 // the connection and tokens. It returns basic information of the installed
 // GitLab
 func (c *HTTPClient) Check(ctx context.Context) (*CheckInfo, error) {
+	ctx = withOriginalRemoteIP(ctx)
 	defer prometheus.NewTimer(c.latencyMetric.WithLabelValues("check")).ObserveDuration()
 
 	resp, err := c.Get(ctx, "/check")

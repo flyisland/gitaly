@@ -118,6 +118,7 @@ func WithReceivePackHooks(objectHash git.ObjectHash, req ReceivePackRequest, pro
 			UserID:   req.GetGlId(),
 			Username: req.GetGlUsername(),
 			Protocol: protocol,
+			RemoteIP: metadata.GetValue(ctx, "remote_ip"),
 		}, requestedHooks); err != nil {
 			return err
 		}

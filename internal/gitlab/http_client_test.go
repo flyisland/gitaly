@@ -12,10 +12,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/promtest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -664,6 +666,51 @@ func TestAccess_postReceive(t *testing.T) {
 			require.Equal(t, [][]string{{"post-receive"}}, mockHistogramVec.LabelsCalled())
 		})
 	}
+}
+
+func TestAccess_remoteIPForwardedAllowed(t *testing.T) {
+	tempDir := testhelper.TempDir(t)
+
+	WriteShellSecretFile(t, tempDir, "secret_token")
+
+	secretFilePath := filepath.Join(tempDir, ".gitlab_shell_secret")
+
+	remoteIP := "10.1.2.3"
+	var forwardedFor string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		forwardedFor = r.Header.Get("X-Forwarded-For")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(`{"status": true}`))
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	c, err := NewHTTPClient(
+		testhelper.SharedLogger(t),
+		config.Gitlab{
+			URL:        server.URL,
+			SecretFile: secretFilePath,
+		},
+		config.TLS{},
+		prometheus.Config{},
+	)
+	require.NoError(t, err)
+
+	ctx := testhelper.Context(t)
+	ctx = grpcmetadata.AppendToOutgoingContext(ctx, "remote_ip", remoteIP)
+	ctx = metadata.OutgoingToIncoming(ctx)
+
+	allowed, _, err := c.Allowed(ctx, AllowedParams{
+		GLRepository: "project-1",
+		GLID:         "user-1",
+		GLProtocol:   "http",
+	})
+	require.NoError(t, err)
+	require.True(t, allowed)
+	require.Equal(t, remoteIP, forwardedFor)
 }
 
 func TestNewHTTPClient_gitlabSecretConfig(t *testing.T) {

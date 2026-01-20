@@ -12,6 +12,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	grpcmetadata "google.golang.org/grpc/metadata"
 )
 
@@ -106,6 +107,49 @@ func TestWithPackObjectsHookEnv(t *testing.T) {
 
 	require.Equal(t, userID, payload.UserDetails.UserID)
 	require.Equal(t, username, payload.UserDetails.Username)
+	require.Equal(t, protocol, payload.UserDetails.Protocol)
+	require.Equal(t, remoteIP, payload.UserDetails.RemoteIP)
+}
+
+func TestWithReceivePackHooksRemoteIP(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	repoProto, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+		SkipCreationViaService: true,
+	})
+	repo := localrepo.NewTestRepo(t, cfg, repoProto)
+
+	objectHash, err := repo.ObjectHash(ctx)
+	require.NoError(t, err)
+
+	glID := "user-123"
+	glUsername := "username"
+	protocol := "protocol"
+	remoteIP := "5.6.7.8"
+
+	req := &gitalypb.PostReceivePackRequest{
+		Repository: repoProto,
+		GlId:       glID,
+		GlUsername: glUsername,
+	}
+
+	opt := gitcmd.WithReceivePackHooks(objectHash, req, protocol, false)
+	subCmd := gitcmd.Command{Name: "receive-pack", Args: []string{"a/b/c"}}
+
+	ctx = grpcmetadata.AppendToOutgoingContext(ctx, "remote_ip", remoteIP)
+	ctx = metadata.OutgoingToIncoming(ctx)
+
+	cmd, err := gittest.NewCommandFactory(t, cfg, gitcmd.WithSkipHooks()).New(ctx, repo, subCmd, opt)
+	require.NoError(t, err)
+
+	payload, err := gitcmd.HooksPayloadFromEnv(cmd.Env())
+	require.NoError(t, err)
+
+	require.Equal(t, glID, payload.UserDetails.UserID)
+	require.Equal(t, glUsername, payload.UserDetails.Username)
 	require.Equal(t, protocol, payload.UserDetails.Protocol)
 	require.Equal(t, remoteIP, payload.UserDetails.RemoteIP)
 }
