@@ -209,7 +209,7 @@ func (repo *Repo) ExecAndWait(ctx context.Context, cmd gitcmd.Command, opts ...g
 }
 
 // GitVersion returns the Git version in use.
-func (repo *Repo) GitVersion(ctx context.Context) (git.Version, error) {
+func (repo *Repo) GitVersion(ctx context.Context) (string, error) {
 	return repo.gitCmdFactory.GitVersion(ctx)
 }
 

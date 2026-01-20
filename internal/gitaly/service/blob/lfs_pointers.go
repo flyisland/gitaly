@@ -87,11 +87,6 @@ func (s *server) ListAllLFSPointers(in *gitalypb.ListAllLFSPointersRequest, stre
 
 	repo := s.localRepoFactory.Build(repository)
 
-	gitVersion, err := repo.GitVersion(ctx)
-	if err != nil {
-		return structerr.NewInternal("detecting availability of object type filter: %w", err)
-	}
-
 	chunker := chunk.New(&lfsPointerSender{
 		send: func(pointers []*gitalypb.LFSPointer) error {
 			return stream.Send(&gitalypb.ListAllLFSPointersResponse{
@@ -110,9 +105,7 @@ func (s *server) ListAllLFSPointers(in *gitalypb.ListAllLFSPointersRequest, stre
 		gitpipe.WithSkipCatfileInfoResult(func(objectInfo *catfile.ObjectInfo) bool {
 			return objectInfo.Type != "blob" || objectInfo.Size > lfsPointerMaxSize
 		}),
-	}
-	if gitVersion.IsCatfileObjectTypeFilterSupported() {
-		catfileInfoOptions = append(catfileInfoOptions, gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeBlob))
+		gitpipe.WithCatfileObjectTypeFilter(gitpipe.ObjectTypeBlob),
 	}
 
 	catfileInfoIter := gitpipe.CatfileInfoAllObjects(ctx, repo, catfileInfoOptions...)

@@ -557,15 +557,8 @@ func TestRepackObjects(t *testing.T) {
 				looseObjects: 3,
 			},
 			stateAfterRepack: objectsState{
-				packfiles: 1,
-				// Prior to Git version 2.49.0, a bug in Git prevented git-repack(1) from packing
-				// unreachable loose objects when there are not any packfiles.
-				looseObjects: func() uint64 {
-					if gittest.IsGitVersionLessThan(t, ctx, cfg, git.NewVersion(2, 49, 0, 0)) {
-						return 1
-					}
-					return 0
-				}(),
+				packfiles:    1,
+				looseObjects: 0,
 			},
 		},
 		{

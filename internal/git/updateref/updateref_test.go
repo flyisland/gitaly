@@ -964,17 +964,14 @@ func TestUpdater_symrefs(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 
-	cfg, executor, repoPath, updater := setupUpdater(t, ctx)
+	cfg, _, repoPath, updater := setupUpdater(t, ctx)
 	defer testhelper.MustClose(t, updater)
-
-	actual, err := executor.GitVersion(ctx)
-	require.NoError(t, err)
 
 	gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("master"))
 
 	require.NoError(t, updater.Start())
 
-	require.NoError(t, updater.UpdateSymbolicReference(actual, "refs/heads/symref", "refs/heads/master"))
+	require.NoError(t, updater.UpdateSymbolicReference("refs/heads/symref", "refs/heads/master"))
 	require.NoError(t, updater.Commit())
 
 	// Verify that the reference was created as expected.

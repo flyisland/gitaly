@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
@@ -69,7 +68,7 @@ func TestGetConfig(t *testing.T) {
 			extensionsForSha256 += "\trefstorage = reftable\n"
 		}
 
-		expectedConfig := gittest.ObjectHashDependent(t, map[string]string{
+		require.Equal(t, gittest.ObjectHashDependent(t, map[string]string{
 			"sha1": fmt.Sprintf(
 				"%s[core]\n\trepositoryformatversion = %d\n\tfilemode = true\n\tbare = true\n%s",
 				extensionsForSha1,
@@ -81,27 +80,7 @@ func TestGetConfig(t *testing.T) {
 				extensionsForSha256,
 				darwinConfig,
 			),
-		})
-
-		// In Git 2.48.0, the order of config entries after repository initialization is different.
-		// The config "extension" entries are now listed before "core" entries.
-		if gittest.IsGitVersionLessThan(t, ctx, cfg, git.NewVersion(2, 48, 0, 0)) {
-			expectedConfig = gittest.ObjectHashDependent(t, map[string]string{
-				"sha1": fmt.Sprintf(
-					"[core]\n\trepositoryformatversion = %d\n\tfilemode = true\n\tbare = true\n%s%s",
-					repoFormatVersion,
-					darwinConfig,
-					extensionsForSha1,
-				),
-				"sha256": fmt.Sprintf(
-					"[core]\n\trepositoryformatversion = 1\n\tfilemode = true\n\tbare = true\n%s%s",
-					darwinConfig,
-					extensionsForSha256,
-				),
-			})
-		}
-
-		require.Equal(t, expectedConfig, config)
+		}), config)
 	})
 
 	t.Run("missing config", func(t *testing.T) {

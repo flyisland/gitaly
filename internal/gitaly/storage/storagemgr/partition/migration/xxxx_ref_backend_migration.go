@@ -119,29 +119,6 @@ func NewReferenceBackendMigration(
 				return fmt.Errorf("running refs migrate: %w, stderr: %q", err, stderr)
 			}
 
-			// Since Git 2.48, the files backend will directly write to packed-refs
-			// during ref-migrations. But for versions before that, we need to manually
-			// pack the refs. Let's do that. We can remove this block once Git 2.48 is
-			// made the minimum version.
-			if targetBackend == git.ReferenceBackendFiles {
-				gitVersion, err := repo.GitVersion(ctx)
-				if err != nil {
-					return fmt.Errorf("git version: %w", err)
-				}
-
-				if gitVersion.LessThan(git.NewVersion(2, 48, 0, 0)) {
-					err = repo.ExecAndWait(ctx, gitcmd.Command{
-						Name: "pack-refs",
-						Flags: []gitcmd.Option{
-							gitcmd.Flag{Name: "--all"},
-						},
-					}, gitcmd.WithStderr(stderr))
-					if err != nil {
-						return fmt.Errorf("running pack-refs: %w, stderr: %q", err, stderr)
-					}
-				}
-			}
-
 			postMigrationHash, err := getHash(repo)
 			if err != nil {
 				return fmt.Errorf("hashing all refs post-migration: %w", err)
