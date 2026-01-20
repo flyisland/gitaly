@@ -116,6 +116,11 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 				return resp, err
 			}
 
+			// No point in housekeeping a deleted repo.
+			if info.FullMethod == gitalypb.RepositoryService_RemoveRepository_FullMethodName {
+				return resp, err
+			}
+
 			_, forceHousekeeping := forceHousekeepingRPCs[methodInfo.FullMethodName()]
 			m.scheduleHousekeeping(ctx, targetRepo, forceHousekeeping)
 			return resp, err
