@@ -48,7 +48,7 @@ func (e *repoExecutor) ExecAndWait(ctx context.Context, cmd gitcmd.Command, opts
 	return command.Wait()
 }
 
-func (e *repoExecutor) GitVersion(ctx context.Context) (git.Version, error) {
+func (e *repoExecutor) GitVersion(ctx context.Context) (string, error) {
 	return e.gitCmdFactory.GitVersion(ctx)
 }
 

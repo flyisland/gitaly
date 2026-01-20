@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v18/auth"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/auth"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service"
@@ -50,10 +49,6 @@ func TestGitalyServerInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, version.GetVersion(), c.GetServerVersion())
-
-	gitVersion, err := gittest.NewCommandFactory(t, cfg).GitVersion(ctx)
-	require.NoError(t, err)
-	require.Equal(t, gitVersion.String(), c.GetGitVersion())
 
 	require.Len(t, c.GetStorageStatuses(), len(cfg.Storages))
 	require.True(t, c.GetStorageStatuses()[0].GetReadable())

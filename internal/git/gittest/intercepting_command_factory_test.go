@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
@@ -69,12 +68,12 @@ func TestInterceptingCommandFactory_GitVersion(t *testing.T) {
 	// `git.Version` structs ourselves.
 	fakeVersion, err := NewInterceptingCommandFactory(t, ctx, cfg, generateVersionScript, WithInterceptedVersion()).GitVersion(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "1.2.3", fakeVersion.String())
+	require.Equal(t, "1.2.3", fakeVersion)
 
 	for _, tc := range []struct {
 		desc            string
 		opts            []InterceptingCommandFactoryOption
-		expectedVersion git.Version
+		expectedVersion string
 	}{
 		{
 			desc:            "without version interception",

@@ -397,7 +397,7 @@ func (u *Updater) Update(reference git.ReferenceName, newOID, oldOID git.ObjectI
 
 // UpdateSymbolicReference is used to do a symbolic reference update. We can potentially provide the oldTarget
 // or the oldOID.
-func (u *Updater) UpdateSymbolicReference(version git.Version, reference, newTarget git.ReferenceName) error {
+func (u *Updater) UpdateSymbolicReference(reference, newTarget git.ReferenceName) error {
 	if err := u.expectState(stateStarted); err != nil {
 		return err
 	}

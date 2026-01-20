@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
@@ -21,13 +19,6 @@ func TestDiffBlobs(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 	cfg, client := setupDiffService(t)
-
-	cmdFactory, clean, err := gitcmd.NewExecCommandFactory(cfg, testhelper.SharedLogger(t))
-	require.NoError(t, err)
-	defer clean()
-
-	gitVersion, err := cmdFactory.GitVersion(ctx)
-	require.NoError(t, err)
 
 	type setupData struct {
 		request           *gitalypb.DiffBlobsRequest
@@ -1194,13 +1185,6 @@ func TestDiffBlobs(t *testing.T) {
 
 			data := tc.setup()
 
-			if len(data.request.GetRawInfo()) > 0 && len(data.request.GetBlobPairs()) == 0 {
-				if gittest.IsGitVersionLessThan(t, ctx, cfg, git.NewVersion(2, 49, 0, 1)) {
-					data.expectedErr = structerr.NewInvalidArgument("git version: %s, doesn't support git-diff-pairs(1)", gitVersion)
-					data.expectedResponses = nil
-				}
-			}
-
 			stream, err := client.DiffBlobs(ctx, data.request)
 			require.NoError(t, err)
 
@@ -1229,9 +1213,6 @@ func BenchmarkDiffBlobs(b *testing.B) {
 	ctx := testhelper.Context(b)
 	cfg, client := setupDiffService(b)
 	repoProto, repoPath := gittest.CreateRepository(b, ctx, cfg)
-
-	gittest.SkipIfGitVersionLessThan(b, ctx, cfg, git.NewVersion(2, 49, 0, 1),
-		"git-diff-pairs(1) required")
 
 	data1 := strings.Repeat("1\n", 1024) + "\n\n\n\na\n"
 	data2 := strings.Repeat("2\n", 1024) + "\n\n\n\nb\n"

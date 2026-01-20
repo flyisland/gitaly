@@ -48,7 +48,7 @@ type CommandFactory interface {
 	// HooksPath returns the path where Gitaly's Git hooks reside.
 	HooksPath(context.Context) string
 	// GitVersion returns the Git version used by the command factory.
-	GitVersion(context.Context) (git.Version, error)
+	GitVersion(context.Context) (string, error)
 }
 
 type execCommandFactoryConfig struct {
@@ -130,7 +130,7 @@ type hookDirectories struct {
 }
 
 type cachedGitVersion struct {
-	version git.Version
+	version string
 	stat    os.FileInfo
 }
 
@@ -370,12 +370,12 @@ func statDiffers(a, b os.FileInfo) bool {
 
 // GitVersion returns the Git version in use. The version is cached as long as the binary remains
 // unchanged as determined by stat(3P).
-func (cf *ExecCommandFactory) GitVersion(ctx context.Context) (git.Version, error) {
+func (cf *ExecCommandFactory) GitVersion(ctx context.Context) (string, error) {
 	gitBinary := cf.GetExecutionEnvironment(ctx).BinaryPath
 
 	stat, err := os.Stat(gitBinary)
 	if err != nil {
-		return git.Version{}, fmt.Errorf("cannot stat Git binary: %w", err)
+		return "", fmt.Errorf("cannot stat Git binary: %w", err)
 	}
 
 	cf.cachedGitVersionLock.RLock()
@@ -399,7 +399,7 @@ func (cf *ExecCommandFactory) GitVersion(ctx context.Context) (git.Version, erro
 	// already updated the Git version information.
 	stat, err = os.Stat(execEnv.BinaryPath)
 	if err != nil {
-		return git.Version{}, fmt.Errorf("cannot stat Git binary: %w", err)
+		return "", fmt.Errorf("cannot stat Git binary: %w", err)
 	}
 
 	// There is a race here: if the Git executable has changed between calling stat(3P) on the
@@ -417,24 +417,24 @@ func (cf *ExecCommandFactory) GitVersion(ctx context.Context) (git.Version, erro
 		command.WithStdout(&versionBuffer),
 	)
 	if err != nil {
-		return git.Version{}, fmt.Errorf("spawning version command: %w", err)
+		return "", fmt.Errorf("spawning version command: %w", err)
 	}
 
 	if err := cmd.Wait(); err != nil {
-		return git.Version{}, fmt.Errorf("waiting for version: %w", err)
+		return "", fmt.Errorf("waiting for version: %w", err)
 	}
 
-	gitVersion, err := git.ParseVersionOutput(versionBuffer.Bytes())
-	if err != nil {
-		return git.Version{}, err
+	version := strings.TrimSpace(versionBuffer.String())
+	if suffix, ok := strings.CutPrefix(version, "git version "); ok {
+		version = suffix
 	}
 
 	cf.cachedGitVersionByBinary[gitBinary] = cachedGitVersion{
-		version: gitVersion,
+		version: version,
 		stat:    stat,
 	}
 
-	return gitVersion, nil
+	return version, nil
 }
 
 // newCommand creates a new command.Command for the given git command. If a repo is given, then the
@@ -544,7 +544,7 @@ func (cf *ExecCommandFactory) newCommand(ctx context.Context, repo storage.Repos
 		command.WithEnvironment(env),
 		command.WithCommandName("git", sc.Name),
 		command.WithCgroup(cf.cgroupsManager, cgroupsAddCommandOpts...),
-		command.WithCommandGitVersion(cmdGitVersion.String()),
+		command.WithCommandGitVersion(cmdGitVersion),
 		command.WithSubprocessLogger(cf.cfg.Logging.Config),
 	)
 

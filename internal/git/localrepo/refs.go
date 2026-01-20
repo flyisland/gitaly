@@ -149,23 +149,17 @@ func (repo *Repo) UpdateRef(ctx context.Context, reference git.ReferenceName, ne
 // SetDefaultBranch sets the repository's HEAD to point to the given reference.
 // It will not verify the reference actually exists.
 func (repo *Repo) SetDefaultBranch(ctx context.Context, txManager transaction.Manager, reference git.ReferenceName) error {
-	version, err := repo.GitVersion(ctx)
-	if err != nil {
-		return fmt.Errorf("detecting Git version: %w", err)
-	}
-
 	if err := git.ValidateReference(reference.String()); err != nil {
 		return fmt.Errorf("%q is a malformed refname", reference)
 	}
 
-	return repo.setDefaultBranchWithUpdateRef(ctx, reference, version)
+	return repo.setDefaultBranchWithUpdateRef(ctx, reference)
 }
 
 // setDefaultBranchWithUpdateRef uses 'symref-update' command to update HEAD.
 func (repo *Repo) setDefaultBranchWithUpdateRef(
 	ctx context.Context,
 	reference git.ReferenceName,
-	version git.Version,
 ) (err error) {
 	updater, err := updateref.New(ctx, repo, updateref.WithNoDeref())
 	if err != nil {
@@ -182,7 +176,7 @@ func (repo *Repo) setDefaultBranchWithUpdateRef(
 		return fmt.Errorf("start: %w", err)
 	}
 
-	if err = updater.UpdateSymbolicReference(version, "HEAD", reference); err != nil {
+	if err = updater.UpdateSymbolicReference("HEAD", reference); err != nil {
 		return fmt.Errorf("update: %w", err)
 	}
 

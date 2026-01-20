@@ -222,11 +222,7 @@ func testObjectReaderObject(t *testing.T, ctx context.Context) {
 		submoduleRevision := fmt.Sprintf("%s:%s", commitID, "sub")
 
 		_, err = reader.Object(ctx, git.Revision(submoduleRevision))
-		if featureflag.GitMaster.IsEnabled(ctx) || !gittest.IsGitVersionLessThan(t, ctx, cfg, git.NewVersion(2, 51, 0, 0)) {
-			require.Equal(t, NotFoundError{Revision: submoduleCommit.String()}, err)
-		} else {
-			require.Equal(t, NotFoundError{Revision: commitID.String() + ":sub"}, err)
-		}
+		require.Equal(t, NotFoundError{Revision: submoduleCommit.String()}, err)
 	})
 
 	t.Run("read fails when partially consuming previous object", func(t *testing.T) {
