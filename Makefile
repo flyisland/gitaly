@@ -84,7 +84,6 @@ ifdef FIPS_MODE
     # Build Git with the OpenSSL backend for SHA256 in case FIPS-mode is
     # requested. Note that we explicitly don't do the same for SHA1: we
     # instead use SHA1DC to protect users against the SHAttered attack.
-    GIT_FIPS_BUILD_OPTIONS := OPENSSL_SHA256=YesPlease
     GIT_FIPS_MESON_BUILD_OPTIONS := -Dsha256_backend=openssl
 
     # Go 1.19+ now requires GOEXPERIMENT=boringcrypto for FIPS compilation.
@@ -177,23 +176,7 @@ else
     override GIT_VERSION := $(shell echo ${GIT_VERSION} | awk '/^[0-9]\.[0-9]+\.[0-9]+$$/ { printf "v" } { print $$1 }')
 endif
 
-ifeq ($(origin GIT_BUILD_OPTIONS),undefined)
-    ## Build options for Git.
-    GIT_BUILD_OPTIONS ?=
-    # activate developer checks
-    GIT_BUILD_OPTIONS += DEVELOPER=1
-    # but don't cause warnings to fail the build
-    GIT_BUILD_OPTIONS += DEVOPTS=no-error
-    GIT_BUILD_OPTIONS += USE_LIBPCRE=YesPlease
-    GIT_BUILD_OPTIONS += NO_PERL=YesPlease
-    GIT_BUILD_OPTIONS += NO_EXPAT=YesPlease
-    GIT_BUILD_OPTIONS += NO_TCLTK=YesPlease
-    GIT_BUILD_OPTIONS += NO_GETTEXT=YesPlease
-    GIT_BUILD_OPTIONS += NO_PYTHON=YesPlease
-    PCRE_PC=libpcre2-8
-    ifeq ($(shell pkg-config --exists ${PCRE_PC} && echo exists),exists)
-	    GIT_BUILD_OPTIONS += LIBPCREDIR=$(shell pkg-config ${PCRE_PC} --variable prefix)
-    endif
+ifeq ($(origin GIT_MESON_BUILD_OPTIONS),undefined)
     ## Build options used for Git when building with Meson.
     GIT_MESON_BUILD_OPTIONS ?=
     GIT_MESON_BUILD_OPTIONS += -Dprefix="${GIT_PREFIX}"
@@ -213,20 +196,14 @@ ifeq ($(origin GIT_BUILD_OPTIONS),undefined)
     # to improve performance. This is only enabled for Linux platforms.
     ifeq ($(OS),Linux)
 	    GIT_MESON_BUILD_OPTIONS += -Dsha1_unsafe_backend=openssl
-	    GIT_BUILD_OPTIONS += OPENSSL_SHA1_UNSAFE=YesPlease
     endif
-endif
-
-ifdef GIT_APPEND_BUILD_OPTIONS
-	GIT_BUILD_OPTIONS += ${GIT_APPEND_BUILD_OPTIONS}
 endif
 
 ifdef GIT_APPEND_MESON_BUILD_OPTIONS
 	GIT_MESON_BUILD_OPTIONS += ${GIT_APPEND_MESON_BUILD_OPTIONS}
 endif
 
-ifdef GIT_FIPS_BUILD_OPTIONS
-	GIT_BUILD_OPTIONS += ${GIT_FIPS_BUILD_OPTIONS}
+ifdef GIT_FIPS_MESON_BUILD_OPTIONS
 	GIT_MESON_BUILD_OPTIONS += ${GIT_FIPS_MESON_BUILD_OPTIONS}
 endif
 
@@ -656,22 +633,12 @@ git: install-git
 
 .PHONY: build-git
 ## Build Git distribution.
-ifdef USE_MESON
 build-git: ${DEPENDENCY_DIR}/git-distribution/build/git
-else
-build-git: ${DEPENDENCY_DIR}/git-distribution/git
-endif
 
 .PHONY: install-git
 ## Install Git distribution.
-ifdef USE_MESON
 install-git: build-git
 	${Q}meson install -C "${DEPENDENCY_DIR}/git-distribution/build"
-else
-install-git: build-git
-	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${DEPENDENCY_DIR}/git-distribution" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} install
-endif
-
 
 ${SOURCE_DIR}/NOTICE: ${BUILD_DIR}/NOTICE
 	${Q}mv $< $@
@@ -690,12 +657,7 @@ ${TOOLS_DIR}: | ${BUILD_DIR}
 ${DEPENDENCY_DIR}: | ${BUILD_DIR}
 	${Q}mkdir -p ${DEPENDENCY_DIR}
 
-# These targets build a full Git distribution with the Makefile...
-${DEPENDENCY_DIR}/git-distribution/git: ${DEPENDENCY_DIR}/git-distribution/Makefile
-	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "$(<D)" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS}
-	${Q}touch $@
-# ... and with Meson.
-${DEPENDENCY_DIR}/git-distribution/build/git: ${DEPENDENCY_DIR}/git-distribution/Makefile
+${DEPENDENCY_DIR}/git-distribution/build/git: ${DEPENDENCY_DIR}/git-distribution/meson.build
 	${Q}rm -rf "${DEPENDENCY_DIR}/git-distribution/build"
 	${Q}meson setup "${DEPENDENCY_DIR}/git-distribution" "${DEPENDENCY_DIR}/git-distribution/build" ${GIT_MESON_BUILD_OPTIONS}
 	${Q}meson compile -C "${DEPENDENCY_DIR}/git-distribution/build"
@@ -705,17 +667,10 @@ ${DEPENDENCY_DIR}/git-distribution/build/git: ${DEPENDENCY_DIR}/git-distribution
 ${BUILD_DIR}/bin/gitaly-%-prev: override GIT_VERSION = ${GIT_VERSION_PREV}
 ${BUILD_DIR}/bin/gitaly-%-master: override GIT_VERSION = ${GIT_VERSION_MASTER}
 
-ifdef USE_MESON
 ${BUILD_DIR}/bin/gitaly-%-prev: ${DEPENDENCY_DIR}/git-prev/build/% | ${BUILD_DIR}/bin
 	${Q}install $< $@
 ${BUILD_DIR}/bin/gitaly-%-master: ${DEPENDENCY_DIR}/git-master/build/% | ${BUILD_DIR}/bin
 	${Q}install $< $@
-else
-${BUILD_DIR}/bin/gitaly-%-prev: ${DEPENDENCY_DIR}/git-prev/% | ${BUILD_DIR}/bin
-	${Q}install $< $@
-${BUILD_DIR}/bin/gitaly-%-master: ${DEPENDENCY_DIR}/git-master/% | ${BUILD_DIR}/bin
-	${Q}install $< $@
-endif
 
 # clear-go-build-cache-if-needed cleans the Go build cache if it exceeds the maximum size as
 # configured in GOCACHE_MAX_SIZE_KB.
@@ -745,7 +700,7 @@ ${GITALY_EXECUTABLES}: ${BUILD_DIR}/bin/%: clear-go-build-cache-if-needed .FORCE
 # these targets.
 .PHONY: dependency-version
 ${DEPENDENCY_DIR}/git-%.version: dependency-version | ${DEPENDENCY_DIR}
-	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${GIT_VERSION} ${GIT_BUILD_OPTIONS} ${GIT_MESON_BUILD_OPTIONS} ${USE_MESON}" ] || >$@ echo -n "${GIT_VERSION} ${GIT_BUILD_OPTIONS} ${GIT_MESON_BUILD_OPTIONS} ${USE_MESON}"
+	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${GIT_VERSION} ${GIT_MESON_BUILD_OPTIONS}" ] || >$@ echo -n "${GIT_VERSION} ${GIT_MESON_BUILD_OPTIONS}"
 ${DEPENDENCY_DIR}/protoc.version: dependency-version | ${DEPENDENCY_DIR}
 	${Q}[ x"$$(cat "$@" 2>/dev/null)" = x"${PROTOC_VERSION} ${PROTOC_BUILD_OPTIONS}" ] || >$@ echo -n "${PROTOC_VERSION} ${PROTOC_BUILD_OPTIONS}"
 ${DEPENDENCY_DIR}/git-filter-repo.version: dependency-version | ${DEPENDENCY_DIR}
@@ -755,8 +710,8 @@ ${DEPENDENCY_DIR}/git-filter-repo.version: dependency-version | ${DEPENDENCY_DIR
 # always changes when anything inside of it changes, like when we for example
 # build binaries inside of it, we cannot depend on it directly or we'd
 # otherwise try to rebuild all targets depending on it whenever we build
-# something else. We thus depend on the Makefile instead.
-${DEPENDENCY_DIR}/git-%/Makefile: ${DEPENDENCY_DIR}/git-%.version
+# something else. We thus depend on the meson.build file instead.
+${DEPENDENCY_DIR}/git-%/meson.build: ${DEPENDENCY_DIR}/git-%.version
 	${Q}${GIT} -c init.defaultBranch=master init ${GIT_QUIET} "${@D}"
 	${Q}${GIT} -C "${@D}" config remote.origin.url ${GIT_REPO_URL}
 	${Q}${GIT} -C "${@D}" config remote.origin.tagOpt --no-tags
@@ -773,14 +728,10 @@ else
 endif
 	${Q}touch $@
 
-$(patsubst %,${DEPENDENCY_DIR}/git-\%/build/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
+$(patsubst %,${DEPENDENCY_DIR}/git-\%/build/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/meson.build
 	${Q}rm -rf "$(dir ${@D})"/build
 	${Q}meson setup "$(dir ${@D})" "$(dir ${@D})"/build ${GIT_MESON_BUILD_OPTIONS}
 	${Q}meson compile -C "$(dir ${@D})/build" $(patsubst %,%:executable,${GIT_EXECUTABLES})
-	${Q}touch $@
-
-$(patsubst %,${DEPENDENCY_DIR}/git-\%/%,${GIT_EXECUTABLES}): ${DEPENDENCY_DIR}/git-%/Makefile
-	${Q}env -u PROFILE -u MAKEFLAGS -u GIT_VERSION ${MAKE} -C "${@D}" -j$(shell nproc) prefix=${GIT_PREFIX} ${GIT_BUILD_OPTIONS} ${GIT_EXECUTABLES}
 	${Q}touch $@
 
 ${INSTALL_DEST_DIR}/gitaly-%: ${BUILD_DIR}/bin/gitaly-%
