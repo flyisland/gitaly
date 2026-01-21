@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.8.2 (2026-01-20)
+
+No changes.
+
 ## 18.8.1 (2026-01-19)
 
 No changes.
@@ -10,6 +14,10 @@ No changes.
 
 - [CountCommits: Add support for pseudo-revisions](gitlab-org/gitaly@85828290f8d1830260408e971db3b7b5e975710c) ([merge request](gitlab-org/gitaly!8349))
 
+## 18.7.2 (2026-01-20)
+
+No changes.
+
 ## 18.7.1 (2026-01-07)
 
 No changes.
@@ -19,6 +27,10 @@ No changes.
 ### Added (1 change)
 
 - [Add `pagination_cursor` to `ListCommitsResponse`](gitlab-org/gitaly@fdba978cadb7fcae6aa59bad30cf497d5d1a8be5) ([merge request](gitlab-org/gitaly!8303))
+
+## 18.6.4 (2026-01-20)
+
+No changes.
 
 ## 18.6.3 (2026-01-07)
 
