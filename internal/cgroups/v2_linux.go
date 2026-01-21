@@ -127,6 +127,102 @@ func (cvh *cgroupV2Handler) collect(repoPath string, ch chan<- prometheus.Metric
 		cpuKernelMetric := cvh.cpuUsage.WithLabelValues(repoPath, "kernel")
 		cpuKernelMetric.Set(float64(metrics.GetCPU().GetSystemUsec()))
 		ch <- cpuKernelMetric
+
+		// PSI Memory Pressure metrics
+		if memPressure := metrics.GetMemory().GetPSI(); memPressure != nil {
+			if some := memPressure.GetSome(); some != nil {
+				memPressureSomeAvg10 := cvh.memoryPressure.WithLabelValues(repoPath, "some", "avg10")
+				memPressureSomeAvg10.Set(some.GetAvg10())
+				ch <- memPressureSomeAvg10
+
+				memPressureSomeAvg60 := cvh.memoryPressure.WithLabelValues(repoPath, "some", "avg60")
+				memPressureSomeAvg60.Set(some.GetAvg60())
+				ch <- memPressureSomeAvg60
+
+				memPressureSomeAvg300 := cvh.memoryPressure.WithLabelValues(repoPath, "some", "avg300")
+				memPressureSomeAvg300.Set(some.GetAvg300())
+				ch <- memPressureSomeAvg300
+			}
+			if full := memPressure.GetFull(); full != nil {
+				memPressureFullAvg10 := cvh.memoryPressure.WithLabelValues(repoPath, "full", "avg10")
+				memPressureFullAvg10.Set(full.GetAvg10())
+				ch <- memPressureFullAvg10
+
+				memPressureFullAvg60 := cvh.memoryPressure.WithLabelValues(repoPath, "full", "avg60")
+				memPressureFullAvg60.Set(full.GetAvg60())
+				ch <- memPressureFullAvg60
+
+				memPressureFullAvg300 := cvh.memoryPressure.WithLabelValues(repoPath, "full", "avg300")
+				memPressureFullAvg300.Set(full.GetAvg300())
+				ch <- memPressureFullAvg300
+			}
+		}
+
+		// PSI IO Pressure metrics
+		if ioPressure := metrics.GetIo().GetPSI(); ioPressure != nil {
+			if some := ioPressure.GetSome(); some != nil {
+				ioPressureSomeAvg10 := cvh.ioPressure.WithLabelValues(repoPath, "some", "avg10")
+				ioPressureSomeAvg10.Set(some.GetAvg10())
+				ch <- ioPressureSomeAvg10
+
+				ioPressureSomeAvg60 := cvh.ioPressure.WithLabelValues(repoPath, "some", "avg60")
+				ioPressureSomeAvg60.Set(some.GetAvg60())
+				ch <- ioPressureSomeAvg60
+
+				ioPressureSomeAvg300 := cvh.ioPressure.WithLabelValues(repoPath, "some", "avg300")
+				ioPressureSomeAvg300.Set(some.GetAvg300())
+				ch <- ioPressureSomeAvg300
+			}
+			if full := ioPressure.GetFull(); full != nil {
+				ioPressureFullAvg10 := cvh.ioPressure.WithLabelValues(repoPath, "full", "avg10")
+				ioPressureFullAvg10.Set(full.GetAvg10())
+				ch <- ioPressureFullAvg10
+
+				ioPressureFullAvg60 := cvh.ioPressure.WithLabelValues(repoPath, "full", "avg60")
+				ioPressureFullAvg60.Set(full.GetAvg60())
+				ch <- ioPressureFullAvg60
+
+				ioPressureFullAvg300 := cvh.ioPressure.WithLabelValues(repoPath, "full", "avg300")
+				ioPressureFullAvg300.Set(full.GetAvg300())
+				ch <- ioPressureFullAvg300
+			}
+		}
+
+		// Memory events metrics
+		if memEvents := metrics.GetMemoryEvents(); memEvents != nil {
+			ch <- prometheus.MustNewConstMetric(
+				cvh.memoryEventsHigh,
+				prometheus.CounterValue,
+				float64(memEvents.GetHigh()),
+				repoPath,
+			)
+			ch <- prometheus.MustNewConstMetric(
+				cvh.memoryEventsMax,
+				prometheus.CounterValue,
+				float64(memEvents.GetMax()),
+				repoPath,
+			)
+			ch <- prometheus.MustNewConstMetric(
+				cvh.memoryEventsOOM,
+				prometheus.CounterValue,
+				float64(memEvents.GetOom()),
+				repoPath,
+			)
+		}
+
+		// Page fault metrics
+		ch <- prometheus.MustNewConstMetric(
+			cvh.pgFault,
+			prometheus.CounterValue,
+			float64(metrics.GetMemory().GetPgfault()),
+			repoPath,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			cvh.pgMajFault,
+			prometheus.CounterValue,
+			float64(metrics.GetMemory().GetPgmajfault()),
+			repoPath,
+		)
 	}
 
 	if subsystems, err := control.Controllers(); err != nil {
@@ -175,7 +271,7 @@ func (cvh *cgroupV2Handler) stats() (Stats, error) {
 			MemoryUsage:          metrics.GetMemory().GetUsage(),
 			MemoryLimit:          metrics.GetMemory().GetUsageLimit(),
 			// memory.stat breaks down the cgroup's memory footprint into different types of memory. In
-			// Cgroup V2, this file includes the consumption of the cgroup’s entire subtree. Total_* stats
+			// Cgroup V2, this file includes the consumption of the cgroup's entire subtree. Total_* stats
 			// were removed.
 			TotalAnon:         metrics.GetMemory().GetAnon(),
 			TotalActiveAnon:   metrics.GetMemory().GetActiveAnon(),
@@ -183,12 +279,48 @@ func (cvh *cgroupV2Handler) stats() (Stats, error) {
 			TotalFile:         metrics.GetMemory().GetFile(),
 			TotalActiveFile:   metrics.GetMemory().GetActiveFile(),
 			TotalInactiveFile: metrics.GetMemory().GetInactiveFile(),
+			PgFault:           metrics.GetMemory().GetPgfault(),
+			PgMajFault:        metrics.GetMemory().GetPgmajfault(),
 		},
 	}
 
-	if metrics.GetMemoryEvents() != nil {
-		stats.ParentStats.OOMKills = metrics.GetMemoryEvents().GetOomKill()
+	if memEvents := metrics.GetMemoryEvents(); memEvents != nil {
+		stats.ParentStats.OOMKills = memEvents.GetOomKill()
+		stats.ParentStats.MemoryHighEvents = memEvents.GetHigh()
+		stats.ParentStats.MemoryMaxEvents = memEvents.GetMax()
+		stats.ParentStats.MemoryOOMEvents = memEvents.GetOom()
 	}
+
+	if memPressure := metrics.GetMemory().GetPSI(); memPressure != nil {
+		if some := memPressure.GetSome(); some != nil {
+			stats.ParentStats.MemoryPSI.Some.Avg10 = some.GetAvg10()
+			stats.ParentStats.MemoryPSI.Some.Avg60 = some.GetAvg60()
+			stats.ParentStats.MemoryPSI.Some.Avg300 = some.GetAvg300()
+			stats.ParentStats.MemoryPSI.Some.Total = some.GetTotal()
+		}
+		if full := memPressure.GetFull(); full != nil {
+			stats.ParentStats.MemoryPSI.Full.Avg10 = full.GetAvg10()
+			stats.ParentStats.MemoryPSI.Full.Avg60 = full.GetAvg60()
+			stats.ParentStats.MemoryPSI.Full.Avg300 = full.GetAvg300()
+			stats.ParentStats.MemoryPSI.Full.Total = full.GetTotal()
+		}
+	}
+
+	if ioPressure := metrics.GetIo().GetPSI(); ioPressure != nil {
+		if some := ioPressure.GetSome(); some != nil {
+			stats.ParentStats.IOPSI.Some.Avg10 = some.GetAvg10()
+			stats.ParentStats.IOPSI.Some.Avg60 = some.GetAvg60()
+			stats.ParentStats.IOPSI.Some.Avg300 = some.GetAvg300()
+			stats.ParentStats.IOPSI.Some.Total = some.GetTotal()
+		}
+		if full := ioPressure.GetFull(); full != nil {
+			stats.ParentStats.IOPSI.Full.Avg10 = full.GetAvg10()
+			stats.ParentStats.IOPSI.Full.Avg60 = full.GetAvg60()
+			stats.ParentStats.IOPSI.Full.Avg300 = full.GetAvg300()
+			stats.ParentStats.IOPSI.Full.Total = full.GetTotal()
+		}
+	}
+
 	return stats, nil
 }
 

@@ -222,6 +222,23 @@ var defaultV2MockFiles = map[string]string{
 	"cpu.stat": `nr_periods 10
 	nr_throttled 20
 	throttled_usec 1000000`,
+	"memory.stat": `anon 0
+file 0
+inactive_anon 0
+active_anon 0
+inactive_file 0
+active_file 0
+pgfault 0
+pgmajfault 0`,
+	"memory.events": `low 0
+high 0
+max 0
+oom 0
+oom_kill 0`,
+	"memory.pressure": `some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0`,
+	"io.pressure": `some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0`,
 }
 
 func (m *mockCgroupV2) setupMockCgroupFiles(
