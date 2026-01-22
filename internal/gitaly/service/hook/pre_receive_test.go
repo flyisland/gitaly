@@ -24,6 +24,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/transaction"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
@@ -32,7 +33,9 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/txinfo"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"gitlab.com/gitlab-org/gitaly/v18/streamio"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func TestPreReceiveInvalidArgument(t *testing.T) {
@@ -346,6 +349,55 @@ func TestPreReceive_APIErrors(t *testing.T) {
 			assert.Contains(t, text.ChompBytes(stderr), tc.expectedStderr, "hook stderr")
 		})
 	}
+}
+
+// TestPreReceiveHook_RateLimitingError validates rate limited error via HookService
+// See issue here: https://gitlab.com/gitlab-org/gitaly/-/issues/6991
+func TestPreReceiveHook_RateLimitingError(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	// Use mock client that returns RailsRateLimitedError
+	mockClient := gitlab.NewMockClient(
+		t,
+		func(context.Context, gitlab.AllowedParams) (bool, string, error) {
+			return false, "", client.RailsRateLimitedError{}
+		},
+		gitlab.MockPreReceive,
+		gitlab.MockPostReceive,
+	)
+
+	cfg.SocketPath = runHooksServer(t, cfg, nil, testserver.WithGitLabClient(mockClient))
+
+	repo, _ := gittest.CreateRepository(t, ctx, cfg)
+	hookClient, conn := newHooksClient(t, cfg.SocketPath)
+	defer conn.Close()
+
+	hooksPayload, err := gitcmd.NewHooksPayload(
+		ctx, cfg, repo, gittest.DefaultObjectHash, nil,
+		&gitcmd.UserDetails{
+			UserID:   "key-123",
+			Username: "username",
+			Protocol: "web",
+		},
+		gitcmd.PreReceiveHook, featureflag.FromContext(ctx), storage.ExtractTransactionID(ctx),
+	).Env()
+	require.NoError(t, err)
+
+	stream, err := hookClient.PreReceiveHook(ctx)
+	require.NoError(t, err)
+	require.NoError(t, stream.Send(&gitalypb.PreReceiveHookRequest{
+		Repository:           repo,
+		EnvironmentVariables: []string{hooksPayload},
+	}))
+	require.NoError(t, stream.Send(&gitalypb.PreReceiveHookRequest{Stdin: []byte("changes\n")}))
+	require.NoError(t, stream.CloseSend())
+
+	// EXPECTED BEHAVIOR: Should return gRPC RESOURCE_EXHAUSTED error
+	_, _, _, err = sendPreReceiveHookRequest(t, stream, &bytes.Buffer{})
+	testhelper.RequireGrpcError(t, status.Error(codes.ResourceExhausted, "GitLab: rate limited"), err)
 }
 
 // TestPreReceiveHook_HookErrorTooLarge validates that when the error message length

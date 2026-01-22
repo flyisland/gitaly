@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"gitlab.com/gitlab-org/gitaly/v18/streamio"
@@ -46,6 +47,12 @@ func (s *server) PreReceiveHook(stream gitalypb.HookService_PreReceiveHookServer
 		stdout,
 		stderr,
 	); err != nil {
+		// Check if this is a rate-limiting error that should be handled by statushandler middleware
+		var rateLimitErr client.RailsRateLimitedError
+		if errors.As(err, &rateLimitErr) {
+			return err
+		}
+
 		var exitError *exec.ExitError
 		if errors.As(err, &exitError) {
 			return preReceiveHookResponse(stream, int32(exitError.ExitCode()), "")
