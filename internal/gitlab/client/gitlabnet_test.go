@@ -178,3 +178,83 @@ func TestServerErrors(t *testing.T) {
 		})
 	}
 }
+
+// wraps an http.RoundTripper to intercept responses
+type spyTransport struct {
+	base       http.RoundTripper
+	onResponse func(*http.Response)
+}
+
+// wraps an io.ReadCloser to track when Close() is called
+type trackableBody struct {
+	io.ReadCloser
+	onClose func()
+}
+
+func (s *spyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := s.base.RoundTrip(req)
+	if err != nil {
+		return resp, err
+	}
+
+	if s.onResponse != nil {
+		s.onResponse(resp)
+	}
+
+	return resp, nil
+}
+
+func (t *trackableBody) Close() error {
+	if t.onClose != nil {
+		t.onClose()
+	}
+	return t.ReadCloser.Close()
+}
+
+func TestRateLimitWithHTTPServer(t *testing.T) {
+	// This test verifies the prevention of rate limit goroutine leaks.
+	// Without that, each 429 response would leak a goroutine because the response body
+	// is never closed when we return early with RailsRateLimitedError.
+	var bodyCloseCalled bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, err := w.Write([]byte(`{"message": "rate limited"}`))
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	// Use custom transport to inject trackable body
+	transport := &spyTransport{
+		base: http.DefaultTransport,
+		onResponse: func(resp *http.Response) {
+			if resp.StatusCode == http.StatusTooManyRequests {
+				originalBody := resp.Body
+				resp.Body = &trackableBody{
+					ReadCloser: originalBody,
+					onClose: func() {
+						bodyCloseCalled = true
+						originalBody.Close()
+					},
+				}
+			}
+		},
+	}
+
+	client := &http.Client{Transport: transport}
+	gitlabnet, err := NewGitlabNetClient(
+		testhelper.NewLogger(t),
+		"user",
+		"password",
+		"secret",
+		&HTTPClient{Client: client, Host: server.URL},
+	)
+	require.NoError(t, err)
+
+	ctx := testhelper.Context(t)
+	_, err = gitlabnet.DoRequest(ctx, http.MethodGet, "/test", nil)
+
+	require.Error(t, err)
+	require.IsType(t, RailsRateLimitedError{}, err)
+	require.True(t, bodyCloseCalled, "Response body should be closed")
+}

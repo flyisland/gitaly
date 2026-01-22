@@ -121,6 +121,14 @@ func parseError(resp *http.Response) error {
 		return nil
 	}
 	defer resp.Body.Close()
+
+	// Handle rate limiting errors
+	if resp.StatusCode == http.StatusTooManyRequests {
+		// This error is unwrapped in statushandler.go to return an
+		// appropriate gRPC status code.
+		return RailsRateLimitedError{}
+	}
+
 	parsedResponse := &ErrorResponse{}
 
 	if err := json.NewDecoder(resp.Body).Decode(parsedResponse); err != nil {
@@ -191,14 +199,9 @@ func (c *GitlabNetClient) DoRequest(ctx context.Context, method, path string, da
 		return nil, &APIError{"Internal API unreachable"}
 	}
 
-	if response != nil {
-		logger = logger.WithField("status", response.StatusCode)
-		if response.StatusCode == http.StatusTooManyRequests {
-			// This error is unwrapped in statushandler.go to return an
-			// appropriate gRPC status code.
-			return nil, RailsRateLimitedError{}
-		}
-	}
+	// At this point, response is guaranteed to be non-nil as per httpClient.Do doc
+	logger = logger.WithField("status", response.StatusCode)
+
 	if err := parseError(response); err != nil {
 		logger.WithError(err).Error("Internal API error")
 		return nil, err
