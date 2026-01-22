@@ -156,7 +156,7 @@ GIT_VERSION ?=
 # Do not modify the format, it's automatically updated by renovate-gitlab-bot. The timestamp
 # is used for version comparison by renovate.
 # renovate: 1767067102000
-GIT_VERSION_MASTER ?= a37bb2ae6c6659cf7cefd0412759fca5202a823d
+GIT_VERSION_MASTER ?= 83a69f19359e6d9bc980563caca38b2b5729808c
 GIT_VERSION_PREV ?= aea8cc3a10c325a22a75e2d4f582db959d3854ae
 #
 #
