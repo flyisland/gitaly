@@ -569,34 +569,56 @@ func testServerUserRevertMergeCommit(t *testing.T, ctx context.Context) {
 		),
 	)
 
-	request := &gitalypb.UserRevertRequest{
-		Repository: repoProto,
-		User:       gittest.TestUser,
-		Commit:     mergedCommit,
-		BranchName: []byte(destinationBranch),
-		Message:    []byte("Reverting " + mergedCommit.GetId()),
+	testCases := []struct {
+		desc string
+		sign bool
+	}{
+		{
+			desc: "with Sign=false",
+			sign: false,
+		},
+		{
+			desc: "with Sign=true",
+			sign: true,
+		},
 	}
 
-	response, err := client.UserRevert(ctx, request)
-	require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			request := &gitalypb.UserRevertRequest{
+				Repository: repoProto,
+				User:       gittest.TestUser,
+				Commit:     mergedCommit,
+				BranchName: []byte(destinationBranch),
+				Message:    []byte("Reverting " + mergedCommit.GetId()),
+				Sign:       tc.sign,
+			}
 
-	gittest.RequireTree(t, cfg, repoPath, response.GetBranchUpdate().GetCommitId(),
-		[]gittest.TreeEntry{
-			{Mode: "100644", Path: "a", Content: "apple"},
-			{Mode: "100644", Path: "b", Content: "banana"},
-			{Mode: "100644", Path: "z", Content: "zucchini"},
+			response, err := client.UserRevert(ctx, request)
+			require.NoError(t, err)
+
+			gittest.RequireTree(t, cfg, repoPath, response.GetBranchUpdate().GetCommitId(),
+				[]gittest.TreeEntry{
+					{Mode: "100644", Path: "a", Content: "apple"},
+					{Mode: "100644", Path: "b", Content: "banana"},
+					{Mode: "100644", Path: "z", Content: "zucchini"},
+				})
+
+			if featureflag.GPGSigning.IsEnabled(ctx) {
+				data, err := repo.ReadObject(ctx, git.ObjectID(response.GetBranchUpdate().GetCommitId()))
+				require.NoError(t, err)
+
+				gpgsig, dataWithoutGpgSig := signature.ExtractSignature(t, ctx, data)
+
+				if tc.sign {
+					signingKey, err := signature.ParseSigningKeys("testdata/signing_ssh_key_rsa")
+					require.NoError(t, err)
+					require.NoError(t, signingKey.Verify([]byte(gpgsig), []byte(dataWithoutGpgSig)))
+				} else {
+					require.Empty(t, gpgsig, "commit should not be signed when Sign=false")
+				}
+			}
 		})
-
-	if featureflag.GPGSigning.IsEnabled(ctx) {
-		data, err := repo.ReadObject(ctx, git.ObjectID(response.GetBranchUpdate().GetCommitId()))
-		require.NoError(t, err)
-
-		gpgsig, dataWithoutGpgSig := signature.ExtractSignature(t, ctx, data)
-
-		signingKey, err := signature.ParseSigningKeys("testdata/signing_ssh_key_rsa")
-		require.NoError(t, err)
-
-		require.NoError(t, signingKey.Verify([]byte(gpgsig), []byte(dataWithoutGpgSig)))
 	}
 }
 
