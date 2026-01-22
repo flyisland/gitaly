@@ -724,7 +724,7 @@ ${DEPENDENCY_DIR}/git-%/meson.build: ${DEPENDENCY_DIR}/git-%.version
 	@ # current version of Git from "GIT-VERSION-GEN" and append the first 8 characters of the commit ID to it.
 	@ # Otherwise, we simply use the Git version passed by the user.
 ifeq ($(OVERRIDE_GIT_VERSION),)
-	${Q}printf "%s.g%.8s\n" "$$(sed -n 's/^DEF_VER=v\(.*\)\(.GIT\)?/\1/p' <"${@D}"/GIT-VERSION-GEN)" "$$(${GIT} -C "${@D}" rev-parse --short HEAD)" >"${@D}"/version
+	${Q}printf "%s.g%.8s\n" "$$(sed -n '/^DEF_VER=/{s/^DEF_VER=//; s/\.GIT$$//; p; q}' <"${@D}"/GIT-VERSION-GEN)" "$$(${GIT} -C "${@D}" rev-parse --short HEAD)" >"${@D}"/version
 else
 	@ # We're writing the version into the "version" file in Git's own source
 	@ # directory. If it exists, Git's Makefile will pick it up and use it as
