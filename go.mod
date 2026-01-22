@@ -27,7 +27,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/yamux v0.1.2-0.20220728231024-8f49b6f63f18
-	github.com/jackc/pgx/v5 v5.7.6
+	github.com/jackc/pgx/v5 v5.8.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/miekg/dns v1.1.68
 	github.com/olekukonko/tablewriter v1.1.2
