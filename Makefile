@@ -156,7 +156,7 @@ GIT_VERSION ?=
 # Do not modify the format, it's automatically updated by renovate-gitlab-bot. The timestamp
 # is used for version comparison by renovate.
 # renovate: 1767067102000
-GIT_VERSION_MASTER ?= a37bb2ae6c6659cf7cefd0412759fca5202a823d
+GIT_VERSION_MASTER ?= 83a69f19359e6d9bc980563caca38b2b5729808c
 GIT_VERSION_PREV ?= aea8cc3a10c325a22a75e2d4f582db959d3854ae
 #
 #
@@ -724,7 +724,7 @@ ${DEPENDENCY_DIR}/git-%/meson.build: ${DEPENDENCY_DIR}/git-%.version
 	@ # current version of Git from "GIT-VERSION-GEN" and append the first 8 characters of the commit ID to it.
 	@ # Otherwise, we simply use the Git version passed by the user.
 ifeq ($(OVERRIDE_GIT_VERSION),)
-	${Q}printf "%s.g%.8s\n" "$$(sed -n 's/^DEF_VER=v\(.*\)\(.GIT\)?/\1/p' <"${@D}"/GIT-VERSION-GEN)" "$$(${GIT} -C "${@D}" rev-parse --short HEAD)" >"${@D}"/version
+	${Q}printf "%s.g%.8s\n" "$$(sed -n '/^DEF_VER=/{s/^DEF_VER=//; s/\.GIT$$//; p; q}' <"${@D}"/GIT-VERSION-GEN)" "$$(${GIT} -C "${@D}" rev-parse --short HEAD)" >"${@D}"/version
 else
 	@ # We're writing the version into the "version" file in Git's own source
 	@ # directory. If it exists, Git's Makefile will pick it up and use it as

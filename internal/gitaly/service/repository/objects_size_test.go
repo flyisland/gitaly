@@ -411,6 +411,7 @@ func TestObjectsSize(t *testing.T) {
 				_, poolPath := gittest.CreateObjectPool(t, ctx, cfg, repo, gittest.CreateObjectPoolConfig{
 					LinkRepositoryToObjectPool: true,
 				})
+				gittest.Exec(t, cfg, "-C", repoPath, "prune-packed")
 
 				uniqueBlob := gittest.WriteBlob(t, cfg, repoPath, []byte("98765"))
 				uniqueTree := gittest.WriteTree(t, cfg, repoPath, []gittest.TreeEntry{
