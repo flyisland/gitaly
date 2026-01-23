@@ -19,6 +19,15 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
+func supportsCloneIntoCgroup(cfg cgroupscfg.Config) (bool, error) {
+	kernelSupported, err := kernel.IsAtLeast(kernel.Version{Major: 5, Minor: 7})
+	if err != nil {
+		return false, fmt.Errorf("detect kernel version: %w", err)
+	}
+
+	return kernelSupported, nil
+}
+
 type cgroupV2Handler struct {
 	cfg    cgroupscfg.Config
 	logger log.Logger
@@ -29,10 +38,9 @@ type cgroupV2Handler struct {
 }
 
 func newV2Handler(cfg cgroupscfg.Config, logger log.Logger, pid int) *cgroupV2Handler {
-	cloneIntoCgroup, err := kernel.IsAtLeast(kernel.Version{Major: 5, Minor: 7})
+	cloneIntoCgroup, err := supportsCloneIntoCgroup(cfg)
 	if err != nil {
-		// Log the error for now as we're only rolling out functionality behind feature flag.
-		logger.WithError(err).Error("failed detecting kernel version, CLONE_INTO_CGROUP support disabled")
+		logger.WithError(err).Error("failed to check cloneIntoCgroup support. Cloning directly into a cgroup will be disabled.")
 	}
 
 	return &cgroupV2Handler{
