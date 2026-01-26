@@ -311,9 +311,8 @@ messages and behavior by erroring out the requests before they even hit this int
 
 				require.NoError(t, stream.Send(&gitalypb.SetCustomHooksRequest{Repository: validRepository()}))
 
-				resp, err := stream.CloseAndRecv()
-				require.Equal(t, io.EOF, err)
-				require.Nil(t, resp)
+				_, err = stream.CloseAndRecv()
+				require.Equal(t, nil, err)
 			},
 			expectHandlerInvoked: true,
 		},
@@ -604,6 +603,7 @@ messages and behavior by erroring out the requests before they even hit this int
 						resp, err := stream.Recv()
 						assert.Nil(t, resp)
 						assert.Equal(t, io.EOF, err)
+						_ = stream.SendAndClose(&gitalypb.SetCustomHooksResponse{})
 						return nil
 					},
 					getCustomHooksFunc: func(req *gitalypb.GetCustomHooksRequest, stream gitalypb.RepositoryService_GetCustomHooksServer) error {
@@ -769,9 +769,8 @@ messages and behavior by erroring out the requests before they even hit this int
 				stream, err := gitalypb.NewRepositoryServiceClient(cc).SetCustomHooks(ctx)
 				require.NoError(t, err)
 
-				resp, err := stream.CloseAndRecv()
-				require.Equal(t, io.EOF, err)
-				require.Nil(t, resp)
+				_, err = stream.CloseAndRecv()
+				require.Equal(t, nil, err)
 			},
 		},
 	} {
@@ -805,6 +804,7 @@ messages and behavior by erroring out the requests before they even hit this int
 						resp, err := stream.Recv()
 						assert.Nil(t, resp)
 						assert.Equal(t, io.EOF, err)
+						_ = stream.SendAndClose(&gitalypb.SetCustomHooksResponse{})
 						return nil
 					},
 					removeRepositoryFunc: func(ctx context.Context, req *gitalypb.RemoveRepositoryRequest) (*gitalypb.RemoveRepositoryResponse, error) {
