@@ -147,6 +147,36 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.1
 			expectedCode:   0,
 		},
 		{
+			name: "space allowed between comment and previous module",
+			goModContent: `module test
+
+go 1.19
+
+require (
+	github.com/urfave/cli/v2 v2.23.0
+
+
+
+	//+gitaly pinVersion github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.0
+)
+`,
+			expectedOutput: `
+❌ VERSION PINNING VALIDATION FAILED
+   1 dependencies violate version pinning requirements:
+
+[1/1] Module: github.com/stretchr/testify
+   ✓ Expected version: v1.7.0
+   ✗ Current version:  v1.8.0
+
+   Reason:
+   +gitaly pinVersion github.com/stretchr/testify v1.7.0
+
+   To resolve: Update dependency in go.mod to version v1.7.0
+`,
+			expectedCode: 1,
+		},
+		{
 			name: "mismatch in replace directive",
 			goModContent: `module test
 
@@ -211,8 +241,43 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.2
 			require.NoError(t, cmd.Run(context.Background(), []string{"app", "--file", goModPath}))
 
 			assert.Equal(t, tc.expectedCode, exitCode, "Expected exit code %d", tc.expectedCode)
-			assert.Contains(t, strings.TrimSpace(stdout.String()), strings.TrimSpace(tc.expectedOutput), "Expected stdout for test case: %s", tc.name)
-			assert.Contains(t, strings.TrimSpace(stderr.String()), strings.TrimSpace(tc.expectedError), "Expected stderr for test case: %s", tc.name)
+
+			// If the output received is not empty, then we must make sure that the expected
+			// output is not empty as well, and that the received output `contains` the expected
+			// output.
+			//
+			// This check might seem more complex than necessary. Let's explain the rationale.
+			//
+			// We can't predict the full expected output since it prints out the `go.mod` file
+			// full path and this path is in a temp directory, for which the path is not known
+			// in advance. That's why we assert that the received output `contains` the expected
+			// output, where what we expect is a subset of the full output.
+			//
+			// We must also take into account the use case where the expected output is empty ("")
+			// but where an output is indeed returned. The following call returns true:
+			// * require.Contains(t, "something", "")
+			//
+			// But it should count as an error, because we expect the output to be empty when in
+			// fact it is not.
+			//
+			// This is why, if the received output is not empty, we also need to assert that the
+			// expected output is not empty.
+			receivedOutput := strings.TrimSpace(stdout.String())
+			if receivedOutput != "" {
+				assert.NotEmpty(t, strings.TrimSpace(tc.expectedOutput))
+				assert.Contains(t, receivedOutput, strings.TrimSpace(tc.expectedOutput), "Expected stdout for test case: %s", tc.name)
+			} else {
+				assert.Empty(t, strings.TrimSpace(tc.expectedOutput))
+			}
+
+			// Here we use the same validation mechanism as above.
+			receivedErr := strings.TrimSpace(stderr.String())
+			if receivedErr != "" {
+				assert.NotEmpty(t, strings.TrimSpace(tc.expectedError))
+				assert.Contains(t, receivedErr, strings.TrimSpace(tc.expectedError), "Expected stderr for test case: %s", tc.name)
+			} else {
+				assert.Empty(t, strings.TrimSpace(tc.expectedError))
+			}
 		})
 	}
 }
