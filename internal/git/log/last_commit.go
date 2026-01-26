@@ -87,7 +87,7 @@ func EachPathLastCommit(
 			Name: "last-modified",
 			Flags: []gitcmd.Option{
 				gitcmd.Flag{Name: "-t"},
-				gitcmd.Flag{Name: "--max-depth=1"},
+				gitcmd.Flag{Name: "--max-depth=0"},
 				gitcmd.Flag{Name: "-z"},
 			},
 			Args:        []string{revision.String()},
