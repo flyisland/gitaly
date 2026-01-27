@@ -255,7 +255,7 @@ func (c *AdaptiveCalculator) calibrateLimits(ctx context.Context) {
 		setting := limit.Setting()
 
 		var newLimit int
-		logger := c.logger.WithField("limit", limit.Name())
+		logger := c.logger.WithField("limit_rpc", limit.Name())
 
 		if c.lastBackoffEvent == nil {
 			// Additive increase, one unit at a time

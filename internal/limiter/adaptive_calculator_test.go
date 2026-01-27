@@ -133,7 +133,7 @@ gitaly_concurrency_limiting_current_limit{limit="testLimit"} 27
 				"testLimit": {25, 26, 27, 28, 29, 14, 15, 16},
 			},
 			expectedLogs: []string{
-				`level=info msg="Multiplicative decrease" limit=testLimit new_limit=14 previous_limit=29 reason="cgroup exceeds limit" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit new_limit=14 previous_limit=29 reason="cgroup exceeds limit" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
 # TYPE gitaly_concurrency_limiting_backoff_events_total counter
@@ -157,9 +157,9 @@ gitaly_concurrency_limiting_current_limit{limit="testLimit"} {testLimit}
 				"testLimit": {25, 26, 27, 13, 10, 10, 11},
 			},
 			expectedLogs: []string{
-				`level=info msg="Multiplicative decrease" limit=testLimit new_limit=13 previous_limit=27 reason="reason 1" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
-				`level=info msg="Multiplicative decrease" limit=testLimit new_limit=10 previous_limit=13 reason="reason 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
-				`level=info msg="Multiplicative decrease" limit=testLimit new_limit=10 previous_limit=10 reason="reason 3" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit new_limit=13 previous_limit=27 reason="reason 1" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit new_limit=10 previous_limit=13 reason="reason 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit new_limit=10 previous_limit=10 reason="reason 3" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
 # TYPE gitaly_concurrency_limiting_backoff_events_total counter
@@ -206,8 +206,8 @@ gitaly_concurrency_limiting_current_limit{limit="testLimit2"} {testLimit2}
 				"testLimit2": {15, 16, 17, 18, 19, 20, 10, 11},
 			},
 			expectedLogs: []string{
-				`level=info msg="Multiplicative decrease" limit=testLimit1 new_limit=15 previous_limit=30 reason="cgroup exceeds limit" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
-				`level=info msg="Multiplicative decrease" limit=testLimit2 new_limit=10 previous_limit=20 reason="cgroup exceeds limit" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit1 new_limit=15 previous_limit=30 reason="cgroup exceeds limit" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit2 new_limit=10 previous_limit=20 reason="cgroup exceeds limit" stats.current=5678 stats.threshold=1234 watcher=testWatcher`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
 # TYPE gitaly_concurrency_limiting_backoff_events_total counter
@@ -236,10 +236,10 @@ gitaly_concurrency_limiting_current_limit{limit="testLimit2"} {testLimit2}
 				"testLimit2": {15, 16, 17, 10, 11, 12, 13, 14, 15, 10, 11},
 			},
 			expectedLogs: []string{
-				`level=info msg="Multiplicative decrease" limit=testLimit1 new_limit=13 previous_limit=27 reason="cgroup exceeds limit 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher3`,
-				`level=info msg="Multiplicative decrease" limit=testLimit2 new_limit=10 previous_limit=17 reason="cgroup exceeds limit 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher3`,
-				`level=info msg="Multiplicative decrease" limit=testLimit1 new_limit=10 previous_limit=18 reason="cgroup exceeds limit 1" stats.current=5678 stats.threshold=1234 watcher=testWatcher1`,
-				`level=info msg="Multiplicative decrease" limit=testLimit2 new_limit=10 previous_limit=15 reason="cgroup exceeds limit 1" stats.current=5678 stats.threshold=1234 watcher=testWatcher1`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit1 new_limit=13 previous_limit=27 reason="cgroup exceeds limit 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher3`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit2 new_limit=10 previous_limit=17 reason="cgroup exceeds limit 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher3`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit1 new_limit=10 previous_limit=18 reason="cgroup exceeds limit 1" stats.current=5678 stats.threshold=1234 watcher=testWatcher1`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit2 new_limit=10 previous_limit=15 reason="cgroup exceeds limit 1" stats.current=5678 stats.threshold=1234 watcher=testWatcher1`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
 # TYPE gitaly_concurrency_limiting_backoff_events_total counter
@@ -269,8 +269,8 @@ gitaly_concurrency_limiting_current_limit{limit="testLimit2"} {testLimit2}
 				"testLimit2": {15, 16, 17, 10, 11, 12},
 			},
 			expectedLogs: []string{
-				`level=info msg="Multiplicative decrease" limit=testLimit1 new_limit=13 previous_limit=27 reason="cgroup exceeds limit 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher3`,
-				`level=info msg="Multiplicative decrease" limit=testLimit2 new_limit=10 previous_limit=17 reason="cgroup exceeds limit 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher3`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit1 new_limit=13 previous_limit=27 reason="cgroup exceeds limit 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher3`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit2 new_limit=10 previous_limit=17 reason="cgroup exceeds limit 2" stats.current=5678 stats.threshold=1234 watcher=testWatcher3`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
 # TYPE gitaly_concurrency_limiting_backoff_events_total counter
@@ -333,8 +333,8 @@ gitaly_concurrency_limiting_watcher_errors_total{watcher="testWatcher3"} 1
 			expectedLogs: []string{
 				`level=error msg="poll from resource watcher failed" error=unexpected watcher=testWatcher3`,
 				`level=error msg="poll from resource watcher failed" error=unexpected watcher=testWatcher2`,
-				`level=info msg="Multiplicative decrease" limit=testLimit1 new_limit=14 previous_limit=28 reason="backoff please" stats.current=5678 stats.threshold=1234 watcher=testWatcher1`,
-				`level=info msg="Multiplicative decrease" limit=testLimit2 new_limit=10 previous_limit=18 reason="backoff please" stats.current=5678 stats.threshold=1234 watcher=testWatcher1`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit1 new_limit=14 previous_limit=28 reason="backoff please" stats.current=5678 stats.threshold=1234 watcher=testWatcher1`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit2 new_limit=10 previous_limit=18 reason="backoff please" stats.current=5678 stats.threshold=1234 watcher=testWatcher1`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
 # TYPE gitaly_concurrency_limiting_backoff_events_total counter
@@ -428,8 +428,8 @@ gitaly_concurrency_limiting_watcher_errors_total{watcher="testWatcher"} 2
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher`,
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher`,
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher`,
-				`level=info msg="Multiplicative decrease" limit=testLimit1 new_limit=14 previous_limit=29 reason="5 consecutive polling timeout errors" watcher=testWatcher`,
-				`level=info msg="Multiplicative decrease" limit=testLimit2 new_limit=10 previous_limit=19 reason="5 consecutive polling timeout errors" watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit1 new_limit=14 previous_limit=29 reason="5 consecutive polling timeout errors" watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit2 new_limit=10 previous_limit=19 reason="5 consecutive polling timeout errors" watcher=testWatcher`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
 # TYPE gitaly_concurrency_limiting_backoff_events_total counter
@@ -469,8 +469,8 @@ gitaly_concurrency_limiting_watcher_errors_total{watcher="testWatcher"} 5
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher`,
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher`,
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher`,
-				`level=info msg="Multiplicative decrease" limit=testLimit1 new_limit=14 previous_limit=29 reason="5 consecutive polling timeout errors" watcher=testWatcher`,
-				`level=info msg="Multiplicative decrease" limit=testLimit2 new_limit=10 previous_limit=19 reason="5 consecutive polling timeout errors" watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit1 new_limit=14 previous_limit=29 reason="5 consecutive polling timeout errors" watcher=testWatcher`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit2 new_limit=10 previous_limit=19 reason="5 consecutive polling timeout errors" watcher=testWatcher`,
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
@@ -520,8 +520,8 @@ gitaly_concurrency_limiting_watcher_errors_total{watcher="testWatcher"} 6
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher2`,
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher1`,
 				`level=error msg="poll from resource watcher failed" error="context deadline exceeded" watcher=testWatcher2`,
-				`level=info msg="Multiplicative decrease" limit=testLimit1 new_limit=14 previous_limit=29 reason="5 consecutive polling timeout errors" watcher=testWatcher2`,
-				`level=info msg="Multiplicative decrease" limit=testLimit2 new_limit=10 previous_limit=19 reason="5 consecutive polling timeout errors" watcher=testWatcher2`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit1 new_limit=14 previous_limit=29 reason="5 consecutive polling timeout errors" watcher=testWatcher2`,
+				`level=info msg="Multiplicative decrease" limit_rpc=testLimit2 new_limit=10 previous_limit=19 reason="5 consecutive polling timeout errors" watcher=testWatcher2`,
 			},
 			expectedMetrics: `# HELP gitaly_concurrency_limiting_backoff_events_total Counter of the total number of backoff events
 # TYPE gitaly_concurrency_limiting_backoff_events_total counter
