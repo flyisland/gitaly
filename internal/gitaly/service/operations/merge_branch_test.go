@@ -94,6 +94,7 @@ func testUserMergeBranch(t *testing.T, ctx context.Context) {
 						CommitId:   data.commitToMerge,
 						Branch:     []byte(data.branch),
 						Message:    []byte(data.message),
+						Sign:       true,
 					},
 					secondRequest:          &gitalypb.UserMergeBranchRequest{Apply: true},
 					secondExpectedResponse: &gitalypb.OperationBranchUpdate{},
@@ -111,6 +112,7 @@ func testUserMergeBranch(t *testing.T, ctx context.Context) {
 						CommitId:   data.commitToMerge,
 						Branch:     []byte(data.branch),
 						Message:    []byte(data.message),
+						Sign:       true,
 					},
 					secondRequest:          &gitalypb.UserMergeBranchRequest{Apply: true},
 					secondExpectedResponse: &gitalypb.OperationBranchUpdate{},
@@ -136,6 +138,25 @@ func testUserMergeBranch(t *testing.T, ctx context.Context) {
 			},
 		},
 		{
+			desc:  "signed merge + squash",
+			hooks: []string{},
+			setup: func(data setupData) setupResponse {
+				return setupResponse{
+					firstRequest: &gitalypb.UserMergeBranchRequest{
+						Repository: data.repoProto,
+						User:       gittest.TestUser,
+						CommitId:   data.commitToMerge,
+						Branch:     []byte(data.branch),
+						Message:    []byte(data.message),
+						Squash:     true,
+						Sign:       true,
+					},
+					secondRequest:          &gitalypb.UserMergeBranchRequest{Apply: true},
+					secondExpectedResponse: &gitalypb.OperationBranchUpdate{},
+				}
+			},
+		},
+		{
 			desc:  "merge successful + expectedOldOID",
 			hooks: []string{},
 			setup: func(data setupData) setupResponse {
@@ -147,6 +168,7 @@ func testUserMergeBranch(t *testing.T, ctx context.Context) {
 						Branch:         []byte(data.branch),
 						Message:        []byte(data.message),
 						ExpectedOldOid: data.masterCommit,
+						Sign:           true,
 					},
 					secondRequest:          &gitalypb.UserMergeBranchRequest{Apply: true},
 					secondExpectedResponse: &gitalypb.OperationBranchUpdate{},
@@ -350,12 +372,10 @@ func testUserMergeBranch(t *testing.T, ctx context.Context) {
 				}
 			}
 
-			if featureflag.GPGSigning.IsEnabled(ctx) {
-				data, err := repo.ReadObject(ctx, git.ObjectID(branchToMerge))
-				require.NoError(t, err)
-
-				gpgsig, dataWithoutGpgSig := signature.ExtractSignature(t, ctx, data)
-
+			objectData, err := repo.ReadObject(ctx, git.ObjectID(branchToMerge))
+			require.NoError(t, err)
+			gpgsig, dataWithoutGpgSig := signature.ExtractSignature(t, ctx, objectData)
+			if featureflag.GPGSigning.IsEnabled(ctx) && data.firstRequest.GetSign() {
 				pubKey := testhelper.MustReadFile(t, "testdata/signing_gpg_key.pub")
 				keyring, err := openpgp.ReadKeyRing(bytes.NewReader(pubKey))
 				require.NoError(t, err)
@@ -367,6 +387,8 @@ func testUserMergeBranch(t *testing.T, ctx context.Context) {
 					&packet.Config{},
 				)
 				require.NoError(t, err)
+			} else {
+				require.Empty(t, gpgsig)
 			}
 		})
 	}

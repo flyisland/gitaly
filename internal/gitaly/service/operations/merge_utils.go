@@ -17,6 +17,7 @@ func (s *Server) merge(
 	ours string,
 	theirs string,
 	squash bool,
+	sign bool,
 ) (string, error) {
 	treeOID, err := quarantineRepo.MergeTree(ctx, ours, theirs, localrepo.WithAllowUnrelatedHistories(), localrepo.WithConflictingFileNamesOnly())
 	if err != nil {
@@ -39,7 +40,7 @@ func (s *Server) merge(
 		CommitterEmail: committer.Email,
 		CommitterDate:  committer.When,
 		GitConfig:      s.gitConfig,
-		Sign:           true,
+		Sign:           sign,
 	}
 	c, err := quarantineRepo.WriteCommit(
 		ctx,

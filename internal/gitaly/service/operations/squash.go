@@ -145,6 +145,7 @@ func (s *Server) userSquash(ctx context.Context, req *gitalypb.UserSquashRequest
 		startCommit.String(),
 		endCommit.String(),
 		true,
+		req.GetSign(),
 	)
 	if err != nil {
 		var mergeConflictErr *localrepo.MergeTreeConflictError

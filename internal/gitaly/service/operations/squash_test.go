@@ -71,41 +71,56 @@ func testUserSquashSuccessful(t *testing.T, ctx context.Context) {
 		gittest.TreeEntry{Path: "ours", Mode: "100644", Content: "ours"},
 	))
 
-	response, err := client.UserSquash(ctx, &gitalypb.UserSquashRequest{
-		Repository:    repoProto,
-		User:          gittest.TestUser,
-		Author:        author,
-		CommitMessage: commitMessage,
-		StartSha:      theirsID.String(),
-		EndSha:        oursID.String(),
-	})
-	require.NoError(t, err)
+	testCases := []struct {
+		sign bool
+	}{
+		{sign: true},
+		{sign: false},
+	}
 
-	commit, err := repo.ReadCommit(ctx, git.Revision(response.GetSquashSha()))
-	require.NoError(t, err)
-	require.Equal(t, []string{theirsID.String()}, commit.GetParentIds())
-	require.Equal(t, author.GetName(), commit.GetAuthor().GetName())
-	require.Equal(t, author.GetEmail(), commit.GetAuthor().GetEmail())
-	require.Equal(t, gittest.TestUser.GetName(), commit.GetCommitter().GetName())
-	require.Equal(t, gittest.TestUser.GetEmail(), commit.GetCommitter().GetEmail())
-	require.Equal(t, gittest.TimezoneOffset, string(commit.GetCommitter().GetTimezone()))
-	require.Equal(t, gittest.TimezoneOffset, string(commit.GetAuthor().GetTimezone()))
-	require.Equal(t, commitMessage, commit.GetSubject())
+	for _, tc := range testCases {
+		request := &gitalypb.UserSquashRequest{
+			Repository:    repoProto,
+			User:          gittest.TestUser,
+			Author:        author,
+			CommitMessage: commitMessage,
+			StartSha:      theirsID.String(),
+			EndSha:        oursID.String(),
+			Sign:          tc.sign,
+		}
 
-	treeData := gittest.Exec(t, cfg, "-C", repoPath, "ls-tree", "--name-only", response.GetSquashSha())
-	files := strings.Fields(text.ChompBytes(treeData))
-	require.Equal(t, []string{"ours", "theirs"}, files)
+		response, err := client.UserSquash(ctx, request)
+		require.NoError(t, err)
 
-	if featureflag.GPGSigning.IsEnabled(ctx) {
+		commit, err := repo.ReadCommit(ctx, git.Revision(response.GetSquashSha()))
+		require.NoError(t, err)
+		require.Equal(t, []string{theirsID.String()}, commit.GetParentIds())
+		require.Equal(t, author.GetName(), commit.GetAuthor().GetName())
+		require.Equal(t, author.GetEmail(), commit.GetAuthor().GetEmail())
+		require.Equal(t, gittest.TestUser.GetName(), commit.GetCommitter().GetName())
+		require.Equal(t, gittest.TestUser.GetEmail(), commit.GetCommitter().GetEmail())
+		require.Equal(t, gittest.TimezoneOffset, string(commit.GetCommitter().GetTimezone()))
+		require.Equal(t, gittest.TimezoneOffset, string(commit.GetAuthor().GetTimezone()))
+		require.Equal(t, commitMessage, commit.GetSubject())
+
+		treeData := gittest.Exec(t, cfg, "-C", repoPath, "ls-tree", "--name-only", response.GetSquashSha())
+		files := strings.Fields(text.ChompBytes(treeData))
+		require.Equal(t, []string{"ours", "theirs"}, files)
+
 		data, err := repo.ReadObject(ctx, git.ObjectID(response.GetSquashSha()))
 		require.NoError(t, err)
-
 		gpgsig, dataWithoutGpgSig := signature.ExtractSignature(t, ctx, data)
-
-		signingKey, err := signature.ParseSigningKeys("testdata/signing_ssh_key_ed25519")
-		require.NoError(t, err)
-
-		require.NoError(t, signingKey.Verify([]byte(gpgsig), []byte(dataWithoutGpgSig)))
+		if featureflag.GPGSigning.IsEnabled(ctx) {
+			if request.GetSign() {
+				signingKey, err := signature.ParseSigningKeys("testdata/signing_ssh_key_ed25519")
+				require.NoError(t, err)
+				require.NoError(t, signingKey.Verify([]byte(gpgsig), []byte(dataWithoutGpgSig)))
+			} else {
+				require.Empty(t, gpgsig)
+			}
+		} else {
+			require.Empty(t, gpgsig)
+		}
 	}
 }
 
