@@ -201,7 +201,7 @@ func New(_ context.Context, rawAddress string, opts ...DialOption) (*grpc.Client
 		transportCredentials = dialCfg.handshaker.ClientHandshake(transportCredentials)
 	}
 
-	connOpts = append(connOpts,
+	connOpts = append([]grpc.DialOption{
 		grpc.WithTransportCredentials(transportCredentials),
 		// grpc.KeepaliveParams must be specified at least as large as what is allowed by the
 		// server-side grpc.KeepaliveEnforcementPolicy
@@ -235,7 +235,7 @@ func New(_ context.Context, rawAddress string, opts ...DialOption) (*grpc.Client
 		// For more information:
 		// https://gitlab.com/groups/gitlab-org/-/epics/8971#note_1207008162
 		grpc.WithDefaultServiceConfig(defaultServiceConfig()),
-	)
+	}, connOpts...)
 
 	// https://github.com/grpc/grpc-go/issues/8207 prevents Unix connections from working
 	// correctly if the http_proxy or https_proxy environment variables are set. Explicitly

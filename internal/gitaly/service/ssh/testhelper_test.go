@@ -51,7 +51,7 @@ func newSSHClient(t *testing.T, serverSocketPath string) gitalypb.SSHServiceClie
 
 func newSSHClientWithSidechannel(t *testing.T, ctx context.Context, registry *sidechannel.Registry, serverSocketPath string) gitalypb.SSHServiceClient {
 	logger := testhelper.SharedLogger(t)
-	conn, err := sidechannel.Dial(ctx, registry, logger, serverSocketPath, []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())})
+	conn, err := sidechannel.Dial(ctx, registry, logger, serverSocketPath, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		testhelper.MustClose(t, conn)
