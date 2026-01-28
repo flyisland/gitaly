@@ -423,6 +423,37 @@ gitaly_cgroup_cpu_cfs_throttled_seconds_total{path="%s"} 0.001
 # TYPE gitaly_cgroup_cpu_usage_total gauge
 gitaly_cgroup_cpu_usage_total{path="%s",type="kernel"} 0
 gitaly_cgroup_cpu_usage_total{path="%s",type="user"} 0
+# HELP gitaly_cgroup_io_pressure_percent Percentage of time processes were stalled due to IO pressure (PSI). 'type' is 'some' (at least one task stalled) or 'full' (all tasks stalled). 'window' is the averaging window (avg10, avg60, avg300 seconds).
+# TYPE gitaly_cgroup_io_pressure_percent gauge
+gitaly_cgroup_io_pressure_percent{path="%s",type="full",window="avg10"} 0
+gitaly_cgroup_io_pressure_percent{path="%s",type="full",window="avg300"} 0
+gitaly_cgroup_io_pressure_percent{path="%s",type="full",window="avg60"} 0
+gitaly_cgroup_io_pressure_percent{path="%s",type="some",window="avg10"} 0
+gitaly_cgroup_io_pressure_percent{path="%s",type="some",window="avg300"} 0
+gitaly_cgroup_io_pressure_percent{path="%s",type="some",window="avg60"} 0
+# HELP gitaly_cgroup_memory_events_high_total Number of times the cgroup memory usage exceeded memory.high threshold, causing throttling
+# TYPE gitaly_cgroup_memory_events_high_total counter
+gitaly_cgroup_memory_events_high_total{path="%s"} 0
+# HELP gitaly_cgroup_memory_events_max_total Number of times the cgroup memory usage was about to exceed memory.max limit
+# TYPE gitaly_cgroup_memory_events_max_total counter
+gitaly_cgroup_memory_events_max_total{path="%s"} 0
+# HELP gitaly_cgroup_memory_events_oom_total Number of times the OOM killer was invoked in the cgroup
+# TYPE gitaly_cgroup_memory_events_oom_total counter
+gitaly_cgroup_memory_events_oom_total{path="%s"} 0
+# HELP gitaly_cgroup_memory_pgfault_total Total number of page faults incurred by the cgroup
+# TYPE gitaly_cgroup_memory_pgfault_total counter
+gitaly_cgroup_memory_pgfault_total{path="%s"} 0
+# HELP gitaly_cgroup_memory_pgmajfault_total Number of major page faults (requiring disk IO) incurred by the cgroup. High values indicate cache misses causing disk reads.
+# TYPE gitaly_cgroup_memory_pgmajfault_total counter
+gitaly_cgroup_memory_pgmajfault_total{path="%s"} 0
+# HELP gitaly_cgroup_memory_pressure_percent Percentage of time processes were stalled due to memory pressure (PSI). 'type' is 'some' (at least one task stalled) or 'full' (all tasks stalled). 'window' is the averaging window (avg10, avg60, avg300 seconds).
+# TYPE gitaly_cgroup_memory_pressure_percent gauge
+gitaly_cgroup_memory_pressure_percent{path="%s",type="full",window="avg10"} 0
+gitaly_cgroup_memory_pressure_percent{path="%s",type="full",window="avg300"} 0
+gitaly_cgroup_memory_pressure_percent{path="%s",type="full",window="avg60"} 0
+gitaly_cgroup_memory_pressure_percent{path="%s",type="some",window="avg10"} 0
+gitaly_cgroup_memory_pressure_percent{path="%s",type="some",window="avg300"} 0
+gitaly_cgroup_memory_pressure_percent{path="%s",type="some",window="avg60"} 0
 # HELP gitaly_cgroup_procs_total Total number of procs
 # TYPE gitaly_cgroup_procs_total gauge
 gitaly_cgroup_procs_total{path="%s",subsystem="cpu"} 1
@@ -799,7 +830,13 @@ file 235000000
 inactive_anon 200000000
 active_anon 34000000
 inactive_file 100000000
-active_file 135000000`},
+active_file 135000000
+pgfault 1000
+pgmajfault 50`},
+				{"memory.pressure", `some avg10=5.50 avg60=3.25 avg300=1.10 total=123456
+full avg10=2.50 avg60=1.75 avg300=0.50 total=54321`},
+				{"io.pressure", `some avg10=10.25 avg60=8.50 avg300=4.25 total=987654
+full avg10=5.00 avg60=3.00 avg300=1.50 total=456789`},
 			},
 			expectedStats: Stats{
 				ParentStats: CgroupStats{
@@ -814,6 +851,19 @@ active_file 135000000`},
 					TotalFile:            235000000,
 					TotalActiveFile:      135000000,
 					TotalInactiveFile:    100000000,
+					MemoryHighEvents:     2,
+					MemoryMaxEvents:      3,
+					MemoryOOMEvents:      4,
+					PgFault:              1000,
+					PgMajFault:           50,
+					MemoryPSI: PSIMetrics{
+						Some: PSIData{Avg10: 5.50, Avg60: 3.25, Avg300: 1.10, Total: 123456},
+						Full: PSIData{Avg10: 2.50, Avg60: 1.75, Avg300: 0.50, Total: 54321},
+					},
+					IOPSI: PSIMetrics{
+						Some: PSIData{Avg10: 10.25, Avg60: 8.50, Avg300: 4.25, Total: 987654},
+						Full: PSIData{Avg10: 5.00, Avg60: 3.00, Avg300: 1.50, Total: 456789},
+					},
 				},
 			},
 		},

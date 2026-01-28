@@ -78,14 +78,37 @@ func (c *CgroupMemoryWatcher) Poll(context.Context) (*limiter.BackoffEvent, erro
 			WatcherName:   c.Name(),
 			ShouldBackoff: true,
 			Reason:        "cgroup memory exceeds threshold",
-			Stats: map[string]any{
-				"memory_usage":     parentStats.MemoryUsage,
-				"inactive_file":    parentStats.TotalInactiveFile,
-				"memory_limit":     parentStats.MemoryLimit,
-				"memory_threshold": c.memoryThreshold,
-			},
+			Stats:         buildMemoryBackoffStats(parentStats, c.memoryThreshold),
 		}, nil
 	}
 
 	return &limiter.BackoffEvent{WatcherName: c.Name(), ShouldBackoff: false}, nil
+}
+
+// PSI metrics are only available on cgroups v2 (will be 0 on v1).
+func buildBackoffStats(stats cgroups.CgroupStats) map[string]any {
+	return map[string]any{
+		"memory_usage":               stats.MemoryUsage,
+		"memory_limit":               stats.MemoryLimit,
+		"inactive_file":              stats.TotalInactiveFile,
+		"anon":                       stats.TotalAnon,
+		"memory_high_events":         stats.MemoryHighEvents,
+		"memory_max_events":          stats.MemoryMaxEvents,
+		"oom_kills":                  stats.OOMKills,
+		"memory_pressure_some_avg10": stats.MemoryPSI.Some.Avg10,
+		"memory_pressure_some_avg60": stats.MemoryPSI.Some.Avg60,
+		"memory_pressure_full_avg10": stats.MemoryPSI.Full.Avg10,
+		"memory_pressure_full_avg60": stats.MemoryPSI.Full.Avg60,
+		"io_pressure_some_avg10":     stats.IOPSI.Some.Avg10,
+		"io_pressure_some_avg60":     stats.IOPSI.Some.Avg60,
+		"io_pressure_full_avg10":     stats.IOPSI.Full.Avg10,
+		"io_pressure_full_avg60":     stats.IOPSI.Full.Avg60,
+		"pgmajfault":                 stats.PgMajFault,
+	}
+}
+
+func buildMemoryBackoffStats(stats cgroups.CgroupStats, memoryThreshold float64) map[string]any {
+	m := buildBackoffStats(stats)
+	m["memory_threshold"] = memoryThreshold
+	return m
 }

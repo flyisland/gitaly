@@ -14,6 +14,22 @@ type addCommandCfg struct {
 	cgroupKey string
 }
 
+// PSIData holds the pressure stall information averages and total.
+// These metrics indicate the percentage of wall-clock time tasks were stalled.
+type PSIData struct {
+	Avg10  float64 // 10-second average percentage
+	Avg60  float64 // 60-second average percentage
+	Avg300 float64 // 300-second (5 minute) average percentage
+	Total  uint64  // Cumulative total stall time in microseconds
+}
+
+// PSIMetrics holds both "some" and "full" pressure metrics.
+// "Some" means at least one task was stalled; "Full" means all tasks were stalled.
+type PSIMetrics struct {
+	Some PSIData
+	Full PSIData
+}
+
 // CgroupStats stores the current usage statistics of the resources managed by
 // cgroup manager. They are fetched from the cgroupfs statistic files.
 type CgroupStats struct {
@@ -47,6 +63,30 @@ type CgroupStats struct {
 	TotalActiveFile uint64
 	// TotalInactiveFile reflects the `inactive_file` of `memory.stat` file, bytes of file-backed memory on inactive LRU list.
 	TotalInactiveFile uint64
+
+	// PSI Memory Pressure from `memory.pressure` file (cgroups v2 only).
+	MemoryPSI PSIMetrics
+	// PSI IO Pressure from `io.pressure` file (cgroups v2 only).
+	IOPSI PSIMetrics
+
+	// Memory Events from `memory.events` file (cgroups v2 only).
+	// These are counters that increment each time certain memory events occur.
+
+	// MemoryHighEvents is the number of times the cgroup's memory usage exceeded memory.high.
+	// A rising count indicates the cgroup is being throttled.
+	MemoryHighEvents uint64
+	// MemoryMaxEvents is the number of times the cgroup's memory usage was about to exceed memory.max.
+	// This indicates how close we are to triggering OOM.
+	MemoryMaxEvents uint64
+	// MemoryOOMEvents is the number of times the OOM killer was invoked in this cgroup.
+	// Note: This may differ from OOMKills which counts actual kills.
+	MemoryOOMEvents uint64
+
+	// PgFault is the total number of page faults incurred.
+	PgFault uint64
+	// PgMajFault is the number of major page faults incurred (required disk IO).
+	// High values indicate cache misses causing disk reads - a key indicator of cache pressure.
+	PgMajFault uint64
 }
 
 // Stats stores statistics of all cgroups managed by a manager

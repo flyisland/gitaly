@@ -91,13 +91,17 @@ func (c *CgroupCPUWatcher) Poll(ctx context.Context) (*limiter.BackoffEvent, err
 			WatcherName:   c.Name(),
 			ShouldBackoff: true,
 			Reason:        "cgroup CPU throttled too much",
-			Stats: map[string]any{
-				"time_diff":           timeDiff,
-				"throttled_duration":  throttledDuration,
-				"throttled_threshold": c.cpuThrottledThreshold,
-			},
+			Stats:         buildCPUBackoffStats(parentStats, timeDiff, throttledDuration, c.cpuThrottledThreshold),
 		}, nil
 	}
 
 	return &limiter.BackoffEvent{WatcherName: c.Name(), ShouldBackoff: false}, nil
+}
+
+func buildCPUBackoffStats(stats cgroups.CgroupStats, timeDiff, throttledDuration, throttledThreshold float64) map[string]any {
+	m := buildBackoffStats(stats)
+	m["time_diff"] = timeDiff
+	m["throttled_duration"] = throttledDuration
+	m["throttled_threshold"] = throttledThreshold
+	return m
 }
