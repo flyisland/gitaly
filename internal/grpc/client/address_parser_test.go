@@ -71,3 +71,36 @@ func Test_extractPathFromSocketURL(t *testing.T) {
 		})
 	}
 }
+
+func Test_extractHostFromDNSURL(t *testing.T) {
+	testCases := []struct {
+		raw     string
+		host    string
+		invalid bool
+	}{
+		{raw: "dns://1.1.1.1:53/example.com:50051", host: "example.com"},
+		{raw: "dns://1.1.1.1/example.com:50051", host: "example.com"},
+		{raw: "dns:///example.com:50051", host: "example.com"},
+		{raw: "dns:example.com:50051", host: "example.com"},
+		{raw: "dns://8.8.8.8:53/gitaly.example.com:443", host: "gitaly.example.com"},
+		{raw: "dns:///gitaly.example.com", host: "gitaly.example.com"},
+		{raw: "dns+tls://1.1.1.1:53/example.com:50051", host: "example.com"},
+		{raw: "dns+tls:///example.com:50051", host: "example.com"},
+		{raw: "dns://1.1.1.1:53/[2001:0db8:85a3::8a2e:0370:7334]:50051", host: "2001:0db8:85a3::8a2e:0370:7334"},
+		{raw: "dns://1.1.1.1:53/", invalid: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.raw, func(t *testing.T) {
+			host, err := extractHostFromDNSURL(tc.raw)
+
+			if tc.invalid {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tc.host, host)
+		})
+	}
+}

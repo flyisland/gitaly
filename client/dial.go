@@ -83,7 +83,8 @@ func DefaultDNSResolverBuilderConfig() *DNSResolverBuilderConfig {
 
 // WithGitalyDNSResolver defines a gRPC dial option for injecting Gitaly's custom DNS resolver. This
 // resolver watches for the changes of target URL periodically and update the target subchannels
-// accordingly.
+// accordingly. It registers resolvers for both "dns://" and "dns+tls://" schemes.
 func WithGitalyDNSResolver(opts *DNSResolverBuilderConfig) grpc.DialOption {
-	return grpc.WithResolvers(dnsresolver.NewBuilder((*dnsresolver.BuilderConfig)(opts)))
+	builder := dnsresolver.NewBuilder((*dnsresolver.BuilderConfig)(opts))
+	return grpc.WithResolvers(builder, dnsresolver.NewTLSPlusDNSBuilder(builder))
 }
