@@ -205,6 +205,11 @@ func (s *memoryReplicationEventQueue) AcknowledgeStale(context.Context, time.Dur
 	return 0, nil
 }
 
+func (s *memoryReplicationEventQueue) CleanUp(context.Context) (int64, error) {
+	// The in-memory queue doesn't persist replication locks, so there is nothing to clean up.
+	return 0, nil
+}
+
 // remove deletes i-th element from the queue and from the in-flight tracking map.
 // It doesn't check 'i' for the out of range and must be called with lock protection.
 func (s *memoryReplicationEventQueue) remove(i int) {
@@ -247,6 +252,7 @@ type ReplicationEventQueueInterceptor struct {
 	onAcknowledge       func(context.Context, JobState, []uint64, ReplicationEventQueue) ([]uint64, error)
 	onStartHealthUpdate func(context.Context, <-chan time.Time, []ReplicationEvent) error
 	onAcknowledgeStale  func(context.Context, time.Duration) (int64, error)
+	onCleanUp           func(context.Context) (int64, error)
 
 	enqueue           []ReplicationEvent
 	enqueueResult     []ReplicationEvent
@@ -279,6 +285,11 @@ func (i *ReplicationEventQueueInterceptor) OnStartHealthUpdate(action func(conte
 // OnAcknowledgeStale allows to set action that would be executed each time when `AcknowledgeStale` method called.
 func (i *ReplicationEventQueueInterceptor) OnAcknowledgeStale(action func(context.Context, time.Duration) (int64, error)) {
 	i.onAcknowledgeStale = action
+}
+
+// OnCleanUp allows to set action that would be executed each time when `CleanUp` method called.
+func (i *ReplicationEventQueueInterceptor) OnCleanUp(action func(context.Context) (int64, error)) {
+	i.onCleanUp = action
 }
 
 // Enqueue intercepts call to the Enqueue method of the underling implementation or a call back.
@@ -361,6 +372,14 @@ func (i *ReplicationEventQueueInterceptor) AcknowledgeStale(ctx context.Context,
 		return i.onAcknowledgeStale(ctx, staleAfter)
 	}
 	return i.ReplicationEventQueue.AcknowledgeStale(ctx, staleAfter)
+}
+
+// CleanUp intercepts call to the CleanUp method of the underling implementation or a call back.
+func (i *ReplicationEventQueueInterceptor) CleanUp(ctx context.Context) (int64, error) {
+	if i.onCleanUp != nil {
+		return i.onCleanUp(ctx)
+	}
+	return i.ReplicationEventQueue.CleanUp(ctx)
 }
 
 // GetEnqueued returns a list of events used for Enqueue method or a call-back invocation.

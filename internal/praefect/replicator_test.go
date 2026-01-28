@@ -1005,7 +1005,7 @@ func TestReplMgr_ProcessStale(t *testing.T) {
 	ticker := helper.NewManualTicker()
 
 	done := mgr.ProcessStale(ctx, ticker, time.Second)
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		ticker.Tick()
 	}
 	<-done
@@ -1018,4 +1018,91 @@ func TestReplMgr_ProcessStale(t *testing.T) {
 	require.Equal(t, "background periodical acknowledgement for stale replication jobs", lastEntry.Message)
 	require.Equal(t, "replication_manager", lastEntry.Data["component"])
 	require.Equal(t, assert.AnError, lastEntry.Data["error"])
+}
+
+func TestReplMgr_CleanUpLocks(t *testing.T) {
+	t.Parallel()
+
+	t.Run("successful cleanup with locks deleted", func(t *testing.T) {
+		t.Parallel()
+
+		logger := testhelper.SharedLogger(t)
+		hook := testhelper.AddLoggerHook(logger)
+		ticker := helper.NewManualTicker()
+
+		db := testdb.New(t)
+		queue := datastore.NewPostgresReplicationEventQueue(db)
+
+		replMgr := NewReplMgr(
+			logger.WithField("test", t.Name()),
+			nil,
+			queue,
+			datastore.MockRepositoryStore{},
+			nil,
+			nil,
+		)
+
+		ctx := testhelper.Context(t)
+
+		// Create 2 orphaned locks and 2 referenced lock (won't be deleted).
+		_, err := db.ExecContext(ctx, `
+            INSERT INTO replication_queue_lock (id, acquired) VALUES
+                ('orphan-lock-1', FALSE),
+                ('orphan-lock-2', FALSE),
+                ('in-use-lock', FALSE),
+				('in-use-lock-2', TRUE)
+        `)
+		require.NoError(t, err)
+
+		// Create jobs referencing only one of the locks.
+		_, err = db.ExecContext(ctx, `
+            INSERT INTO replication_queue (state, lock_id, job)
+            VALUES ('ready', 'in-use-lock', '{}'::jsonb)
+        `)
+		require.NoError(t, err)
+
+		// Run a single cleanup tick.
+		cleanupCtx, cancel := context.WithCancel(ctx)
+		done := replMgr.CleanUpLocks(cleanupCtx, ticker)
+		ticker.Tick()
+
+		// Orphaned locks are deleted, referenced locks are kept
+		require.Eventually(t, func() bool {
+			var currentLocks int
+			require.NoError(t, db.QueryRow(`
+                SELECT COUNT(*)
+                FROM replication_queue_lock
+            `).Scan(&currentLocks))
+			return currentLocks == 2
+		}, time.Second, 10*time.Millisecond)
+
+		// Stop goroutine so cleanup can exit loop and wait.
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("done channel did not close")
+		}
+
+		// Verify log entry + count of deleted locks.
+		require.Eventually(t, func() bool {
+			for _, entry := range hook.AllEntries() {
+				if entry.Message == "unused replication locks deleted" {
+					return true
+				}
+			}
+			return false
+		}, time.Second, 10*time.Millisecond)
+
+		var cleanupEntry *logrus.Entry
+		for _, entry := range hook.AllEntries() {
+			if entry.Message == "unused replication locks deleted" {
+				cleanupEntry = entry
+				break
+			}
+		}
+		require.NotNil(t, cleanupEntry, "cleanup log entry not found")
+		require.Equal(t, "CleanUpLocks", cleanupEntry.Data["component"])
+		require.Equal(t, int64(2), cleanupEntry.Data["count"])
+	})
 }

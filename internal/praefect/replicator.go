@@ -385,6 +385,37 @@ func (r ReplMgr) ProcessStale(ctx context.Context, ticker helper.Ticker, staleAf
 	return done
 }
 
+// CleanUpLocks starts a background process to clean up replication job locks that are no longer used.
+// It will delete a maximum of 1000 entries each time.
+func (r ReplMgr) CleanUpLocks(ctx context.Context, ticker helper.Ticker) chan struct{} {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		ticker.Reset()
+		for {
+			select {
+			case <-ticker.C():
+
+				deletedLocks, err := r.queue.CleanUp(ctx)
+				if err != nil {
+					r.log.WithError(err).Error("background periodical cleanup of unused replication queue locks")
+				} else if deletedLocks > 0 {
+					logger := r.log.WithFields(log.Fields{"component": "CleanUpLocks", "count": deletedLocks})
+					logger.Info("unused replication locks deleted")
+				}
+
+				ticker.Reset()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return done
+}
+
 func (r ReplMgr) processBacklog(ctx context.Context, b BackoffFactory, virtualStorage string) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
