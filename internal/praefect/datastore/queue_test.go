@@ -358,43 +358,131 @@ func TestPostgresReplicationEventQueue_Dequeue(t *testing.T) {
 
 	queue := PostgresReplicationEventQueue{db.DB}
 
-	event := ReplicationEvent{
-		Job: ReplicationJob{
-			Change:            UpdateRepo,
-			RelativePath:      "/project/path-1",
-			TargetNodeStorage: "gitaly-1",
-			SourceNodeStorage: "gitaly-0",
-			VirtualStorage:    "praefect",
-			Params:            nil,
+	const virtualStorage = "praefect"
+	const targetNodeStorage = "gitaly-1"
+
+	// Start with a list of 5 events
+	events := []ReplicationEvent{
+		{
+			Job: ReplicationJob{
+				Change:            UpdateRepo,
+				RelativePath:      "/project/path-1",
+				TargetNodeStorage: targetNodeStorage,
+				SourceNodeStorage: "gitaly-0",
+				VirtualStorage:    virtualStorage,
+			},
+		},
+		{
+			Job: ReplicationJob{
+				Change:            UpdateRepo,
+				RelativePath:      "/project/path-2",
+				TargetNodeStorage: targetNodeStorage,
+				SourceNodeStorage: "gitaly-0",
+				VirtualStorage:    virtualStorage,
+			},
+		},
+		{
+			Job: ReplicationJob{
+				Change:            UpdateRepo,
+				RelativePath:      "/project/path-3",
+				TargetNodeStorage: targetNodeStorage,
+				SourceNodeStorage: "gitaly-0",
+				VirtualStorage:    virtualStorage,
+			},
+		},
+		{
+			Job: ReplicationJob{
+				Change:            UpdateRepo,
+				RelativePath:      "/project/path-4",
+				TargetNodeStorage: targetNodeStorage,
+				SourceNodeStorage: "gitaly-0",
+				VirtualStorage:    virtualStorage,
+			},
+		},
+		{
+			Job: ReplicationJob{
+				Change:            UpdateRepo,
+				RelativePath:      "/project/path-5",
+				TargetNodeStorage: targetNodeStorage,
+				SourceNodeStorage: "gitaly-0",
+				VirtualStorage:    virtualStorage,
+			},
 		},
 	}
 
-	event, err := queue.Enqueue(ctx, event)
-	require.NoError(t, err, "failed to fill in event queue")
-
-	noEvents, err := queue.Dequeue(ctx, "praefect", "not existing storage", 5)
-	require.NoError(t, err)
-	require.Len(t, noEvents, 0, "there must be no events dequeued for not existing storage")
-
-	expectedEvent := event
-	expectedEvent.State = JobStateInProgress
-	expectedEvent.Attempt = 2
-
-	expectedLock := LockRow{ID: event.LockID, Acquired: true} // as we deque events we acquire lock for processing
-
-	expectedJobLock := JobLockRow{JobID: event.ID, LockID: event.LockID} // and there is a track if job is under processing in separate table
-
-	actual, err := queue.Dequeue(ctx, event.Job.VirtualStorage, event.Job.TargetNodeStorage, 5)
-	require.NoError(t, err)
-
-	for i := range actual {
-		actual[i].UpdatedAt = nil // it is not possible to determine update_at value as it is generated on UPDATE in database
+	// Enqueue each event and make sure no error is returned for each
+	for _, e := range events {
+		_, err := queue.Enqueue(ctx, e)
+		require.NoError(t, err, "failed to fill in event queue")
 	}
-	require.Equal(t, []ReplicationEvent{expectedEvent}, actual)
 
-	// there is only one single lock for all fetched events
-	requireLocks(t, ctx, db, []LockRow{expectedLock})
-	requireJobLocks(t, ctx, db, []JobLockRow{expectedJobLock})
+	var expectedLocks []LockRow
+	var expectedJobLocks []JobLockRow
+
+	addToExpectedLocks := func(events []ReplicationEvent) {
+		for _, e := range events {
+			// As we deque events we acquire lock for processing
+			// Validate this event is locked in the DB
+			expectedLocks = append(expectedLocks, LockRow{ID: e.LockID, Acquired: true})
+
+			// Validate that the tracked job is also in the DB
+			expectedJobLocks = append(expectedJobLocks, JobLockRow{JobID: e.ID, LockID: e.LockID})
+		}
+	}
+
+	// First, lets enqueue events for a non-existing storage
+	// This should return 0 events
+	emptyEvents, err := queue.Dequeue(ctx, "praefect", "not existing storage", 5)
+	require.NoError(t, err)
+	require.Len(t, emptyEvents, 0, "there must be no events dequeued for not existing storage")
+
+	// Dequeue actual events but only limit results to 3. This should leave 2 queued jobs in the queue
+	// because we have enqueued 5 events. We will fetch them later
+	dequeuedEvents, err := queue.Dequeue(ctx, virtualStorage, targetNodeStorage, 3)
+	require.NoError(t, err)
+	require.Len(t, dequeuedEvents, 3)
+
+	// Dequeue remaining events. This should return the 2 remaining events in the queue.
+	// Let's add a limit of 5 to test that it can return the remaining items event if it less than
+	// the set limit.
+	dequeuedEventsSecondRound, err := queue.Dequeue(ctx, virtualStorage, targetNodeStorage, 5)
+	require.NoError(t, err)
+	require.Len(t, dequeuedEventsSecondRound, 2)
+
+	// Dequeue one last time. This should return 0 events
+	dequeuedEventsSecondThird, err := queue.Dequeue(ctx, virtualStorage, targetNodeStorage, 3)
+	require.NoError(t, err)
+	require.Len(t, dequeuedEventsSecondThird, 0)
+
+	// This is a list of all dequeued events from the queue
+	receivedEvents := append(dequeuedEvents, dequeuedEventsSecondRound...)
+
+	// Validate events are correctly locked in the DB
+	addToExpectedLocks(receivedEvents)
+	requireLocks(t, ctx, db, expectedLocks)
+	requireJobLocks(t, ctx, db, expectedJobLocks)
+
+	var receivedRelativePath []string
+	for _, event := range receivedEvents {
+		// lets save the relative path for later validation
+		receivedRelativePath = append(receivedRelativePath, event.Job.RelativePath)
+
+		// Every job starts with 3 attempts, so now that we have fetched
+		// them, it should be returned with the count set to 2
+		require.Equal(t, event.Attempt, 2)
+
+		// Make sure the event is returned with the expected state
+		require.Equal(t, event.State, JobState("in_progress"))
+	}
+
+	// Validate that we indeed have received each event once
+	require.Equal(t, []string{
+		"/project/path-1",
+		"/project/path-2",
+		"/project/path-3",
+		"/project/path-4",
+		"/project/path-5",
+	}, receivedRelativePath)
 }
 
 // expected results are listed as literals on purpose to be more explicit about what is going on with data

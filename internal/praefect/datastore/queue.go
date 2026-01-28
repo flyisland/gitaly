@@ -311,50 +311,48 @@ func (rq PostgresReplicationEventQueue) Enqueue(ctx context.Context, event Repli
 //     is a replica on the storage, when there is none in fact. That could cause us to delete all replicas of a repository.
 func (rq PostgresReplicationEventQueue) Dequeue(ctx context.Context, virtualStorage, nodeStorage string, count int) ([]ReplicationEvent, error) {
 	query := `
-		WITH lock AS (
-			SELECT id
-			FROM replication_queue_lock
-			WHERE id LIKE ($1 || '|' || $2 || '|%') AND NOT acquired
+	WITH candidates AS (
+		SELECT DISTINCT FIRST_VALUE(id) OVER (PARTITION BY lock_id, job->>'change' ORDER BY created_at) AS id, lock_id, created_at
+		FROM (
+		    SELECT queue.id, queue.lock_id, queue.job, queue.created_at
+			FROM replication_queue AS queue
+			JOIN replication_queue_lock AS lock ON queue.lock_id = lock.id
+			WHERE queue.state IN ('ready', 'failed' )
+			AND NOT EXISTS (SELECT 1 FROM replication_queue_job_lock WHERE lock_id = queue.lock_id)
+			AND lock.id LIKE ($1 || '|' || $2 || '|%') AND NOT acquired
 			FOR UPDATE SKIP LOCKED
-		)
-		, candidate AS (
-			SELECT id
-			FROM replication_queue
-			WHERE id IN (
-				SELECT DISTINCT FIRST_VALUE(queue.id) OVER (PARTITION BY lock_id, job->>'change'  ORDER BY queue.created_at)
-				FROM replication_queue AS queue
-				JOIN lock ON queue.lock_id = lock.id
-				WHERE queue.state IN ('ready', 'failed' )
-					AND NOT EXISTS (SELECT 1 FROM replication_queue_job_lock WHERE lock_id = queue.lock_id)
-			)
-			ORDER BY created_at
-			LIMIT $3
-			FOR UPDATE
-		)
-		, job AS (
-			UPDATE replication_queue AS queue
-			SET attempt = CASE WHEN job->>'change' = 'delete_replica' THEN queue.attempt ELSE queue.attempt - 1 END
-				, state = 'in_progress'
-				, updated_at = NOW() AT TIME ZONE 'UTC'
-			FROM candidate
-			WHERE queue.id = candidate.id
-			RETURNING queue.id, queue.state, queue.created_at, queue.updated_at, queue.lock_id, queue.attempt, queue.job, queue.meta
-		)
-		, track_job_lock AS (
-			INSERT INTO replication_queue_job_lock (job_id, lock_id, triggered_at)
-			SELECT job.id, job.lock_id, NOW() AT TIME ZONE 'UTC'
-			FROM job
-			RETURNING lock_id
-		)
-		, acquire_lock AS (
-			UPDATE replication_queue_lock AS lock
-			SET acquired = TRUE
-			FROM track_job_lock AS tracked
-			WHERE lock.id = tracked.lock_id
-		)
-		SELECT id, state, created_at, updated_at, lock_id, attempt, job, meta
+		) AS s
+		ORDER BY created_at
+		LIMIT $3
+	)
+	-- Set the jobs as 'in-progress'
+	, job AS (
+		UPDATE replication_queue AS queue
+		SET attempt = CASE WHEN job->>'change' = 'delete_replica' THEN queue.attempt ELSE queue.attempt - 1 END,
+	    		state = 'in_progress',
+	    		updated_at = NOW() AT TIME ZONE 'UTC'
+		FROM candidates
+		WHERE queue.id = candidates.id
+		RETURNING queue.id, queue.state, queue.created_at, queue.updated_at, queue.lock_id, queue.attempt, queue.job, queue.meta
+	)
+	-- Add jobs to the replication_queue_job_lock table for tracking
+	, track_job_lock AS (
+		INSERT INTO replication_queue_job_lock (job_id, lock_id, triggered_at)
+		SELECT job.id, job.lock_id, NOW() AT TIME ZONE 'UTC'
 		FROM job
-		ORDER BY id`
+		RETURNING lock_id
+	)
+	-- Acquire the locks for each jobs
+	, acquire_lock AS (
+		UPDATE replication_queue_lock
+		SET acquired = TRUE
+		FROM candidates
+		WHERE replication_queue_lock.id = candidates.lock_id
+	)
+	SELECT id, state, created_at, updated_at, lock_id, attempt, job, meta
+	FROM job
+	ORDER BY id`
+
 	rows, err := rq.qc.QueryContext(ctx, query, virtualStorage, nodeStorage, count)
 	if err != nil {
 		return nil, fmt.Errorf("query: %w", err)
@@ -575,9 +573,9 @@ func (rq PostgresReplicationEventQueue) AcknowledgeStale(ctx context.Context, st
 func (rq PostgresReplicationEventQueue) CleanUp(ctx context.Context) (int64, error) {
 	query := `
 		WITH delete_locks AS (
-		DELETE FROM replication_queue_lock 
+		DELETE FROM replication_queue_lock
 		WHERE id IN (
-			SELECT id 
+			SELECT id
 			FROM replication_queue_lock
 			WHERE acquired = FALSE
 			AND id NOT IN (
