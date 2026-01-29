@@ -341,6 +341,10 @@ func (r *PerRepositoryRouter) assignRepositoryToNodes(
 		var healthySecondaries []RouterNode
 		var replicationTargets []string
 		for _, replica := range additionalRepoMetadata.Replicas {
+			if !replica.Assigned {
+				continue
+			}
+
 			if replica.Storage == primary.Storage {
 				continue
 			}
