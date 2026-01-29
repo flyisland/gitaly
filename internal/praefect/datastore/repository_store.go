@@ -105,6 +105,8 @@ type RepositoryStore interface {
 	GetRepositoryMetadata(ctx context.Context, repositoryID int64) (RepositoryMetadata, error)
 	// GetRepositoryMetadataByPath retrieves a repository's metadata by its virtual path.
 	GetRepositoryMetadataByPath(ctx context.Context, virtualStorage, relativePath string) (RepositoryMetadata, error)
+	// HasRepositoryAssignments checks if a repository has explicit storage assignments.
+	HasRepositoryAssignments(ctx context.Context, replicaPath string) (bool, error)
 	// MarkUnverified marks replicas of the repository unverified.
 	MarkUnverified(ctx context.Context, repositoryID int64) (int64, error)
 	// MarkVirtualStorageUnverified marks all replicas on the virtual storage as unverified.
@@ -695,6 +697,22 @@ func (rs *PostgresRepositoryStore) GetRepositoryMetadataByPath(ctx context.Conte
 	}
 
 	return metadata[0], nil
+}
+
+// HasRepositoryAssignments checks if a repository identified by its replica path has explicit
+// storage assignments in the repository_assignments table.
+func (rs *PostgresRepositoryStore) HasRepositoryAssignments(ctx context.Context, replicaPath string) (bool, error) {
+	var hasAssignments bool
+	err := rs.db.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT FROM repository_assignments
+			WHERE repository_id = (SELECT repository_id FROM repositories WHERE replica_path = $1)
+		)
+	`, replicaPath).Scan(&hasAssignments)
+	if err != nil {
+		return false, fmt.Errorf("query repository assignments: %w", err)
+	}
+	return hasAssignments, nil
 }
 
 // GetPartiallyAvailableRepositories returns information on repositories which have assigned replicas which

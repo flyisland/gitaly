@@ -1082,6 +1082,36 @@ func TestRepositoryStore_Postgres(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "replica-path", replicaPath)
 	})
+
+	t.Run("HasRepositoryAssignments", func(t *testing.T) {
+		t.Run("repository without assignments", func(t *testing.T) {
+			rs := newRepositoryStore(t, nil)
+
+			require.NoError(t, rs.CreateRepository(ctx, 1, vs, repo, "replica-path", stor, nil, nil, false, false))
+
+			hasAssignments, err := rs.HasRepositoryAssignments(ctx, "replica-path")
+			require.NoError(t, err)
+			require.False(t, hasAssignments)
+		})
+
+		t.Run("repository with assignments", func(t *testing.T) {
+			rs := newRepositoryStore(t, nil)
+
+			require.NoError(t, rs.CreateRepository(ctx, 1, vs, repo, "replica-path", stor, nil, nil, false, true))
+
+			hasAssignments, err := rs.HasRepositoryAssignments(ctx, "replica-path")
+			require.NoError(t, err)
+			require.True(t, hasAssignments)
+		})
+
+		t.Run("repository not found", func(t *testing.T) {
+			rs := newRepositoryStore(t, nil)
+
+			hasAssignments, err := rs.HasRepositoryAssignments(ctx, "non-existent")
+			require.NoError(t, err)
+			require.False(t, hasAssignments)
+		})
+	})
 }
 
 func TestRepositoryStore_incrementGenerationConcurrently(t *testing.T) {

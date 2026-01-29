@@ -28,6 +28,7 @@ type MockRepositoryStore struct {
 	GetReplicaPathFunc                      func(ctx context.Context, repositoryID int64) (string, error)
 	GetRepositoryMetadataFunc               func(ctx context.Context, repositoryID int64) (RepositoryMetadata, error)
 	GetRepositoryMetadataByPathFunc         func(ctx context.Context, virtualStorage, relativePath string) (RepositoryMetadata, error)
+	HasRepositoryAssignmentsFunc            func(ctx context.Context, replicaPath string) (bool, error)
 }
 
 //nolint:revive // This is unintentionally missing documentation.
@@ -178,4 +179,12 @@ func (m MockRepositoryStore) GetRepositoryMetadata(ctx context.Context, reposito
 // GetRepositoryMetadataByPath returns the result of GetRepositoryMetadataByPathFunc or panics if it is unset.
 func (m MockRepositoryStore) GetRepositoryMetadataByPath(ctx context.Context, virtualStorage, relativePath string) (RepositoryMetadata, error) {
 	return m.GetRepositoryMetadataByPathFunc(ctx, virtualStorage, relativePath)
+}
+
+// HasRepositoryAssignments returns the result of HasRepositoryAssignmentsFunc or false if it is unset.
+func (m MockRepositoryStore) HasRepositoryAssignments(ctx context.Context, replicaPath string) (bool, error) {
+	if m.HasRepositoryAssignmentsFunc == nil {
+		return false, nil
+	}
+	return m.HasRepositoryAssignmentsFunc(ctx, replicaPath)
 }
