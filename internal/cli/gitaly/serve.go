@@ -340,20 +340,55 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		adaptiveLimits = append(adaptiveLimits, packObjectLimit)
 	} else {
 		packObjectLimit = limiter.NewAdaptiveLimit("packObjects", limiter.AdaptiveSetting{
-			Initial: cfg.PackObjectsLimiting.MaxConcurrency,
+			Initial: cfg.PackObjectsLimiting.Concurrency(),
 		})
 	}
 
 	packObjectsMonitor := limiter.NewPackObjectsConcurrencyMonitor(
 		cfg.Prometheus.GRPCLatencyBuckets,
+		"authenticated",
 	)
-	packObjectsLimiter := limiter.NewConcurrencyLimiter(
+	packObjectsLimiterAuthenticated := limiter.NewConcurrencyLimiter(
 		packObjectLimit,
-		cfg.PackObjectsLimiting.MaxQueueLength,
+		cfg.PackObjectsLimiting.QueueMax(),
 		cfg.PackObjectsLimiting.MaxQueueWait.Duration(),
 		packObjectsMonitor,
 	)
 	prometheus.MustRegister(packObjectsMonitor)
+
+	var packObjectsLimiter limiter.Limiter = packObjectsLimiterAuthenticated
+
+	if cfg.PackObjectsLimiting.Unauthenticated.IsSet() {
+		var packObjectLimitUnauth *limiter.AdaptiveLimit
+		if cfg.PackObjectsLimiting.Unauthenticated.Adaptive {
+			packObjectLimitUnauth = limiter.NewAdaptiveLimit("packObjects-unauthenticated", limiter.AdaptiveSetting{
+				Initial:       cfg.PackObjectsLimiting.Unauthenticated.InitialLimit,
+				Max:           cfg.PackObjectsLimiting.Unauthenticated.MaxLimit,
+				Min:           cfg.PackObjectsLimiting.Unauthenticated.MinLimit,
+				BackoffFactor: limiter.DefaultBackoffFactor,
+			})
+			adaptiveLimits = append(adaptiveLimits, packObjectLimitUnauth)
+		} else {
+			packObjectLimitUnauth = limiter.NewAdaptiveLimit("packObjects-unauthenticated", limiter.AdaptiveSetting{
+				Initial: cfg.PackObjectsLimiting.Unauthenticated.Concurrency(),
+			})
+		}
+
+		packObjectsMonitorUnauth := limiter.NewPackObjectsConcurrencyMonitor(
+			cfg.Prometheus.GRPCLatencyBuckets,
+			"unauthenticated",
+		)
+		packObjectsLimiterUnauthenticated := limiter.NewConcurrencyLimiter(
+			packObjectLimitUnauth,
+			cfg.PackObjectsLimiting.Unauthenticated.MaxQueueSize,
+			cfg.PackObjectsLimiting.Unauthenticated.MaxQueueWait.Duration(),
+			packObjectsMonitorUnauth,
+		)
+		prometheus.MustRegister(packObjectsMonitorUnauth)
+
+		// Use DualLimiter to switch between authenticated and unauthenticated limiters
+		packObjectsLimiter = limiter.NewDualLimiter(packObjectsLimiterAuthenticated, packObjectsLimiterUnauthenticated)
+	}
 
 	// Enable the adaptive calculator only if there is any limit needed to be adaptive.
 	if len(adaptiveLimits) > 0 {

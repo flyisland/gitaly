@@ -200,7 +200,7 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 			})
 		} else {
 			perRPCLimits[concurrency.RPC] = limiter.NewAdaptiveLimit(limitName, limiter.AdaptiveSetting{
-				Initial: concurrency.MaxPerRepo,
+				Initial: concurrency.Concurrency(),
 			})
 		}
 
@@ -215,9 +215,9 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 					Min:           unauthLimits.MinLimit,
 					BackoffFactor: limiter.DefaultBackoffFactor,
 				})
-			} else if unauthLimits.MaxPerRepo > 0 {
+			} else if unauthLimits.Concurrency() > 0 {
 				perRPCLimitsUnauthenticated[concurrency.RPC] = limiter.NewAdaptiveLimit(limitNameUnauth, limiter.AdaptiveSetting{
-					Initial: unauthLimits.MaxPerRepo,
+					Initial: unauthLimits.Concurrency(),
 				})
 			}
 		}

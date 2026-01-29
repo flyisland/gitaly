@@ -153,35 +153,40 @@ func splitMethodName(fullMethodName string) (string, string) {
 }
 
 // NewPackObjectsConcurrencyMonitor returns a concurrency monitor for use
-// with limiting pack objects processes.
-func NewPackObjectsConcurrencyMonitor(latencyBuckets []float64) *PromMonitor {
+// with limiting pack objects processes. The authType parameter is used to
+// differentiate metrics between authenticated and unauthenticated requests.
+func NewPackObjectsConcurrencyMonitor(latencyBuckets []float64, authType string) *PromMonitor {
 	acquiringSecondsVec := prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "gitaly_pack_objects_acquiring_seconds",
-			Help:    "Histogram of time calls are rate limited (in seconds)",
-			Buckets: latencyBuckets,
+			Name:        "gitaly_pack_objects_acquiring_seconds",
+			Help:        "Histogram of time calls are rate limited (in seconds)",
+			Buckets:     latencyBuckets,
+			ConstLabels: prometheus.Labels{"auth": authType},
 		},
 		nil,
 	)
 
 	inProgressVec := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "gitaly_pack_objects_in_progress",
-			Help: "Gauge of number of concurrent in-progress calls",
+			Name:        "gitaly_pack_objects_in_progress",
+			Help:        "Gauge of number of concurrent in-progress calls",
+			ConstLabels: prometheus.Labels{"auth": authType},
 		},
 	)
 
 	queuedVec := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "gitaly_pack_objects_queued",
-			Help: "Gauge of number of queued calls",
+			Name:        "gitaly_pack_objects_queued",
+			Help:        "Gauge of number of queued calls",
+			ConstLabels: prometheus.Labels{"auth": authType},
 		},
 	)
 
 	requestsDroppedVec := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "gitaly_pack_objects_dropped_total",
-			Help: "Number of requests dropped from the queue",
+			Name:        "gitaly_pack_objects_dropped_total",
+			Help:        "Number of requests dropped from the queue",
+			ConstLabels: prometheus.Labels{"auth": authType},
 		},
 		[]string{"reason"},
 	)

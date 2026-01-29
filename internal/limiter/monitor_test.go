@@ -216,6 +216,7 @@ func TestNewPackObjectsConcurrencyMonitor(t *testing.T) {
 		ctx := log.InitContextCustomFields(testhelper.Context(t))
 		packObjectsConcurrencyMonitor := NewPackObjectsConcurrencyMonitor(
 			promconfig.DefaultConfig().GRPCLatencyBuckets,
+			"authenticated",
 		)
 
 		packObjectsConcurrencyMonitor.Queued(ctx, "1234", 5)
@@ -223,26 +224,26 @@ func TestNewPackObjectsConcurrencyMonitor(t *testing.T) {
 
 		expectedMetrics := `# HELP gitaly_pack_objects_acquiring_seconds Histogram of time calls are rate limited (in seconds)
 # TYPE gitaly_pack_objects_acquiring_seconds histogram
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.001"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.005"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.025"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.1"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.5"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="1"} 1
-gitaly_pack_objects_acquiring_seconds_bucket{le="10"} 1
-gitaly_pack_objects_acquiring_seconds_bucket{le="30"} 1
-gitaly_pack_objects_acquiring_seconds_bucket{le="60"} 1
-gitaly_pack_objects_acquiring_seconds_bucket{le="300"} 1
-gitaly_pack_objects_acquiring_seconds_bucket{le="1500"} 1
-gitaly_pack_objects_acquiring_seconds_bucket{le="+Inf"} 1
-gitaly_pack_objects_acquiring_seconds_sum 1
-gitaly_pack_objects_acquiring_seconds_count 1
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.001"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.005"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.025"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.1"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.5"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="1"} 1
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="10"} 1
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="30"} 1
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="60"} 1
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="300"} 1
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="1500"} 1
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="+Inf"} 1
+gitaly_pack_objects_acquiring_seconds_sum{auth="authenticated"} 1
+gitaly_pack_objects_acquiring_seconds_count{auth="authenticated"} 1
 # HELP gitaly_pack_objects_in_progress Gauge of number of concurrent in-progress calls
 # TYPE gitaly_pack_objects_in_progress gauge
-gitaly_pack_objects_in_progress 1
+gitaly_pack_objects_in_progress{auth="authenticated"} 1
 # HELP gitaly_pack_objects_queued Gauge of number of queued calls
 # TYPE gitaly_pack_objects_queued gauge
-gitaly_pack_objects_queued 1
+gitaly_pack_objects_queued{auth="authenticated"} 1
 
 `
 		testhelper.RequirePromMetrics(t, packObjectsConcurrencyMonitor, expectedMetrics)
@@ -263,10 +264,10 @@ gitaly_pack_objects_queued 1
 		expectedMetrics = `# HELP acquiring_seconds seconds to acquire
 # HELP gitaly_pack_objects_in_progress Gauge of number of concurrent in-progress calls
 # TYPE gitaly_pack_objects_in_progress gauge
-gitaly_pack_objects_in_progress 0
+gitaly_pack_objects_in_progress{auth="authenticated"} 0
 # HELP gitaly_pack_objects_queued Gauge of number of queued calls
 # TYPE gitaly_pack_objects_queued gauge
-gitaly_pack_objects_queued 0
+gitaly_pack_objects_queued{auth="authenticated"} 0
 
 `
 		testhelper.RequirePromMetrics(t, packObjectsConcurrencyMonitor, expectedMetrics)
@@ -276,6 +277,7 @@ gitaly_pack_objects_queued 0
 		ctx := log.InitContextCustomFields(testhelper.Context(t))
 		packObjectsConcurrencyMonitor := NewPackObjectsConcurrencyMonitor(
 			promconfig.DefaultConfig().GRPCLatencyBuckets,
+			"authenticated",
 		)
 
 		packObjectsConcurrencyMonitor.Queued(ctx, "1234", 5)
@@ -283,29 +285,29 @@ gitaly_pack_objects_queued 0
 
 		expectedMetrics := `# HELP gitaly_pack_objects_acquiring_seconds Histogram of time calls are rate limited (in seconds)
 # TYPE gitaly_pack_objects_acquiring_seconds histogram
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.001"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.005"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.025"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.1"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.5"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="1"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="10"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="30"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="60"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="300"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="1500"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="+Inf"} 0
-gitaly_pack_objects_acquiring_seconds_sum 0
-gitaly_pack_objects_acquiring_seconds_count 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.001"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.005"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.025"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.1"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.5"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="1"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="10"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="30"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="60"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="300"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="1500"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="+Inf"} 0
+gitaly_pack_objects_acquiring_seconds_sum{auth="authenticated"} 0
+gitaly_pack_objects_acquiring_seconds_count{auth="authenticated"} 0
 # HELP gitaly_pack_objects_dropped_total Number of requests dropped from the queue
 # TYPE gitaly_pack_objects_dropped_total counter
-gitaly_pack_objects_dropped_total{reason="load"} 1
+gitaly_pack_objects_dropped_total{auth="authenticated",reason="load"} 1
 # HELP gitaly_pack_objects_in_progress Gauge of number of concurrent in-progress calls
 # TYPE gitaly_pack_objects_in_progress gauge
-gitaly_pack_objects_in_progress 0
+gitaly_pack_objects_in_progress{auth="authenticated"} 0
 # HELP gitaly_pack_objects_queued Gauge of number of queued calls
 # TYPE gitaly_pack_objects_queued gauge
-gitaly_pack_objects_queued 1
+gitaly_pack_objects_queued{auth="authenticated"} 1
 
 `
 		testhelper.RequirePromMetrics(t, packObjectsConcurrencyMonitor, expectedMetrics)
@@ -326,35 +328,36 @@ gitaly_pack_objects_queued 1
 		ctx := log.InitContextCustomFields(testhelper.Context(t))
 		packObjectsConcurrencyMonitor := NewPackObjectsConcurrencyMonitor(
 			promconfig.DefaultConfig().GRPCLatencyBuckets,
+			"authenticated",
 		)
 
 		packObjectsConcurrencyMonitor.Dropped(ctx, "1234", 5, 10, time.Second, "load")
 
 		expectedMetrics := `# HELP gitaly_pack_objects_acquiring_seconds Histogram of time calls are rate limited (in seconds)
 # TYPE gitaly_pack_objects_acquiring_seconds histogram
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.001"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.005"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.025"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.1"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="0.5"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="1"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="10"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="30"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="60"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="300"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="1500"} 0
-gitaly_pack_objects_acquiring_seconds_bucket{le="+Inf"} 0
-gitaly_pack_objects_acquiring_seconds_sum 0
-gitaly_pack_objects_acquiring_seconds_count 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.001"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.005"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.025"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.1"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="0.5"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="1"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="10"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="30"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="60"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="300"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="1500"} 0
+gitaly_pack_objects_acquiring_seconds_bucket{auth="authenticated",le="+Inf"} 0
+gitaly_pack_objects_acquiring_seconds_sum{auth="authenticated"} 0
+gitaly_pack_objects_acquiring_seconds_count{auth="authenticated"} 0
 # HELP gitaly_pack_objects_dropped_total Number of requests dropped from the queue
 # TYPE gitaly_pack_objects_dropped_total counter
-gitaly_pack_objects_dropped_total{reason="load"} 1
+gitaly_pack_objects_dropped_total{auth="authenticated",reason="load"} 1
 # HELP gitaly_pack_objects_in_progress Gauge of number of concurrent in-progress calls
 # TYPE gitaly_pack_objects_in_progress gauge
-gitaly_pack_objects_in_progress 0
+gitaly_pack_objects_in_progress{auth="authenticated"} 0
 # HELP gitaly_pack_objects_queued Gauge of number of queued calls
 # TYPE gitaly_pack_objects_queued gauge
-gitaly_pack_objects_queued 0
+gitaly_pack_objects_queued{auth="authenticated"} 0
 
 `
 		testhelper.RequirePromMetrics(t, packObjectsConcurrencyMonitor, expectedMetrics)

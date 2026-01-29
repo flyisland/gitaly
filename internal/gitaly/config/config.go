@@ -534,18 +534,25 @@ type Concurrency struct {
 
 // ConcurrencyLimits sets the limits for adaptive limiting
 type ConcurrencyLimits struct {
+	// MaxConcurrency is the maximum number of concurrent calls for a given key (e.g., repository). This config is
+	// used only if Adaptive is false. If both MaxConcurrency and MaxPerRepo are set, MaxConcurrency takes precedence.
+	MaxConcurrency int `json:"max_concurrency,omitempty" toml:"max_concurrency,omitempty"`
 	// MaxPerRepo is the maximum number of concurrent calls for a given repository. This config is used only
-	// if Adaptive is false.
+	// if Adaptive is false. Deprecated: Use MaxConcurrency instead.
 	MaxPerRepo int `json:"max_per_repo" toml:"max_per_repo"`
 	// MaxQueueSize is the maximum number of requests in the queue waiting to be picked up
 	// after which subsequent requests will return with an error.
 	MaxQueueSize int `json:"max_queue_size" toml:"max_queue_size"`
+	// MaxQueueLength is the maximum length of the request queue.
+	// DEPRECATED: use MaxQueueSize instead
+	MaxQueueLength int `json:"max_queue_length,omitempty" toml:"max_queue_length,omitempty"`
 	// MaxQueueWait is the maximum time a request can remain in the concurrency queue
 	// waiting to be picked up by Gitaly
 	MaxQueueWait duration.Duration `json:"max_queue_wait" toml:"max_queue_wait"`
 	// Adaptive determines the behavior of the concurrency limit. If set to true, the concurrency limit is dynamic
 	// and starts at InitialLimit, then adjusts within the range [MinLimit, MaxLimit] based on current resource
-	// usage. If set to false, the concurrency limit is static and is set to MaxPerRepo.
+	// usage. If set to false, the concurrency limit is static and is set to MaxConcurrency (or MaxPerRepo if
+	// MaxConcurrency is not set).
 	Adaptive bool `json:"adaptive,omitempty" toml:"adaptive,omitempty"`
 	// InitialLimit is the concurrency limit to start with.
 	InitialLimit int `json:"initial_limit,omitempty" toml:"initial_limit,omitempty"`
@@ -557,12 +564,22 @@ type ConcurrencyLimits struct {
 
 // IsSet indicates whether or not ConcurrencyLimits has been configured
 func (c ConcurrencyLimits) IsSet() bool {
-	return c.Adaptive || c.MaxPerRepo > 0
+	return c.Adaptive || c.MaxConcurrency > 0 || c.MaxPerRepo > 0
+}
+
+// Concurrency returns the effective concurrency limit to use.
+// MaxConcurrency takes precedence over MaxPerRepo for backwards compatibility.
+func (c ConcurrencyLimits) Concurrency() int {
+	if c.MaxConcurrency > 0 {
+		return c.MaxConcurrency
+	}
+	return c.MaxPerRepo
 }
 
 // Validate runs validation on all fields and compose all found errors.
 func (c ConcurrencyLimits) Validate() cfgerror.ValidationErrors {
 	errs := cfgerror.New().
+		Append(cfgerror.Comparable(c.MaxConcurrency).GreaterOrEqual(0), "max_concurrency").
 		Append(cfgerror.Comparable(c.MaxPerRepo).GreaterOrEqual(0), "max_per_repo").
 		Append(cfgerror.Comparable(c.MaxQueueSize).GreaterThan(0), "max_queue_size").
 		Append(cfgerror.Comparable(c.MaxQueueWait.Duration()).GreaterOrEqual(0), "max_queue_wait")
@@ -612,38 +629,56 @@ func (c AdaptiveLimiting) Validate() error {
 // Requests that come in after the maximum number of concurrent pack objects
 // processes have been reached will wait.
 type PackObjectsLimiting struct {
-	// Adaptive determines the behavior of the concurrency limit. If set to true, the concurrency limit is dynamic
-	// and starts at InitialLimit, then adjusts within the range [MinLimit, MaxLimit] based on current resource
-	// usage. If set to false, the concurrency limit is static and is set to MaxConcurrency.
-	Adaptive bool `json:"adaptive,omitempty" toml:"adaptive,omitempty"`
-	// InitialLimit is the concurrency limit to start with.
-	InitialLimit int `json:"initial_limit,omitempty" toml:"initial_limit,omitempty"`
-	// MaxLimit is the minimum adaptive concurrency limit.
-	MaxLimit int `json:"max_limit,omitempty" toml:"max_limit,omitempty"`
-	// MinLimit is the mini adaptive concurrency limit.
-	MinLimit int `json:"min_limit,omitempty" toml:"min_limit,omitempty"`
-	// MaxConcurrency is the static maximum number of concurrent pack objects processes for a given key. This config
-	// is used only if Adaptive is false.
-	MaxConcurrency int `json:"max_concurrency,omitempty" toml:"max_concurrency,omitempty"`
-	// MaxQueueWait is the maximum time a request can remain in the concurrency queue
-	// waiting to be picked up by Gitaly.
-	MaxQueueWait duration.Duration `json:"max_queue_wait,omitempty" toml:"max_queue_wait,omitempty"`
-	// MaxQueueLength is the maximum length of the request queue
-	MaxQueueLength int `json:"max_queue_length,omitempty" toml:"max_queue_length,omitempty"`
+	ConcurrencyLimits
+	// Unauthenticated sets the limits for unauthenticated requests
+	Unauthenticated ConcurrencyLimits `json:"unauthenticated" toml:"unauthenticated"`
+}
+
+// QueueMax returns the effective queue size to use.
+// MaxQueueSize takes precedence over MaxQueueLength for backwards compatibility.
+func (pol PackObjectsLimiting) QueueMax() int {
+	if pol.MaxQueueSize > 0 {
+		return pol.MaxQueueSize
+	}
+	return pol.MaxQueueLength
 }
 
 // Validate runs validation on all fields and compose all found errors.
 func (pol PackObjectsLimiting) Validate() error {
+	// Validate the embedded ConcurrencyLimits fields manually to handle both MaxQueueSize and MaxQueueLength
 	errs := cfgerror.New().
 		Append(cfgerror.Comparable(pol.MaxConcurrency).GreaterOrEqual(0), "max_concurrency").
-		Append(cfgerror.Comparable(pol.MaxQueueLength).GreaterThan(0), "max_queue_length").
+		Append(cfgerror.Comparable(pol.MaxPerRepo).GreaterOrEqual(0), "max_per_repo").
 		Append(cfgerror.Comparable(pol.MaxQueueWait.Duration()).GreaterOrEqual(0), "max_queue_wait")
+
+	// Validate queue size fields
+	hasMaxQueueSize := pol.MaxQueueSize != 0
+	hasMaxQueueLength := pol.MaxQueueLength != 0
+
+	if hasMaxQueueSize {
+		errs = errs.Append(cfgerror.Comparable(pol.MaxQueueSize).GreaterThan(0), "max_queue_size")
+	}
+	if hasMaxQueueLength {
+		errs = errs.Append(cfgerror.Comparable(pol.MaxQueueLength).GreaterThan(0), "max_queue_length")
+	}
+
+	// If neither is set, that's an error
+	if !hasMaxQueueSize && !hasMaxQueueLength {
+		errs = errs.Append(
+			fmt.Errorf("at least one of max_queue_size or max_queue_length must be set"),
+			"max_queue_size",
+		)
+	}
 
 	if pol.Adaptive {
 		errs = errs.
 			Append(cfgerror.Comparable(pol.MinLimit).GreaterThan(0), "min_limit").
 			Append(cfgerror.Comparable(pol.MaxLimit).GreaterOrEqual(pol.InitialLimit), "max_limit").
 			Append(cfgerror.Comparable(pol.InitialLimit).GreaterOrEqual(pol.MinLimit), "initial_limit")
+	}
+
+	if pol.Unauthenticated.IsSet() {
+		errs = errs.Append(pol.Unauthenticated.Validate(), "unauthenticated")
 	}
 
 	return errs.AsError()
@@ -769,10 +804,10 @@ func defaultPackObjectsCacheConfig() StreamCacheConfig {
 
 func defaultPackObjectsLimiting() PackObjectsLimiting {
 	return PackObjectsLimiting{
-		MaxConcurrency: defaultPackObjectsLimitingConcurrency,
-		MaxQueueLength: defaultPackObjectsLimitingQueueSize,
-		// Requests can stay in the queue as long as they want
-		MaxQueueWait: 0,
+		ConcurrencyLimits: ConcurrencyLimits{
+			MaxConcurrency: defaultPackObjectsLimitingConcurrency,
+			MaxQueueWait:   0,
+		},
 	}
 }
 
@@ -936,8 +971,11 @@ func (cfg *Cfg) Sanitize() error {
 		}
 	}
 
-	if cfg.PackObjectsLimiting.MaxQueueLength == 0 {
-		cfg.PackObjectsLimiting.MaxQueueLength = defaultPackObjectsLimitingQueueSize
+	if cfg.PackObjectsLimiting.MaxQueueSize == 0 && cfg.PackObjectsLimiting.MaxQueueLength == 0 {
+		cfg.PackObjectsLimiting.MaxQueueSize = defaultPackObjectsLimitingQueueSize
+	} else if cfg.PackObjectsLimiting.MaxQueueSize == 0 && cfg.PackObjectsLimiting.MaxQueueLength > 0 {
+		// For backwards compatibility, copy MaxQueueLength to MaxQueueSize if only MaxQueueLength is set
+		cfg.PackObjectsLimiting.MaxQueueSize = cfg.PackObjectsLimiting.MaxQueueLength
 	}
 
 	if cfg.ArchiveCache.Enabled {
