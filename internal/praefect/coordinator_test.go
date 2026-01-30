@@ -1539,20 +1539,20 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 	for i, tc := range []struct {
 		desc                string
 		replicationFactor   int
-		primaryStored       bool
+		primaryStored       string
 		assignmentsStored   int
 		mockRepositoryStore func() datastore.RepositoryStore
 		expectedErr         error
 	}{
 		{
 			desc:              "without variable replication factor",
-			primaryStored:     true,
+			primaryStored:     "praefect-internal-1",
 			assignmentsStored: 0,
 		},
 		{
 			desc:              "with variable replication factor",
 			replicationFactor: 3,
-			primaryStored:     true,
+			primaryStored:     "praefect-internal-1",
 			assignmentsStored: 3,
 		},
 		{
@@ -1712,6 +1712,15 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 
 			require.Equal(t, expectedEvents, actualEvents, "ensure replication job created by stream director is correct")
 
+			// Verify that primary was stored or not according to tc.primaryStored
+			var primaryStorage string
+			require.NoError(t, tx.QueryRowContext(ctx,
+				`SELECT "primary" FROM repositories WHERE relative_path = $1`,
+				targetRepo.GetRelativePath(),
+			).Scan(&primaryStorage))
+			require.Equal(t, tc.primaryStored, primaryStorage)
+
+			// Verify that repository assignments were stored or not according to tc.assignmentsStored
 			var assignmentCount int
 			require.NoError(t, tx.QueryRowContext(ctx,
 				"SELECT COUNT(*) FROM repository_assignments WHERE relative_path = $1",
