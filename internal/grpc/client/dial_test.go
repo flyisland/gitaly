@@ -159,3 +159,101 @@ func TestDNSPlusTLSWithSNIOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, host, receivedSNI)
 }
+
+func TestDial_OptionsOverride(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	t.Run("caller-provided service config overrides defaults", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		srv := grpc.NewServer(
+			grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {
+				callCount++
+				return status.Error(codes.Unavailable, "unavailable")
+			}),
+		)
+		defer srv.Stop()
+
+		ln, err := net.Listen("tcp", "localhost:0")
+		require.NoError(t, err)
+		go testhelper.MustServe(t, srv, ln)
+
+		t.Run("without override retries on UNAVAILABLE", func(t *testing.T) {
+			callCount = 0
+
+			conn, err := New(ctx, "tcp://"+ln.Addr().String())
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, conn)
+
+			err = conn.Invoke(ctx, "/gitaly.RepositoryService/ObjectFormat", &gitalypb.ObjectFormatRequest{}, &gitalypb.ObjectFormatResponse{})
+			require.Error(t, err)
+			require.Greater(t, callCount, 1, "default service config should retry on UNAVAILABLE")
+		})
+
+		t.Run("with override disables retries", func(t *testing.T) {
+			callCount = 0
+
+			conn, err := New(ctx, "tcp://"+ln.Addr().String(),
+				WithGrpcOptions([]grpc.DialOption{
+					grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"pick_first":{}}]}`),
+				}),
+			)
+			require.NoError(t, err)
+			defer testhelper.MustClose(t, conn)
+
+			err = conn.Invoke(ctx, "/gitaly.RepositoryService/ObjectFormat", &gitalypb.ObjectFormatRequest{}, &gitalypb.ObjectFormatResponse{})
+			require.Error(t, err)
+			require.Equal(t, 1, callCount, "caller-provided service config should override defaults and disable retries")
+		})
+	})
+
+	t.Run("caller-provided transport credentials are honored", func(t *testing.T) {
+		t.Parallel()
+
+		handshakeCalled := false
+		customCreds := &testTransportCredentials{
+			TransportCredentials: insecure.NewCredentials(),
+			onClientHandshake: func() {
+				handshakeCalled = true
+			},
+		}
+
+		srv := grpc.NewServer()
+		defer srv.Stop()
+
+		ln, err := net.Listen("tcp", "localhost:0")
+		require.NoError(t, err)
+		go testhelper.MustServe(t, srv, ln)
+
+		conn, err := New(ctx, "tcp://"+ln.Addr().String(),
+			WithTransportCredentials(customCreds),
+		)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, conn)
+
+		_ = conn.Invoke(ctx, "/Service/Method", &gitalypb.VoteTransactionRequest{}, &gitalypb.VoteTransactionResponse{})
+		require.True(t, handshakeCalled, "caller-provided transport credentials should be used")
+	})
+}
+
+type testTransportCredentials struct {
+	credentials.TransportCredentials
+	onClientHandshake func()
+}
+
+func (t *testTransportCredentials) ClientHandshake(ctx context.Context, authority string, rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
+	if t.onClientHandshake != nil {
+		t.onClientHandshake()
+	}
+	return t.TransportCredentials.ClientHandshake(ctx, authority, rawConn)
+}
+
+func (t *testTransportCredentials) Clone() credentials.TransportCredentials {
+	return &testTransportCredentials{
+		TransportCredentials: t.TransportCredentials.Clone(),
+		onClientHandshake:    t.onClientHandshake,
+	}
+}
