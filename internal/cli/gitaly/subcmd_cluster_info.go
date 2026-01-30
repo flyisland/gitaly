@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
-	"strings"
-	"text/tabwriter"
 
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
@@ -20,13 +17,14 @@ const (
 	flagClusterInfoStorage        = "storage"
 	flagClusterInfoListPartitions = "list-partitions"
 	flagClusterInfoNoColor        = "no-color"
+	flagClusterInfoFormat         = "format"
 )
 
 func newClusterInfoCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "info",
 		Usage: "display cluster statistics and overview",
-		UsageText: `gitaly cluster info --config <gitaly_config_file> [--list-partitions] [--storage <name>]
+		UsageText: `gitaly cluster info --config <gitaly_config_file> [--list-partitions] [--storage <name>] [--format <text|json>]
 
 Examples:
   # Show cluster statistics only (default)
@@ -36,7 +34,13 @@ Examples:
   gitaly cluster info --config config.toml --list-partitions
 
   # Filter by storage (shows partition overview for that storage)
-  gitaly cluster info --config config.toml --storage storage-1 --list-partitions`,
+  gitaly cluster info --config config.toml --storage storage-1 --list-partitions
+
+  # Output as JSON for programmatic consumption
+  gitaly cluster info --config config.toml --format json
+
+  # Output JSON with partition details
+  gitaly cluster info --config config.toml --format json --list-partitions`,
 		Description: `Display cluster-wide information including:
   - Cluster statistics (total partitions, replicas, health) - shown by default
   - Per-storage statistics (leader and replica counts)
@@ -44,6 +48,10 @@ Examples:
 
 By default, only cluster statistics are displayed. Use --list-partitions to see
 a partition overview table. Use --storage to filter partitions by storage.
+
+Output formats:
+  - text (default): Human-readable colored tables and statistics
+  - json: Machine-readable JSON for automation and scripting
 
 For detailed partition information, use 'gitaly cluster get-partition'.`,
 		Flags: []cli.Flag{
@@ -65,6 +73,11 @@ For detailed partition information, use 'gitaly cluster get-partition'.`,
 				Name:  flagClusterInfoNoColor,
 				Usage: "disable colored output",
 			},
+			&cli.StringFlag{
+				Name:  flagClusterInfoFormat,
+				Usage: "output format: 'text' (default) or 'json'",
+				Value: "text",
+			},
 		},
 		Action: clusterInfoAction,
 	}
@@ -77,9 +90,12 @@ func clusterInfoAction(ctx context.Context, cmd *cli.Command) error {
 	storage := cmd.String(flagClusterInfoStorage)
 	listPartitions := cmd.Bool(flagClusterInfoListPartitions)
 	noColor := cmd.Bool(flagClusterInfoNoColor)
+	format := cmd.String(flagClusterInfoFormat)
 
-	// Configure color output
-	colorOutput := setupColorOutput(cmd.Writer, noColor)
+	// Validate format
+	if format != "text" && format != "json" {
+		return fmt.Errorf("invalid format %q: must be 'text' or 'json'", format)
+	}
 
 	// Create Raft client using shared helper
 	raftClient, cleanup, err := loadConfigAndCreateRaftClient(ctx, configPath)
@@ -88,17 +104,35 @@ func clusterInfoAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	defer cleanup()
 
-	// Display cluster info with optimized RPC calls
-	return displayClusterInfo(ctx, cmd.Writer, raftClient, storage, listPartitions, colorOutput)
+	// Fetch cluster data
+	clusterInfoResp, partitions, err := fetchClusterData(ctx, raftClient, storage, listPartitions)
+	if err != nil {
+		return err
+	}
+
+	// Prepare output structure
+	output := &ClusterInfoOutput{
+		ClusterInfo: clusterInfoResp,
+		Partitions:  partitions,
+	}
+
+	// Output based on format
+	if format == "json" {
+		return output.ToJSON(cmd.Writer)
+	}
+
+	// Configure color output for text format
+	colorOutput := setupColorOutput(cmd.Writer, noColor)
+	return output.ToText(cmd.Writer, colorOutput, storage, listPartitions)
 }
 
-// displayClusterInfo calls GetClusterInfo and optionally GetPartitions RPCs, processes the data, and displays the results
-func displayClusterInfo(ctx context.Context, writer io.Writer, client gitalypb.RaftServiceClient, storage string, listPartitions bool, colorOutput *colorOutput) error {
+// fetchClusterData retrieves cluster information and optionally partition details from the Raft service
+func fetchClusterData(ctx context.Context, client gitalypb.RaftServiceClient, storage string, listPartitions bool) (*gitalypb.RaftClusterInfoResponse, []*gitalypb.GetPartitionsResponse, error) {
 	// Step 1: Always get cluster statistics using GetClusterInfo RPC
 	var clusterInfoReq *gitalypb.RaftClusterInfoRequest
 	clusterInfoResp, err := client.GetClusterInfo(ctx, clusterInfoReq)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve cluster information - verify server is running and Raft is enabled: %w", err)
+		return nil, nil, fmt.Errorf("failed to retrieve cluster information - verify server is running and Raft is enabled: %w", err)
 	}
 
 	// Step 2: Only get partition details if needed (when --list-partitions is set or --storage filter is provided)
@@ -120,188 +154,17 @@ func displayClusterInfo(ctx context.Context, writer io.Writer, client gitalypb.R
 
 		partitionsStream, err := client.GetPartitions(ctx, partitionsReq)
 		if err != nil {
-			return fmt.Errorf("failed to retrieve partition details - verify server is running and storage %q exists: %w", storage, err)
+			return nil, nil, fmt.Errorf("failed to retrieve partition details - verify server is running and storage %q exists: %w", storage, err)
 		}
 
 		// Collect all partition responses using helper function
 		partitionResponses, err = collectPartitionResponses(partitionsStream)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 	}
 
-	// Step 3: Display results using the RPC responses
-	return displayFormattedResults(writer, clusterInfoResp, partitionResponses, storage, listPartitions, colorOutput)
-}
-
-// displayFormattedResults displays cluster information using tabular format
-func displayFormattedResults(writer io.Writer, clusterInfoResp *gitalypb.RaftClusterInfoResponse, partitions []*gitalypb.GetPartitionsResponse, storage string, listPartitions bool, colorOutput *colorOutput) error {
-	fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Gitaly Cluster Information ==="))
-
-	// Display cluster statistics overview
-	if clusterInfoResp.GetStatistics() != nil {
-		if err := displayClusterStatistics(writer, clusterInfoResp.GetStatistics(), storage, colorOutput); err != nil {
-			return err
-		}
-	}
-
-	// Display partition overview table if requested
-	if listPartitions || storage != "" {
-		if len(partitions) > 0 {
-			// Sort partitions by partition key for consistent output
-			sortPartitionsByKey(partitions)
-
-			return displayPartitionTable(writer, partitions, storage, colorOutput)
-		} else if storage != "" {
-			fmt.Fprintf(writer, "No partitions found for storage: %s\n", storage)
-		}
-	} else {
-		// Suggest showing partitions if not displayed
-		fmt.Fprintf(writer, "%s\n", colorOutput.formatInfo("Use --list-partitions to display partition overview table."))
-	}
-
-	return nil
-}
-
-// displayClusterStatistics displays cluster-wide statistics in a readable format
-func displayClusterStatistics(writer io.Writer, stats *gitalypb.ClusterStatistics, storageFilter string, colorOutput *colorOutput) error {
-	// Display overall cluster health at the top
-	partitionHealth := colorOutput.formatHealthStatus(int(stats.GetHealthyPartitions()), int(stats.GetTotalPartitions()))
-	replicaHealth := colorOutput.formatHealthStatus(int(stats.GetHealthyReplicas()), int(stats.GetTotalReplicas()))
-
-	fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Cluster Health Summary ==="))
-	fmt.Fprintf(writer, "  Partitions: %s\n", partitionHealth)
-	fmt.Fprintf(writer, "  Replicas: %s\n\n", replicaHealth)
-
-	fmt.Fprintf(writer, "%s\n", colorOutput.formatHeader("=== Cluster Statistics ==="))
-	fmt.Fprintf(writer, "  Total Partitions: %s\n", colorOutput.formatInfo(fmt.Sprintf("%d", stats.GetTotalPartitions())))
-	fmt.Fprintf(writer, "  Total Replicas: %s\n", colorOutput.formatInfo(fmt.Sprintf("%d", stats.GetTotalReplicas())))
-	fmt.Fprintf(writer, "  Healthy Partitions: %s\n", colorOutput.formatInfo(fmt.Sprintf("%d", stats.GetHealthyPartitions())))
-	fmt.Fprintf(writer, "  Healthy Replicas: %s\n", colorOutput.formatInfo(fmt.Sprintf("%d", stats.GetHealthyReplicas())))
-	fmt.Fprintf(writer, "\n")
-
-	if len(stats.GetStorageStats()) > 0 {
-		fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Per-Storage Statistics ==="))
-
-		// Filter storage names if a storage filter is specified
-		var storageNames []string
-		if storageFilter != "" {
-			// Only show the filtered storage if it exists
-			if _, exists := stats.GetStorageStats()[storageFilter]; exists {
-				storageNames = append(storageNames, storageFilter)
-			}
-		} else {
-			// Show all storages if no filter is specified
-			for storageName := range stats.GetStorageStats() {
-				storageNames = append(storageNames, storageName)
-			}
-			sort.Strings(storageNames)
-		}
-
-		// Create table writer for storage statistics
-		tw := tabwriter.NewWriter(writer, 0, 0, 2, ' ', 0)
-
-		// Table headers
-		fmt.Fprintf(tw, "STORAGE\tLEADER COUNT\tREPLICA COUNT\n")
-		fmt.Fprintf(tw, "-------\t------------\t-------------\n")
-
-		for _, storageName := range storageNames {
-			storageStat := stats.GetStorageStats()[storageName]
-			fmt.Fprintf(tw, "%s\t%d\t%d\n",
-				storageName,
-				storageStat.GetLeaderCount(),
-				storageStat.GetReplicaCount())
-		}
-
-		// Flush the table and add spacing
-		if err := tw.Flush(); err != nil {
-			return fmt.Errorf("failed to flush storage statistics table: %w", err)
-		}
-		fmt.Fprintf(writer, "\n")
-	}
-	return nil
-}
-
-// displayPartitionTable displays partitions in a tabular format
-func displayPartitionTable(writer io.Writer, partitions []*gitalypb.GetPartitionsResponse, storageFilter string, colorOutput *colorOutput) error {
-	fmt.Fprintf(writer, "%s\n\n", colorOutput.formatHeader("=== Partition Overview ==="))
-
-	// Create table writer
-	tw := tabwriter.NewWriter(writer, 0, 0, 2, ' ', 0)
-
-	// Table headers
-	fmt.Fprintf(tw, "PARTITION KEY\tLEADER\tREPLICAS\tHEALTH\tLAST INDEX\tMATCH INDEX\tREPOSITORIES\n")
-	fmt.Fprintf(tw, "-------------\t------\t--------\t------\t----------\t-----------\t------------\n")
-
-	for _, partition := range partitions {
-		// Find leader and collect replica info
-		leader := "None"
-		healthyReplicas := 0
-		totalReplicas := len(partition.GetReplicas())
-		var replicaStorages []string
-		var filteredReplicas []string
-		var leaderLastIndex, leaderMatchIndex uint64
-
-		for _, replica := range partition.GetReplicas() {
-			storageName := replica.GetReplicaId().GetStorageName()
-			if replica.GetIsLeader() {
-				leader = colorOutput.formatInfo(storageName)
-				leaderLastIndex = replica.GetLastIndex()
-				leaderMatchIndex = replica.GetMatchIndex()
-			}
-			if replica.GetIsHealthy() {
-				healthyReplicas++
-			}
-			replicaStorages = append(replicaStorages, storageName)
-
-			// Collect replicas matching storage filter
-			if storageFilter != "" && storageName == storageFilter {
-				filteredReplicas = append(filteredReplicas, storageName)
-			}
-		}
-
-		// Format replica list showing storage names
-		replicasStr := strings.Join(replicaStorages, ", ")
-		if storageFilter != "" && len(filteredReplicas) > 0 {
-			// Show all replicas but highlight the filtered ones
-			replicasStr = fmt.Sprintf("%s (filtered: %s)", replicasStr, strings.Join(filteredReplicas, ", "))
-		}
-
-		// Format health status with color
-		var healthStr string
-		if healthyReplicas == totalReplicas && totalReplicas > 0 {
-			healthStr = colorOutput.formatHealthy(fmt.Sprintf("%d/%d", healthyReplicas, totalReplicas))
-		} else if healthyReplicas == 0 {
-			healthStr = colorOutput.formatUnhealthy(fmt.Sprintf("%d/%d", healthyReplicas, totalReplicas))
-		} else {
-			healthStr = colorOutput.formatWarning(fmt.Sprintf("%d/%d", healthyReplicas, totalReplicas))
-		}
-
-		// Format last index and match index
-		lastIndexStr := "N/A"
-		matchIndexStr := "N/A"
-		if leader != "None" {
-			lastIndexStr = fmt.Sprintf("%d", leaderLastIndex)
-			matchIndexStr = fmt.Sprintf("%d", leaderMatchIndex)
-		}
-
-		// Format repository count
-		repoCount := len(partition.GetRelativePaths())
-		repoStr := fmt.Sprintf("%d repos", repoCount)
-
-		// Display full partition key
-		partitionKeyDisplay := partition.GetPartitionKey().GetValue()
-
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			partitionKeyDisplay, leader, replicasStr, healthStr, lastIndexStr, matchIndexStr, repoStr)
-	}
-
-	// Flush the partition table
-	if err := tw.Flush(); err != nil {
-		return fmt.Errorf("failed to flush partition overview table: %w", err)
-	}
-
-	return nil
+	return clusterInfoResp, partitionResponses, nil
 }
 
 // colorOutput holds color configuration for terminal output

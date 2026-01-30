@@ -380,7 +380,11 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		var raftFactory raftmgr.RaftReplicaFactory
 		var raftNode *raftmgr.Node
 		if testhelper.IsRaftEnabled() && !testhelper.IsPraefectEnabled() {
-			cfg.Raft = config.DefaultRaftConfig(uuid.New().String())
+			clusterID := cfg.Raft.ClusterID
+			if clusterID == "" {
+				clusterID = uuid.New().String()
+			}
+			cfg.Raft = config.DefaultRaftConfig(clusterID)
 			// Speed up initial election overhead in the test setup
 			cfg.Raft.ElectionTicks = 5
 			cfg.Raft.RTTMilliseconds = 100
