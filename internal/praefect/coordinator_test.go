@@ -1540,20 +1540,20 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 		desc                string
 		replicationFactor   int
 		primaryStored       bool
-		assignmentsStored   bool
+		assignmentsStored   int
 		mockRepositoryStore func() datastore.RepositoryStore
 		expectedErr         error
 	}{
 		{
 			desc:              "without variable replication factor",
 			primaryStored:     true,
-			assignmentsStored: false,
+			assignmentsStored: 0,
 		},
 		{
 			desc:              "with variable replication factor",
 			replicationFactor: 3,
 			primaryStored:     true,
-			assignmentsStored: true,
+			assignmentsStored: 3,
 		},
 		{
 			desc: "repository metadata already exists",
@@ -1711,6 +1711,13 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 			}
 
 			require.Equal(t, expectedEvents, actualEvents, "ensure replication job created by stream director is correct")
+
+			var assignmentCount int
+			require.NoError(t, tx.QueryRowContext(ctx,
+				"SELECT COUNT(*) FROM repository_assignments WHERE relative_path = $1",
+				targetRepo.GetRelativePath(),
+			).Scan(&assignmentCount))
+			require.Equal(t, tc.assignmentsStored, assignmentCount)
 		})
 	}
 }
