@@ -27,6 +27,7 @@ const optionsStatic = () => {
       getBlobs:           { ...SCENARIO_DEFAULTS, rate: 90, exec: 'getBlobs' },
       getTreeEntries:     { ...SCENARIO_DEFAULTS, rate: 90, exec: 'getTreeEntries' },
       treeEntry:          { ...SCENARIO_DEFAULTS, rate: 40, exec: 'treeEntry' },
+      listAllCommits:     { ...SCENARIO_DEFAULTS, rate: 1, exec: 'listAllCommits' },
       writeAndDeleteRefs: { ...SCENARIO_DEFAULTS, rate: 1, exec: 'writeAndDeleteRefs' },
       userCommitFiles:    { ...SCENARIO_DEFAULTS, rate: 2, exec: 'userCommitFiles' },
       userMergeBranch:    { ...SCENARIO_DEFAULTS, rate: 1, exec: 'userMergeBranch' },
@@ -249,6 +250,35 @@ export function getBlobs () {
   stream.on('data', data => {
     check(data, {
       'GetBlobs - data present in response': r => r && r.data
+    })
+  })
+
+  stream.on('end', function () {
+    client.close()
+  })
+
+  stream.on('error', function(err) {
+    console.error(err)
+  })
+
+  stream.write(req)
+}
+
+export function listAllCommits () {
+  client.connect(gitalyAddress, {
+    plaintext: true
+  })
+
+  const testRepo = selectTestRepo();
+  const req = {
+    repository: testRepo.repository,
+    limit: -1
+  }
+
+  const stream = new Stream(client, 'gitaly.CommitService/ListAllCommits')
+  stream.on('data', data => {
+    check(data, {
+      'ListAllCommits - data present in response': r => r && r.data
     })
   })
 
