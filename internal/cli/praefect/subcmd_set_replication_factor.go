@@ -38,7 +38,7 @@ The authoritative physical storage is never unassigned because it:
 - Accepts writes.
 - Is the first storage that is assigned when setting a replication factor for a repository.
 
-Example: praefect --config praefect.config.toml set-replication-factor --virtual-storage default --repository <relative_path_on_the_virtual_storage> --replication-factor 3`,
+Example: praefect --config praefect.config.toml set-replication-factor --virtual-storage default --relative-path <relative_path_on_the_virtual_storage> --replication-factor 3`,
 		Action: setReplicationFactorAction,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
