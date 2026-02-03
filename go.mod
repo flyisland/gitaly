@@ -35,7 +35,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.67.3
+	github.com/prometheus/common v0.67.5
 	github.com/rubenv/sql-migrate v1.8.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
@@ -235,7 +235,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/oauth2 v0.32.0 // indirect
+	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/tools v0.40.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240716161551-93cc26a95ae9 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
