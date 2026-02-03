@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping"
@@ -199,12 +198,7 @@ func testMiddlewareConfig(interval, statThreshold int) MiddlewareConfig {
 }
 
 func TestInterceptors(t *testing.T) {
-	testhelper.NewFeatureSets(
-		featureflag.HousekeepingMiddleware,
-	).Run(t, testInterceptors)
-}
-
-func testInterceptors(t *testing.T, ctx context.Context) {
+	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
 	logger := testhelper.NewLogger(t)
 	catfileCache := catfile.NewCache(cfg)
@@ -265,7 +259,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		}
 
 		housekeepingMiddleware.WaitForWorkers()
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 0, 0), housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "another invocation after the interval")
+		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "another invocation after the interval")
 	})
 
 	t.Run("when unary mutator RPCs are intercepted", func(t *testing.T) {
@@ -288,14 +282,14 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		sendFn()
 
 		housekeepingMiddleware.WaitForWorkers()
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0), housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "one invocation after the interval")
+		require.Equal(t, 1, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "one invocation after the interval")
 
 		for range 2 {
 			sendFn()
 		}
 
 		housekeepingMiddleware.WaitForWorkers()
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 2, 0), housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "another invocation after the interval")
+		require.Equal(t, 2, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "another invocation after the interval")
 	})
 
 	t.Run("when unary accessor RPCs are intercepted", func(t *testing.T) {
@@ -426,11 +420,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 			Repository: repo,
 		})
 
-		if featureflag.HousekeepingMiddleware.IsEnabled(ctx) {
-			require.EqualError(t, err, "rpc error: code = AlreadyExists desc = housekeeping already executing for repository")
-		} else {
-			require.NoError(t, err)
-		}
+		require.EqualError(t, err, "rpc error: code = AlreadyExists desc = housekeeping already executing for repository")
 
 		close(ch)
 	})
@@ -456,7 +446,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 
 		close(ch)
 
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0), housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "no invocations under the interval")
+		require.Equal(t, 1, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "no invocations under the interval")
 	})
 
 	t.Run("when the write interval is reached again when housekeeping is active", func(t *testing.T) {
@@ -487,7 +477,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		sendFn()
 
 		housekeepingMiddleware.WaitForWorkers()
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 2, 0), housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "another invocation after the interval")
+		require.Equal(t, 2, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "another invocation after the interval")
 	})
 
 	t.Run("when an RPC not registered with protoregistry.GitalyProtoPreregistered is intercepted", func(t *testing.T) {
@@ -520,7 +510,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		housekeepingMiddleware.WaitForWorkers()
 
 		// Verify that housekeeping was triggered immediately (forced) even on the first call
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+		require.Equal(t, 1,
 			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
 			"RewriteHistory should force immediate housekeeping")
 	})
@@ -550,7 +540,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		housekeepingMiddleware.WaitForWorkers()
 
 		// Should trigger housekeeping immediately despite being the first call
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+		require.Equal(t, 1,
 			housekeepingManager.getOptimizeRepositoryInvocations(forceRepo.GetRelativePath()),
 			"First RewriteHistory call should force housekeeping immediately")
 
@@ -574,7 +564,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 
 		housekeepingMiddleware.WaitForWorkers()
 
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+		require.Equal(t, 1,
 			housekeepingManager.getOptimizeRepositoryInvocations(regularRepo.GetRelativePath()),
 			"Second regular mutator should trigger housekeeping after reaching interval")
 	})
@@ -623,7 +613,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 
 		// Verify that housekeeping was triggered
 		require.Equal(t,
-			testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, initialCount+1, initialCount),
+			initialCount+1,
 			newCount,
 			"snapshot stats should force immediate housekeeping",
 		)
@@ -667,12 +657,7 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 }
 
 func TestIndependentOperationThresholds(t *testing.T) {
-	testhelper.NewFeatureSets(
-		featureflag.HousekeepingMiddleware,
-	).Run(t, testIndependentOperationThresholds)
-}
-
-func testIndependentOperationThresholds(t *testing.T, ctx context.Context) {
+	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
 	logger := testhelper.NewLogger(t)
 	catfileCache := catfile.NewCache(cfg)
@@ -747,13 +732,13 @@ func testIndependentOperationThresholds(t *testing.T, ctx context.Context) {
 
 		sendFn()
 		housekeepingMiddleware.WaitForWorkers()
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 0, 0),
+		require.Equal(t, 0,
 			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
 			"no housekeeping AT threshold")
 
 		sendFn()
 		housekeepingMiddleware.WaitForWorkers()
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+		require.Equal(t, 1,
 			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
 			"housekeeping triggered after pack-refs passing threshold")
 
@@ -761,7 +746,7 @@ func testIndependentOperationThresholds(t *testing.T, ctx context.Context) {
 		sendFn()
 		sendFn()
 		housekeepingMiddleware.WaitForWorkers()
-		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 2, 0),
+		require.Equal(t, 2,
 			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
 			"housekeeping triggered again after pack-refs threshold")
 	})
@@ -789,18 +774,16 @@ func testIndependentOperationThresholds(t *testing.T, ctx context.Context) {
 		housekeepingMiddleware.WaitForWorkers()
 
 		require.Equal(t,
-			testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+			1,
 			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
 			"housekeeping should trigger after pack-refs threshold (3 RPCs)")
 
 		// Verify pack-refs was requested but NOT repack-objects
-		if featureflag.HousekeepingMiddleware.IsEnabled(ctx) {
-			ops := housekeepingManager.getLastEnabledOps(repo.GetRelativePath())
-			require.True(t, ops[config.OpRepackRefs],
-				"pack-refs should be enabled after 3 RPCs")
-			require.False(t, ops[config.OpRepackObjects],
-				"repack-objects should NOT be enabled after only 3 RPCs")
-		}
+		ops := housekeepingManager.getLastEnabledOps(repo.GetRelativePath())
+		require.True(t, ops[config.OpRepackRefs],
+			"pack-refs should be enabled after 3 RPCs")
+		require.False(t, ops[config.OpRepackObjects],
+			"repack-objects should NOT be enabled after only 3 RPCs")
 
 		// Send 3 more RPCs
 		// pack-refs: 3 > 2, triggers again
@@ -811,16 +794,14 @@ func testIndependentOperationThresholds(t *testing.T, ctx context.Context) {
 		housekeepingMiddleware.WaitForWorkers()
 
 		require.Equal(t,
-			testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 2, 0),
+			2,
 			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
 			"housekeeping should trigger again after 6 total RPCs")
 
-		if featureflag.HousekeepingMiddleware.IsEnabled(ctx) {
-			ops := housekeepingManager.getLastEnabledOps(repo.GetRelativePath())
-			require.True(t, ops[config.OpRepackRefs],
-				"pack-refs should be enabled")
-			require.True(t, ops[config.OpRepackObjects],
-				"repack-objects should now be enabled after 6 RPCs")
-		}
+		ops = housekeepingManager.getLastEnabledOps(repo.GetRelativePath())
+		require.True(t, ops[config.OpRepackRefs],
+			"pack-refs should be enabled")
+		require.True(t, ops[config.OpRepackObjects],
+			"repack-objects should now be enabled after 6 RPCs")
 	})
 }
