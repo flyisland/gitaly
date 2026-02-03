@@ -15,11 +15,17 @@ func checker(ctx context.Context, cmd *cli.Command) error {
 	gitalyDir := cmd.String("gitaly-directory")
 	gitalyBinary := filepath.Join(gitalyDir, "_build", "bin", "gitaly")
 
-	info, _ := os.Stat(gitalyBinary)
-	if info.Size() > int64(thresholdMB*1000000) {
-		log.Fatal(fmt.Errorf("gitaly binary size (%dM) is over %dM",
-			info.Size()/1000000, thresholdMB))
+	info, err := os.Stat(gitalyBinary)
+	if err != nil {
+		return fmt.Errorf("failed to stat gitaly binary at %q: %w", gitalyBinary, err)
 	}
+
+	sizeMB := info.Size() / 1000000
+	if sizeMB > int64(thresholdMB) {
+		log.Fatal(fmt.Errorf("gitaly binary size (%dM) is over %dM", sizeMB, thresholdMB))
+	}
+
+	log.Printf("gitaly binary size (%dM) is within the %dM limit", sizeMB, thresholdMB)
 
 	return nil
 }
