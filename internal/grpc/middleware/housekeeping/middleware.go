@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/manager"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
@@ -19,10 +20,50 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// OperationThreshold defines when a specific operation should be triggered.
+type OperationThreshold struct {
+	// RPCInterval is the number of write RPCs after which this operation should potentially run.
+	RPCInterval int
+	// StatThreshold is the minimum file + directory count to trigger this operation on accessor RPCs.
+	StatThreshold int
+}
+
+// MiddlewareConfig holds configuration for all housekeeping operations.
+type MiddlewareConfig struct {
+	// OperationThresholds maps each operation type to its triggering thresholds.
+	OperationThresholds map[config.OperationType]OperationThreshold
+	// DefaultThresholds provides a default threshold for operations which aren't explicitly configured.
+	DefaultThresholds OperationThreshold
+}
+
+// DefaultMiddlewareConfig returns the default configuration with pack-refs running more frequently.
+func DefaultMiddlewareConfig() MiddlewareConfig {
+	return MiddlewareConfig{
+		DefaultThresholds: OperationThreshold{
+			RPCInterval:   20,
+			StatThreshold: 1000,
+		},
+		OperationThresholds: map[config.OperationType]OperationThreshold{
+			config.OpRepackRefs: {
+				RPCInterval:   10,
+				StatThreshold: 500,
+			},
+		},
+	}
+}
+
 // activity tracks housekeeping activity for a specific relative path.
 type activity struct {
 	writeCount int
 	active     bool
+	// writeCountAtLastRun tracks the write count at which each operation last ran.
+	writeCountAtLastRun map[config.OperationType]int
+}
+
+func newActivity() *activity {
+	return &activity{
+		writeCountAtLastRun: make(map[config.OperationType]int),
+	}
 }
 
 type repoKey struct {
@@ -31,7 +72,7 @@ type repoKey struct {
 
 // Middleware manages scheduling of housekeeping tasks by intercepting gRPC requests.
 type Middleware struct {
-	interval     int
+	config       MiddlewareConfig
 	repoActivity map[repoKey]*activity
 
 	mu sync.Mutex
@@ -42,26 +83,32 @@ type Middleware struct {
 	manager          manager.Manager
 	localRepoFactory localrepo.Factory
 	statsCache       *sync.Map
-	statThreshold    int
 }
 
-// forceHousekeepingRPCs are all of the RPCs that we should force housekeeping right after.
+// forceHousekeepingRPCs are all the RPCs that we should force housekeeping right after.
 var forceHousekeepingRPCs = map[string]struct{}{
 	gitalypb.CleanupService_RewriteHistory_FullMethodName: {},
 }
 
 // NewHousekeepingMiddleware returns a new middleware.
-func NewHousekeepingMiddleware(logger log.Logger, registry *protoregistry.Registry, factory localrepo.Factory, manager manager.Manager, interval int) *Middleware {
+func NewHousekeepingMiddleware(logger log.Logger, registry *protoregistry.Registry, factory localrepo.Factory, manager manager.Manager, cfg MiddlewareConfig) *Middleware {
 	return &Middleware{
-		interval:         interval,
+		config:           cfg,
 		logger:           logger,
 		registry:         registry,
 		localRepoFactory: factory,
 		manager:          manager,
 		repoActivity:     make(map[repoKey]*activity),
 		statsCache:       &sync.Map{},
-		statThreshold:    1000,
 	}
+}
+
+// getThresholds returns the thresholds for a given operation type.
+func (m *Middleware) getThresholds(op config.OperationType) OperationThreshold {
+	if thresholds, ok := m.config.OperationThresholds[op]; ok {
+		return thresholds
+	}
+	return m.config.DefaultThresholds
 }
 
 // WaitForWorkers waits for any active housekeeping tasks to finish.
@@ -193,14 +240,11 @@ func (m *Middleware) StreamServerInterceptor() grpc.StreamServerInterceptor {
 func (m *Middleware) markHousekeepingActive(key repoKey) {
 	a, ok := m.repoActivity[key]
 	if !ok {
-		a = &activity{}
+		a = newActivity()
 		m.repoActivity[key] = a
 	}
 
 	a.active = true
-	// Reset the counter at the start so we can track the number of write RPCs that executed while a housekeeping
-	// job is active.
-	a.writeCount = 0
 }
 
 func (m *Middleware) markHousekeepingInactive(key repoKey) {
@@ -209,15 +253,8 @@ func (m *Middleware) markHousekeepingInactive(key repoKey) {
 
 	a, ok := m.repoActivity[key]
 	if !ok {
-		a = &activity{}
+		a = newActivity()
 		m.repoActivity[key] = a
-	}
-
-	// Since we reset the counter at the beginning of housekeeping, if the counter remains at 0 after housekeeping
-	// it means the repository is low-activity. We can remove the entry in the map if so.
-	if a.writeCount == 0 {
-		delete(m.repoActivity, key)
-		return
 	}
 
 	a.active = false
@@ -232,6 +269,42 @@ func (m *Middleware) isActive(key repoKey) bool {
 	return a.active
 }
 
+// allOperations contains all known operation types.
+var allOperations = []config.OperationType{
+	config.OpRepackRefs, config.OpRepackObjects, config.OpPruneObjects, config.OpWriteCommitGraph,
+}
+
+// pendingOperations returns operations that have exceeded their RPC interval thresholds.
+func (m *Middleware) pendingOperations(a *activity, force bool) []config.OperationType {
+	var pending []config.OperationType
+
+	for _, op := range allOperations {
+		thresholds := m.getThresholds(op)
+		lastRun := a.writeCountAtLastRun[op]
+		writesSinceLastRun := a.writeCount - lastRun
+
+		if force || writesSinceLastRun > thresholds.RPCInterval {
+			pending = append(pending, op)
+		}
+	}
+
+	return pending
+}
+
+// operationsExceedingStatThreshold returns operations whose stat threshold is exceeded.
+func (m *Middleware) operationsExceedingStatThreshold(statCount int) []config.OperationType {
+	var ops []config.OperationType
+
+	for _, op := range allOperations {
+		thresholds := m.getThresholds(op)
+		if statCount > thresholds.StatThreshold {
+			ops = append(ops, op)
+		}
+	}
+
+	return ops
+}
+
 func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Repository, force bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -240,16 +313,29 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 
 	a, ok := m.repoActivity[key]
 	if !ok {
-		a = &activity{}
+		a = newActivity()
 		m.repoActivity[key] = a
 	}
 	a.writeCount++
 
-	if a.active || (a.writeCount <= m.interval && !force) {
+	if a.active {
 		return
 	}
 
-	m.logger.WithField("forced", force).InfoContext(ctx, "beginning scheduled housekeeping")
+	pendingOps := m.pendingOperations(a, force)
+	if len(pendingOps) == 0 {
+		return
+	}
+
+	m.logger.WithFields(log.Fields{
+		"forced":     force,
+		"operations": pendingOps,
+	}).InfoContext(ctx, "beginning scheduled housekeeping")
+
+	// Mark that these operations are running at the current write count
+	for _, op := range pendingOps {
+		a.writeCountAtLastRun[op] = a.writeCount
+	}
 
 	m.markHousekeepingActive(key)
 
@@ -270,7 +356,7 @@ func (m *Middleware) scheduleHousekeeping(ctx context.Context, repo *gitalypb.Re
 		localRepo := m.localRepoFactory.Build(repo)
 		if err := m.manager.OptimizeRepository(housekeepingCtx, localRepo, manager.WithOptimizationStrategyConstructor(
 			func(info stats.RepositoryInfo) housekeeping.OptimizationStrategy {
-				return housekeeping.NewHeuristicalOptimizationStrategy(info)
+				return housekeeping.NewSelectiveOptimizationStrategy(info, pendingOps)
 			},
 		)); err != nil {
 			m.logger.WithError(err).ErrorContext(housekeepingCtx, "failed scheduled housekeeping")
@@ -293,21 +379,23 @@ func (m *Middleware) scheduleHousekeepingIfNeeded(ctx context.Context, key repoK
 			return
 		}
 
-		stats := snapshot.RepositoryStatistics{}
-		if err := snapshot.WalkPathForStats(ctx, repositoryPath, &stats); err != nil {
+		repoStats := snapshot.RepositoryStatistics{}
+		if err := snapshot.WalkPathForStats(ctx, repositoryPath, &repoStats); err != nil {
 			m.logger.WithError(err).ErrorContext(ctx, "calculate repository statistics")
 			return
 		}
 
 		m.logger.WithFields(log.Fields{
 			"repository_stats": map[string]any{
-				"directory_count": stats.DirectoryCount,
-				"file_count":      stats.FileCount,
+				"directory_count": repoStats.DirectoryCount,
+				"file_count":      repoStats.FileCount,
 			},
 		}).InfoContext(ctx, "collected repository statistics")
 
 		m.statsCache.Store(key, struct{}{})
-		if stats.DirectoryCount+stats.FileCount > m.statThreshold {
+		totalCount := repoStats.DirectoryCount + repoStats.FileCount
+		ops := m.operationsExceedingStatThreshold(totalCount)
+		if len(ops) > 0 {
 			m.scheduleHousekeeping(ctx, targetRepo, true)
 		}
 	}
