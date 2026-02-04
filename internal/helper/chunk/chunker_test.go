@@ -84,11 +84,13 @@ func (s *server) StreamingOutputCall(req *grpc_testing.StreamingOutputCallReques
 }
 
 func runServer(t *testing.T, s *server, opt ...grpc.ServerOption) (*grpc.Server, string) {
+	ctx := testhelper.Context(t)
 	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
 	grpcServer := grpc.NewServer(opt...)
 	grpc_testing.RegisterTestServiceServer(grpcServer, s)
 
-	lis, err := net.Listen("unix", serverSocketPath)
+	lc := net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "unix", serverSocketPath)
 	require.NoError(t, err)
 
 	go testhelper.MustServe(t, grpcServer, lis)

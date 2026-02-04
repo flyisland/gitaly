@@ -376,7 +376,7 @@ Available WAL backup entries: up to LSN: %s`,
 
 			args := []string{"recovery", "-config", configPath, "status", "-storage", data.storageName}
 			args = append(args, data.args...)
-			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
+			cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), args...)
 			output, err := cmd.CombinedOutput()
 			testhelper.RequireGrpcError(t, data.expectedErr, err)
 
@@ -689,7 +689,7 @@ Successfully processed log entries up to LSN: %s`,
 
 			args := []string{"recovery", "-config", configPath, "replay", "-storage", data.storageName}
 			args = append(args, data.args...)
-			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
+			cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), args...)
 
 			output, err := cmd.CombinedOutput()
 			if err != nil && data.expectedErr == nil {
@@ -817,7 +817,7 @@ func TestRecoveryCLI_restore(t *testing.T) {
 			configPath := testcfg.WriteTemporaryGitalyConfigFile(t, cfg)
 			args := []string{"recovery", "-config", configPath, "restore", "-storage", data.storageName}
 			args = append(args, data.args...)
-			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
+			cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), args...)
 			output, err := cmd.CombinedOutput()
 			for _, expectedOutput := range data.expectedOutputs {
 				require.Contains(t, string(output), expectedOutput)

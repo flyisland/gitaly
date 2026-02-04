@@ -37,6 +37,8 @@ func (r *mockRand) Intn(inputMax int) int {
 }
 
 func TestCloneIntoCgroup(t *testing.T) {
+	ctx := testhelper.Context(t)
+
 	mountPoint := t.TempDir()
 	hierarchyRoot := filepath.Join(mountPoint, "gitaly")
 
@@ -78,7 +80,7 @@ func TestCloneIntoCgroup(t *testing.T) {
 			},
 		} {
 			t.Run(tc.desc, func(t *testing.T) {
-				command := exec.Command("command", "arg")
+				command := exec.CommandContext(ctx, "command", "arg")
 				command.SysProcAttr = tc.existingSysProcAttr
 
 				path, closer, err := mgr.CloneIntoCgroup(command)
@@ -104,7 +106,7 @@ func TestCloneIntoCgroup(t *testing.T) {
 			},
 		}, testhelper.NewLogger(t), 1)
 
-		commandWithKey := exec.Command("command", "arg")
+		commandWithKey := exec.CommandContext(ctx, "command", "arg")
 		pathWithKey, closeWithKey, err := mgr.CloneIntoCgroup(commandWithKey, WithCgroupKey("some-key"))
 		require.NoError(t, err)
 		defer testhelper.MustClose(t, closeWithKey)
@@ -112,7 +114,7 @@ func TestCloneIntoCgroup(t *testing.T) {
 		require.True(t, commandWithKey.SysProcAttr.UseCgroupFD)
 		require.NotEqual(t, 0, commandWithKey.SysProcAttr.UseCgroupFD)
 
-		commandWithoutKey := exec.Command("command", "arg")
+		commandWithoutKey := exec.CommandContext(ctx, "command", "arg")
 		pathWithoutKey, closeWithoutKey, err := mgr.CloneIntoCgroup(commandWithoutKey)
 		require.NoError(t, err)
 		defer testhelper.MustClose(t, closeWithoutKey)
@@ -135,7 +137,7 @@ func TestCloneIntoCgroup(t *testing.T) {
 		}, testhelper.NewLogger(t), 1)
 
 		assertSpawnedCommand := func(key string, groupID string) {
-			commandWithKey := exec.Command("command", "arg")
+			commandWithKey := exec.CommandContext(ctx, "command", "arg")
 			pathWithKey, closeWithKey, err := mgr.CloneIntoCgroup(commandWithKey, WithCgroupKey(key))
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, closeWithKey)

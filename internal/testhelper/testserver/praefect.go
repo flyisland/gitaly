@@ -42,10 +42,12 @@ func (ps PraefectServer) Shutdown() {
 // Praefect executable.
 func StartPraefect(tb testing.TB, cfg config.Config) PraefectServer {
 	tb.Helper()
+	ctx := testhelper.Context(tb)
 
 	// We're precreating the Unix socket which we pass to Praefect. This closes a race where
 	// the Unix socket didn't yet exist when we tried to dial the Praefect server.
-	praefectServerSocket, err := net.Listen("unix", cfg.SocketPath)
+	lc := net.ListenConfig{}
+	praefectServerSocket, err := lc.Listen(ctx, "unix", cfg.SocketPath)
 	require.NoError(tb, err)
 	testhelper.MustClose(tb, praefectServerSocket)
 	tb.Cleanup(func() { require.NoError(tb, os.RemoveAll(praefectServerSocket.Addr().String())) })
@@ -68,7 +70,7 @@ func StartPraefect(tb testing.TB, cfg config.Config) PraefectServer {
 	logWriter := testhelper.NewLogger(tb, testhelper.WithLoggerName("praefect")).LogrusEntry().WithField("component", "praefect").Writer() //nolint:staticcheck
 	tb.Cleanup(func() { testhelper.MustClose(tb, logWriter) })
 
-	cmd := exec.Command(binaryPath, "-config", configFilePath)
+	cmd := exec.CommandContext(ctx, binaryPath, "-config", configFilePath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	cmd.Stdout = logWriter

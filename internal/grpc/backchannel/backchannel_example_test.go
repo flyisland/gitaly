@@ -18,7 +18,8 @@ import (
 
 func Example() {
 	// Open the server's listener.
-	ln, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(context.Background(), "tcp", "localhost:0")
 	if err != nil {
 		fmt.Printf("failed to start listener: %v", err)
 		return

@@ -136,7 +136,9 @@ func TestManagerFailoverDisabledElectionStrategySQL(t *testing.T) {
 }
 
 func TestDialWithUnhealthyNode(t *testing.T) {
-	primaryLn, err := net.Listen("unix", testhelper.GetTemporaryGitalySocketFileName(t))
+	ctx := testhelper.Context(t)
+	lc := net.ListenConfig{}
+	primaryLn, err := lc.Listen(ctx, "unix", testhelper.GetTemporaryGitalySocketFileName(t))
 	require.NoError(t, err)
 
 	primaryAddress := "unix://" + primaryLn.Addr().String()
@@ -168,7 +170,6 @@ func TestDialWithUnhealthyNode(t *testing.T) {
 
 	mgr.Start(1*time.Millisecond, 1*time.Millisecond)
 	defer mgr.Stop()
-	ctx := testhelper.Context(t)
 
 	shard, err := mgr.GetShard(ctx, storageName)
 	require.NoError(t, err)

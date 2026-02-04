@@ -69,7 +69,7 @@ func TestGitalyGitCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			args := append([]string{"git", "--config", configPath}, tt.args...)
-			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
+			cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), args...)
 
 			var stdout, stderr bytes.Buffer
 			cmd.Dir = repo

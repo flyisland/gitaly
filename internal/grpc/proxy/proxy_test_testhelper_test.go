@@ -8,13 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/sentryhandler"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/proxy"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/interop/grpc_testing"
 )
 
 func newListener(tb testing.TB) net.Listener {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	ctx := testhelper.Context(tb)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 	require.NoError(tb, err, "must be able to allocate a port for listener")
 
 	return listener

@@ -229,7 +229,8 @@ func TestInterceptors(t *testing.T) {
 	gitalypb.RegisterCleanupServiceServer(server, cleanupService)
 	healthpb.RegisterHealthServer(server, &healthServer{})
 
-	listener, err := net.Listen("tcp", ":0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", ":0")
 	require.NoError(t, err)
 	go func() {
 		testhelper.MustServe(t, server, listener)
@@ -587,7 +588,8 @@ func TestInterceptors(t *testing.T) {
 
 		gitalypb.RegisterRepositoryServiceServer(lowThresholdServer, service)
 
-		lowThresholdListener, err := net.Listen("tcp", ":0")
+		lc := net.ListenConfig{}
+		lowThresholdListener, err := lc.Listen(ctx, "tcp", ":0")
 		require.NoError(t, err)
 		go func() {
 			testhelper.MustServe(t, lowThresholdServer, lowThresholdListener)
@@ -700,7 +702,8 @@ func TestIndependentOperationThresholds(t *testing.T) {
 	service := &testService{}
 	gitalypb.RegisterRepositoryServiceServer(server, service)
 
-	listener, err := net.Listen("tcp", ":0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", ":0")
 	require.NoError(t, err)
 	go func() {
 		testhelper.MustServe(t, server, listener)

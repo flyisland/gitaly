@@ -319,8 +319,10 @@ func (ts *testSvc) FullDuplexCall(stream grpc_testing.TestService_FullDuplexCall
 // communicate with the server.
 func startFakeGitalyServer(t *testing.T, spanContext context.Context, svc *testSvc) grpc_testing.TestServiceClient {
 	t.Helper()
+	ctx := testhelper.Context(t)
 
-	listener, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	srv := grpc.NewServer(grpc.StatsHandler(NewGRPCServerStatsHandler()))

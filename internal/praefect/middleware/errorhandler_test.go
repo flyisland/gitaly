@@ -54,7 +54,8 @@ func TestStreamInterceptor(t *testing.T) {
 	internalSrv := grpc.NewServer()
 
 	internalServerSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
-	lis, err := net.Listen("unix", internalServerSocketPath)
+	lc := net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "unix", internalServerSocketPath)
 	require.NoError(t, err)
 
 	gitalypb.RegisterRepositoryServiceServer(internalSrv, &repositoryService{})
@@ -82,7 +83,7 @@ func TestStreamInterceptor(t *testing.T) {
 	}
 
 	praefectSocket := testhelper.GetTemporaryGitalySocketFileName(t)
-	praefectLis, err := net.Listen("unix", praefectSocket)
+	praefectLis, err := lc.Listen(ctx, "unix", praefectSocket)
 	require.NoError(t, err)
 
 	praefectSrv := grpc.NewServer(srvOptions...)

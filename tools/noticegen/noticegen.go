@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"log"
@@ -35,7 +36,7 @@ func main() {
 
 	var licenses []license
 
-	data, err := exec.Command("go", "mod", "edit", "-json").Output()
+	data, err := exec.CommandContext(context.Background(), "go", "mod", "edit", "-json").Output()
 	if err != nil {
 		log.Fatal(err)
 	}

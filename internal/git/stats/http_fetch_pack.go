@@ -88,7 +88,7 @@ func buildFetchPackRequest(
 		return nil, nil, err
 	}
 
-	req, err := http.NewRequest("POST", url+"/git-upload-pack", reqBodyRaw)
+	req, err := http.NewRequestWithContext(ctx, "POST", url+"/git-upload-pack", reqBodyRaw)
 	if err != nil {
 		return nil, nil, err
 	}

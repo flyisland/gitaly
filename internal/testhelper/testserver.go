@@ -13,7 +13,9 @@ import (
 // NewServerWithHealth creates a new gRPC server with the health server set up.
 // It will listen on the socket identified by `socketName`.
 func NewServerWithHealth(tb testing.TB, socketName string) *health.Server {
-	lis, err := net.Listen("unix", socketName)
+	ctx := Context(tb)
+	lc := net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "unix", socketName)
 	require.NoError(tb, err)
 
 	return NewHealthServerWithListener(tb, lis)

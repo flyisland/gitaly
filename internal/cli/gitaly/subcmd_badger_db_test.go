@@ -16,6 +16,7 @@ import (
 )
 
 func TestBadgerDBCLI(t *testing.T) {
+	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
 	testcfg.BuildGitaly(t, cfg)
 
@@ -39,7 +40,7 @@ func TestBadgerDBCLI(t *testing.T) {
 	require.NoError(t, db.Close())
 
 	t.Run("list command", func(t *testing.T) {
-		cmd := exec.Command(cfg.BinaryPath("gitaly"), "db", "list", "--db-path", dbPath)
+		cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "list", "--db-path", dbPath)
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err)
 
@@ -50,7 +51,7 @@ func TestBadgerDBCLI(t *testing.T) {
 	})
 
 	t.Run("list command with prefix", func(t *testing.T) {
-		cmd := exec.Command(cfg.BinaryPath("gitaly"), "db", "list", "--db-path", dbPath, "--prefix", `p/\x00\x00\x00\x00\x00\x00\x00\x01/`)
+		cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "list", "--db-path", dbPath, "--prefix", `p/\x00\x00\x00\x00\x00\x00\x00\x01/`)
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err)
 		expectedRawKey := "p/\x00\x00\x00\x00\x00\x00\x00\x01/kv/storage"
@@ -59,14 +60,14 @@ func TestBadgerDBCLI(t *testing.T) {
 	})
 
 	t.Run("list command with format-keys flag", func(t *testing.T) {
-		cmd := exec.Command(cfg.BinaryPath("gitaly"), "db", "list", "--db-path", dbPath, "--format-keys")
+		cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "list", "--db-path", dbPath, "--format-keys")
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err)
 		require.Contains(t, string(output), "p/9/applied_lsn")
 	})
 	t.Run("get command - existing key", func(t *testing.T) {
 		key := `p/\x00\x00\x00\x00\x00\x00\x00\x01/kv/storage`
-		cmd := exec.Command(cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, key)
+		cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, key)
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err)
 
@@ -75,28 +76,28 @@ func TestBadgerDBCLI(t *testing.T) {
 
 	t.Run("get command - non-existing key", func(t *testing.T) {
 		key := `p/\x00\x00\x00\x00\x00\x00\x00\x02/kv/hello-1`
-		cmd := exec.Command(cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, key)
+		cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, key)
 		output, err := cmd.CombinedOutput()
 		require.Error(t, err)
 		require.Contains(t, string(output), "Key not found")
 	})
 
 	t.Run("update command", func(t *testing.T) {
-		cmdUpdate := exec.Command(cfg.BinaryPath("gitaly"), "db", "update", "--db-path", dbPath, `p/\x00\x00\x00\x00\x00\x00\x00\x01/applied_lsn`, "100")
+		cmdUpdate := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "update", "--db-path", dbPath, `p/\x00\x00\x00\x00\x00\x00\x00\x01/applied_lsn`, "100")
 		output, err := cmdUpdate.CombinedOutput()
 		require.NoError(t, err)
 		require.Contains(t, string(output), "Updated key:")
 
-		cmdGet := exec.Command(cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, `p/\x00\x00\x00\x00\x00\x00\x00\x01/applied_lsn`)
+		cmdGet := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, `p/\x00\x00\x00\x00\x00\x00\x00\x01/applied_lsn`)
 		output, err = cmdGet.CombinedOutput()
 		require.NoError(t, err)
 		require.Contains(t, string(output), "100")
 
-		cmdUpdate = exec.Command(cfg.BinaryPath("gitaly"), "db", "update", "--db-path", dbPath, "partition_id_seq", "10")
+		cmdUpdate = exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "update", "--db-path", dbPath, "partition_id_seq", "10")
 		_, err = cmdUpdate.CombinedOutput()
 		require.NoError(t, err)
 
-		cmdGet = exec.Command(cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, "partition_id_seq")
+		cmdGet = exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "db", "get", "--db-path", dbPath, "partition_id_seq")
 		output, err = cmdGet.CombinedOutput()
 		require.NoError(t, err)
 		require.Contains(t, string(output), "10")

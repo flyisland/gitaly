@@ -105,7 +105,9 @@ func defaultRepoStore(conf config.Config) datastore.RepositoryStore {
 }
 
 func listenAvailPort(tb testing.TB) (net.Listener, int) {
-	listener, err := net.Listen("tcp", "localhost:0")
+	ctx := testhelper.Context(tb)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(tb, err)
 
 	return listener, listener.Addr().(*net.TCPAddr).Port

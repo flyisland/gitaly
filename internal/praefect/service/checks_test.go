@@ -310,6 +310,7 @@ func TestGitalyNodeConnectivityCheck(t *testing.T) {
 }
 
 func runNodes(t *testing.T, nodes []nodeAssertion) ([]*config.Node, func()) {
+	ctx := testhelper.Context(t)
 	tmp := testhelper.TempDir(t)
 	var cfgNodes []*config.Node
 
@@ -317,7 +318,8 @@ func runNodes(t *testing.T, nodes []nodeAssertion) ([]*config.Node, func()) {
 
 	for _, n := range nodes {
 		socket := filepath.Join(tmp, n.storage)
-		ln, err := net.Listen("unix", socket)
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(ctx, "unix", socket)
 		require.NoError(t, err)
 		healthSrv := health.NewServer()
 		healthSrv.SetServingStatus("", n.servingStatus)
@@ -350,6 +352,7 @@ func runNodes(t *testing.T, nodes []nodeAssertion) ([]*config.Node, func()) {
 }
 
 func TestPostgresReadWriteCheck(t *testing.T) {
+	ctx := testhelper.Context(t)
 	testCases := []struct {
 		desc        string
 		setup       func(t *testing.T, db testdb.DB) config.DB
@@ -368,13 +371,13 @@ func TestPostgresReadWriteCheck(t *testing.T) {
 			setup: func(t *testing.T, db testdb.DB) config.DB {
 				role := "praefect_ro_role_" + strings.ReplaceAll(uuid.New().String(), "-", "")
 
-				_, err := db.Exec(fmt.Sprintf(`
+				_, err := db.ExecContext(ctx, fmt.Sprintf(`
 					CREATE ROLE %[1]s LOGIN;
 					GRANT SELECT ON ALL TABLES IN SCHEMA public TO %[1]s;`, role))
 				require.NoError(t, err)
 
 				t.Cleanup(func() {
-					_, err := db.Exec(fmt.Sprintf(`
+					_, err := db.ExecContext(ctx, fmt.Sprintf(`
 						DROP OWNED BY %[1]s;
 						DROP ROLE %[1]s;`, role))
 					require.NoError(t, err)

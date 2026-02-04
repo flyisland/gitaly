@@ -236,7 +236,7 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 			attribute.String("args", strings.Join(nameAndArgs[1:], " ")),
 		},
 	)
-	cmd := exec.Command(nameAndArgs[0], nameAndArgs[1:]...)
+	cmd := exec.CommandContext(ctx, nameAndArgs[0], nameAndArgs[1:]...)
 
 	command := &Command{
 		logger:                   logger,

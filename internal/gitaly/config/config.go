@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -826,7 +827,7 @@ func Load(file io.Reader) (Cfg, error) {
 	}
 
 	if cfg.ConfigCommand != "" {
-		output, err := exec.Command(cfg.ConfigCommand).Output()
+		output, err := exec.CommandContext(context.Background(), cfg.ConfigCommand).Output()
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
@@ -1399,7 +1400,8 @@ func trySocketCreation(dir string) error {
 	defer func() { _ = os.Remove(socketPath) }()
 
 	// Attempt to create an actual socket and not just a file to catch socket path length problems
-	l, err := net.Listen("unix", socketPath)
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(context.Background(), "unix", socketPath)
 	if err != nil {
 		var errno syscall.Errno
 		if errors.As(err, &errno) && errno == syscall.EINVAL {

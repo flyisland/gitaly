@@ -171,12 +171,13 @@ func WriteFiles(tb testing.TB, root string, files map[string]any) {
 // MustRunCommand runs a command with an optional standard input and returns the standard output, or fails.
 func MustRunCommand(tb testing.TB, stdin io.Reader, name string, args ...string) []byte {
 	tb.Helper()
+	ctx := Context(tb)
 
 	if filepath.Base(name) == "git" {
 		require.Fail(tb, "Please use gittest.Exec or gittest.ExecStream to run git commands.")
 	}
 
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(ctx, name, args...)
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
@@ -249,7 +250,9 @@ func GetTemporaryGitalySocketFileName(tb testing.TB) string {
 // GetLocalhostListener listens on the next available TCP port and returns
 // the listener and the localhost address (host:port) string.
 func GetLocalhostListener(tb testing.TB) (net.Listener, string) {
-	l, err := net.Listen("tcp", "localhost:0")
+	ctx := Context(tb)
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(tb, err)
 
 	addr := fmt.Sprintf("localhost:%d", l.Addr().(*net.TCPAddr).Port)
@@ -502,7 +505,8 @@ func TestdataAbsolutePath(t *testing.T) string {
 
 // SourceRoot returns the root directory of the Gitaly repository.
 func SourceRoot(tb testing.TB) string {
-	output, err := exec.Command("go", "env", "GOMOD").CombinedOutput()
+	ctx := Context(tb)
+	output, err := exec.CommandContext(ctx, "go", "env", "GOMOD").CombinedOutput()
 	require.NoError(tb, err, output)
 	return filepath.Dir(string(output))
 }

@@ -372,7 +372,9 @@ func TestDnsResolver_grpcCallWithOurDNSResolver(t *testing.T) {
 }
 
 func spawnTestGRPCServer(t *testing.T) net.Listener {
-	listener, err := net.Listen("tcp", "localhost:0")
+	ctx := testhelper.Context(t)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpccorrelation.UnaryServerCorrelationInterceptor()))

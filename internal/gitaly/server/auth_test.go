@@ -230,6 +230,7 @@ func newOperationClient(t *testing.T, token, serverSocketPath string) (gitalypb.
 
 func runServer(t *testing.T, cfg config.Cfg) string {
 	t.Helper()
+	ctx := testhelper.Context(t)
 
 	logger := testhelper.SharedLogger(t)
 	registry := backchannel.NewRegistry()
@@ -266,7 +267,8 @@ func runServer(t *testing.T, cfg config.Cfg) string {
 	})
 	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
 
-	listener, err := net.Listen("unix", serverSocketPath)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "unix", serverSocketPath)
 	require.NoError(t, err)
 	t.Cleanup(srv.Stop)
 	go testhelper.MustServe(t, srv, listener)

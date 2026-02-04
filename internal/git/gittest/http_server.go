@@ -21,7 +21,8 @@ import (
 func HTTPServer(tb testing.TB, ctx context.Context, gitCmdFactory gitcmd.CommandFactory, repoPath string, middleware func(http.ResponseWriter, *http.Request, http.Handler)) int {
 	require.NoError(tb, os.WriteFile(filepath.Join(repoPath, "git-daemon-export-ok"), nil, mode.File))
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 	require.NoError(tb, err)
 
 	gitExecEnv := gitCmdFactory.GetExecutionEnvironment(ctx)

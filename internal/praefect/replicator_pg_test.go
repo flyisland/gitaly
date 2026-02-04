@@ -24,7 +24,8 @@ func TestReplicatorInvalidSourceRepository(t *testing.T) {
 	tmp := testhelper.TempDir(t)
 
 	socketPath := filepath.Join(tmp, "socket")
-	ln, err := net.Listen("unix", socketPath)
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "unix", socketPath)
 	require.NoError(t, err)
 
 	srv := grpc.NewServer()
@@ -83,7 +84,8 @@ func TestReplicatorDestroy(t *testing.T) {
 
 			require.NoError(t, rs.CreateRepository(ctx, 1, "virtual-storage-1", "relative-path-1", "relative-path-1", "storage-1", []string{"storage-2"}, nil, false, false))
 
-			ln, err := net.Listen("tcp", "localhost:0")
+			lc := net.ListenConfig{}
+			ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 			require.NoError(t, err)
 
 			srv := grpc.NewServer(grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {

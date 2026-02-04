@@ -36,6 +36,7 @@ func TestGitalyServerFactory(t *testing.T) {
 	newHealthClient := func(t *testing.T, sf *GitalyServerFactory, schema, addr string, creds credentials.TransportCredentials) healthpb.HealthClient {
 		t.Helper()
 
+		lc := net.ListenConfig{}
 		var cc *grpc.ClientConn
 		if creds != nil {
 			srv, err := sf.CreateExternal(true)
@@ -44,7 +45,7 @@ func TestGitalyServerFactory(t *testing.T) {
 
 			healthpb.RegisterHealthServer(srv, health.NewServer())
 
-			listener, err := net.Listen(starter.TCP, addr)
+			listener, err := lc.Listen(ctx, starter.TCP, addr)
 			require.NoError(t, err)
 			grp.Go(func() error { return srv.Serve(listener) })
 
@@ -57,7 +58,7 @@ func TestGitalyServerFactory(t *testing.T) {
 
 			healthpb.RegisterHealthServer(srv, health.NewServer())
 
-			listener, err := net.Listen(schema, addr)
+			listener, err := lc.Listen(ctx, schema, addr)
 			require.NoError(t, err)
 			grp.Go(func() error { return srv.Serve(listener) })
 
@@ -335,7 +336,8 @@ func TestGitalyServerFactory_closeOrder(t *testing.T) {
 			HandlerType: (*interface{})(nil),
 		}, server)
 
-		ln, err := net.Listen("tcp", "localhost:0")
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 		require.NoError(t, err)
 		defer ln.Close()
 

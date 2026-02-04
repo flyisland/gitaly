@@ -123,7 +123,8 @@ func TestInvalidators(t *testing.T) {
 			gitalypb.RegisterPraefectInfoServiceServer(server, service)
 			grpc_health_v1.RegisterHealthServer(server, service)
 
-			listener, err := net.Listen("tcp", ":0")
+			lc := net.ListenConfig{}
+			listener, err := lc.Listen(ctx, "tcp", ":0")
 			require.NoError(t, err)
 			go func() {
 				testhelper.MustServe(t, server, listener)

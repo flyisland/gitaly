@@ -788,7 +788,7 @@ func testUploadPackWithoutSideband(t *testing.T, ctx context.Context, opts ...te
 	// Those simultaneous writes to both stdout and stderr created a race as we could've invoked
 	// two concurrent `SendMsg`s on the gRPC stream. And given that `SendMsg` is not thread-safe
 	// a deadlock would result.
-	uploadPack := exec.Command(cfg.BinaryPath("gitaly-ssh"), "upload-pack", "dontcare", "dontcare")
+	uploadPack := exec.CommandContext(ctx, cfg.BinaryPath("gitaly-ssh"), "upload-pack", "dontcare", "dontcare")
 	uploadPack.Env = []string{
 		fmt.Sprintf("GITALY_ADDRESS=%s", cfg.SocketPath),
 		fmt.Sprintf("GITALY_PAYLOAD=%s", payload),

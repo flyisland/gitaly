@@ -30,10 +30,13 @@ func (m *mockService) UnaryCall(
 
 // This test doesn't use testhelper.NewFeatureSets intentionally.
 func TestFeatureFlagLogs(t *testing.T) {
+	ctx := testhelper.Context(t)
+
 	logger := testhelper.NewLogger(t)
 	loggerHook := testhelper.AddLoggerHook(logger)
 
-	listener, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	service := &mockService{}

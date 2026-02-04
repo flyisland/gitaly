@@ -95,7 +95,8 @@ func TestPayloadBytes(t *testing.T) {
 	require.NoError(t, os.RemoveAll(sock.Name()))
 	t.Cleanup(func() { require.NoError(t, os.RemoveAll(sock.Name())) })
 
-	lis, err := net.Listen("unix", sock.Name())
+	lc := net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "unix", sock.Name())
 	require.NoError(t, err)
 
 	t.Cleanup(srv.GracefulStop)

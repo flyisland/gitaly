@@ -56,6 +56,7 @@ import (
 )
 
 func TestNewBackchannelServerFactory(t *testing.T) {
+	ctx := testhelper.Context(t)
 	logger := testhelper.SharedLogger(t)
 	mgr := transactions.NewManager(config.Config{}, logger)
 	registry := backchannel.NewRegistry()
@@ -88,11 +89,11 @@ func TestNewBackchannelServerFactory(t *testing.T) {
 	)
 	defer server.Stop()
 
-	ln, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	go testhelper.MustServe(t, server, ln)
-	ctx := testhelper.Context(t)
 
 	nodeSet, err := DialNodes(ctx, []*config.VirtualStorage{{
 		Name:  "default",
@@ -887,7 +888,8 @@ func TestProxyWrites(t *testing.T) {
 	)
 
 	socket := testhelper.GetTemporaryGitalySocketFileName(t)
-	listener, err := net.Listen("unix", socket)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "unix", socket)
 	require.NoError(t, err)
 
 	go testhelper.MustServe(t, server, listener)
@@ -1044,7 +1046,8 @@ func TestErrorThreshold(t *testing.T) {
 			)
 
 			socket := testhelper.GetTemporaryGitalySocketFileName(t)
-			listener, err := net.Listen("unix", socket)
+			lc := net.ListenConfig{}
+			listener, err := lc.Listen(ctx, "unix", socket)
 			require.NoError(t, err)
 
 			go testhelper.MustServe(t, server, listener)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -107,7 +108,7 @@ func isModuleVersion(input string) error {
 }
 
 func getModule(modDir string) (string, error) {
-	cmd := exec.Command("go", "mod", "edit", "-json")
+	cmd := exec.CommandContext(context.Background(), "go", "mod", "edit", "-json")
 	cmd.Dir = modDir
 	data, err := cmd.Output()
 	if err != nil {
@@ -315,7 +316,7 @@ func rewriteProto(moduleAbsRootPath, prev, next string) error {
 
 // rewriteGoMod modifies name of the module in the go.mod file.
 func rewriteGoMod(moduleAbsRootPath, next string) error {
-	cmd := exec.Command("go", "mod", "edit", "-module", next)
+	cmd := exec.CommandContext(context.Background(), "go", "mod", "edit", "-module", next)
 	cmd.Dir = moduleAbsRootPath
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("command %q: %w", strings.Join(cmd.Args, " "), err)

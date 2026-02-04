@@ -3,6 +3,7 @@
 package cgroups
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -54,7 +55,7 @@ func supportsCloneIntoCgroup(cfg cgroupscfg.Config) (bool, error) {
 
 	// The simplest command imaginable. The command setup is similar to what we do in
 	// CGroupManager.CloneIntoCgroup().
-	cmd := exec.Command("/bin/true")
+	cmd := exec.CommandContext(context.Background(), "/bin/true")
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}

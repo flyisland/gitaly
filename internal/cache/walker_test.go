@@ -137,7 +137,8 @@ func TestCleanWalkEmptyDirs(t *testing.T) {
 }
 
 func findFiles(tb testing.TB, path string) string {
-	cmd := exec.Command("find", ".")
+	ctx := testhelper.Context(tb)
+	cmd := exec.CommandContext(ctx, "find", ".")
 	cmd.Dir = path
 	out, err := cmd.Output()
 	require.NoError(tb, err)

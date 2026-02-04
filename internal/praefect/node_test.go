@@ -45,7 +45,8 @@ func TestDialNodes(t *testing.T) {
 	var cfgNodes []*config.Node
 	for _, n := range expectedNodes {
 		socket := filepath.Join(tmp, n.storage)
-		ln, err := net.Listen("unix", socket)
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(ctx, "unix", socket)
 		require.NoError(t, err)
 		healthSrv := health.NewServer()
 		healthSrv.SetServingStatus("", n.status)

@@ -25,6 +25,8 @@ import (
 )
 
 func TestDial(t *testing.T) {
+	ctx := testhelper.Context(t)
+
 	errNonMuxed := status.Error(codes.Internal, "non-muxed connection")
 	errMuxed := status.Error(codes.Internal, "muxed connection")
 
@@ -47,11 +49,11 @@ func TestDial(t *testing.T) {
 	)
 	defer srv.Stop()
 
-	ln, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	go testhelper.MustServe(t, srv, ln)
-	ctx := testhelper.Context(t)
 
 	t.Run("non-muxed conn", func(t *testing.T) {
 		nonMuxedConn, err := New(ctx, "tcp://"+ln.Addr().String())
@@ -74,6 +76,8 @@ func TestDial(t *testing.T) {
 }
 
 func TestDNSPlusTLSWithSNIOverride(t *testing.T) {
+	ctx := testhelper.Context(t)
+
 	cert := testhelper.GenerateCertificate(t)
 
 	var receivedSNI string
@@ -88,7 +92,8 @@ func TestDNSPlusTLSWithSNIOverride(t *testing.T) {
 		},
 	}
 
-	listener, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 	defer listener.Close()
 
@@ -109,12 +114,10 @@ func TestDNSPlusTLSWithSNIOverride(t *testing.T) {
 				defer c.Close()
 				// Wrap with TLS
 				tlsConn := tls.Server(c, tlsConfig)
-				_ = tlsConn.Handshake()
+				_ = tlsConn.HandshakeContext(ctx)
 			}(conn)
 		}
 	}()
-
-	ctx := testhelper.Context(t)
 
 	logger := testhelper.SharedLogger(t)
 	dnsBuilder := dnsresolver.NewBuilder(&dnsresolver.BuilderConfig{
@@ -165,6 +168,7 @@ func TestDial_OptionsOverride(t *testing.T) {
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
+	lc := net.ListenConfig{}
 
 	t.Run("caller-provided service config overrides defaults", func(t *testing.T) {
 		t.Parallel()
@@ -178,7 +182,7 @@ func TestDial_OptionsOverride(t *testing.T) {
 		)
 		defer srv.Stop()
 
-		ln, err := net.Listen("tcp", "localhost:0")
+		ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 		require.NoError(t, err)
 		go testhelper.MustServe(t, srv, ln)
 
@@ -225,7 +229,7 @@ func TestDial_OptionsOverride(t *testing.T) {
 		srv := grpc.NewServer()
 		defer srv.Stop()
 
-		ln, err := net.Listen("tcp", "localhost:0")
+		ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 		require.NoError(t, err)
 		go testhelper.MustServe(t, srv, ln)
 
@@ -276,7 +280,8 @@ func TestWithRetryPolicy(t *testing.T) {
 		)
 		defer srv.Stop()
 
-		ln, err := net.Listen("tcp", "localhost:0")
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 		require.NoError(t, err)
 		go testhelper.MustServe(t, srv, ln)
 
@@ -309,7 +314,8 @@ func TestWithRetryPolicy(t *testing.T) {
 		)
 		defer srv.Stop()
 
-		ln, err := net.Listen("tcp", "localhost:0")
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 		require.NoError(t, err)
 		go testhelper.MustServe(t, srv, ln)
 
@@ -342,7 +348,8 @@ func TestWithRetryPolicy(t *testing.T) {
 		)
 		defer srv.Stop()
 
-		ln, err := net.Listen("tcp", "localhost:0")
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 		require.NoError(t, err)
 		go testhelper.MustServe(t, srv, ln)
 
@@ -375,7 +382,8 @@ func TestWithRetryPolicy(t *testing.T) {
 		)
 		defer srv.Stop()
 
-		ln, err := net.Listen("tcp", "localhost:0")
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 		require.NoError(t, err)
 		go testhelper.MustServe(t, srv, ln)
 

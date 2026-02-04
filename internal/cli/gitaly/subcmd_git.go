@@ -79,7 +79,7 @@ func gitAction(ctx context.Context, cmd *cli.Command) (returnErr error) {
 
 	gitBinaryPath := gitCmdFactory.GetExecutionEnvironment(ctx).BinaryPath
 
-	gitCommand := exec.Command(gitBinaryPath, cmd.Args().Slice()...)
+	gitCommand := exec.CommandContext(ctx, gitBinaryPath, cmd.Args().Slice()...)
 	gitCommand.Stdin = cmd.Reader
 	gitCommand.Stdout = cmd.Writer
 	gitCommand.Stderr = cmd.ErrWriter

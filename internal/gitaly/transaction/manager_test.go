@@ -249,7 +249,8 @@ func TestPoolManager_Stop(t *testing.T) {
 func runTransactionServer(t *testing.T, ctx context.Context) (*testTransactionServer, string) {
 	transactionServer := &testTransactionServer{}
 
-	ln, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	srv := grpc.NewServer()

@@ -223,6 +223,7 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 		txMiddleware,
 	)
 
+	lc := net.ListenConfig{}
 	if cfg.RuntimeDir != "" {
 		internalServer, err := serverFactory.CreateInternal(serverOpts...)
 		require.NoError(tb, err)
@@ -233,7 +234,7 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 		require.NoError(tb, os.MkdirAll(cfg.InternalSocketDir(), mode.Directory))
 		tb.Cleanup(func() { require.NoError(tb, os.RemoveAll(cfg.InternalSocketDir())) })
 
-		internalListener, err := net.Listen("unix", cfg.InternalSocketPath())
+		internalListener, err := lc.Listen(ctx, "unix", cfg.InternalSocketPath())
 		require.NoError(tb, err)
 		go func() {
 			assert.NoError(tb, internalServer.Serve(internalListener), "failure to serve internal gRPC")
@@ -256,18 +257,18 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 	var addr string
 	switch {
 	case cfg.TLSListenAddr != "":
-		listener, err = net.Listen("tcp", cfg.TLSListenAddr)
+		listener, err = lc.Listen(ctx, "tcp", cfg.TLSListenAddr)
 		require.NoError(tb, err)
 		_, port, err := net.SplitHostPort(listener.Addr().String())
 		require.NoError(tb, err)
 		addr = "tls://localhost:" + port
 	case cfg.ListenAddr != "":
-		listener, err = net.Listen("tcp", cfg.ListenAddr)
+		listener, err = lc.Listen(ctx, "tcp", cfg.ListenAddr)
 		require.NoError(tb, err)
 		addr = "tcp://" + listener.Addr().String()
 	default:
 		serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(tb)
-		listener, err = net.Listen("unix", serverSocketPath)
+		listener, err = lc.Listen(ctx, "unix", serverSocketPath)
 		require.NoError(tb, err)
 		addr = "unix://" + serverSocketPath
 	}

@@ -232,7 +232,8 @@ type storageCleanupRow struct {
 }
 
 func getAllStoragesCleanup(tb testing.TB, db testdb.DB) []storageCleanupRow {
-	rows, err := db.Query(`SELECT * FROM storage_cleanups`)
+	ctx := testhelper.Context(tb)
+	rows, err := db.QueryContext(ctx, `SELECT * FROM storage_cleanups`)
 	require.NoError(tb, err)
 	defer func() {
 		require.NoError(tb, rows.Close())

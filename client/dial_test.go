@@ -279,9 +279,11 @@ func (ts *testSvc) FullDuplexCall(stream grpc_testing.TestService_FullDuplexCall
 
 func TestDial_Correlation(t *testing.T) {
 	t.Run("unary", func(t *testing.T) {
+		ctx := testhelper.Context(t)
 		serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
 
-		listener, err := net.Listen("unix", serverSocketPath)
+		lc := net.ListenConfig{}
+		listener, err := lc.Listen(ctx, "unix", serverSocketPath)
 		require.NoError(t, err)
 
 		grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpccorrelation.UnaryServerCorrelationInterceptor()))
@@ -295,9 +297,7 @@ func TestDial_Correlation(t *testing.T) {
 		grpc_testing.RegisterTestServiceServer(grpcServer, svc)
 
 		go testhelper.MustServe(t, grpcServer, listener)
-
 		defer grpcServer.Stop()
-		ctx := testhelper.Context(t)
 
 		cc, err := DialContext(ctx, "unix://"+serverSocketPath, WithGrpcOptions([]grpc.DialOption{
 			internalclient.UnaryInterceptor(),
@@ -315,9 +315,11 @@ func TestDial_Correlation(t *testing.T) {
 	})
 
 	t.Run("stream", func(t *testing.T) {
+		ctx := testhelper.Context(t)
 		serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
 
-		listener, err := net.Listen("unix", serverSocketPath)
+		lc := net.ListenConfig{}
+		listener, err := lc.Listen(ctx, "unix", serverSocketPath)
 		require.NoError(t, err)
 
 		grpcServer := grpc.NewServer(grpc.StreamInterceptor(grpccorrelation.StreamServerCorrelationInterceptor()))
@@ -334,7 +336,6 @@ func TestDial_Correlation(t *testing.T) {
 
 		go testhelper.MustServe(t, grpcServer, listener)
 		defer grpcServer.Stop()
-		ctx := testhelper.Context(t)
 
 		cc, err := DialContext(ctx, "unix://"+serverSocketPath, WithGrpcOptions([]grpc.DialOption{
 			internalclient.UnaryInterceptor(),
@@ -405,6 +406,7 @@ func TestDial_Tracing(t *testing.T) {
 	)
 
 	t.Run("unary", func(t *testing.T) {
+		ctx := testhelper.Context(t)
 		reporter.Reset()
 
 		grpcServer := grpc.NewServer(
@@ -417,11 +419,11 @@ func TestDial_Tracing(t *testing.T) {
 
 		serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
 
-		listener, err := net.Listen("unix", serverSocketPath)
+		lc := net.ListenConfig{}
+		listener, err := lc.Listen(ctx, "unix", serverSocketPath)
 		require.NoError(t, err)
 		go testhelper.MustServe(t, grpcServer, listener)
 		defer grpcServer.Stop()
-		ctx := testhelper.Context(t)
 
 		cc, err := DialContext(ctx, "unix://"+serverSocketPath, WithGrpcOptions([]grpc.DialOption{
 			grpc.WithStatsHandler(otelgrpc.NewClientHandler(
@@ -491,6 +493,7 @@ func TestDial_Tracing(t *testing.T) {
 	})
 
 	t.Run("stream", func(t *testing.T) {
+		ctx := testhelper.Context(t)
 		reporter.Reset()
 
 		grpcServer := grpc.NewServer(
@@ -503,11 +506,11 @@ func TestDial_Tracing(t *testing.T) {
 
 		serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
 
-		listener, err := net.Listen("unix", serverSocketPath)
+		lc := net.ListenConfig{}
+		listener, err := lc.Listen(ctx, "unix", serverSocketPath)
 		require.NoError(t, err)
 		go testhelper.MustServe(t, grpcServer, listener)
 		defer grpcServer.Stop()
-		ctx := testhelper.Context(t)
 
 		// This needs to be run after setting up the global tracer as it will cause us to
 		// create the span when executing the RPC call further down below.
@@ -596,7 +599,9 @@ func (*healthServer) Check(context.Context, *healthpb.HealthCheckRequest) (*heal
 
 // startTCPListener will start a insecure TCP listener on a random unused port
 func startTCPListener(tb testing.TB, factory func(credentials.TransportCredentials) *grpc.Server) (func(), string) {
-	listener, err := net.Listen("tcp", "localhost:0")
+	ctx := testhelper.Context(tb)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(tb, err)
 
 	tcpPort := listener.Addr().(*net.TCPAddr).Port
@@ -612,9 +617,11 @@ func startTCPListener(tb testing.TB, factory func(credentials.TransportCredentia
 
 // startUnixListener will start a unix socket listener using a temporary file
 func startUnixListener(tb testing.TB, factory func(credentials.TransportCredentials) *grpc.Server) (func(), string) {
+	ctx := testhelper.Context(tb)
 	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(tb)
 
-	listener, err := net.Listen("unix", serverSocketPath)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "unix", serverSocketPath)
 	require.NoError(tb, err)
 
 	grpcServer := factory(insecure.NewCredentials())
@@ -630,7 +637,9 @@ func startUnixListener(tb testing.TB, factory func(credentials.TransportCredenti
 //go:generate openssl req -newkey rsa:4096 -new -nodes -x509 -days 3650 -out testdata/gitalycert.pem -keyout testdata/gitalykey.pem -subj "/C=US/ST=California/L=San Francisco/O=GitLab/OU=GitLab-Shell/CN=localhost" -addext "subjectAltName = IP:127.0.0.1, DNS:localhost"
 //go:generate openssl req -newkey rsa:4096 -new -nodes -x509 -days 3650 -out testdata/gitaly_snioverride_cert.pem -keyout testdata/gitaly_snioverride_key.pem -subj "/C=US/ST=California/L=San Francisco/O=GitLab/OU=GitLab-Shell/CN=localhost" -addext "subjectAltName = IP:127.0.0.1, DNS:localhost, DNS:sni.override.test"
 func startTLSListener(tb testing.TB, factory func(credentials.TransportCredentials) *grpc.Server) (func(), string) {
-	listener, err := net.Listen("tcp", "localhost:0")
+	ctx := testhelper.Context(tb)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(tb, err)
 
 	tcpPort := listener.Addr().(*net.TCPAddr).Port
@@ -787,7 +796,9 @@ func TestWithGitalyDNSResolver_loopbackAddresses(t *testing.T) {
 func TestWithGitalyDNSResolver_dnsPlusTLS(t *testing.T) {
 	t.Parallel()
 
-	listener, err := net.Listen("tcp", "localhost:0")
+	ctx := testhelper.Context(t)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	cert, err := tls.LoadX509KeyPair("testdata/gitaly_snioverride_cert.pem", "testdata/gitaly_snioverride_key.pem")
@@ -927,7 +938,9 @@ func (s *fakeCommitServer) FindCommit(_ context.Context, _ *gitalypb.FindCommitR
 }
 
 func startFakeGitalyServer(t *testing.T) string {
-	listener, err := net.Listen("tcp", "localhost:0")
+	ctx := testhelper.Context(t)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	srv := grpc.NewServer(SidechannelServer(newLogger(t), insecure.NewCredentials()))

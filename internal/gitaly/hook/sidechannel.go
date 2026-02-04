@@ -37,7 +37,8 @@ func GetSidechannel(ctx context.Context) (net.Conn, error) {
 		return nil, InvalidSidechannelAddressError{address: address}
 	}
 
-	return net.DialTimeout("unix", address, time.Second)
+	dialer := net.Dialer{Timeout: time.Second}
+	return dialer.DialContext(ctx, "unix", address)
 }
 
 // SetupSidechannel creates a sidechannel listener in a tempdir and
