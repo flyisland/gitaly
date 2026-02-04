@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestDial(t *testing.T) {
@@ -256,4 +257,136 @@ func (t *testTransportCredentials) Clone() credentials.TransportCredentials {
 		TransportCredentials: t.TransportCredentials.Clone(),
 		onClientHandshake:    t.onClientHandshake,
 	}
+}
+
+func TestWithRetryPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	t.Run("custom retry policy with more attempts", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		srv := grpc.NewServer(
+			grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {
+				callCount++
+				return status.Error(codes.Unavailable, "unavailable")
+			}),
+		)
+		defer srv.Stop()
+
+		ln, err := net.Listen("tcp", "localhost:0")
+		require.NoError(t, err)
+		go testhelper.MustServe(t, srv, ln)
+
+		conn, err := New(ctx, "tcp://"+ln.Addr().String(),
+			WithRetryPolicy(&gitalypb.MethodConfig_RetryPolicy{
+				MaxAttempts:          5,
+				InitialBackoff:       durationpb.New(time.Millisecond * 10),
+				MaxBackoff:           durationpb.New(time.Millisecond * 50),
+				BackoffMultiplier:    2,
+				RetryableStatusCodes: []string{"UNAVAILABLE"},
+			}),
+		)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, conn)
+
+		err = conn.Invoke(ctx, "/gitaly.RepositoryService/ObjectFormat", &gitalypb.ObjectFormatRequest{}, &gitalypb.ObjectFormatResponse{})
+		require.Error(t, err)
+		require.Equal(t, 5, callCount, "custom retry policy should allow 5 attempts")
+	})
+
+	t.Run("custom retry policy with different status codes", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		srv := grpc.NewServer(
+			grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {
+				callCount++
+				return status.Error(codes.ResourceExhausted, "resource exhausted")
+			}),
+		)
+		defer srv.Stop()
+
+		ln, err := net.Listen("tcp", "localhost:0")
+		require.NoError(t, err)
+		go testhelper.MustServe(t, srv, ln)
+
+		conn, err := New(ctx, "tcp://"+ln.Addr().String(),
+			WithRetryPolicy(&gitalypb.MethodConfig_RetryPolicy{
+				MaxAttempts:          3,
+				InitialBackoff:       durationpb.New(time.Millisecond * 10),
+				MaxBackoff:           durationpb.New(time.Millisecond * 50),
+				BackoffMultiplier:    2,
+				RetryableStatusCodes: []string{"RESOURCE_EXHAUSTED"},
+			}),
+		)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, conn)
+
+		err = conn.Invoke(ctx, "/gitaly.RepositoryService/ObjectFormat", &gitalypb.ObjectFormatRequest{}, &gitalypb.ObjectFormatResponse{})
+		require.Error(t, err)
+		require.Equal(t, 3, callCount, "custom retry policy should retry on RESOURCE_EXHAUSTED")
+	})
+
+	t.Run("custom retry policy with minimal retries", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		srv := grpc.NewServer(
+			grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {
+				callCount++
+				return status.Error(codes.Unavailable, "unavailable")
+			}),
+		)
+		defer srv.Stop()
+
+		ln, err := net.Listen("tcp", "localhost:0")
+		require.NoError(t, err)
+		go testhelper.MustServe(t, srv, ln)
+
+		conn, err := New(ctx, "tcp://"+ln.Addr().String(),
+			WithRetryPolicy(&gitalypb.MethodConfig_RetryPolicy{
+				MaxAttempts:          2,
+				InitialBackoff:       durationpb.New(time.Millisecond * 10),
+				MaxBackoff:           durationpb.New(time.Millisecond * 50),
+				BackoffMultiplier:    2,
+				RetryableStatusCodes: []string{"UNAVAILABLE"},
+			}),
+		)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, conn)
+
+		err = conn.Invoke(ctx, "/gitaly.RepositoryService/ObjectFormat", &gitalypb.ObjectFormatRequest{}, &gitalypb.ObjectFormatResponse{})
+		require.Error(t, err)
+		require.Equal(t, 2, callCount, "MaxAttempts=2 should allow 2 attempts")
+	})
+
+	t.Run("nil retry policy uses defaults", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		srv := grpc.NewServer(
+			grpc.UnknownServiceHandler(func(srv interface{}, stream grpc.ServerStream) error {
+				callCount++
+				return status.Error(codes.Unavailable, "unavailable")
+			}),
+		)
+		defer srv.Stop()
+
+		ln, err := net.Listen("tcp", "localhost:0")
+		require.NoError(t, err)
+		go testhelper.MustServe(t, srv, ln)
+
+		conn, err := New(ctx, "tcp://"+ln.Addr().String(),
+			WithRetryPolicy(nil),
+		)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, conn)
+
+		err = conn.Invoke(ctx, "/gitaly.RepositoryService/ObjectFormat", &gitalypb.ObjectFormatRequest{}, &gitalypb.ObjectFormatResponse{})
+		require.Error(t, err)
+		require.Equal(t, 4, callCount, "nil retry policy should use default of 4 attempts")
+	})
 }
