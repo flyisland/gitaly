@@ -154,8 +154,9 @@ GIT_VERSION ?=
 #
 # GIT_VERSION_MASTER is a commit hash from Git’s master branch, typically between 7–14 days old.
 # Do not modify the format, it's automatically updated by renovate-gitlab-bot. The timestamp
-# is used for version comparison by renovate.
-# renovate: 1767067102000
+# is used for version comparison by renovate. If the version needs to be updated, the timestamp
+# should be updated to the timestamp of the commit.
+# renovate: 1768857600000
 GIT_VERSION_MASTER ?= 83a69f19359e6d9bc980563caca38b2b5729808c
 GIT_VERSION_PREV ?= aea8cc3a10c325a22a75e2d4f582db959d3854ae
 #
