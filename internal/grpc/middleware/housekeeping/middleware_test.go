@@ -15,6 +15,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/config"
 	housekeepingmgr "gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/manager"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
 	gitalycfg "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
@@ -93,8 +94,11 @@ func (*healthServer) Check(context.Context, *healthpb.HealthCheckRequest) (*heal
 }
 
 type mockHousekeepingManager struct {
-	optimizeRepositoryInvocations map[string]int // RelativePath -> count
-	mu                            sync.Mutex
+	// optimizeRepositoryInvocations allows us to track how many times OptimizeRepository was called for a given repository
+	optimizeRepositoryInvocations map[string]int
+	// lastEnabledOps allows us to get the last set of operations that were scheduled to run when OptimizeRepository was called
+	lastEnabledOps map[string]map[config.OperationType]bool
+	mu             sync.Mutex
 
 	useDelayCh bool
 	delayCh    chan struct{}
@@ -105,6 +109,13 @@ func (m *mockHousekeepingManager) getOptimizeRepositoryInvocations(relativePath 
 	defer m.mu.Unlock()
 
 	return m.optimizeRepositoryInvocations[relativePath]
+}
+
+func (m *mockHousekeepingManager) getLastEnabledOps(relativePath string) map[config.OperationType]bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.lastEnabledOps[relativePath]
 }
 
 func (m *mockHousekeepingManager) withDelay() chan struct{} {
@@ -139,6 +150,21 @@ func (m *mockHousekeepingManager) OptimizeRepository(ctx context.Context, repo *
 
 	m.optimizeRepositoryInvocations[relativePath]++
 
+	// Extract enabled operations from the strategy constructor
+	var cfg housekeepingmgr.OptimizeRepositoryConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.StrategyConstructor != nil {
+		strategy := cfg.StrategyConstructor(stats.RepositoryInfo{})
+		if selective, ok := strategy.(*housekeeping.SelectiveOptimizationStrategy); ok {
+			if m.lastEnabledOps == nil {
+				m.lastEnabledOps = make(map[string]map[config.OperationType]bool)
+			}
+			m.lastEnabledOps[relativePath] = selective.EnabledOps()
+		}
+	}
+
 	if m.useDelayCh {
 		<-m.delayCh
 	}
@@ -152,6 +178,24 @@ func (m *mockHousekeepingManager) OffloadRepository(context.Context, *localrepo.
 
 func (m *mockHousekeepingManager) RehydrateRepository(ctx context.Context, repo *localrepo.Repo, s string) error {
 	return nil
+}
+
+// testMiddlewareConfig returns a MiddlewareConfig for testing with all operations
+// using the same interval and threshold for simpler test assertions.
+func testMiddlewareConfig(interval, statThreshold int) MiddlewareConfig {
+	thresholds := OperationThreshold{
+		RPCInterval:   interval,
+		StatThreshold: statThreshold,
+	}
+	return MiddlewareConfig{
+		DefaultThresholds: thresholds,
+		OperationThresholds: map[config.OperationType]OperationThreshold{
+			config.OpRepackRefs:       thresholds,
+			config.OpRepackObjects:    thresholds,
+			config.OpPruneObjects:     thresholds,
+			config.OpWriteCommitGraph: thresholds,
+		},
+	}
 }
 
 func TestInterceptors(t *testing.T) {
@@ -173,7 +217,9 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		delayCh:                       make(chan struct{}),
 	}
 
-	housekeepingMiddleware := NewHousekeepingMiddleware(logger, protoregistry.GitalyProtoPreregistered, localRepoFactory, housekeepingManager, 1)
+	middlewareConfig := testMiddlewareConfig(1, 1000)
+
+	housekeepingMiddleware := NewHousekeepingMiddleware(logger, protoregistry.GitalyProtoPreregistered, localRepoFactory, housekeepingManager, middlewareConfig)
 	defer housekeepingMiddleware.WaitForWorkers()
 
 	server := grpc.NewServer(
@@ -538,18 +584,40 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 			SkipCreationViaService: true,
 		})
 
-		// Setting low threshold to easily pass it
-		housekeepingMiddleware.statThreshold = 1
+		// Create a new middleware with low threshold to easily pass it
+		lowThresholdConfig := testMiddlewareConfig(1, 1)
+		lowThresholdMiddleware := NewHousekeepingMiddleware(logger, protoregistry.GitalyProtoPreregistered, localRepoFactory, housekeepingManager, lowThresholdConfig)
+		defer lowThresholdMiddleware.WaitForWorkers()
+
+		lowThresholdServer := grpc.NewServer(
+			grpc.StreamInterceptor(lowThresholdMiddleware.StreamServerInterceptor()),
+			grpc.UnaryInterceptor(lowThresholdMiddleware.UnaryServerInterceptor()),
+		)
+		t.Cleanup(lowThresholdServer.Stop)
+
+		gitalypb.RegisterRepositoryServiceServer(lowThresholdServer, service)
+
+		lowThresholdListener, err := net.Listen("tcp", ":0")
+		require.NoError(t, err)
+		go func() {
+			testhelper.MustServe(t, lowThresholdServer, lowThresholdListener)
+		}()
+
+		lowThresholdConn, err := grpc.NewClient(
+			lowThresholdListener.Addr().String(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, lowThresholdConn)
 
 		initialCount := housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath())
 
-		_, err = gitalypb.NewRepositoryServiceClient(conn).RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
+		_, err = gitalypb.NewRepositoryServiceClient(lowThresholdConn).RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
 			Repository: repo,
 		})
 		require.NoError(t, err)
 
-		// Wait for any async housekeeping to complete
-		housekeepingMiddleware.WaitForWorkers()
+		lowThresholdMiddleware.WaitForWorkers()
 
 		newCount := housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath())
 
@@ -561,13 +629,12 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		)
 
 		// Next request should not trigger housekeeping as it is added to the stats cache
-		_, err = gitalypb.NewRepositoryServiceClient(conn).RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
+		_, err = gitalypb.NewRepositoryServiceClient(lowThresholdConn).RepositoryExists(ctx, &gitalypb.RepositoryExistsRequest{
 			Repository: repo,
 		})
 		require.NoError(t, err)
-		// Wait for any async housekeeping to complete
-		housekeepingMiddleware.WaitForWorkers()
-		// Verify that housekeeping was not triggered
+
+		lowThresholdMiddleware.WaitForWorkers()
 		require.Equal(t,
 			newCount,
 			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
@@ -579,9 +646,6 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 		repo, _ := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
 		})
-
-		// Setting high threshold to stay below it
-		housekeepingMiddleware.statThreshold = 1000
 
 		initialCount := housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath())
 
@@ -599,5 +663,164 @@ func testInterceptors(t *testing.T, ctx context.Context) {
 			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
 			"snapshot stats should not force immediate housekeeping",
 		)
+	})
+}
+
+func TestIndependentOperationThresholds(t *testing.T) {
+	testhelper.NewFeatureSets(
+		featureflag.HousekeepingMiddleware,
+	).Run(t, testIndependentOperationThresholds)
+}
+
+func testIndependentOperationThresholds(t *testing.T, ctx context.Context) {
+	cfg := testcfg.Build(t)
+	logger := testhelper.NewLogger(t)
+	catfileCache := catfile.NewCache(cfg)
+	t.Cleanup(catfileCache.Stop)
+
+	localRepoFactory := localrepo.NewFactory(logger, gitalycfg.NewLocator(cfg), gittest.NewCommandFactory(t, cfg), catfileCache)
+
+	housekeepingManager := &mockHousekeepingManager{
+		optimizeRepositoryInvocations: make(map[string]int),
+		delayCh:                       make(chan struct{}),
+	}
+
+	// Configure different thresholds for different operations
+	middlewareConfig := MiddlewareConfig{
+		DefaultThresholds: OperationThreshold{
+			RPCInterval:   20,
+			StatThreshold: 1000,
+		},
+		OperationThresholds: map[config.OperationType]OperationThreshold{
+			config.OpRepackRefs: {
+				RPCInterval:   2,
+				StatThreshold: 500,
+			},
+			config.OpRepackObjects: {
+				RPCInterval:   5,
+				StatThreshold: 1000,
+			},
+		},
+	}
+
+	housekeepingMiddleware := NewHousekeepingMiddleware(logger, protoregistry.GitalyProtoPreregistered, localRepoFactory, housekeepingManager, middlewareConfig)
+	defer housekeepingMiddleware.WaitForWorkers()
+
+	server := grpc.NewServer(
+		grpc.StreamInterceptor(housekeepingMiddleware.StreamServerInterceptor()),
+		grpc.UnaryInterceptor(housekeepingMiddleware.UnaryServerInterceptor()),
+	)
+	t.Cleanup(server.Stop)
+
+	service := &testService{}
+	gitalypb.RegisterRepositoryServiceServer(server, service)
+
+	listener, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
+	go func() {
+		testhelper.MustServe(t, server, listener)
+	}()
+
+	conn, err := grpc.NewClient(
+		listener.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, conn)
+
+	t.Run("pack-refs triggers before repack due to lower threshold", func(t *testing.T) {
+		repo := &gitalypb.Repository{
+			RelativePath: "independent-thresholds-repo",
+		}
+
+		sendFn := func() {
+			_, err = gitalypb.NewRepositoryServiceClient(conn).WriteRef(ctx, &gitalypb.WriteRefRequest{
+				Repository: repo,
+			})
+			require.NoError(t, err)
+		}
+
+		sendFn()
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"no housekeeping after 1 RPC")
+
+		sendFn()
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 0, 0),
+			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"no housekeeping AT threshold")
+
+		sendFn()
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"housekeeping triggered after pack-refs passing threshold")
+
+		sendFn()
+		sendFn()
+		sendFn()
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 2, 0),
+			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"housekeeping triggered again after pack-refs threshold")
+	})
+
+	t.Run("repack-refs and repack-objects run at independent intervals", func(t *testing.T) {
+		repo := &gitalypb.Repository{
+			RelativePath: "independent-intervals-repo",
+		}
+
+		sendFn := func() {
+			_, err = gitalypb.NewRepositoryServiceClient(conn).WriteRef(ctx, &gitalypb.WriteRefRequest{
+				Repository: repo,
+			})
+			require.NoError(t, err)
+		}
+
+		// With RPCInterval: 2 for pack-refs and RPCInterval: 5 for repack-objects:
+		// pack-refs triggers when writeCount > 2 (after 3 RPCs)
+		// repack-objects triggers when writeCount > 5 (after 6 RPCs)
+
+		// Send 3 RPCs - pack-refs threshold exceeded (3 > 2), repack-objects not (3 < 5)
+		for i := 0; i < 3; i++ {
+			sendFn()
+		}
+		housekeepingMiddleware.WaitForWorkers()
+
+		require.Equal(t,
+			testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 1, 0),
+			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"housekeeping should trigger after pack-refs threshold (3 RPCs)")
+
+		// Verify pack-refs was requested but NOT repack-objects
+		if featureflag.HousekeepingMiddleware.IsEnabled(ctx) {
+			ops := housekeepingManager.getLastEnabledOps(repo.GetRelativePath())
+			require.True(t, ops[config.OpRepackRefs],
+				"pack-refs should be enabled after 3 RPCs")
+			require.False(t, ops[config.OpRepackObjects],
+				"repack-objects should NOT be enabled after only 3 RPCs")
+		}
+
+		// Send 3 more RPCs
+		// pack-refs: 3 > 2, triggers again
+		// repack-objects: 6 > 5, triggers now
+		for i := 0; i < 3; i++ {
+			sendFn()
+		}
+		housekeepingMiddleware.WaitForWorkers()
+
+		require.Equal(t,
+			testhelper.EnabledOrDisabledFlag(ctx, featureflag.HousekeepingMiddleware, 2, 0),
+			housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"housekeeping should trigger again after 6 total RPCs")
+
+		if featureflag.HousekeepingMiddleware.IsEnabled(ctx) {
+			ops := housekeepingManager.getLastEnabledOps(repo.GetRelativePath())
+			require.True(t, ops[config.OpRepackRefs],
+				"pack-refs should be enabled")
+			require.True(t, ops[config.OpRepackObjects],
+				"repack-objects should now be enabled after 6 RPCs")
+		}
 	})
 }

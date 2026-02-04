@@ -634,7 +634,8 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	housekeepingManager := housekeepingmgr.New(cfg.Prometheus, logger, transactionManager, node)
 	prometheus.MustRegister(housekeepingManager)
 
-	housekeepingMiddleware := housekeepingmw.NewHousekeepingMiddleware(logger, protoregistry.GitalyProtoPreregistered, localrepoFactory, housekeepingManager, 20)
+	housekeepingMiddlewareConfig := housekeepingmw.DefaultMiddlewareConfig()
+	housekeepingMiddleware := housekeepingmw.NewHousekeepingMiddleware(logger, protoregistry.GitalyProtoPreregistered, localrepoFactory, housekeepingManager, housekeepingMiddlewareConfig)
 	defer housekeepingMiddleware.WaitForWorkers()
 
 	gitalyServerFactory := server.NewGitalyServerFactory(
