@@ -142,7 +142,7 @@ func TestPoolDial(t *testing.T) {
 			poolOptions: []PoolOption{
 				WithDialer(func(ctx context.Context, address string, dialOptions []grpc.DialOption) (*grpc.ClientConn, error) {
 					dialFuncInvocationCounter++
-					return DialContext(ctx, address, dialOptions)
+					return DialContext(ctx, address, WithGrpcOptions(dialOptions))
 				}),
 			},
 			test: func(t *testing.T, ctx context.Context, pool *Pool) {

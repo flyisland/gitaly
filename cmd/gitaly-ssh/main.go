@@ -146,7 +146,7 @@ func getConnection(ctx context.Context, url string, registry *sidechannel.Regist
 		return nil, fmt.Errorf("gitaly address can not be empty")
 	}
 
-	return sidechannel.Dial(ctx, registry, logger, url, dialOpts())
+	return sidechannel.Dial(ctx, registry, logger, url, client.WithGrpcOptions(dialOpts()))
 }
 
 func dialOpts() []grpc.DialOption {
