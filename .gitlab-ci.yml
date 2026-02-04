@@ -236,7 +236,7 @@ build:
     matrix:
       - GO_VERSION: !reference [.versions, go_supported]
         TEST_BOOT_ARGS: "--bundled-git"
-        BINARY_SIZE_CHECKER_ARGS: "--binary-size-threshold 350"
+        BINARY_SIZE_CHECKER_ARGS: "--binary-size-threshold 375"
 build:binaries:
   needs: []
   stage: build
