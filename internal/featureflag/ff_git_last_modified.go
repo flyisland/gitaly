@@ -5,5 +5,5 @@ var GitLastModified = NewFeatureFlag(
 	"git_last_modified",
 	"v18.5",
 	"https://gitlab.com/gitlab-org/gitaly/-/issues/6911",
-	false,
+	true,
 )
