@@ -8,7 +8,7 @@ replace github.com/go-enry/go-license-detector/v4 => github.com/gl-gitaly/go-lic
 require (
 	cloud.google.com/go/storage v1.59.2
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.4
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.30.0
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.31.0
 	github.com/ProtonMail/go-crypto v1.1.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.1
 	github.com/cloudflare/tableflip v1.2.3
@@ -88,7 +88,7 @@ require (
 	github.com/DataDog/sketches-go v1.4.7 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.54.0 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.54.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 // indirect
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20210105120005-909beea2cc74 // indirect
