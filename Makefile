@@ -355,9 +355,9 @@ prepare-tests: build-bundled-git
 install: install-bundled-git
 
 else
-prepare-tests: ${DEPENDENCY_DIR}/git-distribution/git
+prepare-tests: ${DEPENDENCY_DIR}/git-distribution/build/git
 
-export GITALY_TESTING_GIT_BINARY ?= ${DEPENDENCY_DIR}/git-distribution/bin-wrappers/git
+export GITALY_TESTING_GIT_BINARY ?= ${DEPENDENCY_DIR}/git-distribution/build/bin-wrappers/git
 endif
 
 ## Enable testing with the SHA256 object format.
