@@ -704,3 +704,77 @@ func Test_maxPatchBytesFor(t *testing.T) {
 		})
 	}
 }
+
+func TestDiffParserUnescapesFilenames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		escapedFilename  string
+		expectedFilename []byte
+	}{
+		{
+			name:             "newline",
+			escapedFilename:  `escaped\n_char.txt`,
+			expectedFilename: []byte("escaped\n_char.txt"),
+		},
+		{
+			name:             "tab",
+			escapedFilename:  `escaped\t_char.txt`,
+			expectedFilename: []byte("escaped\t_char.txt"),
+		},
+		{
+			name:             "carriage return",
+			escapedFilename:  `escaped\r_char.txt`,
+			expectedFilename: []byte("escaped\r_char.txt"),
+		},
+		{
+			name:             "backslash",
+			escapedFilename:  `escaped\\_char.txt`,
+			expectedFilename: []byte(`escaped\_char.txt`),
+		},
+		{
+			name:             "double quote",
+			escapedFilename:  `escaped\"_char.txt`,
+			expectedFilename: []byte(`escaped"_char.txt`),
+		},
+		{
+			name:             "single quote",
+			escapedFilename:  `escaped\'_char.txt`,
+			expectedFilename: []byte(`escaped'_char.txt`),
+		},
+		{
+			name:             "bell",
+			escapedFilename:  `escaped\a_char.txt`,
+			expectedFilename: []byte("escaped\a_char.txt"),
+		},
+		{
+			name:             "backspace",
+			escapedFilename:  `escaped\b_char.txt`,
+			expectedFilename: []byte("escaped\b_char.txt"),
+		},
+		{
+			name:             "form feed",
+			escapedFilename:  `escaped\f_char.txt`,
+			expectedFilename: []byte("escaped\f_char.txt"),
+		},
+		{
+			name:             "vertical tab",
+			escapedFilename:  `escaped\v_char.txt`,
+			expectedFilename: []byte("escaped\v_char.txt"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rawDiff := fmt.Sprintf(":000000 100644 %s %s A\t%s\n\n",
+				zeroOID, oid1, tc.escapedFilename)
+
+			diffs := getDiffs(t, rawDiff, Limits{})
+
+			require.Len(t, diffs, 1)
+			require.Equal(t, tc.expectedFilename, diffs[0].FromPath)
+			require.Equal(t, tc.expectedFilename, diffs[0].ToPath)
+		})
+	}
+}
