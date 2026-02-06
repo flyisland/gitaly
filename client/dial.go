@@ -12,11 +12,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/dnsresolver"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/sidechannel"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc"
 )
 
-// DefaultDialOpts hold the default DialOptions for connection to Gitaly over UNIX-socket
-var DefaultDialOpts = []grpc.DialOption{}
+// DialOption is an option that can be passed to Dial and DialContext.
+type DialOption = client.DialOption
 
 // DialContext creates a client connection to a Gitaly at the given address with the provided options. Valid address
 // formats are
@@ -29,24 +30,24 @@ var DefaultDialOpts = []grpc.DialOption{}
 // The returned ClientConn is configured with tracing and correlation id interceptors to ensure they are propagated
 // correctly. They're also configured to send Keepalives with settings matching what Gitaly expects.
 //
-// connOpts should not contain `grpc.WithInsecure` as DialContext determines whether it is needed or not from the
-// scheme. `grpc.TransportCredentials` should not be provided either as those are handled internally as well.
-func DialContext(ctx context.Context, rawAddress string, connOpts []grpc.DialOption) (*grpc.ClientConn, error) {
-	return client.New(ctx, rawAddress, client.WithGrpcOptions(connOpts))
+// Do not use grpc.WithInsecure or grpc.TransportCredentials in the options as DialContext handles
+// transport credentials internally based on the address scheme.
+func DialContext(ctx context.Context, rawAddress string, opts ...DialOption) (*grpc.ClientConn, error) {
+	return client.New(ctx, rawAddress, opts...)
 }
 
 // Dial calls DialContext with the provided arguments and context.Background. Refer to DialContext's documentation
 // for details.
-func Dial(rawAddress string, connOpts []grpc.DialOption) (*grpc.ClientConn, error) {
-	return DialContext(context.Background(), rawAddress, connOpts)
+func Dial(rawAddress string, opts ...DialOption) (*grpc.ClientConn, error) {
+	return DialContext(context.Background(), rawAddress, opts...)
 }
 
 // DialSidechannel configures the dialer to establish a Gitaly
 // backchannel connection instead of a regular gRPC connection. It also
 // injects sr as a sidechannel registry, so that Gitaly can establish
 // sidechannels back to the client.
-func DialSidechannel(ctx context.Context, rawAddress string, sr *SidechannelRegistry, connOpts []grpc.DialOption) (*grpc.ClientConn, error) {
-	return sidechannel.Dial(ctx, sr.registry, sr.logger, rawAddress, connOpts)
+func DialSidechannel(ctx context.Context, rawAddress string, sr *SidechannelRegistry, opts ...DialOption) (*grpc.ClientConn, error) {
+	return sidechannel.Dial(ctx, sr.registry, sr.logger, rawAddress, opts...)
 }
 
 // FailOnNonTempDialError helps to identify if remote listener is ready to accept new connections.
@@ -87,4 +88,19 @@ func DefaultDNSResolverBuilderConfig() *DNSResolverBuilderConfig {
 func WithGitalyDNSResolver(opts *DNSResolverBuilderConfig) grpc.DialOption {
 	builder := dnsresolver.NewBuilder((*dnsresolver.BuilderConfig)(opts))
 	return grpc.WithResolvers(builder, dnsresolver.NewTLSPlusDNSBuilder(builder))
+}
+
+// RetryPolicy is the configuration for gRPC retry policy on accessor RPCs.
+type RetryPolicy = gitalypb.MethodConfig_RetryPolicy
+
+// WithRetryPolicy returns a DialOption that sets a custom retry policy for accessor RPCs.
+// By default, accessor RPCs are retried with a policy of 4 max attempts, 400ms initial backoff,
+// 1400ms max backoff, 2x multiplier, and UNAVAILABLE as the retryable status code.
+func WithRetryPolicy(policy *RetryPolicy) DialOption {
+	return client.WithRetryPolicy(policy)
+}
+
+// WithGrpcOptions wraps gRPC dial options as a DialOption.
+func WithGrpcOptions(grpcOpts []grpc.DialOption) DialOption {
+	return client.WithGrpcOptions(grpcOpts)
 }

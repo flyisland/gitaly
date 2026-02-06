@@ -19,6 +19,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -32,6 +33,15 @@ const (
 	dnsConnection
 	dnsPlusTLSConnection
 )
+
+var (
+	defaultServiceConfig     *gitalypb.ServiceConfig
+	defaultServiceConfigJSON string
+)
+
+func init() {
+	defaultServiceConfig, defaultServiceConfigJSON = initDefaultServiceConfig()
+}
 
 func getConnectionType(rawAddress string) connectionType {
 	u, err := url.Parse(rawAddress)
@@ -122,6 +132,17 @@ func WithTransportCredentials(creds credentials.TransportCredentials) DialOption
 	return func(cfg *dialConfig) {
 		cfg.creds = creds
 	}
+}
+
+// WithRetryPolicy sets a custom retry policy for accessor RPCs. By default, accessor RPCs are
+// retried with a policy of 4 max attempts, 400ms initial backoff, 1400ms max backoff, 2x multiplier,
+// and UNAVAILABLE as the retryable status code. This option allows callers to override these defaults.
+func WithRetryPolicy(policy *gitalypb.MethodConfig_RetryPolicy) DialOption {
+	return WithGrpcOptions(
+		[]grpc.DialOption{
+			grpc.WithDefaultServiceConfig(serviceConfig(policy)),
+		},
+	)
 }
 
 // New creates a dormant connection to a Gitaly node serving at the given address. New is used by the public 'client'
@@ -234,7 +255,7 @@ func New(_ context.Context, rawAddress string, opts ...DialOption) (*grpc.Client
 		//
 		// For more information:
 		// https://gitlab.com/groups/gitlab-org/-/epics/8971#note_1207008162
-		grpc.WithDefaultServiceConfig(defaultServiceConfig()),
+		grpc.WithDefaultServiceConfig(defaultServiceConfigJSON),
 	}, connOpts...)
 
 	// https://github.com/grpc/grpc-go/issues/8207 prevents Unix connections from working
@@ -276,7 +297,22 @@ func cloneOpts(opts []grpc.DialOption) []grpc.DialOption {
 	return clone
 }
 
-func defaultServiceConfig() string {
+func serviceConfig(retryPolicy *gitalypb.MethodConfig_RetryPolicy) string {
+	serviceConfig := proto.Clone(defaultServiceConfig).(*gitalypb.ServiceConfig)
+
+	if retryPolicy != nil {
+		serviceConfig.MethodConfig[0].RetryPolicy = retryPolicy
+	}
+
+	configJSON, err := protojson.Marshal(serviceConfig)
+	if err != nil {
+		panic("fail to convert service config from protobuf to json")
+	}
+
+	return string(configJSON)
+}
+
+func initDefaultServiceConfig() (*gitalypb.ServiceConfig, string) {
 	// Compile the list of retryable methods. Only RPCs marked as accessors are safe to
 	// retry. Mutators are not safe to retry as they may not be idempotent.
 	var retryableMethods []*gitalypb.MethodConfig_Name
@@ -290,16 +326,13 @@ func defaultServiceConfig() string {
 			Method:  methodInfo.Method(),
 		})
 	}
-
-	serviceConfig := &gitalypb.ServiceConfig{
+	serviceConfig := gitalypb.ServiceConfig{
 		LoadBalancingConfig: []*gitalypb.LoadBalancingConfig{{
 			Policy: &gitalypb.LoadBalancingConfig_RoundRobin{},
 		}},
 		MethodConfig: []*gitalypb.MethodConfig{
 			{
 				Name: retryableMethods,
-				// This should be kept in sync with the RetryPolicy used by rails in the GitLab project
-				// in lib/gitlab/gitaly_client.rb.
 				RetryPolicy: &gitalypb.MethodConfig_RetryPolicy{
 					MaxAttempts:          4,
 					InitialBackoff:       durationpb.New(time.Millisecond * 400),
@@ -310,12 +343,15 @@ func defaultServiceConfig() string {
 			},
 		},
 	}
-	configJSON, err := protojson.Marshal(serviceConfig)
+
+	configJSON, err := protojson.Marshal(&serviceConfig)
 	if err != nil {
 		panic("fail to convert service config from protobuf to json")
 	}
 
-	return string(configJSON)
+	serviceConfigJSON := string(configJSON)
+
+	return &serviceConfig, serviceConfigJSON
 }
 
 // HealthCheckDialer uses provided dialer as an actual dialer, but issues a health check request to the remote

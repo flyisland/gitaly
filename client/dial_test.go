@@ -134,8 +134,7 @@ func TestDial(t *testing.T) {
 
 			ctx := testhelper.Context(t)
 
-			dialOpts := append(tc.dialOpts, WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()))
-			conn, err := Dial(tc.rawAddress, dialOpts)
+			conn, err := Dial(tc.rawAddress, WithGrpcOptions(append(tc.dialOpts, WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()))))
 			if tc.expectDialFailure {
 				require.Error(t, err)
 				return
@@ -224,8 +223,7 @@ func TestDialSidechannel(t *testing.T) {
 
 			ctx := testhelper.Context(t)
 
-			dialOpts := append(tc.dialOpts, WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()))
-			conn, err := DialSidechannel(ctx, tc.rawAddress, registry, dialOpts)
+			conn, err := DialSidechannel(ctx, tc.rawAddress, registry, WithGrpcOptions(append(tc.dialOpts, WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()))))
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, conn)
 
@@ -301,11 +299,11 @@ func TestDial_Correlation(t *testing.T) {
 		defer grpcServer.Stop()
 		ctx := testhelper.Context(t)
 
-		cc, err := DialContext(ctx, "unix://"+serverSocketPath, []grpc.DialOption{
+		cc, err := DialContext(ctx, "unix://"+serverSocketPath, WithGrpcOptions([]grpc.DialOption{
 			internalclient.UnaryInterceptor(),
 			internalclient.StreamInterceptor(),
 			WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()),
-		})
+		}))
 		require.NoError(t, err)
 		defer testhelper.MustClose(t, cc)
 
@@ -338,11 +336,11 @@ func TestDial_Correlation(t *testing.T) {
 		defer grpcServer.Stop()
 		ctx := testhelper.Context(t)
 
-		cc, err := DialContext(ctx, "unix://"+serverSocketPath, []grpc.DialOption{
+		cc, err := DialContext(ctx, "unix://"+serverSocketPath, WithGrpcOptions([]grpc.DialOption{
 			internalclient.UnaryInterceptor(),
 			internalclient.StreamInterceptor(),
 			WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()),
-		})
+		}))
 		require.NoError(t, err)
 		defer testhelper.MustClose(t, cc)
 
@@ -425,14 +423,14 @@ func TestDial_Tracing(t *testing.T) {
 		defer grpcServer.Stop()
 		ctx := testhelper.Context(t)
 
-		cc, err := DialContext(ctx, "unix://"+serverSocketPath, []grpc.DialOption{
+		cc, err := DialContext(ctx, "unix://"+serverSocketPath, WithGrpcOptions([]grpc.DialOption{
 			grpc.WithStatsHandler(otelgrpc.NewClientHandler(
 				otelgrpc.WithTracerProvider(reporter.TracerProvider()),
 				otelgrpc.WithPropagators(propagator))),
 			internalclient.UnaryInterceptor(),
 			internalclient.StreamInterceptor(),
 			WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()),
-		})
+		}))
 		require.NoError(t, err)
 		defer testhelper.MustClose(t, cc)
 
@@ -513,14 +511,14 @@ func TestDial_Tracing(t *testing.T) {
 
 		// This needs to be run after setting up the global tracer as it will cause us to
 		// create the span when executing the RPC call further down below.
-		cc, err := DialContext(ctx, "unix://"+serverSocketPath, []grpc.DialOption{
+		cc, err := DialContext(ctx, "unix://"+serverSocketPath, WithGrpcOptions([]grpc.DialOption{
 			grpc.WithStatsHandler(otelgrpc.NewClientHandler(
 				otelgrpc.WithTracerProvider(reporter.TracerProvider()),
 				otelgrpc.WithPropagators(propagator))),
 			internalclient.UnaryInterceptor(),
 			internalclient.StreamInterceptor(),
 			WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig()),
-		})
+		}))
 		require.NoError(t, err)
 		defer testhelper.MustClose(t, cc)
 
@@ -696,10 +694,14 @@ func TestHealthCheckDialer(t *testing.T) {
 	defer cleanup()
 	ctx := testhelper.Context(t)
 
-	_, err := HealthCheckDialer(DialContext)(ctx, addr, nil)
+	dialer := func(ctx context.Context, address string, opts []grpc.DialOption) (*grpc.ClientConn, error) {
+		return DialContext(ctx, address, WithGrpcOptions(opts))
+	}
+
+	_, err := HealthCheckDialer(dialer)(ctx, addr, nil)
 	testhelper.RequireGrpcError(t, status.Error(codes.Unauthenticated, "authentication required"), err)
 
-	cc, err := HealthCheckDialer(DialContext)(ctx, addr, []grpc.DialOption{
+	cc, err := HealthCheckDialer(dialer)(ctx, addr, []grpc.DialOption{
 		grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2("token")),
 		internalclient.UnaryInterceptor(),
 		internalclient.StreamInterceptor(),
@@ -716,20 +718,20 @@ var dialFuncs = []struct {
 	{
 		name: "Dial",
 		dial: func(t *testing.T, rawAddress string, connOpts []grpc.DialOption) (*grpc.ClientConn, error) {
-			return Dial(rawAddress, connOpts)
+			return Dial(rawAddress, WithGrpcOptions(connOpts))
 		},
 	},
 	{
 		name: "DialContext",
 		dial: func(t *testing.T, rawAddress string, connOpts []grpc.DialOption) (*grpc.ClientConn, error) {
-			return DialContext(testhelper.Context(t), rawAddress, connOpts)
+			return DialContext(testhelper.Context(t), rawAddress, WithGrpcOptions(connOpts))
 		},
 	},
 	{
 		name: "DialSidechannel",
 		dial: func(t *testing.T, rawAddress string, connOpts []grpc.DialOption) (*grpc.ClientConn, error) {
 			sr := NewSidechannelRegistry(newLogger(t))
-			return DialSidechannel(testhelper.Context(t), rawAddress, sr, connOpts)
+			return DialSidechannel(testhelper.Context(t), rawAddress, sr, WithGrpcOptions(connOpts))
 		},
 	},
 }

@@ -318,7 +318,7 @@ func TestConnectivity(t *testing.T) {
 		}
 
 		callWithGitalyDialer := func(t *testing.T, serverAddr string) (func(), error) {
-			conn, err := client.Dial(fmt.Sprintf("tls://%s", serverAddr), []grpc.DialOption{})
+			conn, err := client.Dial(fmt.Sprintf("tls://%s", serverAddr))
 			require.NoError(t, err)
 
 			// Verify connection works by making a simple RPC call
