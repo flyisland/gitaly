@@ -1539,21 +1539,21 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 	for i, tc := range []struct {
 		desc                string
 		replicationFactor   int
-		primaryStored       bool
-		assignmentsStored   bool
+		primaryStored       string
+		assignmentsStored   int
 		mockRepositoryStore func() datastore.RepositoryStore
 		expectedErr         error
 	}{
 		{
 			desc:              "without variable replication factor",
-			primaryStored:     true,
-			assignmentsStored: false,
+			primaryStored:     "praefect-internal-1",
+			assignmentsStored: 0,
 		},
 		{
 			desc:              "with variable replication factor",
 			replicationFactor: 3,
-			primaryStored:     true,
-			assignmentsStored: true,
+			primaryStored:     "praefect-internal-1",
+			assignmentsStored: 3,
 		},
 		{
 			desc: "repository metadata already exists",
@@ -1711,6 +1711,226 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 			}
 
 			require.Equal(t, expectedEvents, actualEvents, "ensure replication job created by stream director is correct")
+
+			// Verify that primary was stored or not according to tc.primaryStored
+			var primaryStorage string
+			require.NoError(t, tx.QueryRowContext(ctx,
+				`SELECT "primary" FROM repositories WHERE relative_path = $1`,
+				targetRepo.GetRelativePath(),
+			).Scan(&primaryStorage))
+			require.Equal(t, tc.primaryStored, primaryStorage)
+
+			// Verify that repository assignments were stored or not according to tc.assignmentsStored
+			var assignmentCount int
+			require.NoError(t, tx.QueryRowContext(ctx,
+				"SELECT COUNT(*) FROM repository_assignments WHERE relative_path = $1",
+				targetRepo.GetRelativePath(),
+			).Scan(&assignmentCount))
+			require.Equal(t, tc.assignmentsStored, assignmentCount)
+		})
+	}
+}
+
+// TestStreamDirector_additional_repo_creation tests datastore.CreateRepo requests which include an
+// additionalReplicaPath argument. This is true for RPCs like CreateFork and CreateObjectPool, where we must consult
+// the source repository when creating the new target repository.
+//
+// These tests ensure that if the source repository had entries in the repository_assignments table, that these entries
+// are set for the target repository too. This is important for forks and object pools, since an entire object pool
+// network must reside on the disks of the same subset of replicas.
+func TestStreamDirector_additional_repo_creation(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+
+	for _, tc := range []struct {
+		desc                       string
+		fullMethod                 string
+		createRequest              func(targetRelativePath, sourceRelativePath string) proto.Message
+		targetRelativePath         string
+		sourceHasAssignments       bool
+		expectedNewRepoAssignments []string
+	}{
+		{
+			desc:       "CreateFork without source assignments",
+			fullMethod: "/gitaly.RepositoryService/CreateFork",
+			createRequest: func(targetRelativePath, sourceRelativePath string) proto.Message {
+				return &gitalypb.CreateForkRequest{
+					Repository: &gitalypb.Repository{
+						StorageName:  "praefect",
+						RelativePath: targetRelativePath,
+					},
+					SourceRepository: &gitalypb.Repository{
+						StorageName:  "praefect",
+						RelativePath: sourceRelativePath,
+					},
+				}
+			},
+			targetRelativePath:   "/path/to/forked/repo",
+			sourceHasAssignments: false,
+		},
+		{
+			desc:       "CreateFork with source assignments",
+			fullMethod: "/gitaly.RepositoryService/CreateFork",
+			createRequest: func(targetRelativePath, sourceRelativePath string) proto.Message {
+				return &gitalypb.CreateForkRequest{
+					Repository: &gitalypb.Repository{
+						StorageName:  "praefect",
+						RelativePath: targetRelativePath,
+					},
+					SourceRepository: &gitalypb.Repository{
+						StorageName:  "praefect",
+						RelativePath: sourceRelativePath,
+					},
+				}
+			},
+			targetRelativePath:         "/path/to/forked/repo",
+			sourceHasAssignments:       true,
+			expectedNewRepoAssignments: []string{"praefect-internal-1", "praefect-internal-2"},
+		},
+		{
+			desc:       "CreateObjectPool without source assignments",
+			fullMethod: "/gitaly.ObjectPoolService/CreateObjectPool",
+			createRequest: func(targetRelativePath, sourceRelativePath string) proto.Message {
+				return &gitalypb.CreateObjectPoolRequest{
+					ObjectPool: &gitalypb.ObjectPool{
+						Repository: &gitalypb.Repository{
+							StorageName:  "praefect",
+							RelativePath: targetRelativePath,
+						},
+					},
+					Origin: &gitalypb.Repository{
+						StorageName:  "praefect",
+						RelativePath: sourceRelativePath,
+					},
+				}
+			},
+			targetRelativePath:   "@pools/ab/cd/1234",
+			sourceHasAssignments: false,
+		},
+		{
+			desc:       "CreateObjectPool with source assignments",
+			fullMethod: "/gitaly.ObjectPoolService/CreateObjectPool",
+			createRequest: func(targetRelativePath, sourceRelativePath string) proto.Message {
+				return &gitalypb.CreateObjectPoolRequest{
+					ObjectPool: &gitalypb.ObjectPool{
+						Repository: &gitalypb.Repository{
+							StorageName:  "praefect",
+							RelativePath: targetRelativePath,
+						},
+					},
+					Origin: &gitalypb.Repository{
+						StorageName:  "praefect",
+						RelativePath: sourceRelativePath,
+					},
+				}
+			},
+			targetRelativePath:         "@pools/ab/cd/1234",
+			sourceHasAssignments:       true,
+			expectedNewRepoAssignments: []string{"praefect-internal-1", "praefect-internal-2"},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			ctx := testhelper.Context(t)
+			logger := testhelper.NewLogger(t)
+
+			// We can't start a DB transaction here and roll back the changes at the end of each test,
+			// because the CreateObjectPool RPC is designated as non-transactional. Due to this, the
+			// coordinator marks all secondary replicas as outdated, causing newRequestFinalizer() to
+			// enqueue replication jobs for all secondaries. Each enqueue happens in its own goroutine,
+			// and this is problematic multiple goroutines attempt to use the same *sql.Tx instance.
+			//
+			// Instead, truncate all data in the test DB before each test. It's probably equivalent, but
+			// just slower.
+			db.TruncateAll(t)
+
+			primaryNode := &config.Node{Storage: "praefect-internal-1"}
+			secondaryNode1 := &config.Node{Storage: "praefect-internal-2"}
+			secondaryNode2 := &config.Node{Storage: "praefect-internal-3"}
+			conf := config.Config{
+				Failover: config.Failover{ElectionStrategy: config.ElectionStrategyPerRepository},
+				VirtualStorages: []*config.VirtualStorage{
+					{
+						Name:  "praefect",
+						Nodes: []*config.Node{primaryNode, secondaryNode1, secondaryNode2},
+					},
+				},
+			}
+
+			repositoryStore := datastore.NewPostgresRepositoryStore(db, conf.StorageNames())
+
+			sourceRelativePath := "@hashed/foo/bar"
+			sourceReplicaPath := "@cluster/foo/bar"
+			sourceRepoID, err := repositoryStore.ReserveRepositoryID(ctx, "praefect", sourceRelativePath)
+			require.NoError(t, err)
+
+			// Create source repository with only primary and secondaryNode1.
+			// When sourceHasAssignments is true, this creates explicit assignments
+			// to just these two nodes (not secondaryNode2).
+			require.NoError(t, repositoryStore.CreateRepository(ctx,
+				sourceRepoID,
+				"praefect",
+				sourceRelativePath,
+				sourceReplicaPath,
+				primaryNode.Storage,
+				[]string{secondaryNode1.Storage},
+				nil,
+				true,
+				tc.sourceHasAssignments,
+			))
+
+			conns := Connections{
+				"praefect": {
+					primaryNode.Storage:    &grpc.ClientConn{},
+					secondaryNode1.Storage: &grpc.ClientConn{},
+					secondaryNode2.Storage: &grpc.ClientConn{},
+				},
+			}
+
+			router := NewPerRepositoryRouter(
+				conns,
+				nil,
+				StaticHealthChecker{"praefect": {primaryNode.Storage, secondaryNode1.Storage, secondaryNode2.Storage}},
+				nil,
+				nil,
+				nil,
+				repositoryStore,
+				conf.DefaultReplicationFactors(),
+			)
+
+			coordinator := NewCoordinator(
+				logger,
+				datastore.NewReplicationEventQueueInterceptor(datastore.NewPostgresReplicationEventQueue(db)),
+				repositoryStore,
+				router,
+				transactions.NewManager(conf, logger),
+				conf,
+				protoregistry.GitalyProtoPreregistered,
+			)
+
+			frame, err := proto.Marshal(tc.createRequest(tc.targetRelativePath, sourceRelativePath))
+			require.NoError(t, err)
+
+			streamParams, err := coordinator.StreamDirector(correlation.ContextWithCorrelation(ctx, "my-correlation-id"), tc.fullMethod, &mockPeeker{frame})
+			require.NoError(t, err)
+
+			require.NoError(t, streamParams.RequestFinalizer())
+
+			rows, err := db.QueryContext(ctx,
+				"SELECT storage FROM repository_assignments WHERE relative_path = $1 ORDER BY storage",
+				tc.targetRelativePath,
+			)
+			require.NoError(t, err)
+
+			var actualAssignments []string
+			for rows.Next() {
+				var st string
+				require.NoError(t, rows.Scan(&st))
+				actualAssignments = append(actualAssignments, st)
+			}
+			require.NoError(t, rows.Err())
+			require.NoError(t, rows.Close())
+			require.ElementsMatch(t, tc.expectedNewRepoAssignments, actualAssignments)
 		})
 	}
 }
@@ -2941,6 +3161,7 @@ func TestNewRequestFinalizer_contextIsDisjointedFromTheRPC(t *testing.T) {
 					tc.change,
 					datastore.Params{"RelativePath": "relative-path"},
 					"rpc-name",
+					"",
 				)(),
 				tc.errMsg,
 			)
@@ -2994,6 +3215,7 @@ func TestNewRequestFinalizer_enqueueErrorPropagation(t *testing.T) {
 				datastore.UpdateRepo,
 				datastore.Params{"RelativePath": "relative-path"},
 				"rpc-name",
+				"",
 			)()
 			require.Equal(t, tc.expectedErr, err)
 		})

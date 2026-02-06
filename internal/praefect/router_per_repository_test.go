@@ -1001,7 +1001,7 @@ func TestPerRepositoryRouterRouteRepositoryCreation(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			db.TruncateAll(t)
 
-			rs := datastore.NewPostgresRepositoryStore(db, nil)
+			rs := datastore.NewPostgresRepositoryStore(db, configuredNodes)
 			if tc.setupRepoStore != nil {
 				tc.setupRepoStore(t, rs)
 			}

@@ -543,6 +543,7 @@ func (c *Coordinator) mutatorStreamParameters(ctx context.Context, call grpcCall
 				change,
 				params,
 				call.fullMethodName,
+				route.AdditionalReplicaPath,
 			))
 	}
 
@@ -913,7 +914,7 @@ func (c *Coordinator) createTransactionFinalizer(
 
 		return c.newRequestFinalizer(
 			ctx, route.RepositoryID, virtualStorage, targetRepo, route.ReplicaPath, route.Primary.Storage,
-			updated, outdated, change, params, cause)()
+			updated, outdated, change, params, cause, route.AdditionalReplicaPath)()
 	}
 }
 
@@ -1077,6 +1078,7 @@ func (c *Coordinator) newRequestFinalizer(
 	change datastore.ChangeType,
 	params datastore.Params,
 	cause string,
+	additionalReplicaPath string, // set for RPCs like CreateFork and CreateObjectPool
 ) func() error {
 	return func() error {
 		// Use a separate timeout for the database operations. If the request times out, the passed in context is
@@ -1112,6 +1114,19 @@ func (c *Coordinator) newRequestFinalizer(
 			variableReplicationFactorEnabled := repositorySpecificPrimariesEnabled &&
 				c.conf.DefaultReplicationFactors()[virtualStorage] > 0
 
+			// The repository should be explicitly assigned to a subset of replicas if:
+			// - A reduced replication factor is used; or
+			// - The repository is a fork (thus additionalReplicaPath is the path of the upstream), and
+			//   the upstream had explicit assignments.
+			storeAssignments := variableReplicationFactorEnabled
+			if !storeAssignments && additionalReplicaPath != "" {
+				hasAssignments, err := c.rs.HasRepositoryAssignments(ctx, additionalReplicaPath)
+				if err != nil {
+					return fmt.Errorf("check repository assignments: %w", err)
+				}
+				storeAssignments = hasAssignments
+			}
+
 			if err := c.rs.CreateRepository(ctx,
 				repositoryID,
 				virtualStorage,
@@ -1121,7 +1136,7 @@ func (c *Coordinator) newRequestFinalizer(
 				updatedSecondaries,
 				outdatedSecondaries,
 				repositorySpecificPrimariesEnabled,
-				variableReplicationFactorEnabled,
+				storeAssignments,
 			); err != nil {
 				if errors.Is(err, datastore.ErrRepositoryAlreadyExists) {
 					return structerr.NewAlreadyExists("%w", err)
