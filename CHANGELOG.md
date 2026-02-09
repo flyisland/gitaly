@@ -44,6 +44,10 @@ No changes.
 
 - [Add `pagination_cursor` to `ListCommitsResponse`](gitlab-org/gitaly@fdba978cadb7fcae6aa59bad30cf497d5d1a8be5) ([merge request](gitlab-org/gitaly!8303))
 
+## 18.6.6 (2026-02-09)
+
+No changes.
+
 ## 18.6.5 (2026-02-04)
 
 No changes.
