@@ -126,6 +126,11 @@ func TestHandler_propagatesServerError(t *testing.T) {
 		Dsn:       sentryURL.String(),
 		Transport: sentry.NewHTTPSyncTransport(),
 	}))
+	defer func() {
+		if client := sentry.CurrentHub().Client(); client != nil {
+			client.Close()
+		}
+	}()
 
 	// Verify that Sentry is configured correctyl to be triggered.
 	sentry.CaptureEvent(sentry.NewEvent())
