@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping/manager"
@@ -119,10 +118,6 @@ func (m *Middleware) WaitForWorkers() {
 // UnaryServerInterceptor returns gRPC unary middleware.
 func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		if featureflag.HousekeepingMiddleware.IsDisabled(ctx) {
-			return handler(ctx, req)
-		}
-
 		methodInfo, err := m.registry.LookupMethod(info.FullMethod)
 		if err != nil {
 			// The only error that occurs here is the failure to find the method in the registry, which
@@ -182,10 +177,6 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 // StreamServerInterceptor returns gRPC stream request middleware.
 func (m *Middleware) StreamServerInterceptor() grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if featureflag.HousekeepingMiddleware.IsDisabled(ss.Context()) {
-			return handler(srv, ss)
-		}
-
 		methodInfo, err := m.registry.LookupMethod(info.FullMethod)
 		if err != nil {
 			// The only error that occurs here is the failure to find the method in the registry, which
