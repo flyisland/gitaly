@@ -107,7 +107,7 @@ func (s *ServerHandshaker) Handshake(conn net.Conn, authInfo credentials.AuthInf
 	cfg := DefaultConfiguration()
 	cfg.AcceptBacklog = 1
 	cfg.MaximumStreamWindowSizeBytes = 16 * 1024 * 1024
-	muxSession, err := yamux.Server(conn, muxConfig(s.logger.WithField("component", "backchannel.YamuxServer"), cfg))
+	muxSession, err := yamux.Server(newInstrumentedConn(conn), muxConfig(s.logger.WithField("component", "backchannel.YamuxServer"), cfg))
 	if err != nil {
 		return nil, nil, fmt.Errorf("create multiplexing session: %w", err)
 	}
