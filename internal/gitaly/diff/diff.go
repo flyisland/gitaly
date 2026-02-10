@@ -531,6 +531,8 @@ func unescape(s []byte) []byte {
 				switch s[i+1] {
 				case '"', '\\', '/', '\'':
 					unescapedByte = s[i+1]
+				case 'a':
+					unescapedByte = '\a'
 				case 'b':
 					unescapedByte = '\b'
 				case 'f':
@@ -541,6 +543,8 @@ func unescape(s []byte) []byte {
 					unescapedByte = '\r'
 				case 't':
 					unescapedByte = '\t'
+				case 'v':
+					unescapedByte = '\v'
 				default:
 					unescaped = append(unescaped, '\\')
 					unescapedByte = s[i+1]
