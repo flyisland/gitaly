@@ -79,6 +79,7 @@ func TestCgroupMemoryWatcher_Poll(t *testing.T) {
 					"memory_threshold":           0.9,
 					"inactive_file":              uint64(0),
 					"anon":                       uint64(0),
+					"anon_ratio":                 float64(0),
 					"memory_high_events":         uint64(0),
 					"memory_max_events":          uint64(0),
 					"oom_kills":                  uint64(0),
@@ -119,6 +120,7 @@ func TestCgroupMemoryWatcher_Poll(t *testing.T) {
 					"memory_threshold":           0.9,
 					"inactive_file":              uint64(100000000),
 					"anon":                       uint64(0),
+					"anon_ratio":                 float64(0),
 					"memory_high_events":         uint64(0),
 					"memory_max_events":          uint64(0),
 					"oom_kills":                  uint64(0),
@@ -220,6 +222,7 @@ func TestCgroupMemoryWatcher_Poll(t *testing.T) {
 					"memory_threshold":           0.5,
 					"inactive_file":              uint64(100000000),
 					"anon":                       uint64(0),
+					"anon_ratio":                 float64(0),
 					"memory_high_events":         uint64(0),
 					"memory_max_events":          uint64(0),
 					"oom_kills":                  uint64(0),
@@ -273,6 +276,7 @@ func TestCgroupMemoryWatcher_Poll(t *testing.T) {
 					"memory_threshold":           0.9,
 					"inactive_file":              uint64(50000000),
 					"anon":                       uint64(1400000000),
+					"anon_ratio":                 float64(0.7),
 					"memory_high_events":         uint64(10),
 					"memory_max_events":          uint64(3),
 					"oom_kills":                  uint64(2),
@@ -300,6 +304,107 @@ func TestCgroupMemoryWatcher_Poll(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tc.expectedEvent, event)
+			}
+		})
+	}
+}
+
+func TestCgroupMemoryWatcher_AnonMemory(t *testing.T) {
+	for _, tc := range []struct {
+		desc        string
+		manager     *testCgroupManager
+		expectEvent bool
+		expectLog   bool
+	}{
+		{
+			desc: "no backoff + no anon pressure",
+			manager: &testCgroupManager{
+				ready: true,
+				statsList: []cgroups.Stats{
+					{
+						ParentStats: cgroups.CgroupStats{
+							MemoryUsage:       850000000,
+							MemoryLimit:       2000000000,
+							TotalAnon:         500000000,
+							TotalInactiveFile: 50000000,
+						},
+					},
+				},
+			},
+			expectEvent: false,
+			expectLog:   false,
+		},
+		{
+			desc: "no backoff + anon pressure",
+			manager: &testCgroupManager{
+				ready: true,
+				statsList: []cgroups.Stats{
+					{
+						ParentStats: cgroups.CgroupStats{
+							MemoryUsage:       850000000,
+							MemoryLimit:       2000000000,
+							TotalAnon:         1500000000,
+							TotalInactiveFile: 50000000,
+						},
+					},
+				},
+			},
+			expectEvent: false,
+			expectLog:   true,
+		},
+		{
+			desc: "backoff + no anon pressure",
+			manager: &testCgroupManager{
+				ready: true,
+				statsList: []cgroups.Stats{
+					{
+						ParentStats: cgroups.CgroupStats{
+							MemoryUsage:       1850000000,
+							MemoryLimit:       2000000000,
+							TotalAnon:         500000000,
+							TotalInactiveFile: 50000000,
+						},
+					},
+				},
+			},
+			expectEvent: true,
+			expectLog:   false,
+		},
+		{
+			desc: "backoff + anon pressure",
+			manager: &testCgroupManager{
+				ready: true,
+				statsList: []cgroups.Stats{
+					{
+						ParentStats: cgroups.CgroupStats{
+							MemoryUsage:       1850000000,
+							MemoryLimit:       2000000000,
+							TotalAnon:         1500000000,
+							TotalInactiveFile: 50000000,
+						},
+					},
+				},
+			},
+			expectEvent: true,
+			expectLog:   true,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			logger := testhelper.NewLogger(t)
+			hook := testhelper.AddLoggerHook(logger)
+
+			watcher := NewCgroupMemoryWatcher(tc.manager, 0.9).WithLogger(logger)
+			event, err := watcher.Poll(testhelper.Context(t))
+			require.Nil(t, err)
+
+			require.Equal(t, tc.expectEvent, event.ShouldBackoff)
+
+			if tc.expectLog {
+				for _, logEntry := range hook.AllEntries() {
+					require.Contains(t, logEntry.Message, "Anonymous memory pressure detected", "should have anon memory log")
+				}
 			}
 		})
 	}
