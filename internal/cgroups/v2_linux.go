@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/containerd/cgroups/v3/cgroup2"
@@ -19,6 +22,58 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
+// supportsCloneIntoCgroup performs two checks to determine whether the running system allows
+// a process to be forked directly into an arbitrary cgroup. Firstly, the kernel must be new
+// enough to support this. Secondly, Gitaly must have permission to execute the clone3 syscall.
+//
+// The second factor has historically been problematic in containerised environments, where a
+// restrictive seccomp profile blocks the clone3(2) syscall. We need to detect these cases so we
+// can gracefully fall back to using clone(2) and moving the process into the cgroup _after_ it's
+// been started.
+func supportsCloneIntoCgroup(cfg cgroupscfg.Config) (bool, error) {
+	kernelSupported, err := kernel.IsAtLeast(kernel.Version{Major: 5, Minor: 7})
+	if err != nil {
+		return false, fmt.Errorf("detect kernel version: %w", err)
+	}
+
+	if !kernelSupported {
+		return false, nil
+	}
+
+	// Use the root of the Gitaly hierarchy, since we don't want to worry about allocating
+	// a repository cgroup.
+	cgroupDirPath := filepath.Join(cfg.Mountpoint, cfg.HierarchyRoot)
+	dir, err := os.Open(cgroupDirPath)
+	if err != nil {
+		return false, fmt.Errorf("open cgroup directory: %w", err)
+	}
+
+	defer func() {
+		_ = dir.Close()
+	}()
+
+	// The simplest command imaginable. The command setup is similar to what we do in
+	// CGroupManager.CloneIntoCgroup().
+	cmd := exec.Command("/bin/true")
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.UseCgroupFD = true
+	cmd.SysProcAttr.CgroupFD = int(dir.Fd())
+
+	if err := cmd.Start(); err != nil {
+		// The "function not implemented" error is the signal that something is blocking
+		// us from invoking clone3(2).
+		if errors.Is(err, syscall.ENOSYS) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("exec command in cgroup: %w", err)
+	}
+
+	return true, cmd.Wait()
+}
+
 type cgroupV2Handler struct {
 	cfg    cgroupscfg.Config
 	logger log.Logger
@@ -29,10 +84,9 @@ type cgroupV2Handler struct {
 }
 
 func newV2Handler(cfg cgroupscfg.Config, logger log.Logger, pid int) *cgroupV2Handler {
-	cloneIntoCgroup, err := kernel.IsAtLeast(kernel.Version{Major: 5, Minor: 7})
+	cloneIntoCgroup, err := supportsCloneIntoCgroup(cfg)
 	if err != nil {
-		// Log the error for now as we're only rolling out functionality behind feature flag.
-		logger.WithError(err).Error("failed detecting kernel version, CLONE_INTO_CGROUP support disabled")
+		logger.WithError(err).Error("failed to check cloneIntoCgroup support. Cloning directly into a cgroup will be disabled.")
 	}
 
 	return &cgroupV2Handler{
