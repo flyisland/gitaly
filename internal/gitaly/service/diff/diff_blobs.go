@@ -304,6 +304,8 @@ func (s *server) sendDiff(stream gitalypb.DiffService_DiffBlobsServer, diff *dif
 		Binary:              diff.Binary,
 		OverPatchBytesLimit: diff.TooLarge,
 		PatchSize:           diff.PatchSize,
+		LinesAdded:          diff.LinesAdded,
+		LinesRemoved:        diff.LinesRemoved,
 	}
 
 	for {
