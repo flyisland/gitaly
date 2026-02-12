@@ -259,8 +259,7 @@ func readNextDiff(reader *bufio.Reader, diff *Diff, skipPatch bool) error {
 		case bytes.HasPrefix(line, []byte("Binary")):
 			diff.Binary = true
 			fallthrough
-		case bytes.HasPrefix(line, []byte("~\n")),
-			helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\"):
+		case helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\", "~\n"):
 			if err := consumeChunkLine(reader, diff, skipPatch, true); err != nil {
 				return err
 			}
