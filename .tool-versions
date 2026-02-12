@@ -1,5 +1,5 @@
 # Versions of Gitaly dependencies managed by asdf.
-golang 1.24.11
+golang 1.24.13
 ruby 3.3.10
 
 # For linting documentation
