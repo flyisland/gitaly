@@ -52,12 +52,13 @@ After your merge request has been approved according to our [approval guidelines
 | Description | Link |
 | -------- | -------- |
 | Issue on [Gitaly](https://gitlab.com/gitlab-org/gitaly/issues) | #TODO  |
+| CVE request | #TODO |
 
 ### Details
 
 | Description | Details | Further details|
 | -------- | -------- | -------- |
-| Versions affected | X.Y  | |
+| First Version affected | X.Y  | |
 | Upgrade notes | | |
 | Thanks | | |
 
