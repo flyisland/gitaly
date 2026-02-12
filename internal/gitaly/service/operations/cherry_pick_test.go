@@ -477,17 +477,6 @@ func testServerUserCherryPickMergeCommit(t *testing.T, ctx context.Context) {
 	cherryPickedCommit, err := repo.ReadCommit(ctx, cherryPickCommitID.Revision())
 	require.NoError(t, err)
 
-	destinationBranch := "cherry-picking-dst"
-	gittest.WriteCommit(t, cfg, repoPath,
-		gittest.WithParents(baseCommitID),
-		gittest.WithBranch(destinationBranch),
-		gittest.WithMessage("add zucchini"),
-		gittest.WithTreeEntries(
-			gittest.TreeEntry{Mode: "100644", Path: "a", Content: "apple"},
-			gittest.TreeEntry{Mode: "100644", Path: "z", Content: "zucchini"},
-		),
-	)
-
 	testCases := []struct {
 		desc string
 		sign bool
@@ -502,8 +491,19 @@ func testServerUserCherryPickMergeCommit(t *testing.T, ctx context.Context) {
 		},
 	}
 
+	destinationBranch := "cherry-picking-dst"
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			gittest.WriteCommit(t, cfg, repoPath,
+				gittest.WithParents(baseCommitID),
+				gittest.WithBranch(destinationBranch),
+				gittest.WithMessage("add zucchini"),
+				gittest.WithTreeEntries(
+					gittest.TreeEntry{Mode: "100644", Path: "a", Content: "apple"},
+					gittest.TreeEntry{Mode: "100644", Path: "z", Content: "zucchini"},
+				),
+			)
+
 			request := &gitalypb.UserCherryPickRequest{
 				Repository: repoProto,
 				User:       gittest.TestUser,
