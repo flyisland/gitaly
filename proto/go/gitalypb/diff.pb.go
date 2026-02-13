@@ -767,7 +767,13 @@ type CommitDiffResponse struct {
 	Collapsed bool `protobuf:"varint,12,opt,name=collapsed,proto3" json:"collapsed,omitempty"`
 	// too_large indicates the patch was pruned since it surpassed a hard limit, and can
 	// therefore not be expanded.
-	TooLarge      bool `protobuf:"varint,13,opt,name=too_large,json=tooLarge,proto3" json:"too_large,omitempty"`
+	TooLarge bool `protobuf:"varint,13,opt,name=too_large,json=tooLarge,proto3" json:"too_large,omitempty"`
+	// lines_added is the number of lines added in the diff. This count always represents the
+	// full diff, even when it is pruned.
+	LinesAdded int32 `protobuf:"varint,14,opt,name=lines_added,json=linesAdded,proto3" json:"lines_added,omitempty"`
+	// lines_removed is the number of lines removed in the diff. This count always represents the
+	// full diff, even when it is pruned.
+	LinesRemoved  int32 `protobuf:"varint,15,opt,name=lines_removed,json=linesRemoved,proto3" json:"lines_removed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -884,6 +890,20 @@ func (x *CommitDiffResponse) GetTooLarge() bool {
 		return x.TooLarge
 	}
 	return false
+}
+
+func (x *CommitDiffResponse) GetLinesAdded() int32 {
+	if x != nil {
+		return x.LinesAdded
+	}
+	return 0
+}
+
+func (x *CommitDiffResponse) GetLinesRemoved() int32 {
+	if x != nil {
+		return x.LinesRemoved
+	}
+	return 0
 }
 
 // CommitDeltaRequest is a request for the CommitDelta RPC.
@@ -2547,7 +2567,13 @@ type DiffBlobsResponse struct {
 	// patch_bytes_limit to avoid receiving large patches. If a patch exceeds this byte limit and gets
 	// pruned, the patch size can be used by the client to determine whether it is sensible to make a
 	// follow-up DiffBlobs request by increasing the patch_bytes_limit to a "hard" limit.
-	PatchSize     int32 `protobuf:"varint,7,opt,name=patch_size,json=patchSize,proto3" json:"patch_size,omitempty"`
+	PatchSize int32 `protobuf:"varint,7,opt,name=patch_size,json=patchSize,proto3" json:"patch_size,omitempty"`
+	// lines_added is the number of lines added in the diff. This count always represents the
+	// full diff, even when it is pruned.
+	LinesAdded int32 `protobuf:"varint,8,opt,name=lines_added,json=linesAdded,proto3" json:"lines_added,omitempty"`
+	// lines_removed is the number of lines removed in the diff. This count always represents the
+	// full diff, even when it is pruned.
+	LinesRemoved  int32 `protobuf:"varint,9,opt,name=lines_removed,json=linesRemoved,proto3" json:"lines_removed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2627,6 +2653,20 @@ func (x *DiffBlobsResponse) GetOverPatchBytesLimit() bool {
 func (x *DiffBlobsResponse) GetPatchSize() int32 {
 	if x != nil {
 		return x.PatchSize
+	}
+	return 0
+}
+
+func (x *DiffBlobsResponse) GetLinesAdded() int32 {
+	if x != nil {
+		return x.LinesAdded
+	}
+	return 0
+}
+
+func (x *DiffBlobsResponse) GetLinesRemoved() int32 {
+	if x != nil {
+		return x.LinesRemoved
 	}
 	return 0
 }
@@ -2926,7 +2966,7 @@ const file_diff_proto_rawDesc = "" +
 	"\x11WhitespaceChanges\x12\"\n" +
 	"\x1eWHITESPACE_CHANGES_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19WHITESPACE_CHANGES_IGNORE\x10\x01\x12!\n" +
-	"\x1dWHITESPACE_CHANGES_IGNORE_ALL\x10\x02J\x04\b\x04\x10\x05R\x18ignore_whitespace_change\"\xf8\x02\n" +
+	"\x1dWHITESPACE_CHANGES_IGNORE_ALL\x10\x02J\x04\b\x04\x10\x05R\x18ignore_whitespace_change\"\xbe\x03\n" +
 	"\x12CommitDiffResponse\x12\x1b\n" +
 	"\tfrom_path\x18\x01 \x01(\fR\bfromPath\x12\x17\n" +
 	"\ato_path\x18\x02 \x01(\fR\x06toPath\x12\x17\n" +
@@ -2941,7 +2981,10 @@ const file_diff_proto_rawDesc = "" +
 	"endOfPatch\x12'\n" +
 	"\x0foverflow_marker\x18\v \x01(\bR\x0eoverflowMarker\x12\x1c\n" +
 	"\tcollapsed\x18\f \x01(\bR\tcollapsed\x12\x1b\n" +
-	"\ttoo_large\x18\r \x01(\bR\btooLargeJ\x04\b\b\x10\t\"\xb2\x01\n" +
+	"\ttoo_large\x18\r \x01(\bR\btooLarge\x12\x1f\n" +
+	"\vlines_added\x18\x0e \x01(\x05R\n" +
+	"linesAdded\x12#\n" +
+	"\rlines_removed\x18\x0f \x01(\x05R\flinesRemovedJ\x04\b\b\x10\t\"\xb2\x01\n" +
 	"\x12CommitDeltaRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
@@ -3117,7 +3160,7 @@ const file_diff_proto_rawDesc = "" +
 	"\x11WhitespaceChanges\x12\"\n" +
 	"\x1eWHITESPACE_CHANGES_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19WHITESPACE_CHANGES_IGNORE\x10\x01\x12!\n" +
-	"\x1dWHITESPACE_CHANGES_IGNORE_ALL\x10\x02\"\xcf\x02\n" +
+	"\x1dWHITESPACE_CHANGES_IGNORE_ALL\x10\x02\"\x95\x03\n" +
 	"\x11DiffBlobsResponse\x12 \n" +
 	"\fleft_blob_id\x18\x01 \x01(\tR\n" +
 	"leftBlobId\x12\"\n" +
@@ -3127,7 +3170,10 @@ const file_diff_proto_rawDesc = "" +
 	"\x06binary\x18\x05 \x01(\bR\x06binary\x123\n" +
 	"\x16over_patch_bytes_limit\x18\x06 \x01(\bR\x13overPatchBytesLimit\x12\x1d\n" +
 	"\n" +
-	"patch_size\x18\a \x01(\x05R\tpatchSize\"8\n" +
+	"patch_size\x18\a \x01(\x05R\tpatchSize\x12\x1f\n" +
+	"\vlines_added\x18\b \x01(\x05R\n" +
+	"linesAdded\x12#\n" +
+	"\rlines_removed\x18\t \x01(\x05R\flinesRemoved\"8\n" +
 	"\x06Status\x12\x15\n" +
 	"\x11STATUS_INCOMPLETE\x10\x00\x12\x17\n" +
 	"\x13STATUS_END_OF_PATCH\x10\x012\xa4\x06\n" +

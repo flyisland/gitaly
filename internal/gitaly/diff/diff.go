@@ -30,6 +30,8 @@ type Diff struct {
 	OldMode         int32
 	NewMode         int32
 	PatchSize       int32
+	LinesAdded      int32
+	LinesRemoved    int32
 	FromPath        []byte
 	ToPath          []byte
 	Patch           []byte
@@ -259,8 +261,7 @@ func readNextDiff(reader *bufio.Reader, diff *Diff, skipPatch bool) error {
 		case bytes.HasPrefix(line, []byte("Binary")):
 			diff.Binary = true
 			fallthrough
-		case bytes.HasPrefix(line, []byte("~\n")),
-			helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\"):
+		case helper.ByteSliceHasAnyPrefix(line, "-", "+", " ", "\\", "~\n"):
 			if err := consumeChunkLine(reader, diff, skipPatch, true); err != nil {
 				return err
 			}
@@ -477,6 +478,13 @@ func consumeChunkLine(reader *bufio.Reader, diff *Diff, skipPatch, updateStats b
 	var byteCount int
 	for done := false; !done; {
 		line, err := reader.ReadSlice('\n')
+		if updateStats && byteCount == 0 && len(line) > 0 {
+			if line[0] == '+' {
+				diff.LinesAdded++
+			} else if line[0] == '-' {
+				diff.LinesRemoved++
+			}
+		}
 		byteCount += len(line)
 
 		switch {

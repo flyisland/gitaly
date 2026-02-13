@@ -52,6 +52,26 @@ index %[1]s..%[2]s
 -foo
 `, oid1, zeroOID)
 
+	modifyRaw := Raw{
+		SrcMode: 0o100644,
+		DstMode: 0o100644,
+		SrcOID:  oid1.String(),
+		DstOID:  oid2.String(),
+		Status:  'M',
+		SrcPath: []byte("foo"),
+	}
+
+	modifyDiff := fmt.Sprintf(`diff --git a/foo b/foo
+index %[1]s..%[2]s 100644
+--- a/foo
++++ b/foo
+@@ -1,2 +1,3 @@
+ context
+-old
++new
++added
+`, oid1, oid2)
+
 	for _, tc := range []struct {
 		desc          string
 		rawInfo       []Raw
@@ -82,13 +102,35 @@ index %[1]s..%[2]s
 			diffOutput: addDiff,
 			expectedDiffs: []*Diff{
 				{
-					lineCount: 1,
-					byteCount: 5,
-					FromID:    zeroOID.String(),
-					ToID:      oid1.String(),
-					PatchSize: 19,
-					FromPath:  []byte("foo"),
-					Patch:     []byte("@@ -0,0 +1 @@\n+foo\n"),
+					lineCount:    1,
+					byteCount:    5,
+					FromID:       zeroOID.String(),
+					ToID:         oid1.String(),
+					PatchSize:    19,
+					LinesAdded:   1,
+					LinesRemoved: 0,
+					FromPath:     []byte("foo"),
+					Patch:        []byte("@@ -0,0 +1 @@\n+foo\n"),
+				},
+			},
+		},
+		{
+			desc: "lines added and removed",
+			rawInfo: []Raw{
+				modifyRaw,
+			},
+			diffOutput: modifyDiff,
+			expectedDiffs: []*Diff{
+				{
+					lineCount:    4,
+					byteCount:    26,
+					FromID:       oid1.String(),
+					ToID:         oid2.String(),
+					PatchSize:    42,
+					LinesAdded:   2,
+					LinesRemoved: 1,
+					FromPath:     []byte("foo"),
+					Patch:        []byte("@@ -1,2 +1,3 @@\n context\n-old\n+new\n+added\n"),
 				},
 			},
 		},
@@ -101,22 +143,26 @@ index %[1]s..%[2]s
 			diffOutput: addDiff + deleteDiff,
 			expectedDiffs: []*Diff{
 				{
-					lineCount: 1,
-					byteCount: 5,
-					FromID:    zeroOID.String(),
-					ToID:      oid1.String(),
-					PatchSize: 19,
-					FromPath:  []byte("foo"),
-					Patch:     []byte("@@ -0,0 +1 @@\n+foo\n"),
+					lineCount:    1,
+					byteCount:    5,
+					FromID:       zeroOID.String(),
+					ToID:         oid1.String(),
+					PatchSize:    19,
+					LinesAdded:   1,
+					LinesRemoved: 0,
+					FromPath:     []byte("foo"),
+					Patch:        []byte("@@ -0,0 +1 @@\n+foo\n"),
 				},
 				{
-					lineCount: 1,
-					byteCount: 5,
-					FromID:    oid1.String(),
-					ToID:      zeroOID.String(),
-					PatchSize: 19,
-					FromPath:  []byte("foo"),
-					Patch:     []byte("@@ -1 +0,0 @@\n-foo\n"),
+					lineCount:    1,
+					byteCount:    5,
+					FromID:       oid1.String(),
+					ToID:         zeroOID.String(),
+					PatchSize:    19,
+					LinesAdded:   0,
+					LinesRemoved: 1,
+					FromPath:     []byte("foo"),
+					Patch:        []byte("@@ -1 +0,0 @@\n-foo\n"),
 				},
 			},
 		},
@@ -175,14 +221,16 @@ index %[1]s..%[2]s
 			diffOutput: addDiff,
 			expectedDiffs: []*Diff{
 				{
-					lineCount: 1,
-					byteCount: 5,
-					FromID:    zeroOID.String(),
-					ToID:      oid1.String(),
-					PatchSize: 19,
-					FromPath:  []byte("foo"),
-					Patch:     nil,
-					TooLarge:  true,
+					lineCount:    1,
+					byteCount:    5,
+					FromID:       zeroOID.String(),
+					ToID:         oid1.String(),
+					PatchSize:    19,
+					LinesAdded:   1,
+					LinesRemoved: 0,
+					FromPath:     []byte("foo"),
+					Patch:        nil,
+					TooLarge:     true,
 				},
 			},
 		},

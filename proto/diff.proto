@@ -208,6 +208,12 @@ message CommitDiffResponse {
   // too_large indicates the patch was pruned since it surpassed a hard limit, and can
   // therefore not be expanded.
   bool too_large = 13;
+  // lines_added is the number of lines added in the diff. This count always represents the
+  // full diff, even when it is pruned.
+  int32 lines_added = 14;
+  // lines_removed is the number of lines removed in the diff. This count always represents the
+  // full diff, even when it is pruned.
+  int32 lines_removed = 15;
 }
 
 // CommitDeltaRequest is a request for the CommitDelta RPC.
@@ -647,4 +653,10 @@ message DiffBlobsResponse {
   // pruned, the patch size can be used by the client to determine whether it is sensible to make a
   // follow-up DiffBlobs request by increasing the patch_bytes_limit to a "hard" limit.
   int32 patch_size = 7;
+  // lines_added is the number of lines added in the diff. This count always represents the
+  // full diff, even when it is pruned.
+  int32 lines_added = 8;
+  // lines_removed is the number of lines removed in the diff. This count always represents the
+  // full diff, even when it is pruned.
+  int32 lines_removed = 9;
 }

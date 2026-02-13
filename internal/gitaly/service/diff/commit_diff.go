@@ -156,6 +156,8 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 			OverflowMarker: diff.OverflowMarker,
 			Collapsed:      diff.Collapsed,
 			TooLarge:       diff.TooLarge,
+			LinesAdded:     diff.LinesAdded,
+			LinesRemoved:   diff.LinesRemoved,
 		}
 
 		if len(diff.Patch) <= s.MsgSizeThreshold {
