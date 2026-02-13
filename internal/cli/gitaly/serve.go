@@ -81,6 +81,17 @@ Example: gitaly serve gitaly.config.toml`,
 	}
 }
 
+// exitWithError logs an error and returns a cli.Exit with the appropriate exit code.
+// If a logger is available, it uses the logger's structured logging. Otherwise, it
+// returns a plain error message.
+func exitWithError(logger log.Logger, msg string, err error) error {
+	if logger != nil {
+		logger.WithError(err).Error(msg)
+		return cli.Exit("", 1)
+	}
+	return cli.Exit(fmt.Errorf("%s: %w", msg, err), 1)
+}
+
 func loadConfig(configPath string) (config.Cfg, error) {
 	cfgFile, err := os.Open(configPath)
 	if err != nil {
@@ -107,7 +118,7 @@ func serveAction(ctx context.Context, cmd *cli.Command) error {
 
 	cfg, logger, err := configure(cmd.Args().First())
 	if err != nil {
-		return cli.Exit(err, 1)
+		return exitWithError(logger, "failed to configure Gitaly", err)
 	}
 
 	_, tracingCloser, err := tracing.InitializeTracerProvider(context.Background(), "gitaly")
@@ -124,7 +135,7 @@ func serveAction(ctx context.Context, cmd *cli.Command) error {
 	fips.Check()
 
 	if err := run(cmd, cfg, logger); err != nil {
-		return cli.Exit(fmt.Errorf("unclean Gitaly shutdown: %w", err), 1)
+		return exitWithError(logger, "unclean Gitaly shutdown", err)
 	}
 
 	logger.Info("Gitaly shutdown")
