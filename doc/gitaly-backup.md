@@ -212,6 +212,25 @@ To use server-side create:
 
    Important: Do not set `-path` and `-layout` flags cannot be used in server-side mode as Gitaly uses the `go_cloud_url` set in the Gitaly config file.
 
+### WORM (Write Once Read Many) server-side backups
+
+Gitaly does not currently provide a strict WORM mode: some files, such as
+“latest” pointers in the backup layout, are still overwritten.
+
+However, for object storages that support Object Lock and versioning (for
+example, Amazon S3), server-side backups can still be used safely with WORM
+buckets. When Object Lock with retention is configured on the backup bucket:
+
+- Each overwrite of a backup object creates a new immutable version.
+- Gitaly (for example when using the AWS SDK v2) includes checksum headers on
+  uploads, which S3 uses together with Object Lock to enforce integrity and
+  retention.
+
+In this setup, WORM guarantees are provided by the storage backend’s Object
+Lock policy and versioning, not by Gitaly itself. Gitaly currently does not
+track the compatibility list of all providers with object locking and versioning,
+but please contact the team if you encounter any issues with a specific provider.
+
 ## Direct Gitaly Server-side restore
 
 Server-side restore stream backup data from the object storage sink defined in the Gitaly config.

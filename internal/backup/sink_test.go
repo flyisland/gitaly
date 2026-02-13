@@ -13,6 +13,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
@@ -270,4 +271,23 @@ func TestSink_List(t *testing.T) {
 	}
 	require.NoError(t, it.Err())
 	require.Equal(t, expectedObjects, objects)
+}
+
+func TestInjectChecksumAlgorithm_SetsChecksumAlgorithm(t *testing.T) {
+	var captured *s3.PutObjectInput
+
+	asFunc := func(i interface{}) bool {
+		ptr, ok := i.(**s3.PutObjectInput)
+		if !ok {
+			return false
+		}
+		// Simulate driver giving us a real PutObjectInput
+		captured = &s3.PutObjectInput{}
+		*ptr = captured
+		return true
+	}
+
+	require.NoError(t, injectChecksumAlgorithm(asFunc))
+	require.NotNil(t, captured)
+	require.Equal(t, types.ChecksumAlgorithmSha256, captured.ChecksumAlgorithm)
 }
