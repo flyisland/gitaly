@@ -2,6 +2,7 @@ package gitaly
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -647,7 +648,6 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		housekeepingMiddleware,
 		txMiddleware,
 	)
-	defer gitalyServerFactory.Stop()
 
 	gitlabClient := gitlab.NewStubClient()
 	if skipHooks, _ := env.GetBool("GITALY_TESTING_NO_GIT_HOOKS", false); skipHooks {
@@ -849,7 +849,15 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	gracefulStopTicker := helper.NewTimerTicker(cfg.GracefulRestartTimeout.Duration())
 	defer gracefulStopTicker.Stop()
 
-	return b.Wait(gracefulStopTicker, gitalyServerFactory.GracefulStop)
+	waitErr := b.Wait(gracefulStopTicker, gitalyServerFactory.GracefulStop)
+
+	// Only call Stop() if we didn't timeout or force shutdown during graceful shutdown.
+	// In both cases, the servers are already forcefully stopped.
+	if waitErr == nil || (!errors.Is(waitErr, bootstrap.ErrGracePeriodExpired) && !errors.Is(waitErr, bootstrap.ErrForceShutdown)) {
+		gitalyServerFactory.Stop()
+	}
+
+	return waitErr
 }
 
 // replicaPartitionMigration performs replica partition migrations for all storages.
