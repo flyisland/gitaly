@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -21,6 +22,13 @@ const (
 	// EnvUpgradesEnabled is an environment variable that when defined gitaly must enable graceful upgrades on SIGHUP
 	EnvUpgradesEnabled     = "GITALY_UPGRADES_ENABLED"
 	socketReusePortWarning = "Unable to set SO_REUSEPORT: zero downtime upgrades will not work"
+)
+
+var (
+	// ErrGracePeriodExpired is returned when the grace period for graceful shutdown expires.
+	ErrGracePeriodExpired = errors.New("grace period expired")
+	// ErrForceShutdown is returned when a force shutdown signal is received during grace period.
+	ErrForceShutdown = errors.New("force shutdown")
 )
 
 // Listener is an interface of the bootstrap manager.
@@ -217,9 +225,9 @@ func (b *Bootstrap) waitGracePeriod(gracePeriodTicker helper.Ticker, kill <-chan
 
 	select {
 	case <-gracePeriodTicker.C():
-		return fmt.Errorf("grace period expired")
+		return ErrGracePeriodExpired
 	case <-kill:
-		return fmt.Errorf("force shutdown")
+		return ErrForceShutdown
 	case <-b.allServersDone:
 		return nil
 	}
