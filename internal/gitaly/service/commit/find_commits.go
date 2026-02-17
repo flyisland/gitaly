@@ -212,7 +212,7 @@ func streamCommits(getCommits *GetCommits, stream gitalypb.CommitService_FindCom
 	ctx := stream.Context()
 
 	chunker := chunk.New(&commitsSender{
-		send: func(commits []*gitalypb.GitCommit) error {
+		send: func(commits []*gitalypb.GitCommit, _ *gitalypb.PaginationCursor) error {
 			return stream.Send(&gitalypb.FindCommitsResponse{
 				Commits: commits,
 			})

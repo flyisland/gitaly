@@ -6,8 +6,9 @@ import (
 )
 
 type commitsSender struct {
-	commits []*gitalypb.GitCommit
-	send    func([]*gitalypb.GitCommit) error
+	commits       []*gitalypb.GitCommit
+	send          func([]*gitalypb.GitCommit, *gitalypb.PaginationCursor) error
+	pendingCursor *gitalypb.PaginationCursor
 }
 
 func (s *commitsSender) Reset() {
@@ -19,5 +20,16 @@ func (s *commitsSender) Append(m proto.Message) {
 }
 
 func (s *commitsSender) Send() error {
-	return s.send(s.commits)
+	// Include the pending cursor if set (typically on the final send).
+	// Clear after sending to ensure cursor is only sent once.
+	cursor := s.pendingCursor
+	s.pendingCursor = nil
+	return s.send(s.commits, cursor)
+}
+
+// SetPaginationCursor sets the pagination cursor to be included in the next
+// Send() call. This is used to send the cursor in the final response when
+// there are more commits available beyond the requested limit.
+func (s *commitsSender) SetPaginationCursor(cursor *gitalypb.PaginationCursor) {
+	s.pendingCursor = cursor
 }
