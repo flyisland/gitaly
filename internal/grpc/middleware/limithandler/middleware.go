@@ -49,6 +49,7 @@ func New(cfg config.Cfg, getLockKey GetLockKey, setupMiddleware SetupFunc) *Limi
 				"grpc_service",
 				"grpc_method",
 				"reason",
+				"authenticated",
 			},
 		),
 	}
@@ -270,6 +271,7 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 				limiter.NewPerRPCPromMonitor(
 					"gitaly", concurrency.RPC,
 					queuedMetric, inProgressMetric, acquiringSecondsMetric, middleware.requestsDroppedMetric,
+					true,
 				),
 			)
 
@@ -281,8 +283,9 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 					unauthLimits.MaxQueueSize,
 					unauthLimits.MaxQueueWait.Duration(),
 					limiter.NewPerRPCPromMonitor(
-						"gitaly", concurrency.RPC+"-unauthenticated",
+						"gitaly", concurrency.RPC,
 						queuedMetric, inProgressMetric, acquiringSecondsMetric, middleware.requestsDroppedMetric,
+						false,
 					),
 				)
 			}
@@ -298,6 +301,7 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 				limiter.NewPerRPCPromMonitor(
 					"gitaly", replicateRepositoryFullMethod,
 					queuedMetric, inProgressMetric, acquiringSecondsMetric, middleware.requestsDroppedMetric,
+					true,
 				),
 			)
 		}

@@ -47,6 +47,7 @@ func TestNewPerRPCPromMonitor(t *testing.T) {
 				"grpc_service",
 				"grpc_method",
 				"reason",
+				"authenticated",
 			},
 		)
 		return NewPerRPCPromMonitor(
@@ -56,6 +57,7 @@ func TestNewPerRPCPromMonitor(t *testing.T) {
 			inProgressMetric,
 			acquiringSecondsVec,
 			requestsDroppedMetric,
+			true,
 		)
 	}
 
@@ -142,7 +144,7 @@ acquiring_seconds_sum{grpc_method="unknown",grpc_service="unknown",system="gital
 acquiring_seconds_count{grpc_method="unknown",grpc_service="unknown",system="gitaly"} 0
 # HELP dropped number of dropped requests
 # TYPE dropped counter
-dropped{grpc_method="unknown",grpc_service="unknown",reason="load",system="gitaly"} 1
+dropped{authenticated="true",grpc_method="unknown",grpc_service="unknown",reason="load",system="gitaly"} 1
 # HELP in_progress requests in progress
 # TYPE in_progress gauge
 in_progress{grpc_method="unknown",grpc_service="unknown",system="gitaly"} 0
@@ -161,6 +163,7 @@ queued{grpc_method="unknown",grpc_service="unknown",system="gitaly"} 1
 			"limit.concurrency_queue_length": 5,
 			"limit.concurrency_in_progress":  10,
 			"limit.concurrency_dropped":      "load",
+			"limit.authenticated":            "true",
 		}, stats.Fields())
 	})
 
@@ -187,7 +190,7 @@ acquiring_seconds_sum{grpc_method="unknown",grpc_service="unknown",system="gital
 acquiring_seconds_count{grpc_method="unknown",grpc_service="unknown",system="gitaly"} 0
 # HELP dropped number of dropped requests
 # TYPE dropped counter
-dropped{grpc_method="unknown",grpc_service="unknown",reason="load",system="gitaly"} 1
+dropped{authenticated="true",grpc_method="unknown",grpc_service="unknown",reason="load",system="gitaly"} 1
 # HELP in_progress requests in progress
 # TYPE in_progress gauge
 in_progress{grpc_method="unknown",grpc_service="unknown",system="gitaly"} 0
@@ -207,6 +210,7 @@ queued{grpc_method="unknown",grpc_service="unknown",system="gitaly"} 0
 			"limit.concurrency_queue_length": 5,
 			"limit.concurrency_in_progress":  10,
 			"limit.concurrency_dropped":      "load",
+			"limit.authenticated":            "true",
 		}, stats.Fields())
 	})
 }

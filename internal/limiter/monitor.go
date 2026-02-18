@@ -2,6 +2,7 @@ package limiter
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,7 @@ type PromMonitor struct {
 	// limitingType stores the type of the limiter. There are two types at the moment: per-rpc
 	// and pack-objects.
 	limitingType           string
+	authenticated          string
 	queuedMetric           prometheus.Gauge
 	inProgressMetric       prometheus.Gauge
 	acquiringSecondsMetric prometheus.Observer
@@ -53,18 +55,21 @@ func NewPerRPCPromMonitor(
 	queuedMetric, inProgressMetric *prometheus.GaugeVec,
 	acquiringSecondsVec *prometheus.HistogramVec,
 	requestsDroppedMetric *prometheus.CounterVec,
+	authenticated bool,
 ) *PromMonitor {
 	serviceName, methodName := splitMethodName(fullMethod)
 
 	return &PromMonitor{
 		limitingType:           TypePerRPC,
+		authenticated:          strconv.FormatBool(authenticated),
 		queuedMetric:           queuedMetric.WithLabelValues(system, serviceName, methodName),
 		inProgressMetric:       inProgressMetric.WithLabelValues(system, serviceName, methodName),
 		acquiringSecondsMetric: acquiringSecondsVec.WithLabelValues(system, serviceName, methodName),
 		requestsDroppedMetric: requestsDroppedMetric.MustCurryWith(prometheus.Labels{
-			"system":       system,
-			"grpc_service": serviceName,
-			"grpc_method":  methodName,
+			"system":        system,
+			"grpc_service":  serviceName,
+			"grpc_method":   methodName,
+			"authenticated": strconv.FormatBool(authenticated),
 		}),
 		acquiringSecondsHistogramVec: acquiringSecondsVec,
 	}
@@ -110,6 +115,9 @@ func (p *PromMonitor) Dropped(ctx context.Context, key string, queueLength int, 
 		stats.RecordMetadata("limit.concurrency_in_progress", inProgress)
 		stats.RecordMetadata("limit.concurrency_dropped", reason)
 		stats.RecordMetadata("limit.concurrency_queue_ms", acquireTime.Milliseconds())
+		if p.authenticated != "" {
+			stats.RecordMetadata("limit.authenticated", p.authenticated)
+		}
 	}
 	p.requestsDroppedMetric.WithLabelValues(reason).Inc()
 }
