@@ -159,6 +159,29 @@ func (repo *Repo) UnsetMatchingConfig(
 	return nil
 }
 
+// GetConfig returns the raw byte output for `git config list`.
+func (repo *Repo) GetConfig(ctx context.Context) (config []byte, returnedErr error) {
+	repoPath, err := repo.Path(ctx)
+	if err != nil {
+		return config, fmt.Errorf("getting repo path: %w", err)
+	}
+	configPath := filepath.Join(repoPath, "config")
+
+	var stdout bytes.Buffer
+	if err := repo.ExecAndWait(ctx, gitcmd.Command{
+		Name:   "config",
+		Action: "list",
+		Flags: []gitcmd.Option{
+			gitcmd.ValueFlag{Name: "-f", Value: configPath},
+		},
+	}, gitcmd.WithStdout(&stdout)); err != nil {
+		return config, fmt.Errorf("running git config: %w", err)
+	}
+
+	config = stdout.Bytes()
+	return config, nil
+}
+
 // GetConfigValues gets the values for the given configuration key. If the
 // key is not found, an ErrNotFound will be returned.
 func (repo *Repo) GetConfigValues(ctx context.Context, key string) (values []string, returnedErr error) {

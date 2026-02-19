@@ -365,3 +365,84 @@ func TestRepo_GetConfigValues(t *testing.T) {
 		})
 	}
 }
+
+func TestRepo_GetConfig(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg := testcfg.Build(t)
+
+	for _, tc := range []struct {
+		desc         string
+		addEntries   map[string]string
+		expectedKeys []string
+	}{
+		{
+			desc:         "default config only",
+			addEntries:   nil,
+			expectedKeys: nil,
+		},
+		{
+			desc: "single custom entry",
+			addEntries: map[string]string{
+				"custom.key": "value",
+			},
+			expectedKeys: []string{"custom.key=value"},
+		},
+		{
+			desc: "multiple custom entries",
+			addEntries: map[string]string{
+				"foo.bar": "value1",
+				"foo.baz": "value2",
+			},
+			expectedKeys: []string{"foo.bar=value1", "foo.baz=value2"},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipCreationViaService: true,
+			})
+			repo := NewTestRepo(t, cfg, repoProto)
+
+			for key, value := range tc.addEntries {
+				gittest.Exec(t, cfg, "-C", repoPath, "config", "--add", key, value)
+			}
+
+			config, err := repo.GetConfig(ctx)
+			require.NoError(t, err)
+
+			standardEntries := []string{
+				"core.filemode=true",
+				"core.bare=true",
+			}
+
+			if gittest.ObjectHashIsSHA256() || testhelper.IsReftableEnabled() {
+				standardEntries = append(standardEntries, "core.repositoryformatversion=1")
+			} else {
+				standardEntries = append(standardEntries, "core.repositoryformatversion=0")
+			}
+
+			if gittest.ObjectHashIsSHA256() {
+				standardEntries = append(standardEntries, "extensions.objectformat=sha256")
+			}
+
+			if testhelper.IsReftableEnabled() {
+				standardEntries = append(standardEntries, "extensions.refstorage=reftable")
+			}
+
+			if runtime.GOOS == "darwin" {
+				standardEntries = append(standardEntries,
+					"core.ignorecase=true",
+					"core.precomposeunicode=true",
+				)
+			}
+
+			expectedEntries := append(standardEntries, tc.expectedKeys...)
+			actualEntries := strings.Split(text.ChompBytes(config), "\n")
+
+			require.ElementsMatch(t, expectedEntries, actualEntries)
+		})
+	}
+}
