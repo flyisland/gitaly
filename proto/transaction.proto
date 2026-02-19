@@ -60,6 +60,8 @@ message VoteTransactionRequest {
     // SYNCHRONIZED_PHASE is the synchronizing phase. This is used to synchronize nodes with each other on a
     // specific event.
     SYNCHRONIZED_PHASE = 3;  // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
+    // PREPARING_PHASE is the phase before PREPARED_PHASE. The data is not yet locked.
+    PREPARING_PHASE = 4; // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
   };
 
   // repository ...

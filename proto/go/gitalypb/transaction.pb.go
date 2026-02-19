@@ -39,6 +39,8 @@ const (
 	// SYNCHRONIZED_PHASE is the synchronizing phase. This is used to synchronize nodes with each other on a
 	// specific event.
 	VoteTransactionRequest_SYNCHRONIZED_PHASE VoteTransactionRequest_Phase = 3 // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
+	// PREPARING_PHASE is the phase before PREPARED_PHASE. The data is not yet locked.
+	VoteTransactionRequest_PREPARING_PHASE VoteTransactionRequest_Phase = 4 // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
 )
 
 // Enum value maps for VoteTransactionRequest_Phase.
@@ -48,12 +50,14 @@ var (
 		1: "PREPARED_PHASE",
 		2: "COMMITTED_PHASE",
 		3: "SYNCHRONIZED_PHASE",
+		4: "PREPARING_PHASE",
 	}
 	VoteTransactionRequest_Phase_value = map[string]int32{
 		"UNKNOWN_PHASE":      0,
 		"PREPARED_PHASE":     1,
 		"COMMITTED_PHASE":    2,
 		"SYNCHRONIZED_PHASE": 3,
+		"PREPARING_PHASE":    4,
 	}
 )
 
@@ -363,7 +367,7 @@ var File_transaction_proto protoreflect.FileDescriptor
 const file_transaction_proto_rawDesc = "" +
 	"\n" +
 	"\x11transaction.proto\x12\x06gitaly\x1a\n" +
-	"lint.proto\x1a\fshared.proto\"\xdc\x02\n" +
+	"lint.proto\x1a\fshared.proto\"\xf1\x02\n" +
 	"\x16VoteTransactionRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
@@ -371,12 +375,13 @@ const file_transaction_proto_rawDesc = "" +
 	"\x0etransaction_id\x18\x02 \x01(\x04R\rtransactionId\x12\x12\n" +
 	"\x04node\x18\x03 \x01(\tR\x04node\x124\n" +
 	"\x16reference_updates_hash\x18\x04 \x01(\fR\x14referenceUpdatesHash\x12:\n" +
-	"\x05phase\x18\x05 \x01(\x0e2$.gitaly.VoteTransactionRequest.PhaseR\x05phase\"[\n" +
+	"\x05phase\x18\x05 \x01(\x0e2$.gitaly.VoteTransactionRequest.PhaseR\x05phase\"p\n" +
 	"\x05Phase\x12\x11\n" +
 	"\rUNKNOWN_PHASE\x10\x00\x12\x12\n" +
 	"\x0ePREPARED_PHASE\x10\x01\x12\x13\n" +
 	"\x0fCOMMITTED_PHASE\x10\x02\x12\x16\n" +
-	"\x12SYNCHRONIZED_PHASE\x10\x03\"\x96\x01\n" +
+	"\x12SYNCHRONIZED_PHASE\x10\x03\x12\x13\n" +
+	"\x0fPREPARING_PHASE\x10\x04\"\x96\x01\n" +
 	"\x17VoteTransactionResponse\x12F\n" +
 	"\x05state\x18\x01 \x01(\x0e20.gitaly.VoteTransactionResponse.TransactionStateR\x05state\"3\n" +
 	"\x10TransactionState\x12\n" +
