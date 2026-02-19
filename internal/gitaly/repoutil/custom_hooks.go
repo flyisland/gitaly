@@ -128,6 +128,15 @@ func SetCustomHooks(
 		}
 	}
 
+	// Cast a preparing vote to acquire a distributed lock
+	preparingVoteHash := voting.NewVoteHash()
+	if _, err := preparingVoteHash.Write([]byte("preparing set custom hooks")); err != nil {
+		return fmt.Errorf("preparing vote hash: %w", err)
+	}
+	if err := voteCustomHooks(ctx, txManager, &preparingVoteHash, voting.Preparing); err != nil {
+		return fmt.Errorf("casting preparing vote: %w", err)
+	}
+
 	// The `custom_hooks` directory in the repository is locked to prevent
 	// concurrent modification of hooks.
 	hooksLock, err := safe.NewLockingDirectory(repoPath, CustomHooksDir)

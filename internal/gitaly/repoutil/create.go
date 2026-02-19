@@ -206,6 +206,9 @@ func Create(
 
 		return fmt.Errorf("post-lock stat: %w", err)
 	}
+	if err := transaction.VoteOnContext(ctx, txManager, vote, voting.Preparing); err != nil {
+		return structerr.NewFailedPrecondition("preparatory vote: %w", err)
+	}
 
 	if err := transaction.VoteOnContext(ctx, txManager, vote, voting.Prepared); err != nil {
 		return structerr.NewFailedPrecondition("preparatory vote: %w", err)

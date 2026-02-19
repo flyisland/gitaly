@@ -63,7 +63,6 @@ func (s *server) DeleteRefs(ctx context.Context, in *gitalypb.DeleteRefsRequest)
 			},
 		)
 	}
-
 	if err := updater.Start(); err != nil {
 		return nil, structerr.NewInternal("start reference transaction: %w", err)
 	}
@@ -76,6 +75,15 @@ func (s *server) DeleteRefs(ctx context.Context, in *gitalypb.DeleteRefsRequest)
 		if _, err := voteHash.Write([]byte(ref.String() + "\n")); err != nil {
 			return nil, structerr.NewInternal("could not update vote hash: %w", err)
 		}
+	}
+
+	vote, err := voteHash.Vote()
+	if err != nil {
+		return nil, structerr.NewInternal("could not compute vote: %w", err)
+	}
+
+	if err := transaction.VoteOnContext(ctx, s.txManager, vote, voting.Preparing); err != nil {
+		return nil, structerr.NewInternal("preparing vote: %w", err)
 	}
 
 	if err := updater.Prepare(); err != nil {
@@ -95,17 +103,12 @@ func (s *server) DeleteRefs(ctx context.Context, in *gitalypb.DeleteRefsRequest)
 		return nil, structerr.NewInternal("unable to prepare: %w", err)
 	}
 
-	vote, err := voteHash.Vote()
-	if err != nil {
-		return nil, structerr.NewInternal("could not compute vote: %w", err)
-	}
-
 	// All deletes we're doing in this RPC are force deletions. Because we're required to filter
 	// out transactions which only consist of force deletions, we never do any voting via the
 	// reference-transaction hook here. Instead, we need to resort to a manual vote which is
 	// simply the concatenation of all reference we're about to delete.
 	if err := transaction.VoteOnContext(ctx, s.txManager, vote, voting.Prepared); err != nil {
-		return nil, structerr.NewInternal("preparatory vote: %w", err)
+		return nil, structerr.NewInternal("prepared vote: %w", err)
 	}
 
 	if err := updater.Commit(); err != nil {

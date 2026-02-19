@@ -251,8 +251,10 @@ func TestDisconnect(t *testing.T) {
 					repository: repo,
 					txManager:  transaction.NewTrackingManager(),
 					expectedVotes: []transaction.PhasedVote{
+						{Vote: voting.VoteFromData([]byte("migrate objects")), Phase: voting.Preparing},
 						{Vote: voting.VoteFromData([]byte("migrate objects")), Phase: voting.Prepared},
 						{Vote: voting.VoteFromData([]byte("migrate objects")), Phase: voting.Committed},
+						{Vote: voting.VoteFromData([]byte("disconnect alternate")), Phase: voting.Preparing},
 						{Vote: voting.VoteFromData([]byte("disconnect alternate")), Phase: voting.Prepared},
 						{Vote: voting.VoteFromData([]byte("disconnect alternate")), Phase: voting.Committed},
 					},
@@ -273,7 +275,7 @@ func TestDisconnect(t *testing.T) {
 					repository: repo,
 					txManager:  transaction.NewTrackingManager(),
 					expectedVotes: []transaction.PhasedVote{
-						{Vote: voting.VoteFromData([]byte("no alternates")), Phase: voting.Committed},
+						{Vote: voting.VoteFromData([]byte("no alternates")), Phase: voting.Synchronized},
 					},
 				}
 			},

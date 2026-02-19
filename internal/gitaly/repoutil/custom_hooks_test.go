@@ -269,10 +269,11 @@ func TestSetCustomHooks_success(t *testing.T) {
 	require.NoError(t, err)
 
 	require.FileExists(t, filepath.Join(repoPath, "custom_hooks", "pre-push.sample"))
-	require.Equal(t, 2, len(txManager.Votes()))
-	assert.Equal(t, voting.Prepared, txManager.Votes()[0].Phase)
+	require.Equal(t, 3, len(txManager.Votes()))
+	assert.Equal(t, voting.Preparing, txManager.Votes()[0].Phase)
+	assert.Equal(t, voting.Prepared, txManager.Votes()[1].Phase)
 	assert.Equal(t, expectedVote, txManager.Votes()[1].Vote)
-	assert.Equal(t, voting.Committed, txManager.Votes()[1].Phase)
+	assert.Equal(t, voting.Committed, txManager.Votes()[2].Phase)
 }
 
 func TestSetCustomHooks_corruptTar(t *testing.T) {

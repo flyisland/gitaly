@@ -158,9 +158,10 @@ func TestSetCustomHooksRequest_success(t *testing.T) {
 
 			testhelper.RequireTarState(t, hooks, expected)
 
-			require.Equal(t, 2, len(txManager.Votes()))
-			assert.Equal(t, voting.Prepared, txManager.Votes()[0].Phase)
-			assert.Equal(t, voting.Committed, txManager.Votes()[1].Phase)
+			require.Equal(t, 3, len(txManager.Votes()))
+			assert.Equal(t, voting.Preparing, txManager.Votes()[0].Phase)
+			assert.Equal(t, voting.Prepared, txManager.Votes()[1].Phase)
+			assert.Equal(t, voting.Committed, txManager.Votes()[2].Phase)
 		})
 	}
 }

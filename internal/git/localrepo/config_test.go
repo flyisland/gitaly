@@ -154,7 +154,7 @@ func TestRepo_SetConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, repo.SetConfig(ctx, "some.key", "value", txManager))
 
-		require.Equal(t, 2, len(txManager.Votes()))
+		require.Equal(t, 3, len(txManager.Votes()))
 	})
 }
 
@@ -296,7 +296,7 @@ func TestRepo_UnsetMatchingConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, repo.UnsetMatchingConfig(ctx, "some.key", txManager))
 
-		require.Equal(t, 2, len(txManager.Votes()))
+		require.Equal(t, 3, len(txManager.Votes()))
 	})
 }
 

@@ -163,21 +163,45 @@ func testUserSquashTransactional(t *testing.T, ctx context.Context) {
 				// Only a single vote because we abort on the first one.
 				squashedCommitVote,
 				squashedCommitVote,
+				squashedCommitVote,
 			},
 			expectedExists: true,
 		},
 		{
-			desc: "preparatory vote failure",
+			desc: "preparing vote failure",
 			voteFn: func(ctx context.Context, tx txinfo.Transaction, vote voting.Vote, phase voting.Phase) error {
-				return errors.New("vote failed")
+				if phase == voting.Preparing {
+					return errors.New("vote failed")
+				}
+				return nil
 			},
 			// This gets intercepted by the Aborted interceptor which replaces the error message
 			// "preparatory vote on squashed commit: vote failed"
 			expectedErr: testhelper.ToInterceptedMetadata(
 				structerr.NewAborted("The operation could not be completed. Please try again.").WithMetadata(
-					"error_details", "preparatory vote on squashed commit: vote failed"),
+					"error_details", "preparing vote on squashed commit: vote failed"),
 			),
 			expectedVotes: []voting.Vote{
+				squashedCommitVote,
+			},
+			expectedExists: false,
+		},
+		{
+			desc: "prepared vote failure",
+			voteFn: func(ctx context.Context, tx txinfo.Transaction, vote voting.Vote, phase voting.Phase) error {
+				if phase == voting.Prepared {
+					return errors.New("vote failed")
+				}
+				return nil
+			},
+			// This gets intercepted by the Aborted interceptor which replaces the error message
+			// "preparatory vote on squashed commit: vote failed"
+			expectedErr: testhelper.ToInterceptedMetadata(
+				structerr.NewAborted("The operation could not be completed. Please try again.").WithMetadata(
+					"error_details", "prepared vote on squashed commit: vote failed"),
+			),
+			expectedVotes: []voting.Vote{
+				squashedCommitVote,
 				squashedCommitVote,
 			},
 			expectedExists: false,
@@ -197,6 +221,7 @@ func testUserSquashTransactional(t *testing.T, ctx context.Context) {
 					"error_details", "committing vote on squashed commit: vote failed"),
 			),
 			expectedVotes: []voting.Vote{
+				squashedCommitVote,
 				squashedCommitVote,
 				squashedCommitVote,
 			},

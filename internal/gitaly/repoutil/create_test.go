@@ -223,6 +223,7 @@ func TestCreate(t *testing.T) {
 			},
 			verify: func(t *testing.T, tempRepo *gitalypb.Repository, tempRepoPath string, realRepo *gitalypb.Repository, realRepoPath string) {
 				require.Equal(t, map[voting.Phase]int{
+					voting.Preparing: 1,
 					voting.Prepared:  1,
 					voting.Committed: 1,
 				}, votesByPhase)
@@ -249,7 +250,7 @@ func TestCreate(t *testing.T) {
 			transactional: true,
 			setup: func(t *testing.T, repo *gitalypb.Repository, repoPath string) {
 				txManager.VoteFn = func(_ context.Context, _ txinfo.Transaction, _ voting.Vote, phase voting.Phase) error {
-					if phase == voting.Prepared {
+					if phase == voting.Preparing || phase == voting.Prepared {
 						return nil
 					}
 					return errors.New("vote failed")

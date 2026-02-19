@@ -828,7 +828,7 @@ index 3742e48..e40a3b9 100644
 	response, err := stream.CloseAndRecv()
 	require.NoError(t, err)
 	require.True(t, response.GetBranchUpdate().GetBranchCreated())
-	require.Equal(t, 15, len(txManager.Votes()))
+	require.Equal(t, 16, len(txManager.Votes()))
 }
 
 func TestUserApplyPatch_validation(t *testing.T) {

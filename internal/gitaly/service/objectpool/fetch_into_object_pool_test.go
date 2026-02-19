@@ -145,9 +145,9 @@ func TestFetchIntoObjectPool_transactional(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, []voting.Vote{
-			// We expect to see two votes that demonstrate we're voting on no deleted
+			// We expect to see three votes that demonstrate we're voting on no deleted
 			// references.
-			voting.VoteFromData(nil), voting.VoteFromData(nil),
+			voting.VoteFromData(nil), voting.VoteFromData(nil), voting.VoteFromData(nil),
 			// It is a bug though that we don't have a vote on the unchanged references
 			// in git-fetch(1).
 		}, votes)
@@ -172,7 +172,7 @@ func TestFetchIntoObjectPool_transactional(t *testing.T) {
 		require.Equal(t, []voting.Vote{
 			// The first two votes stem from the fact that we're voting on no
 			// deleted references.
-			voting.VoteFromData(nil), voting.VoteFromData(nil),
+			voting.VoteFromData(nil), voting.VoteFromData(nil), voting.VoteFromData(nil),
 			// And the other two votes are from the new branch we pull in.
 			vote, vote,
 		}, votes)
@@ -197,7 +197,7 @@ func TestFetchIntoObjectPool_transactional(t *testing.T) {
 		vote := voting.VoteFromData([]byte(fmt.Sprintf(
 			"%[1]s %[1]s %s\n", gittest.DefaultObjectHash.ZeroOID, reference,
 		)))
-		require.Equal(t, []voting.Vote{vote, vote}, votes)
+		require.Equal(t, []voting.Vote{vote, vote, vote}, votes)
 
 		exists, err := pool.Repo.HasRevision(ctx, git.Revision(reference))
 		require.NoError(t, err)

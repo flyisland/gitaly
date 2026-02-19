@@ -1396,7 +1396,7 @@ func testFetchRemoteTransaction(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	ctx = metadata.IncomingToOutgoing(ctx)
 
-	require.Equal(t, testhelper.GitalyOrPraefect(0, 2), len(txManager.Votes()))
+	require.Equal(t, testhelper.GitalyOrPraefect(0, 3), len(txManager.Votes()))
 
 	_, err = client.FetchRemote(ctx, &gitalypb.FetchRemoteRequest{
 		Repository: repoProto,
@@ -1406,7 +1406,7 @@ func testFetchRemoteTransaction(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, testhelper.GitalyOrPraefect(2, 4), len(txManager.Votes()))
+	require.Equal(t, testhelper.GitalyOrPraefect(2, 5), len(txManager.Votes()))
 }
 
 func TestFetchRemote_pooledRepository(t *testing.T) {

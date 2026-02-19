@@ -186,7 +186,7 @@ func TestUserCreateBranch_transactions(t *testing.T) {
 			transactionServer.called = 0
 			_, err = client.UserCreateBranch(ctx, request)
 			require.NoError(t, err)
-			require.Equal(t, 5, transactionServer.called)
+			require.Equal(t, 6, transactionServer.called)
 		})
 	}
 }

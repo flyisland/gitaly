@@ -585,14 +585,22 @@ func TestReplicateRepository_transactional(t *testing.T) {
 	noHooksVote := voting.VoteFromData(noHooksVoteData[:])
 
 	expectedVotes := []voting.Vote{
-		// We cannot easily derive these first two votes: they are based on the complete
+		// The first three votes are from repo creation.
+		// We cannot easily derive these first three votes: they are based on the complete
 		// hashed contents of the unpacked repository. We thus just only assert that they
-		// are always the first two entries and that they are the same by simply taking the
-		// first vote twice here.
+		// are always the first three entries and that they are the same by simply taking the
+		// first vote three times here.
 		votes[0],
 		votes[0],
+		votes[0],
+
+		// Votes from setting config files (called from voting.CommitLockedFile).
+		voting.VoteFromData([]byte("preparing commit locked file")),
 		gitconfigVote,
 		gitconfigVote,
+
+		// Votes from setting custom hooks
+		voting.VoteFromData([]byte("preparing set custom hooks")),
 		noHooksVote,
 		noHooksVote,
 	}
@@ -623,10 +631,20 @@ func TestReplicateRepository_transactional(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedVotes = []voting.Vote{
+		// Votes from setting config files (called from voting.CommitLockedFile).
+		voting.VoteFromData([]byte("preparing commit locked file")),
 		gitconfigVote,
 		gitconfigVote,
+
+		// Votes from reference transaction hook when updating refs/heads/master
+		// This is current two because the git binary we are using now is not yet aware of
+		// The preparing phase. Once newer version of git is used, this need to be updated
+		// to three votes.
 		replicationVote,
 		replicationVote,
+
+		// Votes from setting custom hooks
+		voting.VoteFromData([]byte("preparing set custom hooks")),
 		noHooksVote,
 		noHooksVote,
 	}

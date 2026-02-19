@@ -176,6 +176,7 @@ func TestLink(t *testing.T) {
 					pool:      pool,
 					txManager: txManager,
 					expectedVotes: []transaction.PhasedVote{
+						{Vote: voting.VoteFromData([]byte("preparing commit locked file")), Phase: voting.Preparing},
 						{Vote: expectedVote, Phase: voting.Prepared},
 						{Vote: expectedVote, Phase: voting.Committed},
 					},
@@ -241,7 +242,7 @@ func TestLink(t *testing.T) {
 					repo:          repo,
 					pool:          pool,
 					txManager:     txManager,
-					expectedError: errors.New("committing alternates: voting on locked file: preimage vote: transaction failed"),
+					expectedError: errors.New("committing alternates: voting on locked file: preimage vote at preparing phase: transaction failed"),
 				}
 			},
 		},
