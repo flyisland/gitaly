@@ -7,7 +7,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/hashicorp/yamux"
+	hashicorpyamux "github.com/hashicorp/yamux"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -22,12 +22,12 @@ var ErrNonMultiplexedConnection = errors.New("non-multiplexed connection")
 // authInfoWrapper is used to pass the peer id through the context to the RPC handlers.
 type authInfoWrapper struct {
 	id      ID
-	session *yamux.Session
+	session MuxSession
 	credentials.AuthInfo
 }
 
-func (w authInfoWrapper) peerID() ID                   { return w.id }
-func (w authInfoWrapper) yamuxSession() *yamux.Session { return w.session }
+func (w authInfoWrapper) peerID() ID             { return w.id }
+func (w authInfoWrapper) muxSession() MuxSession { return w.session }
 
 // GetPeerID gets the ID of the current peer connection.
 func GetPeerID(ctx context.Context) (ID, error) {
@@ -45,28 +45,27 @@ func GetPeerID(ctx context.Context) (ID, error) {
 }
 
 // WithID stores the ID in the provided AuthInfo so it can be later accessed by the RPC handler.
-// GetYamuxSession gets the yamux session of the current peer connection.
 // This is exported to facilitate testing.
 func WithID(authInfo credentials.AuthInfo, id ID) credentials.AuthInfo {
 	return authInfoWrapper{id: id, AuthInfo: authInfo}
 }
 
-// GetYamuxSession gets the yamux session of the current peer connection.
-func GetYamuxSession(ctx context.Context) (*yamux.Session, error) {
+// GetMuxSession gets the mux session of the current peer connection.
+func GetMuxSession(ctx context.Context) (MuxSession, error) {
 	peerInfo, ok := peer.FromContext(ctx)
 	if !ok {
 		return nil, errors.New("no peer info in context")
 	}
 
-	wrapper, ok := peerInfo.AuthInfo.(interface{ yamuxSession() *yamux.Session })
+	wrapper, ok := peerInfo.AuthInfo.(interface{ muxSession() MuxSession })
 	if !ok {
 		return nil, ErrNonMultiplexedConnection
 	}
 
-	return wrapper.yamuxSession(), nil
+	return wrapper.muxSession(), nil
 }
 
-func withSessionInfo(authInfo credentials.AuthInfo, id ID, muxSession *yamux.Session) credentials.AuthInfo {
+func withSessionInfo(authInfo credentials.AuthInfo, id ID, muxSession MuxSession) credentials.AuthInfo {
 	return authInfoWrapper{id: id, AuthInfo: authInfo, session: muxSession}
 }
 
@@ -107,7 +106,7 @@ func (s *ServerHandshaker) Handshake(conn net.Conn, authInfo credentials.AuthInf
 	cfg := DefaultConfiguration()
 	cfg.AcceptBacklog = 1
 	cfg.MaximumStreamWindowSizeBytes = 16 * 1024 * 1024
-	muxSession, err := yamux.Server(newInstrumentedConn(conn), muxConfig(s.logger.WithField("component", "backchannel.YamuxServer"), cfg))
+	muxSession, err := newServerMuxSession(newInstrumentedConn(conn), s.logger.WithField("component", "backchannel.YamuxServer"), cfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create multiplexing session: %w", err)
 	}
@@ -128,7 +127,7 @@ func (s *ServerHandshaker) Handshake(conn net.Conn, authInfo credentials.AuthInf
 		append(
 			s.dialOpts,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return muxSession.Open() }),
+			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return muxSession.Open(ctx) }),
 		)...,
 	)
 	if err != nil {
@@ -157,4 +156,12 @@ func (s *ServerHandshaker) Handshake(conn net.Conn, authInfo credentials.AuthInf
 		},
 		withSessionInfo(authInfo, id, muxSession),
 		nil
+}
+
+func newServerMuxSession(conn net.Conn, logger log.Logger, cfg Configuration) (MuxSession, error) {
+	session, err := hashicorpyamux.Server(conn, hashicorpMuxConfig(logger, cfg))
+	if err != nil {
+		return nil, err
+	}
+	return &hashicorpSession{session}, nil
 }

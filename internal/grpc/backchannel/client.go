@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/hashicorp/yamux"
+	hashicorpyamux "github.com/hashicorp/yamux"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc/credentials"
 )
@@ -40,7 +40,7 @@ type Configuration struct {
 
 // DefaultConfiguration returns the default configuration.
 func DefaultConfiguration() Configuration {
-	defaults := yamux.DefaultConfig()
+	defaults := hashicorpyamux.DefaultConfig()
 	return Configuration{
 		MaximumStreamWindowSizeBytes: defaults.MaxStreamWindowSize,
 		AcceptBacklog:                defaults.AcceptBacklog,
@@ -116,7 +116,7 @@ func (ch clientHandshake) serve(ctx context.Context, conn net.Conn) (net.Conn, e
 	}
 
 	// Initiate the multiplexing session.
-	muxSession, err := yamux.Client(newInstrumentedConn(conn), muxConfig(ch.logger.WithField("component", "backchannel.YamuxClient"), ch.cfg))
+	muxSession, err := newClientMuxSession(newInstrumentedConn(conn), ch.logger.WithField("component", "backchannel.YamuxClient"), ch.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("open multiplexing session: %w", err)
 	}
@@ -126,7 +126,7 @@ func (ch clientHandshake) serve(ctx context.Context, conn net.Conn) (net.Conn, e
 	}()
 
 	// Initiate the stream to the server. This is used by the client's gRPC session.
-	clientToServer, err := muxSession.Open()
+	clientToServer, err := muxSession.Open(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open client stream: %w", err)
 	}
@@ -157,4 +157,12 @@ func (ch clientHandshake) Clone() credentials.TransportCredentials {
 		TransportCredentials: ch.TransportCredentials.Clone(),
 		serverFactory:        ch.serverFactory,
 	}
+}
+
+func newClientMuxSession(conn net.Conn, logger log.Logger, cfg Configuration) (MuxSession, error) {
+	session, err := hashicorpyamux.Client(conn, hashicorpMuxConfig(logger, cfg))
+	if err != nil {
+		return nil, err
+	}
+	return &hashicorpSession{session}, nil
 }

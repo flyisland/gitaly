@@ -51,12 +51,12 @@ func OpenSidechannel(ctx context.Context) (_ *ServerConn, err error) {
 	}
 	sidechannelID, _ := strconv.ParseInt(ids[len(ids)-1], 10, 64)
 
-	muxSession, err := backchannel.GetYamuxSession(ctx)
+	muxSession, err := backchannel.GetMuxSession(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("sidechannel: fail to extract yamux session: %w", err)
+		return nil, fmt.Errorf("sidechannel: fail to extract mux session: %w", err)
 	}
 
-	stream, err := muxSession.Open()
+	stream, err := muxSession.Open(ctx)
 	if err != nil {
 		return nil, RetryableError{error: fmt.Errorf("sidechannel: open stream: %w", err)}
 	}
