@@ -12,6 +12,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -161,6 +162,8 @@ type Command struct {
 	cgroupPath    string
 	cmdGitVersion string
 	refBackend    string
+
+	maxRssAnon atomic.Int64
 
 	completionErrorLogFilter func(cmd *Command, stderr string) bool
 }
@@ -403,6 +406,10 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("starting process %v: %w", cmd.Args, err)
+	}
+
+	if featureflag.TrackMaxRssAnon.IsEnabled(ctx) {
+		go trackMaxRssAnon(ctx, cmd.Process.Pid, &command.maxRssAnon, command.processExitedCh)
 	}
 
 	inFlightCommandGauge.Inc()
@@ -654,6 +661,12 @@ func (c *Command) logProcessComplete() {
 		})
 	}
 
+	if featureflag.TrackMaxRssAnon.IsEnabled(ctx) && c.maxRssAnon.Load() > 0 {
+		entry = entry.WithFields(log.Fields{
+			"command.maxrssanon_bytes": c.maxRssAnon.Load(),
+		})
+	}
+
 	entry.DebugContext(ctx, "spawn complete")
 	if c.stderrBuffer != nil && c.stderrBuffer.Len() > 0 {
 		logLevel := entry.WarnContext
@@ -679,6 +692,10 @@ func (c *Command) logProcessComplete() {
 			customFields.RecordSum("command.oublock", int(rusage.Oublock))
 			customFields.RecordSum("command.minflt", int(rusage.Minflt))
 			customFields.RecordSum("command.majflt", int(rusage.Majflt))
+		}
+
+		if featureflag.TrackMaxRssAnon.IsEnabled(ctx) {
+			customFields.RecordMax("command.maxrssanon_bytes", int(c.maxRssAnon.Load()))
 		}
 
 		if c.cgroupPath != "" {
@@ -718,6 +735,9 @@ func (c *Command) logProcessComplete() {
 			attribute.Int64("minflt", rusage.Minflt),
 			attribute.Int64("majflt", rusage.Majflt),
 		)
+	}
+	if featureflag.TrackMaxRssAnon.IsEnabled(ctx) {
+		attributes = append(attributes, attribute.Int64("maxrssanon_bytes", c.maxRssAnon.Load()))
 	}
 	if c.cgroupPath != "" {
 		attributes = append(attributes, attribute.String("cgroup_path", c.cgroupPath))

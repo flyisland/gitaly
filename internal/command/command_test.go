@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/cgroups"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
@@ -534,7 +535,12 @@ func (m mockCgroupManager) CloneIntoCgroup(*exec.Cmd, ...cgroups.AddCommandOptio
 func TestCommand_logMessage(t *testing.T) {
 	t.Parallel()
 
-	ctx := testhelper.Context(t)
+	testhelper.NewFeatureSets(featureflag.TrackMaxRssAnon).Run(t, testCommandLogMessage)
+}
+
+func testCommandLogMessage(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	logger := testhelper.NewLogger(t)
 	logger.LogrusEntry().Logger.SetLevel(logrus.DebugLevel) //nolint:staticcheck
 	hook := testhelper.AddLoggerHook(logger)
