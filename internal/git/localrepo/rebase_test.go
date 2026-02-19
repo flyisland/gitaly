@@ -24,8 +24,6 @@ func TestRebase(t *testing.T) {
 }
 
 func testRebase(t *testing.T, ctx context.Context) {
-	t.Parallel()
-
 	cfg := testcfg.Build(t)
 
 	defaultCommitter := git.Signature{
@@ -944,8 +942,6 @@ func testRebase(t *testing.T, ctx context.Context) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			t.Parallel()
-
 			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 				SkipCreationViaService: true,
 			})
