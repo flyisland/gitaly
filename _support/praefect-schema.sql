@@ -103,6 +103,20 @@ CREATE FUNCTION public.notify_on_change() RETURNS trigger
 				$$;
 
 
+--
+-- Name: notify_on_write_lock_release(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.notify_on_write_lock_release() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+				BEGIN
+					PERFORM PG_NOTIFY('repository_reference_write_lock_releases', OLD.lock_id);
+					RETURN NULL;
+				END;
+				$$;
+
+
 SET default_tablespace = '';
 
 --
@@ -292,6 +306,17 @@ CREATE VIEW public.repository_generations AS
 
 
 --
+-- Name: repository_reference_write_locks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.repository_reference_write_locks (
+    lock_id text NOT NULL,
+    holder_txn_id bigint NOT NULL,
+    expired_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -462,6 +487,14 @@ ALTER TABLE ONLY public.repository_assignments
 
 
 --
+-- Name: repository_reference_write_locks repository_reference_write_locks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.repository_reference_write_locks
+    ADD CONSTRAINT repository_reference_write_locks_pkey PRIMARY KEY (lock_id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -527,6 +560,13 @@ CREATE UNIQUE INDEX repository_assignments_new_pkey ON public.repository_assignm
 --
 
 CREATE UNIQUE INDEX repository_lookup_index ON public.repositories USING btree (virtual_storage, relative_path);
+
+
+--
+-- Name: repository_reference_write_locks_expired_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX repository_reference_write_locks_expired_at_idx ON public.repository_reference_write_locks USING btree (expired_at);
 
 
 --
@@ -611,6 +651,13 @@ CREATE TRIGGER notify_on_insert AFTER INSERT ON public.storage_repositories REFE
 --
 
 CREATE TRIGGER notify_on_update AFTER UPDATE ON public.storage_repositories REFERENCING OLD TABLE AS old NEW TABLE AS new FOR EACH STATEMENT EXECUTE PROCEDURE public.notify_on_change('storage_repositories_updates');
+
+
+--
+-- Name: repository_reference_write_locks notify_on_write_lock_delete; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER notify_on_write_lock_delete AFTER DELETE ON public.repository_reference_write_locks FOR EACH ROW EXECUTE PROCEDURE public.notify_on_write_lock_release();
 
 
 --
