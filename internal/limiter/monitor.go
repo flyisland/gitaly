@@ -3,10 +3,10 @@ package limiter
 import (
 	"context"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
@@ -57,7 +57,7 @@ func NewPerRPCPromMonitor(
 	requestsDroppedMetric *prometheus.CounterVec,
 	authenticated bool,
 ) *PromMonitor {
-	serviceName, methodName := splitMethodName(fullMethod)
+	serviceName, methodName := protoregistry.SplitMethodName(fullMethod)
 
 	return &PromMonitor{
 		limitingType:           TypePerRPC,
@@ -149,15 +149,6 @@ func (p *PromMonitor) Collect(metrics chan<- prometheus.Metric) {
 // Describe describes all the metrics that PromMonitor keeps track of.
 func (p *PromMonitor) Describe(descs chan<- *prometheus.Desc) {
 	prometheus.DescribeByCollect(p, descs)
-}
-
-func splitMethodName(fullMethodName string) (string, string) {
-	fullMethodName = strings.TrimPrefix(fullMethodName, "/") // remove leading slash
-	service, method, ok := strings.Cut(fullMethodName, "/")
-	if !ok {
-		return "unknown", "unknown"
-	}
-	return service, method
 }
 
 // NewPackObjectsConcurrencyMonitor returns a concurrency monitor for use

@@ -116,6 +116,17 @@ func formatFullMethodName(packageName, serviceName, methodName string) string {
 	return fmt.Sprintf("/%s.%s/%s", packageName, serviceName, methodName)
 }
 
+// SplitMethodName splits a full gRPC method name (e.g. "/gitaly.RepositoryService/RepositoryExists")
+// into its service and method components. Returns ("unknown", "unknown") if the format is invalid.
+func SplitMethodName(fullMethodName string) (service, method string) {
+	fullMethodName = strings.TrimPrefix(fullMethodName, "/")
+	service, method, ok := strings.Cut(fullMethodName, "/")
+	if !ok {
+		return "unknown", "unknown"
+	}
+	return service, method
+}
+
 // ErrRepositoryFieldNotFound indicates that the repository field could not be found.
 var ErrRepositoryFieldNotFound = errors.New("repository field not found")
 
