@@ -106,11 +106,17 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 		})
 	}
 
+	var backchannelOptions []backchannel.ServerHandshakerOption
+	if s.cfg.UseLibP2P() {
+		backchannelOptions = append(backchannelOptions, backchannel.WithLibp2pYamux())
+	}
+
 	lm := listenmux.New(transportCredentials)
 	lm.Register(backchannel.NewServerHandshaker(
 		s.logger,
 		s.registry,
 		[]grpc.DialOption{client.UnaryInterceptor()},
+		backchannelOptions...,
 	))
 
 	logMsgProducer := grpcmwlogrus.WithMessageProducer(
