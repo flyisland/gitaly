@@ -763,7 +763,7 @@ func TestConcurrencyLimitHandlerMetrics(t *testing.T) {
 					gitaly_concurrency_limiting_queued{grpc_method="UnaryCall",grpc_service="grpc.testing.TestService",system="gitaly"} 1
 					# HELP gitaly_requests_dropped_total Number of requests dropped from the queue
 					# TYPE gitaly_requests_dropped_total counter
-					gitaly_requests_dropped_total{grpc_method="UnaryCall",grpc_service="grpc.testing.TestService",reason="max_size",system="gitaly"} 9
+					gitaly_requests_dropped_total{authenticated="true",grpc_method="UnaryCall",grpc_service="grpc.testing.TestService",reason="max_size",system="gitaly"} 9
 `
 	testhelper.RequirePromMetrics(t, lh, expectedMetrics)
 
