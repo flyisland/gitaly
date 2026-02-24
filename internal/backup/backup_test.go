@@ -234,8 +234,7 @@ func TestManager_Create(t *testing.T) {
 				require.NoError(t, err)
 				defer testhelper.MustClose(t, sink)
 
-				locator, err := backup.ResolveLocator("manifest", sink)
-				require.NoError(t, err)
+				locator := backup.ResolveLocator(sink)
 
 				fsBackup := managerTC.setup(t, sink, locator)
 				err = fsBackup.Create(ctx, &backup.CreateRequest{
@@ -410,8 +409,7 @@ custom_hooks_path = '%[2]s/001.custom_hooks.tar'
 				require.NoError(t, err)
 				defer testhelper.MustClose(t, sink)
 
-				locator, err := backup.ResolveLocator("manifest", sink)
-				require.NoError(t, err)
+				locator := backup.ResolveLocator(sink)
 
 				fsBackup := managerTC.setup(t, sink, locator)
 				err = fsBackup.Create(ctx, &backup.CreateRequest{
@@ -753,8 +751,7 @@ custom_hooks_path = '%[2]s/%[3]s/002.custom_hooks.tar'
 					require.NoError(t, err)
 					defer testhelper.MustClose(t, sink)
 
-					locator, err := backup.ResolveLocator("manifest", sink)
-					require.NoError(t, err)
+					locator := backup.ResolveLocator(sink)
 
 					logger := testhelper.NewLogger(t)
 
@@ -1054,8 +1051,7 @@ custom_hooks_path = 'custom_hooks.tar'
 					require.NoError(t, err)
 					defer testhelper.MustClose(t, sink)
 
-					locator, err := backup.ResolveLocator("manifest", sink)
-					require.NoError(t, err)
+					locator := backup.ResolveLocator(sink)
 
 					logger := testhelper.NewLogger(t)
 
@@ -1133,9 +1129,7 @@ func TestManager_CreateRestore_contextServerInfo(t *testing.T) {
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, sink)
 
-	locator, err := backup.ResolveLocator("manifest", sink)
-	require.NoError(t, err)
-
+	locator := backup.ResolveLocator(sink)
 	fsBackup := backup.NewManager(sink, testhelper.SharedLogger(t), locator, pool)
 
 	ctx = testhelper.MergeIncomingMetadata(ctx, testcfg.GitalyServersMetadataFromCfg(t, cfg))
@@ -1147,36 +1141,6 @@ func TestManager_CreateRestore_contextServerInfo(t *testing.T) {
 	require.NoError(t, fsBackup.Restore(ctx, &backup.RestoreRequest{
 		Repository: repo,
 	}))
-}
-
-func TestResolveLocator(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		layout      string
-		expectedErr string
-	}{
-		{layout: "legacy"},
-		{layout: "pointer"},
-		{layout: "manifest"},
-		{
-			layout:      "unknown",
-			expectedErr: "unknown layout: \"unknown\"",
-		},
-	} {
-		t.Run(tc.layout, func(t *testing.T) {
-			l, err := backup.ResolveLocator(tc.layout, nil)
-
-			if tc.expectedErr == "" {
-				require.NoError(t, err)
-			} else {
-				require.EqualError(t, err, tc.expectedErr)
-				return
-			}
-
-			require.NotNil(t, l)
-		})
-	}
 }
 
 func joinBackupPath(tb testing.TB, backupRoot string, repo storage.Repository, elements ...string) string {

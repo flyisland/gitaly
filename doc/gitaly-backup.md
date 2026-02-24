@@ -114,7 +114,6 @@ transfers the received data to the specified storage destination, as defined by 
     |  `-parallel`          |  integer  |  no      |  Maximum number of parallel backups. |
     |  `-parallel-storage`  |  integer  |  no      |  Maximum number of parallel backups per storage. |
     |  `-id`                |  string   |  no      |  Used to determine a unique path for the backup when a full backup is created. |
-    |  `-layout`            |  string   |  no      |  How backup files are located. One of `manifest` (default), `pointer`, or `legacy`. |
     |  `-incremental`       |  bool     |  no      |  Indicates whether to create an incremental backup. |
     |  `-server-side`       |  bool     |  no      |  Indicates whether to use server-side backups. |
 
@@ -134,7 +133,6 @@ Set up the environment as show in [Set up environment step](#how-to-set-up-for-b
      |  `-parallel`                |  integer               |  no      |  Maximum number of parallel restores. |
      |  `-parallel-storage`        |  integer               |  no      |  Maximum number of parallel restores per storage. |
      |  `-id`                      |  string                |  no      |  ID of full backup to restore. If not specified, the latest backup is restored (default). |
-     |  `-layout`                  |  string                |  no      |  How backup files are located. One of `manifest` (default), `pointer`, or `legacy`. |
      |  `-remove-all-repositories` |  comma-separated list  |  no      |  List of storage names to have all repositories removed from before restoring. You must specify `GITALY_SERVERS` for the listed storage names. |
      |  `-server-side`             |  bool                  |  no      |  Indicates whether to use server-side backups. |
 
@@ -210,12 +208,12 @@ To use server-side create:
    |  `-remove-all-repositories` |  comma-separated list  | no       |  List of storage names to have all repositories removed from before restoring. You must specify `GITALY_SERVERS` for the listed storage names. |
    |  `-server-side`             |  bool                  | yes      |  Indicates whether to use server-side backups. |
 
-   Important: Do not set `-path` and `-layout` flags cannot be used in server-side mode as Gitaly uses the `go_cloud_url` set in the Gitaly config file.
+   Important: Do not set `-path` flag. It cannot be used in server-side mode as Gitaly uses the `go_cloud_url` set in the Gitaly config file.
 
 ### WORM (Write Once Read Many) server-side backups
 
 Gitaly does not currently provide a strict WORM mode: some files, such as
-“latest” pointers in the backup layout, are still overwritten.
+“+latest” pointers in the backup manifest, are still overwritten.
 
 However, for object storages that support Object Lock and versioning (for
 example, Amazon S3), server-side backups can still be used safely with WORM
@@ -304,7 +302,7 @@ To use server-side restore:
    |  `-remove-all-repositories` |  comma-separated list  | no       |  List of storage names to have all repositories removed from before restoring. You must specify `GITALY_SERVERS` for the listed storage names. |
    |  `-server-side`             |  bool                  | yes      |  Indicates whether to use server-side backups. |
 
-   Important: Do not set `-path` and `-layout` flags cannot be used in server-side mode as Gitaly uses the `go_cloud_url` set in the Gitaly config file.
+   Important: Do not set `-path` flag. It cannot be used in server-side mode as Gitaly uses the `go_cloud_url` set in the Gitaly config file.
 
 ## Concepts and Flags
 
@@ -330,115 +328,11 @@ using the [`gocloud.dev/blob`](https://pkg.go.dev/gocloud.dev/blob) library.
 - [memory block storage backend](https://pkg.go.dev/gocloud.dev/blob/memblob). For example `go_cloud_url = "mem://my-backup"`.
 - [Filesystem storage backend](https://pkg.go.dev/gocloud.dev@v0.40.0/blob/fileblob) for example `go_cloud_url = "/tmp//my-backup"`.
 
-## Layouts
+## Backup Layout
 
 The way backup files are arranged on the filesystem or on object storage is
-determined by the layout. The layout is set using the `-layout` flag.
-
-### Legacy layout
-
-This layout is designed to be identical to historic `backup.rake` repository
-backups. Repository data is stored in bundle files in a pre-determined
-directory structure based on each repository's relative path. This directory
-structure is then archived into a tar file by `backup.rake`. Each time a backup
-is created, this entire directory structure is recreated.
-
-For example, a repository with the relative path of
-`@hashed/4e/c9/4ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a.git`
-creates the following structure:
-
-```plaintext
-$BACKUP_DESTINATION_PATH/
-  @hashed/
-    4e/
-      c9/
-        4ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a.bundle
-```
-
-#### Generating full backups
-
-A bundle with all references is created via the RPC `CreateBundle`. It
-effectively executes the following:
-
-```shell
-git bundle create repo.bundle --all
-```
-
-#### Generating incremental backups
-
-This layout does not support incremental backups.
-
-### Pointer layout
-
-This layout is designed to support incremental backups. Each repository backup
-cannot overwrite a previous backup because this would leave dangling incremental
-backups. To prevent dangling incremental backups, every new full backup is put into a new directory.
-The two files called `LATEST` point to:
-
-- The latest full backup.
-- The latest increment of that full backup.
-
-These pointer files enable looking up
-backups from object storage without needing directory traversal (directory
-traversal typically requires additional permissions). In addition to the bundle
-files, each backup writes a full list of refs and their target object IDs.
-
-When the pointer files are not found, the pointer layout will fall back to
-using the legacy layout.
-
-For example, a repository with the relative path of
-`@hashed/4e/c9/4ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a.git`
-and a backup ID of `20210930065413` will create the following structure:
-
-```plaintext
-$BACKUP_DESTINATION_PATH/
-  @hashed/
-    4e/
-      c9/
-        4ec9599fc203d176a301536c2e091a19bc852759b255bd6818810a42c5fed14a/
-          LATEST
-          20210930065413/
-            001.bundle
-            001.refs
-            LATEST
-```
-
-#### Generating full backups
-
-1. A full list of references is retrieved via the RPC `ListRefs`. This list is written to `001.refs` in the same format as [`git-show-ref`](https://git-scm.com/docs/git-show-ref#_output).
-1. A bundle is generated using the retrieved reference names. Effectively, by running:
-
-   ```shell
-   awk '{print $2}' 001.refs | git bundle create repo.bundle --stdin
-   ```
-
-1. The backup and increment pointers are written.
-
-#### Generating incremental backups
-
-1. The next increment is calculated by finding the increment `LATEST` file and
-   adding 1. For example, `001` + `1` = `002`.
-1. A full list of references is retrieved using the `ListRefs` RPC. This list is
-   written to the calculated next increment (for example, `002.refs`) in the same
-   format as [`git-show-ref`](https://git-scm.com/docs/git-show-ref#_output).
-1. The full list of the previous increments references is retrieved by reading
-   the file. For example, `001.refs`.
-1. A bundle is generated using the negated list of reference targets of the
-   previous increment and the new list of retrieved reference names
-   by effectively running:
-
-   ```shell
-   { awk '{print "^" $1}' 001.refs; awk '{print $2}' 002.refs; } | git bundle create repo.bundle --stdin
-   ```
-
-   Negating the object IDs from the previous increment ensures that we stop
-   traversing commits when we reach the HEAD of the branch at the time of the
-   last incremental backup.
-
-### Manifest layout
-
-This layout uses manifest files to describe where each file exists in a backup
-to restore the files from the backup:
+determined by the manifest layout. Gitaly uses manifest files to describe
+where each file exists in a backup to restore the files from the backup:
 
 - The latest backup has two manifests, one named `+latest.toml` and another named after
   its backup ID. `+latest.toml` is overwritten by newer backups.

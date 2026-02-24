@@ -214,8 +214,7 @@ func TestRestoreRepository(t *testing.T) {
 			backupSink, err := backup.ResolveSink(ctx, backupRoot)
 			require.NoError(t, err)
 
-			backupLocator, err := backup.ResolveLocator("manifest", backupSink)
-			require.NoError(t, err)
+			backupLocator := backup.ResolveLocator(backupSink)
 
 			data := tc.setup(t, ctx, backupSink, backupLocator)
 
