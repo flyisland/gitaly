@@ -13,6 +13,7 @@ type cgroupsMetrics struct {
 	procs                      *prometheus.GaugeVec
 	memoryPressure             *prometheus.GaugeVec
 	ioPressure                 *prometheus.GaugeVec
+	cpuPressure                *prometheus.GaugeVec
 	memoryEventsHigh           *prometheus.Desc
 	memoryEventsMax            *prometheus.Desc
 	memoryEventsOOM            *prometheus.Desc
@@ -103,6 +104,13 @@ func newV2CgroupsMetrics() *cgroupsMetrics {
 			prometheus.GaugeOpts{
 				Name: "gitaly_cgroup_io_pressure_percent",
 				Help: "Percentage of time processes were stalled due to IO pressure (PSI). 'type' is 'some' (at least one task stalled) or 'full' (all tasks stalled). 'window' is the averaging window (avg10, avg60, avg300 seconds).",
+			},
+			[]string{"path", "type", "window"},
+		),
+		cpuPressure: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "gitaly_cgroup_cpu_pressure_percent",
+				Help: "Percentage of time processes were stalled waiting for CPU (PSI). Only 'some' type exists for CPU. 'window' is the averaging window (avg10, avg60, avg300 seconds).",
 			},
 			[]string{"path", "type", "window"},
 		),

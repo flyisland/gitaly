@@ -68,6 +68,8 @@ type CgroupStats struct {
 	MemoryPSI PSIMetrics
 	// PSI IO Pressure from `io.pressure` file (cgroups v2 only).
 	IOPSI PSIMetrics
+	// PSI CPU Pressure from `cpu.pressure` (cgroups v2 only, "Some" only).
+	CPUPSI PSIMetrics
 
 	// Memory Events from `memory.events` file (cgroups v2 only).
 	// These are counters that increment each time certain memory events occur.
