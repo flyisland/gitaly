@@ -19,7 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	InternalGitaly_WalkRepos_FullMethodName = "/gitaly.InternalGitaly/WalkRepos"
+	InternalGitaly_WalkRepos_FullMethodName         = "/gitaly.InternalGitaly/WalkRepos"
+	InternalGitaly_ScanPoolMetadata_FullMethodName  = "/gitaly.InternalGitaly/ScanPoolMetadata"
+	InternalGitaly_StorePoolMetadata_FullMethodName = "/gitaly.InternalGitaly/StorePoolMetadata"
+	InternalGitaly_ListPoolMetadata_FullMethodName  = "/gitaly.InternalGitaly/ListPoolMetadata"
 )
 
 // InternalGitalyClient is the client API for InternalGitaly service.
@@ -32,6 +35,16 @@ type InternalGitalyClient interface {
 	// WalkRepos walks the storage and streams back all known git repos on the
 	// requested storage
 	WalkRepos(ctx context.Context, in *WalkReposRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WalkReposResponse], error)
+	// ScanPoolMetadata scans a storage for repository-to-pool relationships
+	// by reading alternates files. It streams back repositories that are
+	// linked to object pools.
+	ScanPoolMetadata(ctx context.Context, in *ScanPoolMetadataRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ScanPoolMetadataResponse], error)
+	// StorePoolMetadata stores repository-to-pool relationships into the
+	// local pool metadata database. It receives a stream of (repo, pool) pairs
+	// and merges them into the existing data.
+	StorePoolMetadata(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[StorePoolMetadataRequest, StorePoolMetadataResponse], error)
+	// ListPoolMetadata lists all pools stored in the local pool metadata database.
+	ListPoolMetadata(ctx context.Context, in *ListPoolMetadataRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ListPoolMetadataResponse], error)
 }
 
 type internalGitalyClient struct {
@@ -61,6 +74,57 @@ func (c *internalGitalyClient) WalkRepos(ctx context.Context, in *WalkReposReque
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type InternalGitaly_WalkReposClient = grpc.ServerStreamingClient[WalkReposResponse]
 
+func (c *internalGitalyClient) ScanPoolMetadata(ctx context.Context, in *ScanPoolMetadataRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ScanPoolMetadataResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &InternalGitaly_ServiceDesc.Streams[1], InternalGitaly_ScanPoolMetadata_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ScanPoolMetadataRequest, ScanPoolMetadataResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type InternalGitaly_ScanPoolMetadataClient = grpc.ServerStreamingClient[ScanPoolMetadataResponse]
+
+func (c *internalGitalyClient) StorePoolMetadata(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[StorePoolMetadataRequest, StorePoolMetadataResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &InternalGitaly_ServiceDesc.Streams[2], InternalGitaly_StorePoolMetadata_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StorePoolMetadataRequest, StorePoolMetadataResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type InternalGitaly_StorePoolMetadataClient = grpc.ClientStreamingClient[StorePoolMetadataRequest, StorePoolMetadataResponse]
+
+func (c *internalGitalyClient) ListPoolMetadata(ctx context.Context, in *ListPoolMetadataRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ListPoolMetadataResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &InternalGitaly_ServiceDesc.Streams[3], InternalGitaly_ListPoolMetadata_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ListPoolMetadataRequest, ListPoolMetadataResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type InternalGitaly_ListPoolMetadataClient = grpc.ServerStreamingClient[ListPoolMetadataResponse]
+
 // InternalGitalyServer is the server API for InternalGitaly service.
 // All implementations must embed UnimplementedInternalGitalyServer
 // for forward compatibility.
@@ -71,6 +135,16 @@ type InternalGitalyServer interface {
 	// WalkRepos walks the storage and streams back all known git repos on the
 	// requested storage
 	WalkRepos(*WalkReposRequest, grpc.ServerStreamingServer[WalkReposResponse]) error
+	// ScanPoolMetadata scans a storage for repository-to-pool relationships
+	// by reading alternates files. It streams back repositories that are
+	// linked to object pools.
+	ScanPoolMetadata(*ScanPoolMetadataRequest, grpc.ServerStreamingServer[ScanPoolMetadataResponse]) error
+	// StorePoolMetadata stores repository-to-pool relationships into the
+	// local pool metadata database. It receives a stream of (repo, pool) pairs
+	// and merges them into the existing data.
+	StorePoolMetadata(grpc.ClientStreamingServer[StorePoolMetadataRequest, StorePoolMetadataResponse]) error
+	// ListPoolMetadata lists all pools stored in the local pool metadata database.
+	ListPoolMetadata(*ListPoolMetadataRequest, grpc.ServerStreamingServer[ListPoolMetadataResponse]) error
 	mustEmbedUnimplementedInternalGitalyServer()
 }
 
@@ -83,6 +157,15 @@ type UnimplementedInternalGitalyServer struct{}
 
 func (UnimplementedInternalGitalyServer) WalkRepos(*WalkReposRequest, grpc.ServerStreamingServer[WalkReposResponse]) error {
 	return status.Error(codes.Unimplemented, "method WalkRepos not implemented")
+}
+func (UnimplementedInternalGitalyServer) ScanPoolMetadata(*ScanPoolMetadataRequest, grpc.ServerStreamingServer[ScanPoolMetadataResponse]) error {
+	return status.Error(codes.Unimplemented, "method ScanPoolMetadata not implemented")
+}
+func (UnimplementedInternalGitalyServer) StorePoolMetadata(grpc.ClientStreamingServer[StorePoolMetadataRequest, StorePoolMetadataResponse]) error {
+	return status.Error(codes.Unimplemented, "method StorePoolMetadata not implemented")
+}
+func (UnimplementedInternalGitalyServer) ListPoolMetadata(*ListPoolMetadataRequest, grpc.ServerStreamingServer[ListPoolMetadataResponse]) error {
+	return status.Error(codes.Unimplemented, "method ListPoolMetadata not implemented")
 }
 func (UnimplementedInternalGitalyServer) mustEmbedUnimplementedInternalGitalyServer() {}
 func (UnimplementedInternalGitalyServer) testEmbeddedByValue()                        {}
@@ -116,6 +199,35 @@ func _InternalGitaly_WalkRepos_Handler(srv interface{}, stream grpc.ServerStream
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type InternalGitaly_WalkReposServer = grpc.ServerStreamingServer[WalkReposResponse]
 
+func _InternalGitaly_ScanPoolMetadata_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ScanPoolMetadataRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(InternalGitalyServer).ScanPoolMetadata(m, &grpc.GenericServerStream[ScanPoolMetadataRequest, ScanPoolMetadataResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type InternalGitaly_ScanPoolMetadataServer = grpc.ServerStreamingServer[ScanPoolMetadataResponse]
+
+func _InternalGitaly_StorePoolMetadata_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(InternalGitalyServer).StorePoolMetadata(&grpc.GenericServerStream[StorePoolMetadataRequest, StorePoolMetadataResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type InternalGitaly_StorePoolMetadataServer = grpc.ClientStreamingServer[StorePoolMetadataRequest, StorePoolMetadataResponse]
+
+func _InternalGitaly_ListPoolMetadata_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ListPoolMetadataRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(InternalGitalyServer).ListPoolMetadata(m, &grpc.GenericServerStream[ListPoolMetadataRequest, ListPoolMetadataResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type InternalGitaly_ListPoolMetadataServer = grpc.ServerStreamingServer[ListPoolMetadataResponse]
+
 // InternalGitaly_ServiceDesc is the grpc.ServiceDesc for InternalGitaly service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -127,6 +239,21 @@ var InternalGitaly_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WalkRepos",
 			Handler:       _InternalGitaly_WalkRepos_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ScanPoolMetadata",
+			Handler:       _InternalGitaly_ScanPoolMetadata_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StorePoolMetadata",
+			Handler:       _InternalGitaly_StorePoolMetadata_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ListPoolMetadata",
+			Handler:       _InternalGitaly_ListPoolMetadata_Handler,
 			ServerStreams: true,
 		},
 	},

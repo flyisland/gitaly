@@ -18,6 +18,34 @@ service InternalGitaly {
       scope_level: STORAGE
     };
   }
+
+  // ScanPoolMetadata scans a storage for repository-to-pool relationships
+  // by reading alternates files. It streams back repositories that are
+  // linked to object pools.
+  rpc ScanPoolMetadata (ScanPoolMetadataRequest) returns (stream ScanPoolMetadataResponse) {
+    option (op_type) = {
+      op:          ACCESSOR
+      scope_level: STORAGE
+    };
+  }
+
+  // StorePoolMetadata stores repository-to-pool relationships into the
+  // local pool metadata database. It receives a stream of (repo, pool) pairs
+  // and merges them into the existing data.
+  rpc StorePoolMetadata (stream StorePoolMetadataRequest) returns (StorePoolMetadataResponse) {
+    option (op_type) = {
+      op:          MUTATOR
+      scope_level: STORAGE
+    };
+  }
+
+  // ListPoolMetadata lists all pools stored in the local pool metadata database.
+  rpc ListPoolMetadata (ListPoolMetadataRequest) returns (stream ListPoolMetadataResponse) {
+    option (op_type) = {
+      op:          ACCESSOR
+      scope_level: STORAGE
+    };
+  }
 }
 
 // WalkReposRequest ...
@@ -34,4 +62,47 @@ message WalkReposResponse {
   // This can be used as a proxy for when the repository was last
   // modified.
   google.protobuf.Timestamp modification_time = 2;
+}
+
+// ScanPoolMetadataRequest initiates a scan of a storage for repository-to-pool relationships 
+// by reading alternates files. It contains the name of the storage to scan.
+message ScanPoolMetadataRequest {
+  // storage_name is the name of the storage to scan.
+  string storage_name = 1 [(storage)=true];
+}
+
+// ScanPoolMetadataResponse contains a repository that is linked to an object pool.
+message ScanPoolMetadataResponse {
+  // relative_path is the relative path of the repository.
+  string relative_path = 1;
+  // pool_disk_path is the disk path of the object pool the repository is linked to.
+  string pool_disk_path = 2;
+}
+
+// StorePoolMetadataRequest contains a single repository-to-pool relationship to store.
+message StorePoolMetadataRequest {
+  // storage_name is the name of the storage.
+  string storage_name = 1 [(storage)=true];
+  // relative_path is the relative path of the repository.
+  string relative_path = 2;
+  // pool_disk_path is the disk path of the object pool.
+  string pool_disk_path = 3;
+  // is_upstream indicates if this repository is the upstream/source repository for the pool.
+  bool is_upstream = 4;
+}
+
+// StorePoolMetadataResponse contains the result of storing pool metadata.
+message StorePoolMetadataResponse {
+}
+
+// ListPoolMetadataRequest requests a list of pools from the metadata database.
+message ListPoolMetadataRequest {
+  // storage_name is the name of the storage to list pools for.
+  string storage_name = 1 [(storage)=true];
+}
+
+// ListPoolMetadataResponse contains a single pool from the metadata database.
+message ListPoolMetadataResponse {
+  // pool_disk_path is the disk path of the object pool.
+  string pool_disk_path = 1;
 }
