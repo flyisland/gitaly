@@ -617,6 +617,104 @@ type AdaptiveLimiting struct {
 	// memory usage (excluding high evictable page caches) to the defined limit. If the ratio exceeds this
 	// threshold, a backoff event is fired. By default, the threshold is 0.9 (90%).
 	MemoryThreshold float64 `json:"memory_threshold" toml:"memory_threshold"`
+
+	PSIPressure PSIPressureConfig `json:"psi_pressure" toml:"psi_pressure"`
+}
+
+// PSIPressureConfig holds configuration for PSI-based pressure watchers.
+// Each resource type (memory, IO, CPU) can be independently enabled with its own thresholds.
+// PSI (Pressure Stall Information) metrics report the percentage of wall-clock time tasks are
+// stalled waiting for a resource, as measured by the kernel.
+type PSIPressureConfig struct {
+	Memory PSIResourceConfig `json:"memory" toml:"memory"`
+	IO     PSIResourceConfig `json:"io"     toml:"io"`
+	CPU    PSIResourceConfig `json:"cpu"    toml:"cpu"`
+}
+
+// PSIResourceConfig configures a single PSI resource pressure watcher.
+//
+// Thresholds are expressed as PSI "some" values (see https://docs.kernel.org/accounting/psi.html#pressure-interface)
+// as a 60-second rolling average. The watcher looks for three conditions in order to trigger a backoff:
+//  1. Pressure is sustained above the backoff threshold;
+//  2. Current 10-second rolling average is also elevated;
+//  3. Pressure is not falling rapidly.
+type PSIResourceConfig struct {
+	// Enabled controls whether this resource's pressure watcher is active.
+	Enabled bool `json:"enabled" toml:"enabled"`
+	// WarningThreshold is the PSI some.avg60 percentage at which a warning is logged.
+	// Below this value, pressure is considered healthy and no log is emitted.
+	WarningThreshold float64 `json:"warning_threshold" toml:"warning_threshold"`
+	// BackoffThreshold is the PSI some.avg60 percentage at which elevated pressure is detected.
+	// This is also the threshold used for sustain-duration tracking.
+	BackoffThreshold float64 `json:"backoff_threshold" toml:"backoff_threshold"`
+	// CriticalThreshold is the PSI some.avg60 percentage at which critical pressure is logged
+	// as an error.
+	CriticalThreshold float64 `json:"critical_threshold" toml:"critical_threshold"`
+	// SustainDurationSeconds is how long pressure must remain above the backoff threshold
+	// before it is considered "sustained". 0 uses the default (60 seconds).
+	SustainDurationSeconds int `json:"sustain_duration_seconds" toml:"sustain_duration_seconds"`
+	// FastFallRatio controls the "not recovering" condition. If the current avg10 drops below
+	// this ratio of the previous poll's avg10, pressure is considered to be falling rapidly
+	// and the system is recovering on its own. 0 uses the default (0.85).
+	FastFallRatio float64 `json:"fast_fall_ratio" toml:"fast_fall_ratio"`
+}
+
+const (
+	// Default memory pressure thresholds
+	defaultMemoryPressureWarningThreshold  = 5.0
+	defaultMemoryPressureBackoffThreshold  = 10.0
+	defaultMemoryPressureCriticalThreshold = 25.0
+
+	// Default I/O pressure thresholds
+	defaultIOPressureWarningThreshold  = 10.0
+	defaultIOPressureBackoffThreshold  = 20.0
+	defaultIOPressureCriticalThreshold = 40.0
+
+	// Default CPU pressure thresholds
+	defaultCPUPressureWarningThreshold  = 10.0
+	defaultCPUPressureBackoffThreshold  = 25.0
+	defaultCPUPressureCriticalThreshold = 50.0
+
+	// Default sustain duration in seconds. This is the duration of time for which pressure must remain above the backoff threshold.
+	defaultSustainDurationSeconds = 60
+
+	// Default fast fall ratio for pressure recovery. This is the ratio of the previous poll's avg10 to the current avg10.
+	// If the current avg10 drops below this ratio of the previous poll's avg10, pressure is considered to be falling rapidly
+	// and the system is recovering on its own.
+	defaultPressureFastFallRatio = 0.85
+)
+
+// FulfillDefaults returns a copy of config with zero-valued fields replaced by per-resource defaults.
+// The resource parameter is "memory", "io", or "cpu". Called during config load.
+func (c PSIResourceConfig) FulfillDefaults(resource string) PSIResourceConfig {
+	warning, backoff, critical := psiDefaultThresholds(resource)
+	if c.WarningThreshold <= 0 {
+		c.WarningThreshold = warning
+	}
+	if c.BackoffThreshold <= 0 {
+		c.BackoffThreshold = backoff
+	}
+	if c.CriticalThreshold <= 0 {
+		c.CriticalThreshold = critical
+	}
+	if c.SustainDurationSeconds <= 0 {
+		c.SustainDurationSeconds = defaultSustainDurationSeconds
+	}
+	if c.FastFallRatio <= 0 {
+		c.FastFallRatio = defaultPressureFastFallRatio
+	}
+	return c
+}
+
+func psiDefaultThresholds(resource string) (warning, backoff, critical float64) {
+	switch resource {
+	case "io":
+		return defaultIOPressureWarningThreshold, defaultIOPressureBackoffThreshold, defaultIOPressureCriticalThreshold
+	case "cpu":
+		return defaultCPUPressureWarningThreshold, defaultCPUPressureBackoffThreshold, defaultCPUPressureCriticalThreshold
+	default:
+		return defaultMemoryPressureWarningThreshold, defaultMemoryPressureBackoffThreshold, defaultMemoryPressureCriticalThreshold
+	}
 }
 
 // Validate runs validation on all fields and compose all found errors.
@@ -1063,7 +1161,15 @@ func (cfg *Cfg) Sanitize() error {
 	if cfg.Transactions.MaxInactivePartitions == 0 {
 		cfg.Transactions.MaxInactivePartitions = DefaultMaxInactivePartitions
 	}
-
+	if cfg.AdaptiveLimiting.PSIPressure.Memory.Enabled {
+		cfg.AdaptiveLimiting.PSIPressure.Memory = cfg.AdaptiveLimiting.PSIPressure.Memory.FulfillDefaults("memory")
+	}
+	if cfg.AdaptiveLimiting.PSIPressure.IO.Enabled {
+		cfg.AdaptiveLimiting.PSIPressure.IO = cfg.AdaptiveLimiting.PSIPressure.IO.FulfillDefaults("io")
+	}
+	if cfg.AdaptiveLimiting.PSIPressure.CPU.Enabled {
+		cfg.AdaptiveLimiting.PSIPressure.CPU = cfg.AdaptiveLimiting.PSIPressure.CPU.FulfillDefaults("cpu")
+	}
 	return nil
 }
 
