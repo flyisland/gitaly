@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/labkit/correlation"
+	"gitlab.com/gitlab-org/labkit/fields"
 )
 
 const (
@@ -200,7 +201,7 @@ func (c *GitlabNetClient) DoRequest(ctx context.Context, method, path string, da
 	}
 
 	// At this point, response is guaranteed to be non-nil as per httpClient.Do doc
-	logger = logger.WithField("status", response.StatusCode)
+	logger = logger.WithField(fields.HTTPStatusCode, response.StatusCode)
 
 	if err := parseError(response); err != nil {
 		logger.WithError(err).Error("Internal API error")
