@@ -32,6 +32,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
 	nodeimpl "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/node"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/relational"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/migration"
@@ -321,6 +322,7 @@ type gitalyServerDeps struct {
 	archiveCache              streamcache.Cache
 	MigrationStateManager     migration.StateManager
 	transactionInterceptorsFn func(log.Logger, storage.Node, localrepo.Factory) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor)
+	poolMetadataStore         relational.PoolStore
 }
 
 func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Context, cfg config.Cfg) *service.Dependencies {
@@ -540,6 +542,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		LocalRepositoryFactory: gsd.localRepoFactory,
 		MigrationStateManager:  gsd.MigrationStateManager,
 		ArchiveCache:           gsd.archiveCache,
+		PoolMetadataStore:      gsd.poolMetadataStore,
 	}
 }
 
@@ -743,6 +746,14 @@ func WithTransactionInterceptors(
 func WithMigrations(migrations *[]migration.Migration) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
 		deps.migrations = migrations
+		return deps
+	}
+}
+
+// WithPoolMetadataStore sets the relational.PoolStore that will be used for gitaly services initialisation.
+func WithPoolMetadataStore(store relational.PoolStore) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.poolMetadataStore = store
 		return deps
 	}
 }

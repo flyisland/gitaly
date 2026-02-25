@@ -1,8 +1,6 @@
 package internalgitaly
 
 import (
-	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -115,23 +113,9 @@ func TestWalkRepos(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	actualRepos := consumeWalkReposStream(t, stream)
+	actualRepos := consumeServerStream(t, stream)
 	require.Equal(t, testRepo1.GetRelativePath(), actualRepos[0].GetRelativePath())
 	require.Equal(t, modifiedDate.UTC(), actualRepos[0].GetModificationTime().AsTime())
 	require.Equal(t, testRepo2.GetRelativePath(), actualRepos[1].GetRelativePath())
 	require.Equal(t, modifiedDate.UTC(), actualRepos[1].GetModificationTime().AsTime())
-}
-
-func consumeWalkReposStream(t *testing.T, stream gitalypb.InternalGitaly_WalkReposClient) []*gitalypb.WalkReposResponse {
-	var repos []*gitalypb.WalkReposResponse
-	for {
-		resp, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		} else {
-			require.NoError(t, err)
-		}
-		repos = append(repos, resp)
-	}
-	return repos
 }
