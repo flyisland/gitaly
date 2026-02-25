@@ -1068,6 +1068,879 @@ func testRebase(t *testing.T, ctx context.Context) {
 				}
 			},
 		},
+		{
+			desc: "Middle commit becomes empty after rebase",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// Commit r2 introduces the same change as l2, so it becomes empty
+				// after rebase and should be dropped. r1 and r3 should be picked:
+				//
+				// BEFORE:                    AFTER:
+				// * l2, upstream             * r3', result
+				// | * r3, branch             * r1'
+				// | * r2                     * l2, upstream
+				// | * r1                     * l1
+				// |/
+				// * l1
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: add bar"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				r2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r2: add bar"),
+					gittest.WithParents(r1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r2"),
+				)
+				r3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r3: add baz"),
+					gittest.WithParents(r2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r3"),
+				)
+
+				return setupData{
+					upstream:             l2.String(),
+					branch:               r3.String(),
+					expectedCommitsAhead: 2,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "bar",
+							Content: "bar",
+						},
+						{
+							Mode:    "100644",
+							Path:    "baz",
+							Content: "baz",
+						},
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo edited",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "Conflict on second commit",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// Commit r1 cherry-picks cleanly but r2 conflicts with l2:
+				//
+				// BEFORE:
+				// * l2, upstream
+				// | * r2, branch
+				// | * r1
+				// |/
+				// * l1
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo and bar"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				blob1 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar edited by upstream"))
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: edit bar"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", OID: blob1},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				blob2 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar edited by branch"))
+				r2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r2: edit bar"),
+					gittest.WithParents(r1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", OID: blob2},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r2"),
+				)
+				blob0 := gittest.WriteBlob(t, cfg, repoPath, []byte("bar"))
+
+				return setupData{
+					upstream: l2.String(),
+					branch:   r2.String(),
+					expectedErr: structerr.NewInternal("rebase using merge-tree: %w", &RebaseConflictError{
+						Commit: r2.String(),
+						ConflictError: &MergeTreeConflictError{
+							ConflictingFileInfo: []ConflictingFileInfo{
+								{
+									FileName: "bar",
+									OID:      blob0,
+									Stage:    MergeStageAncestor,
+									Mode:     0o100644,
+								},
+								{
+									FileName: "bar",
+									OID:      blob1,
+									Stage:    MergeStageOurs,
+									Mode:     0o100644,
+								},
+								{
+									FileName: "bar",
+									OID:      blob2,
+									Stage:    MergeStageTheirs,
+									Mode:     0o100644,
+								},
+							},
+							ConflictInfoMessage: []ConflictInfoMessage{
+								{
+									Paths:   []string{"bar"},
+									Type:    "Auto-merging",
+									Message: "Auto-merging bar\n",
+								},
+								{
+									Paths:   []string{"bar"},
+									Type:    "CONFLICT (contents)",
+									Message: "CONFLICT (content): Merge conflict in bar\n",
+								},
+							},
+						},
+					}),
+				}
+			},
+		},
+		{
+			desc: "Merge commit in the middle with regular commits after",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// Merge commit r2 is dropped, r1 and r3 are picked:
+				//
+				// BEFORE:                AFTER:
+				// * l3, upstream         * r3', result
+				// | * r3, branch         * r1'
+				// | *   r2               * l3, upstream
+				// | |\                   * l2
+				// | |/                   * l1
+				// |/|
+				// * | l2
+				// | * r1
+				// |/
+				// * l1
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: add bar"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				l3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l3: edit bar"),
+					gittest.WithParents(l2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar edited"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l3"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				r2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r2: merge l2"),
+					gittest.WithParents(r1, l2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r2"),
+				)
+				r3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r3: add baz"),
+					gittest.WithParents(r2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r3"),
+				)
+
+				return setupData{
+					upstream:             l3.String(),
+					branch:               r3.String(),
+					expectedCommitsAhead: 2,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "bar",
+							Content: "bar edited",
+						},
+						{
+							Mode:    "100644",
+							Path:    "baz",
+							Content: "baz",
+						},
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo edited",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "All cherry-pick equivalents filtered by rev-list",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// Both r1 and r2 introduce identical patches to l2 and l3 respectively,
+				// so git-rev-list --cherry-pick filters them all out. Result is upstream:
+				//
+				// BEFORE:              AFTER:
+				// * l3, upstream       * l3, upstream, result
+				// * l2                 * l2
+				// | * r2, branch       * l1
+				// | * r1
+				// |/
+				// * l1
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: edit foo"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				l3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l3: add bar"),
+					gittest.WithParents(l2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/l3"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				r2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r2: add bar"),
+					gittest.WithParents(r1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r2"),
+				)
+
+				return setupData{
+					upstream:             l3.String(),
+					branch:               r2.String(),
+					expectedCommitsAhead: 0,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "bar",
+							Content: "bar",
+						},
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo edited",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "Same commit as upstream and branch",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// When upstream and branch are the same commit, merge-base equals
+				// both, so it fast-forwards to branch (no-op):
+				//
+				// BEFORE:                    AFTER:
+				// * l1, upstream, branch     * l1, upstream, result
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+
+				return setupData{
+					upstream:             l1.String(),
+					branch:               l1.String(),
+					expectedCommitsAhead: 0,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "Evil merge loses extra changes",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// An "evil merge" is a merge commit that introduces changes
+				// beyond what either parent contributes. Since rebase drops
+				// merge commits (--no-merges), the extra changes from the
+				// evil merge r2 are silently lost. Only r1 is picked:
+				//
+				// BEFORE:                   AFTER:
+				// * l2, upstream            * r1', result
+				// | *   r2, branch          * l2, upstream
+				// | |\                      * l1
+				// | |/                      * base
+				// |/|
+				// * | l1
+				// | * r1
+				// |/
+				// * base
+				base := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("base: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/base"),
+				)
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add bar"),
+					gittest.WithParents(base),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: edit bar"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar edited"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(base),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				r2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r2: evil merge adds baz"),
+					gittest.WithParents(r1, l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "evil merge sneaked this in"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r2"),
+				)
+
+				return setupData{
+					upstream:             l2.String(),
+					branch:               r2.String(),
+					expectedCommitsAhead: 1,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "bar",
+							Content: "bar edited",
+						},
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo edited",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "Branch merges in a third branch",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// The branch merges in a third branch (side). The merge
+				// commit r2 is dropped by --no-merges, but s1 appears in
+				// rev-list as it is reachable from branch but not upstream.
+				// Both r1 and s1 are picked:
+				//
+				// BEFORE:                    AFTER:
+				// * l2, upstream             * s1', result
+				// | *   r2, branch           * r1'
+				// | |\                       * l2, upstream
+				// | | * s1                   * l1
+				// | |/
+				// |/|
+				// | * r1
+				// |/
+				// * l1
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: add bar"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				s1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("s1: add baz"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/s1"),
+				)
+				r2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r2: merge side branch"),
+					gittest.WithParents(r1, s1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r2"),
+				)
+
+				return setupData{
+					upstream:             l2.String(),
+					branch:               r2.String(),
+					expectedCommitsAhead: 2,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "bar",
+							Content: "bar",
+						},
+						{
+							Mode:    "100644",
+							Path:    "baz",
+							Content: "baz",
+						},
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo edited",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "Commits before and after merging a third branch",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// r1 and r2 are on the branch before the merge, s1 is on a
+				// side branch. m1 merges s1 into the branch, r3 follows.
+				// The merge m1 is dropped by --no-merges; r1, r2, s1 and r3
+				// are all picked:
+				//
+				// BEFORE:                          AFTER:
+				// * l2, upstream                   * r3', result
+				// | * r3, branch                   * s1'
+				// | *   m1                         * r2'
+				// | |\                             * r1'
+				// | | * s1                         * l2, upstream
+				// | * | r2                         * l1
+				// | |/
+				// | * r1
+				// |/
+				// * l1
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: add bar"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				r2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r2: add baz"),
+					gittest.WithParents(r1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r2"),
+				)
+				s1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("s1: add qux"),
+					gittest.WithParents(r1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+						gittest.TreeEntry{Path: "qux", Mode: "100644", Content: "qux"},
+					),
+					gittest.WithReference("refs/tags/s1"),
+				)
+				m1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("m1: merge side branch"),
+					gittest.WithParents(r2, s1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+						gittest.TreeEntry{Path: "qux", Mode: "100644", Content: "qux"},
+					),
+					gittest.WithReference("refs/tags/m1"),
+				)
+				r3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r3: add quux"),
+					gittest.WithParents(m1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+						gittest.TreeEntry{Path: "quux", Mode: "100644", Content: "quux"},
+						gittest.TreeEntry{Path: "qux", Mode: "100644", Content: "qux"},
+					),
+					gittest.WithReference("refs/tags/r3"),
+				)
+
+				return setupData{
+					upstream:             l2.String(),
+					branch:               r3.String(),
+					expectedCommitsAhead: 4,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "bar",
+							Content: "bar",
+						},
+						{
+							Mode:    "100644",
+							Path:    "baz",
+							Content: "baz",
+						},
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo edited",
+						},
+						{
+							Mode:    "100644",
+							Path:    "quux",
+							Content: "quux",
+						},
+						{
+							Mode:    "100644",
+							Path:    "qux",
+							Content: "qux",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "Branch merges upstream with commits before and after",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// r1 is before the merge, m1 merges l2 into the branch,
+				// r3 follows. l3 advances upstream past the merge point.
+				// The merge m1 is dropped by --no-merges; r1 and r3 are picked:
+				//
+				// BEFORE:                    AFTER:
+				// * l3, upstream             * r3', result
+				// | * r3, branch             * r1'
+				// | *   m1                   * l3, upstream
+				// | |\                       * l2
+				// | |/                       * l1
+				// |/|
+				// * | l2
+				// | * r1
+				// |/
+				// * l1
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: add bar"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				l3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l3: add quux"),
+					gittest.WithParents(l2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+						gittest.TreeEntry{Path: "quux", Mode: "100644", Content: "quux"},
+					),
+					gittest.WithReference("refs/tags/l3"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				m1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("m1: merge upstream"),
+					gittest.WithParents(r1, l2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/m1"),
+				)
+				r3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r3: add baz"),
+					gittest.WithParents(m1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r3"),
+				)
+
+				return setupData{
+					upstream:             l3.String(),
+					branch:               r3.String(),
+					expectedCommitsAhead: 2,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "bar",
+							Content: "bar",
+						},
+						{
+							Mode:    "100644",
+							Path:    "baz",
+							Content: "baz",
+						},
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo edited",
+						},
+						{
+							Mode:    "100644",
+							Path:    "quux",
+							Content: "quux",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "Upstream merges branch then branch continues",
+			setup: func(t *testing.T, repoPath string) setupData {
+				// Upstream merges r1 via l3, then r2 continues on the branch.
+				// The merge-base is r1. Only r2 should be picked:
+				//
+				// BEFORE:                    AFTER:
+				// *   l3, upstream           * r2', result
+				// |\                         *   l3, upstream
+				// | | * r2, branch           |\
+				// | |/                       | * r1
+				// | * r1                     |/
+				// |/                         * l2
+				// * l2                       * l1
+				// * l1
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l1"),
+				)
+				l2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l2: add bar"),
+					gittest.WithParents(l1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+					gittest.WithReference("refs/tags/l2"),
+				)
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: edit foo"),
+					gittest.WithParents(l2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r1"),
+				)
+				r2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r2: add baz"),
+					gittest.WithParents(r1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "baz", Mode: "100644", Content: "baz"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/r2"),
+				)
+				l3 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l3: merge branch"),
+					gittest.WithParents(l2, r1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "bar", Mode: "100644", Content: "bar"},
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo edited"},
+					),
+					gittest.WithReference("refs/tags/l3"),
+				)
+
+				return setupData{
+					upstream:             l3.String(),
+					branch:               r2.String(),
+					expectedCommitsAhead: 1,
+					expectedTreeEntries: []gittest.TreeEntry{
+						{
+							Mode:    "100644",
+							Path:    "bar",
+							Content: "bar",
+						},
+						{
+							Mode:    "100644",
+							Path:    "baz",
+							Content: "baz",
+						},
+						{
+							Mode:    "100644",
+							Path:    "foo",
+							Content: "foo edited",
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "Invalid upstream revision",
+			setup: func(t *testing.T, repoPath string) setupData {
+				r1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("r1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+				)
+
+				return setupData{
+					upstream:    "does-not-exist",
+					branch:      r1.String(),
+					expectedErr: structerr.NewInvalidArgument("resolving upstream commit: reference not found").WithMetadata("revision", "does-not-exist"),
+				}
+			},
+		},
+		{
+			desc: "Invalid branch revision",
+			setup: func(t *testing.T, repoPath string) setupData {
+				l1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithMessage("l1: add foo"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "foo", Mode: "100644", Content: "foo"},
+					),
+				)
+
+				return setupData{
+					upstream:    l1.String(),
+					branch:      "does-not-exist",
+					expectedErr: structerr.NewInvalidArgument("resolving branch commit: reference not found").WithMetadata("revision", "does-not-exist"),
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
