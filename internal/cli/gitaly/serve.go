@@ -782,6 +782,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			BundleURIManager:       bundleURIManager,
 			MigrationStateManager:  migration.NewStateManager(&migrations),
 			ArchiveCache:           archiveStreamCache,
+			PoolMetadataStore:      poolMetadataStore,
 		})
 		b.RegisterStarter(starter.New(c, srv, logger))
 	}
