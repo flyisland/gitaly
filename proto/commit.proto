@@ -389,7 +389,8 @@ message CountCommitsRequest {
   // repository is the repository in which we want to count the number of commits.
   Repository repository = 1 [(target_repository)=true];
   // revision is a commitish which is the start point for the traversal of commits.
-  bytes revision = 2;
+  // Deprecated: Use the 'revisions' field instead. See https://gitlab.com/gitlab-org/gitlab/-/issues/588471
+  bytes revision = 2 [deprecated = true];
   // after is used to filter commits more recent than a specific date.
   google.protobuf.Timestamp after = 3;
   // before is used to filter commits older than a specific date.
@@ -400,7 +401,8 @@ message CountCommitsRequest {
   int32 max_count = 6;
   // all is used to consider all refs (including HEAD) as the start point for the traversal.
   // all and Revision options are mutually exclusive.
-  bool all = 7;
+  // Deprecated: Use revisions with '--all' pseudo-revision instead. See https://gitlab.com/gitlab-org/gitlab/-/issues/588471
+  bool all = 7 [deprecated = true];
   // first_parent ensures that only the first parent commit is followed in the traversal.
   bool first_parent = 8;
   // global_options contains the global options used to modify the behaviour of Git.
@@ -408,7 +410,8 @@ message CountCommitsRequest {
   // revisions is the set of revisions which should be walked to enumerate
   // commits. Accepts all notation as documented in gitrevisions(7) as well as
   // the pseudo-revisions `--not` and `--all` as documented in git-rev-list(1).
-  // If set, this takes precedence over 'revision' and 'all' fields.
+  // This is the preferred way to specify revisions; the 'revision' and 'all'
+  // fields are deprecated.
   repeated bytes revisions = 10;
 }
 
