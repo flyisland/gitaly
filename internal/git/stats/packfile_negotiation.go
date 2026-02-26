@@ -15,6 +15,8 @@ import (
 
 //nolint:revive // This is unintentionally missing documentation.
 type PackfileNegotiation struct {
+	// UserAgent is the user agent of the client, e.g. "git/2.53.0".
+	UserAgent string
 	// Total size of all pktlines' data
 	PayloadSize int64
 	// Total number of packets
@@ -90,6 +92,9 @@ func (n *PackfileNegotiation) Parse(body io.Reader) error {
 		if command, ok := strings.CutPrefix(lineFirstPart, "command="); ok {
 			n.Command = command
 			continue
+		} else if agent, ok := strings.CutPrefix(lineFirstPart, "agent="); ok {
+			n.UserAgent = agent
+			continue
 		}
 
 		switch lineFirstPart {
@@ -104,6 +109,12 @@ func (n *PackfileNegotiation) Parse(body io.Reader) error {
 			n.Wants++
 			if len(split) > 2 {
 				n.Caps = split[2:]
+				for _, cap := range n.Caps {
+					if agent, ok := strings.CutPrefix(cap, "agent="); ok {
+						n.UserAgent = agent
+						break
+					}
+				}
 			}
 		case "shallow":
 			if len(split) != 2 {
@@ -164,6 +175,9 @@ func (n *PackfileNegotiation) UpdateMetrics(metrics *prometheus.CounterVec) {
 func (n *PackfileNegotiation) UpdateLogFields(ctx context.Context) {
 	if n.Command != "" {
 		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.command", n.Command)
+	}
+	if n.UserAgent != "" {
+		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.user_agent", n.UserAgent)
 	}
 	if n.Deepen != "" {
 		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.deepen", n.Deepen)
