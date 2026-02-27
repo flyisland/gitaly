@@ -8529,7 +8529,7 @@ This product includes software developed at CoreOS, Inc.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 LICENSE - github.com/cyphar/filepath-securejoin
 Copyright (C) 2014-2015 Docker Inc & Go Authors. All rights reserved.
-Copyright (C) 2017 SUSE LLC. All rights reserved.
+Copyright (C) 2017-2024 SUSE LLC. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -25219,7 +25219,7 @@ LICENSE - github.com/pjbgf/sha1cd
       same "printed page" as the copyright notice for easier
       identification within third-party archives.
 
-   Copyright [yyyy] [name of copyright owner]
+   Copyright 2023 pjbgf
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -26614,7 +26614,7 @@ LICENSE - github.com/skeema/knownhosts
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 NOTICE - github.com/skeema/knownhosts
-Copyright 2024 Skeema LLC and the Skeema Knownhosts authors
+Copyright 2025 Skeema LLC and the Skeema Knownhosts authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
