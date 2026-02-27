@@ -157,11 +157,13 @@ type Command struct {
 
 	span trace.Span
 
-	metricsCmd    string
-	metricsSubCmd string
-	cgroupPath    string
-	cmdGitVersion string
-	refBackend    string
+	metricsCmd     string
+	metricsSubCmd  string
+	metricsService string
+	metricsMethod  string
+	cgroupPath     string
+	cmdGitVersion  string
+	refBackend     string
 
 	maxRssAnon atomic.Int64
 
@@ -240,6 +242,7 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 		},
 	)
 	cmd := exec.CommandContext(ctx, nameAndArgs[0], nameAndArgs[1:]...)
+	service, method := methodFromContext(ctx)
 
 	command := &Command{
 		logger:                   logger,
@@ -250,6 +253,8 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 		finalizers:               cfg.finalizers,
 		metricsCmd:               cfg.commandName,
 		metricsSubCmd:            cfg.subcommandName,
+		metricsService:           service,
+		metricsMethod:            method,
 		cmdGitVersion:            cfg.gitVersion,
 		refBackend:               cfg.refBackend,
 		subprocessLoggerDone:     make(chan struct{}),
@@ -412,7 +417,7 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 		go trackMaxRssAnon(ctx, cmd.Process.Pid, &command.maxRssAnon, command.processExitedCh)
 	}
 
-	inFlightCommandGauge.Inc()
+	inFlightCommandGauge.WithLabelValues(command.metricsService, command.metricsMethod, command.metricsCmd, command.metricsSubCmd).Inc()
 	commandcounter.Increment()
 
 	defer func() {
@@ -586,7 +591,7 @@ func (c *Command) wait() {
 		}
 	}
 
-	inFlightCommandGauge.Dec()
+	inFlightCommandGauge.WithLabelValues(c.metricsService, c.metricsMethod, c.metricsCmd, c.metricsSubCmd).Dec()
 
 	c.logProcessComplete()
 
