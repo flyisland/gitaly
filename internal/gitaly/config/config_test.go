@@ -1078,7 +1078,8 @@ dir = '%s'`, gitlabShellDir))
 		SecretFile: filepath.Join(gitlabShellDir, ".gitlab_shell_secret"),
 	}, cfg.Gitlab)
 	require.Equal(t, Hooks{
-		CustomHooksDir: filepath.Join(gitlabShellDir, "hooks"),
+		CustomHooksDir:         filepath.Join(gitlabShellDir, "hooks"),
+		PackObjectsHookMaxProc: 0,
 	}, cfg.Hooks)
 }
 

@@ -341,6 +341,17 @@ func (gl Gitlab) Validate() error {
 // Hooks contains the settings required for hooks
 type Hooks struct {
 	CustomHooksDir string `json:"custom_hooks_dir" toml:"custom_hooks_dir,omitempty"`
+
+	// PackObjectsHookMaxProc defines the value of the GOMAXPROCS environment
+	// variable when invoking git-upload-pack(1). The default value is 0.
+	// The Go runtime typically ignores invalid environment variable values.
+	// If a negative value is provided at startup, the runtime will default to the standard behavior:
+	// the number of available logical CPU cores (or the container limit in Go 1.25+).
+	//
+	// We expect this value to be inherited by the git pack-objects hook process,
+	// so that the number of OS threads executing Go code within the hook is
+	// bounded and CPU usage is constrained.
+	PackObjectsHookMaxProc uint `json:"packobjects_hook_max_proc" toml:"packobjects_hook_max_proc,omitempty"`
 }
 
 // HTTPSettings contains configuration settings used to setup HTTP transport
