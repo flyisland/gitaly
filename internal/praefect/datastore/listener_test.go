@@ -32,6 +32,7 @@ func TestNewListener(t *testing.T) {
 
 func TestListener_Listen(t *testing.T) {
 	t.Parallel()
+	ctx := testhelper.Context(t)
 	db := testdb.New(t)
 
 	lis, err := NewListener(testdb.GetConfig(t, db.Name))
@@ -48,7 +49,7 @@ func TestListener_Listen(t *testing.T) {
 		t.Helper()
 		for _, channel := range channels {
 			//nolint:gitaly-linters
-			_, err := db.Exec(fmt.Sprintf(`NOTIFY %s, '%s'`, channel, payload))
+			_, err := db.ExecContext(ctx, fmt.Sprintf(`NOTIFY %s, '%s'`, channel, payload))
 			assert.NoError(t, err)
 		}
 	}
@@ -234,7 +235,9 @@ func waitFor(t *testing.T, c <-chan struct{}) {
 
 func disconnectListener(t *testing.T, db testdb.DB, channel string) {
 	t.Helper()
-	res, err := db.Exec(
+	ctx := testhelper.Context(t)
+	res, err := db.ExecContext(
+		ctx,
 		`SELECT PG_TERMINATE_BACKEND(pid) FROM PG_STAT_ACTIVITY WHERE datname = $1 AND query = $2`,
 		db.Name,
 		"listen "+channel+";",
@@ -257,7 +260,7 @@ func TestListener_Listen_repositories_delete(t *testing.T) {
 		dbConf,
 		RepositoriesUpdatesChannel,
 		func(t *testing.T) {
-			_, err := db.DB.Exec(`
+			_, err := db.DB.ExecContext(ctx, `
 				INSERT INTO repositories
 				VALUES ('praefect-1', '/path/to/repo/1', 1, 1),
 					('praefect-1', '/path/to/repo/2', 1, 2),
@@ -266,7 +269,7 @@ func TestListener_Listen_repositories_delete(t *testing.T) {
 			require.NoError(t, err)
 		},
 		func(t *testing.T) {
-			_, err := db.DB.Exec(`DELETE FROM repositories WHERE generation > 0`)
+			_, err := db.DB.ExecContext(ctx, `DELETE FROM repositories WHERE generation > 0`)
 			require.NoError(t, err)
 		},
 		func(t *testing.T, n glsql.Notification) {
@@ -295,7 +298,7 @@ func TestListener_Listen_storage_repositories_insert(t *testing.T) {
 			require.NoError(t, rs.CreateRepository(ctx, 1, "praefect-1", "/path/to/repo", "replica-path", "primary", nil, nil, true, false))
 		},
 		func(t *testing.T) {
-			_, err := db.DB.Exec(`
+			_, err := db.DB.ExecContext(ctx, `
 				INSERT INTO storage_repositories
 				VALUES ('praefect-1', '/path/to/repo', 'gitaly-1', 0, 1),
 					('praefect-1', '/path/to/repo', 'gitaly-2', 0, 1)`,
@@ -325,7 +328,7 @@ func TestListener_Listen_storage_repositories_generation_update(t *testing.T) {
 			require.NoError(t, rs.CreateRepository(ctx, 1, "praefect-1", "/path/to/repo", "replica-path", "gitaly-1", nil, nil, true, false))
 		},
 		func(t *testing.T) {
-			_, err := db.DB.Exec(`UPDATE storage_repositories SET generation = generation + 1`)
+			_, err := db.DB.ExecContext(ctx, `UPDATE storage_repositories SET generation = generation + 1`)
 			require.NoError(t, err)
 		},
 		func(t *testing.T, n glsql.Notification) {
@@ -351,7 +354,7 @@ func TestListener_Listen_storage_repositories_relative_path_update(t *testing.T)
 			require.NoError(t, rs.CreateRepository(ctx, 1, "praefect-1", "/path/to/repo", "replica-path", "gitaly-1", nil, nil, true, false))
 		},
 		func(t *testing.T) {
-			_, err := db.DB.Exec(`UPDATE storage_repositories SET relative_path = 'updated-relative-path'`)
+			_, err := db.DB.ExecContext(ctx, `UPDATE storage_repositories SET relative_path = 'updated-relative-path'`)
 			require.NoError(t, err)
 		},
 		func(t *testing.T, n glsql.Notification) {
@@ -377,7 +380,7 @@ func TestListener_Listen_storage_repositories_verification_updates_ignored(t *te
 			require.NoError(t, rs.CreateRepository(ctx, 1, "praefect-1", "/path/to/repo", "replica-path", "gitaly-1", nil, nil, true, false))
 		},
 		func(t *testing.T) {
-			_, err := db.DB.Exec(`UPDATE storage_repositories SET verified_at = now(), verification_leased_until = now()`)
+			_, err := db.DB.ExecContext(ctx, `UPDATE storage_repositories SET verified_at = now(), verification_leased_until = now()`)
 			require.NoError(t, err)
 		},
 		nil, // no notification events expected
@@ -397,7 +400,7 @@ func TestListener_Listen_storage_empty_notification(t *testing.T) {
 		StorageRepositoriesUpdatesChannel,
 		func(t *testing.T) {},
 		func(t *testing.T) {
-			_, err := db.DB.Exec(`UPDATE storage_repositories SET generation = 1`)
+			_, err := db.DB.ExecContext(ctx, `UPDATE storage_repositories SET generation = 1`)
 			require.NoError(t, err)
 		},
 		nil, // no notification events expected
@@ -420,7 +423,7 @@ func TestListener_Listen_storage_repositories_delete(t *testing.T) {
 			require.NoError(t, rs.CreateRepository(ctx, 1, "praefect-1", "/path/to/repo", "replica-path", "gitaly-1", nil, nil, true, false))
 		},
 		func(t *testing.T) {
-			_, err := db.DB.Exec(`DELETE FROM storage_repositories`)
+			_, err := db.DB.ExecContext(ctx, `DELETE FROM storage_repositories`)
 			require.NoError(t, err)
 		},
 		func(t *testing.T, n glsql.Notification) {

@@ -1084,7 +1084,8 @@ func TestReconciler(t *testing.T) {
 
 			for vs, repos := range tc.deletedRepositories {
 				for _, repo := range repos {
-					_, err := db.Exec(
+					_, err := db.ExecContext(
+						ctx,
 						"DELETE FROM repositories WHERE virtual_storage = $1 AND relative_path = $2",
 						vs, repo,
 					)

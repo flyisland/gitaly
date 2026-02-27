@@ -23,7 +23,8 @@ func TestOpenDB(t *testing.T) {
 	ctx := testhelper.Context(t)
 
 	t.Run("timeout on hanging connection attempt", func(t *testing.T) {
-		lis, err := net.Listen("tcp", "localhost:0")
+		lc := net.ListenConfig{}
+		lis, err := lc.Listen(ctx, "tcp", "localhost:0")
 		require.NoError(t, err)
 		badCfg := dbCfg
 		badCfg.Host = "localhost"
@@ -70,10 +71,11 @@ func TestUint64Provider(t *testing.T) {
 
 func TestScanAll(t *testing.T) {
 	t.Parallel()
+	ctx := testhelper.Context(t)
 	db := testdb.New(t)
 
 	var ids glsql.Uint64Provider
-	notEmptyRows, err := db.Query("SELECT id FROM (VALUES (1), (200), (300500)) AS t(id)")
+	notEmptyRows, err := db.QueryContext(ctx, "SELECT id FROM (VALUES (1), (200), (300500)) AS t(id)")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, notEmptyRows.Close()) }()
 
@@ -82,7 +84,7 @@ func TestScanAll(t *testing.T) {
 	require.NoError(t, notEmptyRows.Err())
 
 	var nothing glsql.Uint64Provider
-	emptyRows, err := db.Query("SELECT id FROM (VALUES (1), (200), (300500)) AS t(id) WHERE id < 0")
+	emptyRows, err := db.QueryContext(ctx, "SELECT id FROM (VALUES (1), (200), (300500)) AS t(id) WHERE id < 0")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, emptyRows.Close()) }()
 
@@ -214,17 +216,18 @@ func TestDSN(t *testing.T) {
 
 func TestStringArray(t *testing.T) {
 	t.Parallel()
+	ctx := testhelper.Context(t)
 	db := testdb.New(t)
 
 	t.Run("multiple elements", func(t *testing.T) {
 		var res glsql.StringArray
-		require.NoError(t, db.QueryRow("SELECT ARRAY['a', NULL, '42', 'c']").Scan(&res))
+		require.NoError(t, db.QueryRowContext(ctx, "SELECT ARRAY['a', NULL, '42', 'c']").Scan(&res))
 		require.Equal(t, []string{"a", "42", "c"}, res.Slice())
 	})
 
 	t.Run("NULL value", func(t *testing.T) {
 		var res glsql.StringArray
-		require.NoError(t, db.QueryRow("SELECT NULL").Scan(&res))
+		require.NoError(t, db.QueryRowContext(ctx, "SELECT NULL").Scan(&res))
 		require.Empty(t, res.Slice())
 	})
 }

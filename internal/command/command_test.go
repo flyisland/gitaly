@@ -193,10 +193,11 @@ func TestCommand_Wait_contextCancellationKillsCommand(t *testing.T) {
 
 	err = cmd.Wait()
 	// Depending on whether the closed file descriptor or the sent signal arrive first, cat(1) may fail
-	// either with SIGPIPE or with SIGKILL.
+	// either with SIGPIPE or with SIGKILL. We can also get SIGKILL depending on context cancellation.
 	require.Contains(t, []error{
 		fmt.Errorf("signal: %s: %w", syscall.SIGTERM, context.Canceled),
 		fmt.Errorf("signal: %s: %w", syscall.SIGPIPE, context.Canceled),
+		fmt.Errorf("signal: %s: %w", syscall.SIGKILL, context.Canceled),
 	}, err)
 	require.ErrorIs(t, err, context.Canceled)
 }

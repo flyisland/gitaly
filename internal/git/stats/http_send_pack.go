@@ -66,7 +66,7 @@ func buildSendPackRequest(
 		return nil, fmt.Errorf("finalizing request body: %w", err)
 	}
 
-	request, err := http.NewRequest("POST", url+"/git-receive-pack", &requestBuffer)
+	request, err := http.NewRequestWithContext(ctx, "POST", url+"/git-receive-pack", &requestBuffer)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}

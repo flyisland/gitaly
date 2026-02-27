@@ -76,6 +76,8 @@ var (
 // either be a ".go" file or a directory containing Go files. Returns the path to the executable in
 // the destination directory.
 func BuildBinary(tb testing.TB, targetDir, sourcePath string) string {
+	ctx := testhelper.Context(tb)
+
 	createGlobalBinaryDirectoryOnce.Do(func() {
 		sharedBinariesDir = testhelper.CreateGlobalDirectory(tb, "bins")
 	})
@@ -113,7 +115,8 @@ func BuildBinary(tb testing.TB, targetDir, sourcePath string) string {
 			buildTags = append(buildTags, "fips")
 		}
 
-		cmd := exec.Command(
+		cmd := exec.CommandContext(
+			ctx,
 			"go",
 			"build",
 			"-buildvcs=false",
@@ -122,6 +125,7 @@ func BuildBinary(tb testing.TB, targetDir, sourcePath string) string {
 			"-o", sharedBinaryPath,
 			sourcePath,
 		)
+
 		cmd.Env = filteredEnvironment
 
 		output, err := cmd.CombinedOutput()

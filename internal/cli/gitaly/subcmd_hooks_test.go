@@ -178,7 +178,7 @@ func TestSetHooksSubcommand(t *testing.T) {
 			flags, repo := tc.setup()
 
 			args := append([]string{"hooks", "set"}, flags...)
-			cmd := exec.Command(cfg.BinaryPath("gitaly"), args...)
+			cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), args...)
 
 			var stderr bytes.Buffer
 			cmd.Stdin = tc.hooks

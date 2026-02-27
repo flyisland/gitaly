@@ -256,8 +256,9 @@ func TestElectDemotedPrimary(t *testing.T) {
 // waiting for the node's status to become unhealthy.
 func predateLastSeenActiveAt(tb testing.TB, db testdb.DB, shardName, nodeName string, amount time.Duration) {
 	tb.Helper()
+	ctx := testhelper.Context(tb)
 
-	_, err := db.Exec(`
+	_, err := db.ExecContext(ctx, `
 UPDATE node_status SET last_seen_active_at = last_seen_active_at - INTERVAL '1 MICROSECOND' * $1
 WHERE shard_name = $2 AND node_name = $3`, amount.Microseconds(), shardName, nodeName,
 	)
@@ -281,6 +282,7 @@ func predateElection(tb testing.TB, ctx context.Context, db glsql.Querier, shard
 
 func TestElectNewPrimary(t *testing.T) {
 	t.Parallel()
+	ctx := testhelper.Context(t)
 	db := testdb.New(t)
 
 	ns := []*nodeStatus{{
@@ -399,7 +401,7 @@ func TestElectNewPrimary(t *testing.T) {
 			tx := db.Begin(t)
 			defer tx.Rollback(t)
 
-			_, err := tx.Exec(testCase.initialReplQueueInsert)
+			_, err := tx.ExecContext(ctx, testCase.initialReplQueueInsert)
 			require.NoError(t, err)
 
 			logger := testhelper.NewLogger(t)
@@ -422,6 +424,7 @@ func TestElectNewPrimary(t *testing.T) {
 
 func TestConnectionMultiplexing(t *testing.T) {
 	t.Parallel()
+	ctx := testhelper.Context(t)
 	errNonMuxed := status.Error(codes.Internal, "non-muxed connection")
 	errMuxed := status.Error(codes.Internal, "muxed connection")
 
@@ -447,7 +450,8 @@ func TestConnectionMultiplexing(t *testing.T) {
 
 	defer srv.Stop()
 
-	ln, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	go testhelper.MustServe(t, srv, ln)
@@ -483,7 +487,6 @@ func TestConnectionMultiplexing(t *testing.T) {
 
 	// check the shard to get the primary in a healthy state
 	mgr.checkShards()
-	ctx := testhelper.Context(t)
 	for _, tc := range []struct {
 		desc  string
 		error error

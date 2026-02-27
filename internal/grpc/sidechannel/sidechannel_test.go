@@ -150,6 +150,7 @@ func TestSidechannelConcurrency(t *testing.T) {
 
 func startServer(t *testing.T, th testHandler, opts ...grpc.ServerOption) string {
 	t.Helper()
+	ctx := testhelper.Context(t)
 
 	lm := listenmux.New(insecure.NewCredentials())
 	lm.Register(backchannel.NewServerHandshaker(testhelper.SharedLogger(t), backchannel.NewRegistry(), nil))
@@ -162,7 +163,8 @@ func startServer(t *testing.T, th testHandler, opts ...grpc.ServerOption) string
 	handler := &server{testHandler: th}
 	healthpb.RegisterHealthServer(s, handler)
 
-	lis, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	go testhelper.MustServe(t, s, lis)

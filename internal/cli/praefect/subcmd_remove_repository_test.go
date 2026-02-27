@@ -410,7 +410,7 @@ func TestRemoveRepository_removeReplicationEvents(t *testing.T) {
 
 	// And now we can finally assert that the replication queue is empty.
 	var notExists bool
-	row := db.QueryRow(`SELECT NOT EXISTS(SELECT FROM replication_queue)`)
+	row := db.QueryRowContext(ctx, `SELECT NOT EXISTS(SELECT FROM replication_queue)`)
 	require.NoError(t, row.Scan(&notExists))
 	require.True(t, notExists)
 }

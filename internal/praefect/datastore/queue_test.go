@@ -847,7 +847,7 @@ func TestPostgresReplicationEventQueue_AcknowledgeMultiple(t *testing.T) {
 	db.RequireRowsInTable(t, "replication_queue", 1)
 
 	var newEventState string
-	require.NoError(t, db.QueryRow("SELECT state FROM replication_queue WHERE id = $1", newEvent.ID).Scan(&newEventState))
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT state FROM replication_queue WHERE id = $1", newEvent.ID).Scan(&newEventState))
 	require.Equal(t, "ready", newEventState, "no way to acknowledge event that is not in in_progress state(was not dequeued)")
 	requireLocks(t, ctx, db, []LockRow{
 		{ID: events[0].LockID, Acquired: false},

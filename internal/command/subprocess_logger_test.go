@@ -29,8 +29,10 @@ func (l capturedOutput) Output() io.Writer {
 func TestSubprocessLogger(t *testing.T) {
 	t.Parallel()
 
+	ctx := testhelper.Context(t)
+
 	executablePath := filepath.Join(t.TempDir(), "subprocess-executable")
-	buildOutput, err := exec.Command("go", "build", "-buildvcs=false", "-o", executablePath, "./testdata/subprocess").CombinedOutput()
+	buildOutput, err := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", executablePath, "./testdata/subprocess").CombinedOutput()
 	require.NoError(t, err, string(buildOutput))
 
 	// LogLine contains the fields we're interested in asserting. There are also other fields

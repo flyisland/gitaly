@@ -43,10 +43,12 @@ func registerPraefectInfoServer(impl gitalypb.PraefectInfoServiceServer) svcRegi
 
 func listenAndServe(tb testing.TB, svcs []svcRegistrar) (net.Listener, testhelper.Cleanup) {
 	tb.Helper()
+	ctx := testhelper.Context(tb)
 
 	tmp := testhelper.TempDir(tb)
 
-	ln, err := net.Listen("unix", filepath.Join(tmp, "gitaly"))
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "unix", filepath.Join(tmp, "gitaly"))
 	require.NoError(tb, err)
 
 	srv := grpc.NewServer()

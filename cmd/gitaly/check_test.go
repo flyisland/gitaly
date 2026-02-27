@@ -33,6 +33,7 @@ func createTestServer(t *testing.T) (user, password, url string, cleanup func())
 }
 
 func TestCheckOK(t *testing.T) {
+	ctx := testhelper.Context(t)
 	user, password, serverURL, cleanup := createTestServer(t)
 	defer cleanup()
 
@@ -59,7 +60,7 @@ func TestCheckOK(t *testing.T) {
 
 	configPath := testcfg.WriteTemporaryGitalyConfigFile(t, cfg)
 
-	cmd := exec.Command(cfg.BinaryPath("gitaly"), "check", configPath)
+	cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "check", configPath)
 
 	var stderr, stdout bytes.Buffer
 	cmd.Stderr = &stderr
@@ -75,6 +76,7 @@ func TestCheckOK(t *testing.T) {
 }
 
 func TestCheckBadCreds(t *testing.T) {
+	ctx := testhelper.Context(t)
 	_, password, serverURL, cleanup := createTestServer(t)
 	defer cleanup()
 
@@ -92,7 +94,7 @@ func TestCheckBadCreds(t *testing.T) {
 
 	configPath := testcfg.WriteTemporaryGitalyConfigFile(t, cfg)
 
-	cmd := exec.Command(cfg.BinaryPath("gitaly"), "check", configPath)
+	cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "check", configPath)
 
 	var stderr, stdout bytes.Buffer
 	cmd.Stderr = &stderr
@@ -105,6 +107,7 @@ func TestCheckBadCreds(t *testing.T) {
 }
 
 func TestCheckAuxiliaryBinaries(t *testing.T) {
+	ctx := testhelper.Context(t)
 	user, password, serverURL, cleanup := createTestServer(t)
 	defer cleanup()
 
@@ -126,7 +129,7 @@ func TestCheckAuxiliaryBinaries(t *testing.T) {
 
 	configPath := testcfg.WriteTemporaryGitalyConfigFile(t, cfg)
 
-	cmd := exec.Command(cfg.BinaryPath("gitaly"), "check", configPath)
+	cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "check", configPath)
 	require.NoError(t, cmd.Run())
 
 	// When Gitaly starts, it needs to unpack embedded binaries to the configured runtime directory.

@@ -12,6 +12,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/text"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 // ListObjects returns a list of all object IDs in the repository.
@@ -74,7 +75,8 @@ func GetGitPackfileDirSize(tb testing.TB, repoPath string) int64 {
 }
 
 func getGitDirSize(tb testing.TB, repoPath string, subdirs ...string) int64 {
-	cmd := exec.Command("du", "-s", "-k", filepath.Join(append([]string{repoPath}, subdirs...)...))
+	ctx := testhelper.Context(tb)
+	cmd := exec.CommandContext(ctx, "du", "-s", "-k", filepath.Join(append([]string{repoPath}, subdirs...)...))
 	output, err := cmd.Output()
 	require.NoError(tb, err)
 	if len(output) < 2 {

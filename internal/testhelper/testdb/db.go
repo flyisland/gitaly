@@ -60,7 +60,8 @@ type DB struct {
 // Begin starts a new transaction and returns it wrapped into TxWrapper.
 func (db DB) Begin(tb testing.TB) *TxWrapper {
 	tb.Helper()
-	tx, err := db.DB.Begin()
+	ctx := testhelper.Context(tb)
+	tx, err := db.DB.BeginTx(ctx, nil)
 	require.NoError(tb, err)
 	return &TxWrapper{Tx: tx}
 }
@@ -68,22 +69,24 @@ func (db DB) Begin(tb testing.TB) *TxWrapper {
 // Truncate removes all data from the list of tables and restarts identities for them.
 func (db DB) Truncate(tb testing.TB, tables ...string) {
 	tb.Helper()
+	ctx := testhelper.Context(tb)
 
 	for _, table := range tables {
-		_, err := db.DB.Exec("DELETE FROM " + table)
+		_, err := db.DB.ExecContext(ctx, "DELETE FROM "+table)
 		require.NoError(tb, err, "database cleanup failed: %s", tables)
 	}
 
-	_, err := db.DB.Exec("SELECT setval(relname::TEXT, 1, false) from pg_class where relkind = 'S'")
+	_, err := db.DB.ExecContext(ctx, "SELECT setval(relname::TEXT, 1, false) from pg_class where relkind = 'S'")
 	require.NoError(tb, err, "database cleanup failed: %s", tables)
 }
 
 // RequireRowsInTable verifies that `tname` table has `n` amount of rows in it.
 func (db DB) RequireRowsInTable(tb testing.TB, tname string, n int) {
 	tb.Helper()
+	ctx := testhelper.Context(tb)
 
 	var count int
-	require.NoError(tb, db.QueryRow("SELECT COUNT(*) FROM "+tname).Scan(&count))
+	require.NoError(tb, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tname).Scan(&count))
 	require.Equal(tb, n, count, "unexpected amount of rows in table: %d instead of %d", count, n)
 }
 
@@ -105,7 +108,8 @@ func (db DB) TruncateAll(tb testing.TB) {
 
 // MustExec executes `q` with `args` and verifies there are no errors.
 func (db DB) MustExec(tb testing.TB, q string, args ...interface{}) {
-	_, err := db.DB.Exec(q, args...)
+	ctx := testhelper.Context(tb)
+	_, err := db.DB.ExecContext(ctx, q, args...)
 	require.NoError(tb, err)
 }
 
@@ -172,9 +176,10 @@ func GetConfig(tb testing.TB, database string) config.DB {
 
 func requireSQLOpen(tb testing.TB, dbCfg config.DB, direct bool) *sql.DB {
 	tb.Helper()
+	ctx := testhelper.Context(tb)
 	db, err := sql.Open("pgx", glsql.DSN(dbCfg, direct))
 	require.NoErrorf(tb, err, "failed to connect to %q database", dbCfg.DBName)
-	if !assert.NoErrorf(tb, db.Ping(), "failed to communicate with %q database", dbCfg.DBName) {
+	if !assert.NoErrorf(tb, db.PingContext(ctx), "failed to communicate with %q database", dbCfg.DBName) {
 		require.NoErrorf(tb, db.Close(), "release connection to the %q database", dbCfg.DBName)
 	}
 	return db
@@ -182,7 +187,8 @@ func requireSQLOpen(tb testing.TB, dbCfg config.DB, direct bool) *sql.DB {
 
 func requireTerminateAllConnections(tb testing.TB, db *sql.DB, database string) {
 	tb.Helper()
-	_, err := db.Exec("SELECT PG_TERMINATE_BACKEND(pid) FROM PG_STAT_ACTIVITY WHERE datname = $1", database)
+	ctx := testhelper.Context(tb)
+	_, err := db.ExecContext(ctx, "SELECT PG_TERMINATE_BACKEND(pid) FROM PG_STAT_ACTIVITY WHERE datname = $1", database)
 	require.NoError(tb, err)
 
 	// Once the pg_terminate_backend has completed, we may need to wait before the connections
@@ -193,7 +199,8 @@ func requireTerminateAllConnections(tb testing.TB, db *sql.DB, database string) 
 	// require.Eventuallyf call in favor of passing in a timeout to pg_terminate_backend
 	require.Eventuallyf(tb, func() bool {
 		var openConnections int
-		require.NoError(tb, db.QueryRow(
+		require.NoError(tb, db.QueryRowContext(
+			ctx,
 			`SELECT COUNT(*) FROM pg_stat_activity
 				WHERE datname = $1 AND pid != pg_backend_pid()`, database).
 			Scan(&openConnections))
@@ -203,6 +210,7 @@ func requireTerminateAllConnections(tb testing.TB, db *sql.DB, database string) 
 
 func initPraefectDB(tb testing.TB, database string) *sql.DB {
 	tb.Helper()
+	ctx := testhelper.Context(tb)
 
 	postgresCfg := GetConfig(tb, "postgres")
 
@@ -211,7 +219,7 @@ func initPraefectDB(tb testing.TB, database string) *sql.DB {
 		testhelper.MustClose(tb, postgresDB)
 	})
 
-	_, err := postgresDB.Exec("CREATE DATABASE " + database + " WITH ENCODING 'UTF8'")
+	_, err := postgresDB.ExecContext(ctx, "CREATE DATABASE "+database+" WITH ENCODING 'UTF8'")
 	require.NoErrorf(tb, err, "failed to create %q database", database)
 	tb.Cleanup(func() {
 		if _, ok := getDatabaseEnvironment(tb)["PGHOST_PGBOUNCER"]; ok {
@@ -230,7 +238,7 @@ func initPraefectDB(tb testing.TB, database string) *sql.DB {
 			// connections are seemingly never released. Instead, we kill PgBouncer
 			// connections by connecting to its admin console and using the KILL
 			// command, which instructs it to kill all client and server connections.
-			_, err = pgbouncerDB.Exec("KILL " + database)
+			_, err = pgbouncerDB.ExecContext(ctx, "KILL "+database)
 			require.NoError(tb, err, "killing PgBouncer connections")
 		}
 
@@ -239,7 +247,7 @@ func initPraefectDB(tb testing.TB, database string) *sql.DB {
 		// running.
 		requireTerminateAllConnections(tb, postgresDB, database)
 
-		_, err := postgresDB.Exec("DROP DATABASE " + database)
+		_, err := postgresDB.ExecContext(ctx, "DROP DATABASE "+database)
 		require.NoErrorf(tb, err, "failed to drop %q database", database)
 	})
 
@@ -266,13 +274,15 @@ var (
 )
 
 func getDatabaseEnvironment(tb testing.TB) map[string]string {
+	ctx := testhelper.Context(tb)
+
 	databaseEnvOnce.Do(func() {
 		envvars := map[string]string{}
 
 		// We only process output if `gdk env` returned success. If it didn't, we simply assume that
 		// we are not running in a GDK environment and will try to extract variables from the
 		// environment instead.
-		if output, err := exec.Command("gdk", "env").Output(); err == nil {
+		if output, err := exec.CommandContext(ctx, "gdk", "env").Output(); err == nil {
 			for _, line := range strings.Split(string(output), "\n") {
 				const prefix = "export "
 				if !strings.HasPrefix(line, prefix) {

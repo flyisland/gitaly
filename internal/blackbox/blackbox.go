@@ -129,7 +129,8 @@ func (b Blackbox) Collect(metrics chan<- prometheus.Metric) {
 // Run starts the blackbox. It sets up and serves the Prometheus listener and starts a Goroutine
 // which runs the probes.
 func (b Blackbox) Run() error {
-	listener, err := net.Listen("tcp", b.cfg.PrometheusListenAddr)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(context.Background(), "tcp", b.cfg.PrometheusListenAddr)
 	if err != nil {
 		return err
 	}

@@ -13,6 +13,7 @@ import (
 )
 
 func TestPruneOldGitalyProcessDirectories(t *testing.T) {
+	ctx := testhelper.Context(t)
 	t.Run("no runtime directories", func(t *testing.T) {
 		require.NoError(t, PruneOldGitalyProcessDirectories(testhelper.SharedLogger(t), testhelper.TempDir(t)))
 	})
@@ -44,7 +45,7 @@ func TestPruneOldGitalyProcessDirectories(t *testing.T) {
 		// Setup runtime directories for processes that have finished.
 		var prunableDirs []string
 		for i := 0; i < 2; i++ {
-			cmd := exec.Command("cat")
+			cmd := exec.CommandContext(ctx, "cat")
 			require.NoError(t, cmd.Run())
 
 			newCfg, err = SetupRuntimeDirectory(cfg, cmd.Process.Pid)

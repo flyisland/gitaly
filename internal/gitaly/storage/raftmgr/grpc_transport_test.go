@@ -375,8 +375,10 @@ func newReplica(cfg config.Cfg) RaftReplica {
 }
 
 func runServer(t *testing.T) (*grpc.Server, net.Listener, string) {
+	ctx := testhelper.Context(t)
 	socketPath := testhelper.GetTemporaryGitalySocketFileName(t)
-	listener, err := net.Listen("unix", socketPath)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "unix", socketPath)
 	require.NoError(t, err)
 
 	srv := grpc.NewServer()

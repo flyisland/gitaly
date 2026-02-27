@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,7 +15,8 @@ import (
 
 func simulateHTTPClone(gitDir string) {
 	msg("Generating server response for HTTP clone. Data goes to /dev/null.")
-	infoRefs := exec.Command("git", "upload-pack", "--stateless-rpc", "--advertise-refs", gitDir)
+	ctx := context.Background()
+	infoRefs := exec.CommandContext(ctx, "git", "upload-pack", "--stateless-rpc", "--advertise-refs", gitDir)
 	infoRefs.Stderr = os.Stderr
 	out, err := infoRefs.StdoutPipe()
 	noError(err)
@@ -57,7 +59,7 @@ func simulateHTTPClone(gitDir string) {
 	}
 	fmt.Fprint(request, "00000009done\n")
 
-	uploadPack := exec.Command("git", "upload-pack", "--stateless-rpc", gitDir)
+	uploadPack := exec.CommandContext(ctx, "git", "upload-pack", "--stateless-rpc", gitDir)
 	uploadPack.Stdin = request
 	uploadPack.Stderr = os.Stderr
 	out, err = uploadPack.StdoutPipe()

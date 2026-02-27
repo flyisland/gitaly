@@ -603,8 +603,9 @@ func TestHealthManager_databaseTimeout(t *testing.T) {
 
 func predateHealthChecks(tb testing.TB, db testdb.DB, amount time.Duration) {
 	tb.Helper()
+	ctx := testhelper.Context(tb)
 
-	_, err := db.Exec(`
+	_, err := db.ExecContext(ctx, `
 		UPDATE node_status SET
 			last_contact_attempt_at = last_contact_attempt_at - INTERVAL '1 MICROSECOND' * $1,
 			last_seen_active_at = last_seen_active_at - INTERVAL '1 MICROSECOND' * $1

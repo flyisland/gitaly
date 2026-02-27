@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -111,7 +112,7 @@ func findProcess(pidFilePath string) (*os.Process, error) {
 }
 
 func spawnProcess(logger log.Logger, bin string, args []string) (*os.Process, error) {
-	cmd := exec.Command(bin, args...)
+	cmd := exec.CommandContext(context.Background(), bin, args...)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=true", bootstrap.EnvUpgradesEnabled))
 
 	cmd.Stdin = os.Stdin

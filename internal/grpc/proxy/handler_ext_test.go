@@ -342,8 +342,8 @@ func TestProxyErrorPropagation(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := testhelper.Context(t)
 			tmpDir := testhelper.TempDir(t)
-
-			backendListener, err := net.Listen("unix", filepath.Join(tmpDir, "backend"))
+			lc := net.ListenConfig{}
+			backendListener, err := lc.Listen(ctx, "unix", filepath.Join(tmpDir, "backend"))
 			require.NoError(t, err)
 
 			// We use a wait group to synchronize shutdown of the gRPC servers. This is
@@ -380,7 +380,7 @@ func TestProxyErrorPropagation(t *testing.T) {
 			require.NoError(t, err)
 			defer testhelper.MustClose(t, backendClientConn)
 
-			proxyListener, err := net.Listen("unix", filepath.Join(tmpDir, "proxy"))
+			proxyListener, err := lc.Listen(ctx, "unix", filepath.Join(tmpDir, "proxy"))
 			require.NoError(t, err)
 
 			proxyServer := grpc.NewServer(

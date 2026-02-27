@@ -4,16 +4,18 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 func TestDB_Truncate(t *testing.T) {
 	t.Parallel()
+	ctx := testhelper.Context(t)
 	db := New(t)
 
-	_, err := db.Exec("CREATE TABLE truncate_tbl(id BIGSERIAL PRIMARY KEY)")
+	_, err := db.ExecContext(ctx, "CREATE TABLE truncate_tbl(id BIGSERIAL PRIMARY KEY)")
 	require.NoError(t, err)
 
-	res, err := db.Exec("INSERT INTO truncate_tbl VALUES (DEFAULT), (DEFAULT)")
+	res, err := db.ExecContext(ctx, "INSERT INTO truncate_tbl VALUES (DEFAULT), (DEFAULT)")
 	require.NoError(t, err)
 	affected, err := res.RowsAffected()
 	require.NoError(t, err)
@@ -22,10 +24,10 @@ func TestDB_Truncate(t *testing.T) {
 	db.Truncate(t, "truncate_tbl")
 
 	var count int
-	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM truncate_tbl").Scan(&count))
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM truncate_tbl").Scan(&count))
 	require.Equal(t, 0, count, "no rows must exist after TRUNCATE operation")
 
 	var id int
-	require.NoError(t, db.QueryRow("INSERT INTO truncate_tbl VALUES (DEFAULT) RETURNING id").Scan(&id))
+	require.NoError(t, db.QueryRowContext(ctx, "INSERT INTO truncate_tbl VALUES (DEFAULT) RETURNING id").Scan(&id))
 	require.Equal(t, 1, id, "sequence for primary key must be restarted")
 }

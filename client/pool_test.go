@@ -176,6 +176,7 @@ func runServer(t *testing.T, creds string) (*health.Server, string, func()) {
 func runServerWithAddr(t *testing.T, creds, addr string) (*health.Server, string, func()) {
 	t.Helper()
 
+	ctx := testhelper.Context(t)
 	var opts []grpc.ServerOption
 	if creds != "" {
 		opts = []grpc.ServerOption{
@@ -197,7 +198,8 @@ func runServerWithAddr(t *testing.T, creds, addr string) (*health.Server, string
 	healthServer := health.NewServer()
 	grpc_health_v1.RegisterHealthServer(server, healthServer)
 
-	listener, err := net.Listen("tcp", addr)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", addr)
 	require.NoError(t, err)
 
 	errQ := make(chan error)

@@ -54,7 +54,7 @@ func performHTTPReferenceDiscovery(
 ) (HTTPReferenceDiscovery, error) {
 	var referenceDiscovery HTTPReferenceDiscovery
 
-	req, err := http.NewRequest("GET", url+"/info/refs?service=git-upload-pack", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url+"/info/refs?service=git-upload-pack", nil)
 	if err != nil {
 		return HTTPReferenceDiscovery{}, err
 	}

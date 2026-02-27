@@ -1,6 +1,7 @@
 package ps
 
 import (
+	"context"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -8,7 +9,7 @@ import (
 
 // Exec invokes ps -o keywords -p pid and returns its output
 func Exec(pid int, keywords string) (string, error) {
-	out, err := exec.Command("ps", "-o", keywords, "-p", strconv.Itoa(pid)).Output()
+	out, err := exec.CommandContext(context.Background(), "ps", "-o", keywords, "-p", strconv.Itoa(pid)).Output()
 	if err != nil {
 		return "", err
 	}

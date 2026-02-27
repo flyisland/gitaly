@@ -342,6 +342,7 @@ func (m mockSSHService) SSHUploadArchive(stream gitalypb.SSHService_SSHUploadArc
 
 func startStreamServer(t *testing.T, handler func(gitalypb.SSHService_SSHUploadArchiveServer) error) string {
 	t.Helper()
+	ctx := testhelper.Context(t)
 
 	lm := listenmux.New(insecure.NewCredentials())
 	lm.Register(backchannel.NewServerHandshaker(
@@ -353,7 +354,8 @@ func startStreamServer(t *testing.T, handler func(gitalypb.SSHService_SSHUploadA
 		SSHUploadArchiveFunc: handler,
 	})
 
-	ln, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	t.Cleanup(srv.Stop)

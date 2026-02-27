@@ -17,6 +17,8 @@ import (
 func TestConfiguration_validate(t *testing.T) {
 	t.Parallel()
 
+	ctx := testhelper.Context(t)
+
 	praefectBin := testcfg.BuildBinary(t, testhelper.TempDir(t), "gitlab.com/gitlab-org/gitaly/v18/cmd/praefect")
 
 	for _, tc := range []struct {
@@ -106,7 +108,7 @@ OPTIONS:
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := exec.Command(praefectBin, append([]string{"configuration", "validate"}, tc.args...)...)
+			cmd := exec.CommandContext(ctx, praefectBin, append([]string{"configuration", "validate"}, tc.args...)...)
 
 			var stdout, stderr bytes.Buffer
 			cmd.Stdin = tc.stdin(t)

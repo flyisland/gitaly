@@ -12,12 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 )
 
 func TestConfiguration(t *testing.T) {
 	t.Parallel()
 
+	ctx := testhelper.Context(t)
 	cfg := testcfg.Build(t)
 	testcfg.BuildGitaly(t, cfg)
 
@@ -90,7 +92,7 @@ func TestConfiguration(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
-				cmd := exec.Command(cfg.BinaryPath("gitaly"), "configuration", "validate")
+				cmd := exec.CommandContext(ctx, cfg.BinaryPath("gitaly"), "configuration", "validate")
 				var stderr, stdout bytes.Buffer
 				cmd.Stderr = &stderr
 				cmd.Stdout = &stdout

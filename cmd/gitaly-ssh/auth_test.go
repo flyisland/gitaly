@@ -209,6 +209,8 @@ func TestConnectivity(t *testing.T) {
 		})
 	}
 
+	lc := net.ListenConfig{}
+
 	// The ALPN tests are a subtest of TestConnectivity because we can only generate TLS certificates _once_ per
 	// package under Linux. This isn't elegant, but correctly tests the functionality.
 	t.Run("ALPN tests", func(t *testing.T) {
@@ -221,7 +223,7 @@ func TestConnectivity(t *testing.T) {
 		setupDummyServer := func(t *testing.T) (string, func()) {
 			logger := testhelper.SharedLogger(t)
 
-			listener, err := net.Listen("tcp", "localhost:0")
+			listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 			require.NoError(t, err)
 
 			serverCert, err := tls.LoadX509KeyPair(certificate.CertPath, certificate.KeyPath)
@@ -253,7 +255,8 @@ func TestConnectivity(t *testing.T) {
 		}
 
 		setupGitalyServer := func(t *testing.T) (string, func()) {
-			listener, err := net.Listen("tcp", "localhost:0")
+			listener, err := lc.Listen(ctx, "tcp", "localhost:0")
+
 			require.NoError(t, err)
 
 			cfg.TLS = config.TLS{

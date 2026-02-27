@@ -1176,7 +1176,7 @@ func TestFetchRemote(t *testing.T) {
 						},
 						Timeout: 1,
 					},
-					runs: []run{{expectedErr: structerr.NewInternal("fetch remote: signal: terminated: context deadline exceeded")}},
+					runs: []run{{expectedErr: structerr.NewInternal("fetch remote: signal: killed: context deadline exceeded")}},
 				}
 			},
 		},

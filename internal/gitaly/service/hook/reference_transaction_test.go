@@ -75,6 +75,8 @@ func TestReferenceTransactionHookInvalidArgument(t *testing.T) {
 }
 
 func TestReferenceTransactionHook(t *testing.T) {
+	ctx := testhelper.Context(t)
+
 	stdin := []byte(fmt.Sprintf(
 		`%[1]s %[2]s refs/heads/branch-1
 %[2]s %[1]s refs/heads/branch-2
@@ -266,7 +268,8 @@ ref:refs/heads/main ref:refs/heads/branch-1 HEAD
 	grpcServer := grpc.NewServer()
 	gitalypb.RegisterRefTransactionServer(grpcServer, transactionServer)
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	backchannelConn, err := client.New(testhelper.Context(t), fmt.Sprintf("tcp://%s", listener.Addr().String()))

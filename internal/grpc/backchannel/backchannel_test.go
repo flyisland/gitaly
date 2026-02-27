@@ -32,6 +32,8 @@ func (m mockTransactionServer) VoteTransaction(ctx context.Context, req *gitalyp
 }
 
 func TestBackchannel_concurrentRequestsFromMultipleClients(t *testing.T) {
+	ctx := testhelper.Context(t)
+
 	var interceptorInvoked int32
 	registry := NewRegistry()
 	lm := listenmux.New(insecure.NewCredentials())
@@ -46,7 +48,8 @@ func TestBackchannel_concurrentRequestsFromMultipleClients(t *testing.T) {
 		},
 	))
 
-	ln, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	errNonMultiplexed := status.Error(codes.FailedPrecondition, ErrNonMultiplexedConnection.Error())
@@ -71,7 +74,6 @@ func TestBackchannel_concurrentRequestsFromMultipleClients(t *testing.T) {
 
 	defer srv.Stop()
 	go testhelper.MustServe(t, srv, ln)
-	ctx := testhelper.Context(t)
 
 	start := make(chan struct{})
 
@@ -257,12 +259,13 @@ func Benchmark(b *testing.B) {
 						},
 					})
 
-					ln, err := net.Listen("tcp", "localhost:0")
+					ctx := testhelper.Context(b)
+					lc := net.ListenConfig{}
+					ln, err := lc.Listen(ctx, "tcp", "localhost:0")
 					require.NoError(b, err)
 
 					defer srv.Stop()
 					go testhelper.MustServe(b, srv, ln)
-					ctx := testhelper.Context(b)
 
 					opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 					if tc.multiplexed {

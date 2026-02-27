@@ -41,7 +41,7 @@ secret = "{{.GitlabSecret}}"
 `
 
 func checkVersion(gitalyDir, gitalyBin string) error {
-	versionCmd := exec.Command(gitalyBin, "-version")
+	versionCmd := exec.CommandContext(context.Background(), gitalyBin, "-version")
 	versionOutput, err := versionCmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to get Gitaly version output: %w", err)

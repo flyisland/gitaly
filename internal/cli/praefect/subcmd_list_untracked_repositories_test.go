@@ -35,7 +35,7 @@ func TestListUntrackedRepositoriesCommand(t *testing.T) {
 
 	db := testdb.New(t)
 	var database string
-	require.NoError(t, db.QueryRow(`SELECT current_database()`).Scan(&database))
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT current_database()").Scan(&database))
 	dbConf := testdb.GetConfig(t, database)
 
 	conf := config.Config{

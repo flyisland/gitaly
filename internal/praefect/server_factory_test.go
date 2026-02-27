@@ -193,11 +193,13 @@ func TestServerFactory(t *testing.T) {
 		})
 	}
 
+	lc := net.ListenConfig{}
+
 	t.Run("insecure", func(t *testing.T) {
 		praefectServerFactory := setupPraefectServerFactory(conf)
 		defer praefectServerFactory.Stop()
 
-		listener, err := net.Listen(starter.TCP, "localhost:0")
+		listener, err := lc.Listen(ctx, starter.TCP, "localhost:0")
 		require.NoError(t, err)
 
 		go func() { require.NoError(t, praefectServerFactory.Serve(listener, false)) }()
@@ -229,7 +231,7 @@ func TestServerFactory(t *testing.T) {
 		praefectServerFactory := setupPraefectServerFactory(conf)
 		defer praefectServerFactory.Stop()
 
-		listener, err := net.Listen(starter.TCP, "localhost:0")
+		listener, err := lc.Listen(ctx, starter.TCP, "localhost:0")
 		require.NoError(t, err)
 
 		go func() { require.NoError(t, praefectServerFactory.Serve(listener, true)) }()
@@ -282,7 +284,7 @@ func TestServerFactory(t *testing.T) {
 				secure:  false,
 			},
 		} {
-			listener, err := net.Listen(cfg.network, cfg.address)
+			listener, err := lc.Listen(ctx, cfg.network, cfg.address)
 			require.NoError(t, err)
 
 			go func() { require.NoError(t, praefectServerFactory.Serve(listener, cfg.secure)) }()

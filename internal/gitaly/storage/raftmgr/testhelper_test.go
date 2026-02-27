@@ -124,8 +124,10 @@ func createRaftReplicaWithConfig(t *testing.T, ctx context.Context, raftCfg conf
 }
 
 func createTempServer(t *testing.T, transport *GrpcTransport) (string, *grpc.Server) {
+	ctx := testhelper.Context(t)
 	socketPath := testhelper.GetTemporaryGitalySocketFileName(t)
-	listener, err := net.Listen("unix", socketPath)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "unix", socketPath)
 	require.NoError(t, err)
 
 	srv := grpc.NewServer()

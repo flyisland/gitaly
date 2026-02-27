@@ -1,6 +1,7 @@
 package testhelper
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -73,13 +74,13 @@ func mustFindNoFinishedChildProcess() error {
 }
 
 func mustFindNoRunningChildProcess() error {
-	pgrep := exec.Command("pgrep", "-P", fmt.Sprintf("%d", os.Getpid()))
+	pgrep := exec.CommandContext(context.Background(), "pgrep", "-P", fmt.Sprintf("%d", os.Getpid()))
 	desc := fmt.Sprintf("%q", strings.Join(pgrep.Args, " "))
 
 	out, err := pgrep.Output()
 	if err == nil {
 		pidsComma := strings.Replace(text.ChompBytes(out), "\n", ",", -1)
-		psOut, _ := exec.Command("ps", "-o", "pid,args", "-p", pidsComma).Output()
+		psOut, _ := exec.CommandContext(context.Background(), "ps", "-o", "pid,args", "-p", pidsComma).Output()
 		return fmt.Errorf("found running child processes %s:\n%s", pidsComma, psOut)
 	}
 

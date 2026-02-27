@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -331,7 +332,7 @@ func FromReader(reader io.Reader) (Config, error) {
 	}
 
 	if conf.ConfigCommand != "" {
-		output, err := exec.Command(conf.ConfigCommand).Output()
+		output, err := exec.CommandContext(context.Background(), conf.ConfigCommand).Output()
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {

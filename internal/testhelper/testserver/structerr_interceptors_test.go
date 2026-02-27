@@ -89,7 +89,8 @@ func TestFieldsProducer(t *testing.T) {
 	logger := testhelper.NewLogger(t)
 	loggerHook := testhelper.AddLoggerHook(logger)
 
-	listener, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 
 	service := &mockService{}

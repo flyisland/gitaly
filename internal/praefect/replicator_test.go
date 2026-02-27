@@ -1069,7 +1069,7 @@ func TestReplMgr_CleanUpLocks(t *testing.T) {
 		// Orphaned locks are deleted, referenced locks are kept
 		require.Eventually(t, func() bool {
 			var currentLocks int
-			require.NoError(t, db.QueryRow(`
+			require.NoError(t, db.QueryRowContext(ctx, `
                 SELECT COUNT(*)
                 FROM replication_queue_lock
             `).Scan(&currentLocks))

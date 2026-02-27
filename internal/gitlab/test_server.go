@@ -545,9 +545,11 @@ func verifyJWT(header, secretToken string) bool {
 
 func startSocketHTTPServer(tb testing.TB, mux *http.ServeMux, tlsCfg *tls.Config) (string, func()) {
 	tempDir := testhelper.TempDir(tb)
+	ctx := testhelper.Context(tb)
 
 	filename := filepath.Join(tempDir, "http-test-server")
-	socketListener, err := net.Listen("unix", filename)
+	lc := net.ListenConfig{}
+	socketListener, err := lc.Listen(ctx, "unix", filename)
 	require.NoError(tb, err)
 
 	server := http.Server{

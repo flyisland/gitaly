@@ -1007,11 +1007,13 @@ func TestAuthenticatedVsUnauthenticatedLimiting(t *testing.T) {
 }
 
 func runServer(tb testing.TB, s grpc_testing.TestServiceServer, opt ...grpc.ServerOption) (*grpc.Server, string) {
+	ctx := testhelper.Context(tb)
 	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(tb)
 	grpcServer := grpc.NewServer(opt...)
 	grpc_testing.RegisterTestServiceServer(grpcServer, s)
 
-	lis, err := net.Listen("unix", serverSocketPath)
+	lc := net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "unix", serverSocketPath)
 	require.NoError(tb, err)
 
 	go testhelper.MustServe(tb, grpcServer, lis)
@@ -1020,6 +1022,7 @@ func runServer(tb testing.TB, s grpc_testing.TestServiceServer, opt ...grpc.Serv
 }
 
 func runServerWithAuth(tb testing.TB, s grpc_testing.TestServiceServer, unaryInt grpc.UnaryServerInterceptor, streamInt grpc.StreamServerInterceptor) (*grpc.Server, string) {
+	ctx := testhelper.Context(tb)
 	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(tb)
 
 	var unaryInterceptors []grpc.UnaryServerInterceptor
@@ -1060,7 +1063,8 @@ func runServerWithAuth(tb testing.TB, s grpc_testing.TestServiceServer, unaryInt
 	)
 	grpc_testing.RegisterTestServiceServer(grpcServer, s)
 
-	lis, err := net.Listen("unix", serverSocketPath)
+	lc := net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "unix", serverSocketPath)
 	require.NoError(tb, err)
 
 	go testhelper.MustServe(tb, grpcServer, lis)

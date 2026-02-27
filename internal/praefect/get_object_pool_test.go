@@ -69,7 +69,8 @@ func TestGetObjectPoolHandler(t *testing.T) {
 
 		tmp := testhelper.TempDir(t)
 
-		ln, err := net.Listen("unix", filepath.Join(tmp, "praefect"))
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(ctx, "unix", filepath.Join(tmp, "praefect"))
 		require.NoError(t, err)
 
 		srv := NewGRPCServer(&Dependencies{

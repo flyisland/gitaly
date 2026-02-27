@@ -33,8 +33,10 @@ func (hf handshakeFunc) Magic() string { return testmux }
 
 func serverWithHandshaker(t *testing.T, h Handshaker) string {
 	t.Helper()
+	ctx := testhelper.Context(t)
 
-	l, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp", "localhost:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { l.Close() })
 
@@ -103,8 +105,9 @@ func TestMux_muxClientPassesThrough(t *testing.T) {
 	)
 
 	opts := []grpc.DialOption{
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			c, err := net.Dial("tcp", addr)
+		grpc.WithContextDialer(func(dialCtx context.Context, _ string) (net.Conn, error) {
+			dialer := net.Dialer{}
+			c, err := dialer.DialContext(dialCtx, "tcp", addr)
 			if err != nil {
 				return nil, err
 			}
@@ -139,6 +142,8 @@ func readN(t *testing.T, r io.Reader, n int) []byte {
 }
 
 func TestMux_handshakerStealsConnection(t *testing.T) {
+	ctx := testhelper.Context(t)
+
 	connCh := make(chan net.Conn, 1)
 	addr := serverWithHandshaker(t,
 		handshakeFunc(func(c net.Conn, _ credentials.AuthInfo) (net.Conn, credentials.AuthInfo, error) {
@@ -161,7 +166,8 @@ func TestMux_handshakerStealsConnection(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	c, err := net.Dial("tcp", addr)
+	dialer := net.Dialer{}
+	c, err := dialer.DialContext(ctx, "tcp", addr)
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -175,13 +181,16 @@ func TestMux_handshakerStealsConnection(t *testing.T) {
 }
 
 func TestMux_handshakerReturnsError(t *testing.T) {
+	ctx := testhelper.Context(t)
+
 	addr := serverWithHandshaker(t,
 		handshakeFunc(func(_ net.Conn, _ credentials.AuthInfo) (net.Conn, credentials.AuthInfo, error) {
 			return nil, nil, errors.New("something went wrong")
 		}),
 	)
 
-	c, err := net.Dial("tcp", addr)
+	dialer := net.Dialer{}
+	c, err := dialer.DialContext(ctx, "tcp", addr)
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -224,7 +233,8 @@ func TestMux_concurrency(t *testing.T) {
 		go func() {
 			<-start
 			streamClientErrors <- func() error {
-				c, err := net.Dial("tcp", addr)
+				dialer := net.Dialer{}
+				c, err := dialer.DialContext(ctx, "tcp", addr)
 				if err != nil {
 					return err
 				}

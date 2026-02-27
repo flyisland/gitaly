@@ -122,6 +122,7 @@ func (brokenAuth) GetRequestMetadata(context.Context, ...string) (map[string]str
 }
 
 func runServer(t *testing.T, token string, required bool) (*grpc.Server, string, func()) {
+	ctx := testhelper.Context(t)
 	backendToken := "abcxyz"
 	backend, cleanup := newMockDownstream(t, backendToken, func(srv *grpc.Server) {
 		gitalypb.RegisterRepositoryServiceServer(srv, &gitalypb.UnimplementedRepositoryServiceServer{})
@@ -164,7 +165,8 @@ func runServer(t *testing.T, token string, required bool) (*grpc.Server, string,
 
 	serverSocketPath := testhelper.GetTemporaryGitalySocketFileName(t)
 
-	listener, err := net.Listen("unix", serverSocketPath)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "unix", serverSocketPath)
 	require.NoError(t, err)
 	go testhelper.MustServe(t, srv, listener)
 

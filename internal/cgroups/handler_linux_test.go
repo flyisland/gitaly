@@ -587,7 +587,8 @@ func TestPruneOldCgroups(t *testing.T) {
 				},
 			},
 			setup: func(t *testing.T, cfg cgroups.Config, mock mockCgroup) int {
-				cmd := exec.Command("ls")
+				ctx := testhelper.Context(t)
+				cmd := exec.CommandContext(ctx, "ls")
 				require.NoError(t, cmd.Run())
 				pid := cmd.Process.Pid
 
