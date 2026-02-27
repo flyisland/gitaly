@@ -29,48 +29,12 @@
 package backchannel
 
 import (
-	"fmt"
 	"net"
 	"sync"
-
-	"github.com/hashicorp/yamux"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
-
-type yamuxLogWrapper struct {
-	logger log.Logger
-}
-
-func (l yamuxLogWrapper) Print(args ...any) {
-	l.logger.Info(fmt.Sprint(args...))
-}
-
-func (l yamuxLogWrapper) Printf(format string, args ...any) {
-	l.Print(fmt.Sprintf(format, args...))
-}
-
-func (l yamuxLogWrapper) Println(args ...any) {
-	msg := fmt.Sprintln(args...)
-	l.logger.Info(msg[:len(msg)-1])
-}
 
 // magicBytes are sent by the client to server to identify as a multiplexing aware client.
 var magicBytes = []byte("backchannel")
-
-// muxConfig returns a new config to use with the multiplexing session.
-func muxConfig(logger log.Logger, cfg Configuration) *yamux.Config {
-	yamuxCfg := yamux.DefaultConfig()
-	yamuxCfg.Logger = yamuxLogWrapper{logger}
-	yamuxCfg.LogOutput = nil
-	// gRPC is already configured to send keep alives so we don't need yamux to do this for us.
-	// gRPC is a better choice as it sends the keep alives also to non-multiplexed connections.
-	yamuxCfg.EnableKeepAlive = false
-	yamuxCfg.AcceptBacklog = cfg.AcceptBacklog
-	yamuxCfg.MaxStreamWindowSize = cfg.MaximumStreamWindowSizeBytes
-	yamuxCfg.StreamCloseTimeout = cfg.StreamCloseTimeout
-
-	return yamuxCfg
-}
 
 // connCloser wraps a net.Conn and calls the provided close function instead when Close
 // is called.

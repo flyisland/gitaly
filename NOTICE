@@ -23933,6 +23933,5568 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+LICENSE - github.com/libp2p/go-buffer-pool
+The MIT License (MIT)
+
+Copyright (c) 2014 Juan Batiz-Benet
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+generated-pr.yml - github.com/libp2p/go-yamux/v5/.github/workflows
+name: Close Generated PRs
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    uses: ipdxco/unified-github-workflows/.github/workflows/reusable-generated-pr.yml@v1
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+go-check.yml - github.com/libp2p/go-yamux/v5/.github/workflows
+name: Go Checks
+
+on:
+  pull_request:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-check:
+    uses: ipdxco/unified-github-workflows/.github/workflows/go-check.yml@v1.0
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+go-test.yml - github.com/libp2p/go-yamux/v5/.github/workflows
+name: Go Test
+
+on:
+  pull_request:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-test:
+    uses: ipdxco/unified-github-workflows/.github/workflows/go-test.yml@v1.0
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+release-check.yml - github.com/libp2p/go-yamux/v5/.github/workflows
+name: Release Checker
+
+on:
+  pull_request_target:
+    paths: [ 'version.json' ]
+    types: [ opened, synchronize, reopened, labeled, unlabeled ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-check:
+    uses: ipdxco/unified-github-workflows/.github/workflows/release-check.yml@v1.0
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+releaser.yml - github.com/libp2p/go-yamux/v5/.github/workflows
+name: Releaser
+
+on:
+  push:
+    paths: [ 'version.json' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  releaser:
+    uses: ipdxco/unified-github-workflows/.github/workflows/releaser.yml@v1.0
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+stale.yml - github.com/libp2p/go-yamux/v5/.github/workflows
+name: Close Stale Issues
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    uses: ipdxco/unified-github-workflows/.github/workflows/reusable-stale-issue.yml@v1
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+tagpush.yml - github.com/libp2p/go-yamux/v5/.github/workflows
+name: Tag Push Checker
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  releaser:
+    uses: ipdxco/unified-github-workflows/.github/workflows/tagpush.yml@v1.0
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.gitignore - github.com/libp2p/go-yamux/v5
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+
+# Folders
+_obj
+_test
+
+# Architecture specific extensions/prefixes
+*.[568vq]
+[568vq].out
+
+*.cgo1.go
+*.cgo2.c
+_cgo_defun.c
+_cgo_gotypes.go
+_cgo_export.*
+
+_testmain.go
+
+*.exe
+*.test
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+LICENSE - github.com/libp2p/go-yamux/v5
+Mozilla Public License, version 2.0
+
+1. Definitions
+
+1.1. "Contributor"
+
+     means each individual or legal entity that creates, contributes to the
+     creation of, or owns Covered Software.
+
+1.2. "Contributor Version"
+
+     means the combination of the Contributions of others (if any) used by a
+     Contributor and that particular Contributor's Contribution.
+
+1.3. "Contribution"
+
+     means Covered Software of a particular Contributor.
+
+1.4. "Covered Software"
+
+     means Source Code Form to which the initial Contributor has attached the
+     notice in Exhibit A, the Executable Form of such Source Code Form, and
+     Modifications of such Source Code Form, in each case including portions
+     thereof.
+
+1.5. "Incompatible With Secondary Licenses"
+     means
+
+     a. that the initial Contributor has attached the notice described in
+        Exhibit B to the Covered Software; or
+
+     b. that the Covered Software was made available under the terms of
+        version 1.1 or earlier of the License, but not also under the terms of
+        a Secondary License.
+
+1.6. "Executable Form"
+
+     means any form of the work other than Source Code Form.
+
+1.7. "Larger Work"
+
+     means a work that combines Covered Software with other material, in a
+     separate file or files, that is not Covered Software.
+
+1.8. "License"
+
+     means this document.
+
+1.9. "Licensable"
+
+     means having the right to grant, to the maximum extent possible, whether
+     at the time of the initial grant or subsequently, any and all of the
+     rights conveyed by this License.
+
+1.10. "Modifications"
+
+     means any of the following:
+
+     a. any file in Source Code Form that results from an addition to,
+        deletion from, or modification of the contents of Covered Software; or
+
+     b. any new file in Source Code Form that contains any Covered Software.
+
+1.11. "Patent Claims" of a Contributor
+
+      means any patent claim(s), including without limitation, method,
+      process, and apparatus claims, in any patent Licensable by such
+      Contributor that would be infringed, but for the grant of the License,
+      by the making, using, selling, offering for sale, having made, import,
+      or transfer of either its Contributions or its Contributor Version.
+
+1.12. "Secondary License"
+
+      means either the GNU General Public License, Version 2.0, the GNU Lesser
+      General Public License, Version 2.1, the GNU Affero General Public
+      License, Version 3.0, or any later versions of those licenses.
+
+1.13. "Source Code Form"
+
+      means the form of the work preferred for making modifications.
+
+1.14. "You" (or "Your")
+
+      means an individual or a legal entity exercising rights under this
+      License. For legal entities, "You" includes any entity that controls, is
+      controlled by, or is under common control with You. For purposes of this
+      definition, "control" means (a) the power, direct or indirect, to cause
+      the direction or management of such entity, whether by contract or
+      otherwise, or (b) ownership of more than fifty percent (50%) of the
+      outstanding shares or beneficial ownership of such entity.
+
+
+2. License Grants and Conditions
+
+2.1. Grants
+
+     Each Contributor hereby grants You a world-wide, royalty-free,
+     non-exclusive license:
+
+     a. under intellectual property rights (other than patent or trademark)
+        Licensable by such Contributor to use, reproduce, make available,
+        modify, display, perform, distribute, and otherwise exploit its
+        Contributions, either on an unmodified basis, with Modifications, or
+        as part of a Larger Work; and
+
+     b. under Patent Claims of such Contributor to make, use, sell, offer for
+        sale, have made, import, and otherwise transfer either its
+        Contributions or its Contributor Version.
+
+2.2. Effective Date
+
+     The licenses granted in Section 2.1 with respect to any Contribution
+     become effective for each Contribution on the date the Contributor first
+     distributes such Contribution.
+
+2.3. Limitations on Grant Scope
+
+     The licenses granted in this Section 2 are the only rights granted under
+     this License. No additional rights or licenses will be implied from the
+     distribution or licensing of Covered Software under this License.
+     Notwithstanding Section 2.1(b) above, no patent license is granted by a
+     Contributor:
+
+     a. for any code that a Contributor has removed from Covered Software; or
+
+     b. for infringements caused by: (i) Your and any other third party's
+        modifications of Covered Software, or (ii) the combination of its
+        Contributions with other software (except as part of its Contributor
+        Version); or
+
+     c. under Patent Claims infringed by Covered Software in the absence of
+        its Contributions.
+
+     This License does not grant any rights in the trademarks, service marks,
+     or logos of any Contributor (except as may be necessary to comply with
+     the notice requirements in Section 3.4).
+
+2.4. Subsequent Licenses
+
+     No Contributor makes additional grants as a result of Your choice to
+     distribute the Covered Software under a subsequent version of this
+     License (see Section 10.2) or under the terms of a Secondary License (if
+     permitted under the terms of Section 3.3).
+
+2.5. Representation
+
+     Each Contributor represents that the Contributor believes its
+     Contributions are its original creation(s) or it has sufficient rights to
+     grant the rights to its Contributions conveyed by this License.
+
+2.6. Fair Use
+
+     This License is not intended to limit any rights You have under
+     applicable copyright doctrines of fair use, fair dealing, or other
+     equivalents.
+
+2.7. Conditions
+
+     Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted in
+     Section 2.1.
+
+
+3. Responsibilities
+
+3.1. Distribution of Source Form
+
+     All distribution of Covered Software in Source Code Form, including any
+     Modifications that You create or to which You contribute, must be under
+     the terms of this License. You must inform recipients that the Source
+     Code Form of the Covered Software is governed by the terms of this
+     License, and how they can obtain a copy of this License. You may not
+     attempt to alter or restrict the recipients' rights in the Source Code
+     Form.
+
+3.2. Distribution of Executable Form
+
+     If You distribute Covered Software in Executable Form then:
+
+     a. such Covered Software must also be made available in Source Code Form,
+        as described in Section 3.1, and You must inform recipients of the
+        Executable Form how they can obtain a copy of such Source Code Form by
+        reasonable means in a timely manner, at a charge no more than the cost
+        of distribution to the recipient; and
+
+     b. You may distribute such Executable Form under the terms of this
+        License, or sublicense it under different terms, provided that the
+        license for the Executable Form does not attempt to limit or alter the
+        recipients' rights in the Source Code Form under this License.
+
+3.3. Distribution of a Larger Work
+
+     You may create and distribute a Larger Work under terms of Your choice,
+     provided that You also comply with the requirements of this License for
+     the Covered Software. If the Larger Work is a combination of Covered
+     Software with a work governed by one or more Secondary Licenses, and the
+     Covered Software is not Incompatible With Secondary Licenses, this
+     License permits You to additionally distribute such Covered Software
+     under the terms of such Secondary License(s), so that the recipient of
+     the Larger Work may, at their option, further distribute the Covered
+     Software under the terms of either this License or such Secondary
+     License(s).
+
+3.4. Notices
+
+     You may not remove or alter the substance of any license notices
+     (including copyright notices, patent notices, disclaimers of warranty, or
+     limitations of liability) contained within the Source Code Form of the
+     Covered Software, except that You may alter any license notices to the
+     extent required to remedy known factual inaccuracies.
+
+3.5. Application of Additional Terms
+
+     You may choose to offer, and to charge a fee for, warranty, support,
+     indemnity or liability obligations to one or more recipients of Covered
+     Software. However, You may do so only on Your own behalf, and not on
+     behalf of any Contributor. You must make it absolutely clear that any
+     such warranty, support, indemnity, or liability obligation is offered by
+     You alone, and You hereby agree to indemnify every Contributor for any
+     liability incurred by such Contributor as a result of warranty, support,
+     indemnity or liability terms You offer. You may include additional
+     disclaimers of warranty and limitations of liability specific to any
+     jurisdiction.
+
+4. Inability to Comply Due to Statute or Regulation
+
+   If it is impossible for You to comply with any of the terms of this License
+   with respect to some or all of the Covered Software due to statute,
+   judicial order, or regulation then You must: (a) comply with the terms of
+   this License to the maximum extent possible; and (b) describe the
+   limitations and the code they affect. Such description must be placed in a
+   text file included with all distributions of the Covered Software under
+   this License. Except to the extent prohibited by statute or regulation,
+   such description must be sufficiently detailed for a recipient of ordinary
+   skill to be able to understand it.
+
+5. Termination
+
+5.1. The rights granted under this License will terminate automatically if You
+     fail to comply with any of its terms. However, if You become compliant,
+     then the rights granted under this License from a particular Contributor
+     are reinstated (a) provisionally, unless and until such Contributor
+     explicitly and finally terminates Your grants, and (b) on an ongoing
+     basis, if such Contributor fails to notify You of the non-compliance by
+     some reasonable means prior to 60 days after You have come back into
+     compliance. Moreover, Your grants from a particular Contributor are
+     reinstated on an ongoing basis if such Contributor notifies You of the
+     non-compliance by some reasonable means, this is the first time You have
+     received notice of non-compliance with this License from such
+     Contributor, and You become compliant prior to 30 days after Your receipt
+     of the notice.
+
+5.2. If You initiate litigation against any entity by asserting a patent
+     infringement claim (excluding declaratory judgment actions,
+     counter-claims, and cross-claims) alleging that a Contributor Version
+     directly or indirectly infringes any patent, then the rights granted to
+     You by any and all Contributors for the Covered Software under Section
+     2.1 of this License shall terminate.
+
+5.3. In the event of termination under Sections 5.1 or 5.2 above, all end user
+     license agreements (excluding distributors and resellers) which have been
+     validly granted by You or Your distributors under this License prior to
+     termination shall survive termination.
+
+6. Disclaimer of Warranty
+
+   Covered Software is provided under this License on an "as is" basis,
+   without warranty of any kind, either expressed, implied, or statutory,
+   including, without limitation, warranties that the Covered Software is free
+   of defects, merchantable, fit for a particular purpose or non-infringing.
+   The entire risk as to the quality and performance of the Covered Software
+   is with You. Should any Covered Software prove defective in any respect,
+   You (not any Contributor) assume the cost of any necessary servicing,
+   repair, or correction. This disclaimer of warranty constitutes an essential
+   part of this License. No use of  any Covered Software is authorized under
+   this License except under this disclaimer.
+
+7. Limitation of Liability
+
+   Under no circumstances and under no legal theory, whether tort (including
+   negligence), contract, or otherwise, shall any Contributor, or anyone who
+   distributes Covered Software as permitted above, be liable to You for any
+   direct, indirect, special, incidental, or consequential damages of any
+   character including, without limitation, damages for lost profits, loss of
+   goodwill, work stoppage, computer failure or malfunction, or any and all
+   other commercial damages or losses, even if such party shall have been
+   informed of the possibility of such damages. This limitation of liability
+   shall not apply to liability for death or personal injury resulting from
+   such party's negligence to the extent applicable law prohibits such
+   limitation. Some jurisdictions do not allow the exclusion or limitation of
+   incidental or consequential damages, so this exclusion and limitation may
+   not apply to You.
+
+8. Litigation
+
+   Any litigation relating to this License may be brought only in the courts
+   of a jurisdiction where the defendant maintains its principal place of
+   business and such litigation shall be governed by laws of that
+   jurisdiction, without reference to its conflict-of-law provisions. Nothing
+   in this Section shall prevent a party's ability to bring cross-claims or
+   counter-claims.
+
+9. Miscellaneous
+
+   This License represents the complete agreement concerning the subject
+   matter hereof. If any provision of this License is held to be
+   unenforceable, such provision shall be reformed only to the extent
+   necessary to make it enforceable. Any law or regulation which provides that
+   the language of a contract shall be construed against the drafter shall not
+   be used to construe this License against a Contributor.
+
+
+10. Versions of the License
+
+10.1. New Versions
+
+      Mozilla Foundation is the license steward. Except as provided in Section
+      10.3, no one other than the license steward has the right to modify or
+      publish new versions of this License. Each version will be given a
+      distinguishing version number.
+
+10.2. Effect of New Versions
+
+      You may distribute the Covered Software under the terms of the version
+      of the License under which You originally received the Covered Software,
+      or under the terms of any subsequent version published by the license
+      steward.
+
+10.3. Modified Versions
+
+      If you create software not governed by this License, and you want to
+      create a new license for such software, you may create and use a
+      modified version of this License if you rename the license and remove
+      any references to the name of the license steward (except to note that
+      such modified license differs from this License).
+
+10.4. Distributing Source Code Form that is Incompatible With Secondary
+      Licenses If You choose to distribute Source Code Form that is
+      Incompatible With Secondary Licenses under the terms of this version of
+      the License, the notice described in Exhibit B of this License must be
+      attached.
+
+Exhibit A - Source Code Form License Notice
+
+      This Source Code Form is subject to the
+      terms of the Mozilla Public License, v.
+      2.0. If a copy of the MPL was not
+      distributed with this file, You can
+      obtain one at
+      http://mozilla.org/MPL/2.0/.
+
+If it is not possible or desirable to put the notice in a particular file,
+then You may include the notice in a location (such as a LICENSE file in a
+relevant directory) where a recipient would be likely to look for such a
+notice.
+
+You may add additional accurate notices of copyright ownership.
+
+Exhibit B - "Incompatible With Secondary Licenses" Notice
+
+      This Source Code Form is "Incompatible
+      With Secondary Licenses", as defined by
+      the Mozilla Public License, v. 2.0.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+LICENSE-BSD - github.com/libp2p/go-yamux/v5
+Copyright (c) 2009 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+README.md - github.com/libp2p/go-yamux/v5
+# Yamux
+
+Yamux (Yet another Multiplexer) is a multiplexing library for Golang.
+It relies on an underlying connection to provide reliability
+and ordering, such as TCP or Unix domain sockets, and provides
+stream-oriented multiplexing. It is inspired by SPDY but is not
+interoperable with it.
+
+Yamux features include:
+
+* Bi-directional streams
+  * Streams can be opened by either client or server
+  * Server-side push support
+* Flow control
+  * Avoid starvation
+  * Back-pressure to prevent overwhelming a receiver
+* Keep Alives
+  * Enables persistent connections over a load balancer
+* Efficient
+  * Enables thousands of logical streams with low overhead
+
+## Documentation
+
+For complete documentation, see the associated [Godoc](http://godoc.org/github.com/libp2p/go-yamux).
+
+## Specification
+
+The full specification for Yamux is provided in the `spec.md` file.
+It can be used as a guide to implementors of interoperable libraries.
+
+## Usage
+
+Using Yamux is remarkably simple:
+
+```go
+
+func client() {
+    // Get a TCP connection
+    conn, err := net.Dial(...)
+    if err != nil {
+        panic(err)
+    }
+
+    // Setup client side of yamux
+    session, err := yamux.Client(conn, nil)
+    if err != nil {
+        panic(err)
+    }
+
+    // Open a new stream
+    stream, err := session.Open()
+    if err != nil {
+        panic(err)
+    }
+
+    // Stream implements net.Conn
+    stream.Write([]byte("ping"))
+}
+
+func server() {
+    // Accept a TCP connection
+    conn, err := listener.Accept()
+    if err != nil {
+        panic(err)
+    }
+
+    // Setup server side of yamux
+    session, err := yamux.Server(conn, nil)
+    if err != nil {
+        panic(err)
+    }
+
+    // Accept a stream
+    stream, err := session.Accept()
+    if err != nil {
+        panic(err)
+    }
+
+    // Listen for a message
+    buf := make([]byte, 4)
+    stream.Read(buf)
+}
+
+```
+
+---
+The last gx published version of this module was: 1.1.5: QmUNMbRUsVYHi1D14annF7Rr7pQAX7TNLwpRCa975ojKnw
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+addr.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"fmt"
+	"net"
+)
+
+// hasAddr is used to get the address from the underlying connection
+type hasAddr interface {
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+}
+
+// yamuxAddr is used when we cannot get the underlying address
+type yamuxAddr struct {
+	Addr string
+}
+
+func (*yamuxAddr) Network() string {
+	return "yamux"
+}
+
+func (y *yamuxAddr) String() string {
+	return fmt.Sprintf("yamux:%s", y.Addr)
+}
+
+// Addr is used to get the address of the listener.
+func (s *Session) Addr() net.Addr {
+	return s.LocalAddr()
+}
+
+// LocalAddr is used to get the local address of the
+// underlying connection.
+func (s *Session) LocalAddr() net.Addr {
+	addr, ok := s.conn.(hasAddr)
+	if !ok {
+		return &yamuxAddr{"local"}
+	}
+	return addr.LocalAddr()
+}
+
+// RemoteAddr is used to get the address of remote end
+// of the underlying connection
+func (s *Session) RemoteAddr() net.Addr {
+	addr, ok := s.conn.(hasAddr)
+	if !ok {
+		return &yamuxAddr{"remote"}
+	}
+	return addr.RemoteAddr()
+}
+
+// LocalAddr returns the local address
+func (s *Stream) LocalAddr() net.Addr {
+	return s.session.LocalAddr()
+}
+
+// RemoteAddr returns the remote address
+func (s *Stream) RemoteAddr() net.Addr {
+	return s.session.RemoteAddr()
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+bench_test.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"context"
+	"io"
+	"testing"
+)
+
+func BenchmarkPing(b *testing.B) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	for i := 0; i < b.N; i++ {
+		rtt, err := client.Ping()
+		if err != nil {
+			b.Fatalf("err: %v", err)
+		}
+		if rtt == 0 {
+			b.Fatalf("bad: %v", rtt)
+		}
+	}
+}
+
+func BenchmarkAccept(b *testing.B) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	go func() {
+		for i := 0; i < b.N; i++ {
+			stream, err := server.AcceptStream()
+			if err != nil {
+				return
+			}
+			stream.Close()
+		}
+	}()
+
+	for i := 0; i < b.N; i++ {
+		stream, err := client.Open(context.Background())
+		if err != nil {
+			b.Fatalf("err: %v", err)
+		}
+		stream.Close()
+	}
+}
+
+func BenchmarkSendRecv(b *testing.B) {
+	client, server := testClientServer()
+	defer client.Close()
+
+	sendBuf := make([]byte, 512)
+	recvBuf := make([]byte, 512)
+
+	doneCh := make(chan struct{})
+	b.ResetTimer()
+	go func() {
+		defer close(doneCh)
+		defer server.Close()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			return
+		}
+		defer stream.Close()
+		for i := 0; i < b.N; i++ {
+			if _, err := io.ReadFull(stream, recvBuf); err != nil {
+				b.Errorf("err: %v", err)
+				return
+			}
+		}
+	}()
+
+	stream, err := client.Open(context.Background())
+	if err != nil {
+		b.Fatalf("err: %v", err)
+	}
+	defer stream.Close()
+	for i := 0; i < b.N; i++ {
+		if _, err := stream.Write(sendBuf); err != nil {
+			b.Fatalf("err: %v", err)
+		}
+	}
+	<-doneCh
+}
+
+func BenchmarkSendRecvLarge(b *testing.B) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+	const sendSize = 512 * 1024 * 1024
+	const recvSize = 4 * 1024
+
+	sendBuf := make([]byte, sendSize)
+	recvBuf := make([]byte, recvSize)
+
+	b.ResetTimer()
+	recvDone := make(chan struct{})
+
+	go func() {
+		defer close(recvDone)
+		defer server.Close()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			return
+		}
+		defer stream.Close()
+		for i := 0; i < b.N; i++ {
+			for j := 0; j < sendSize/recvSize; j++ {
+				if _, err := io.ReadFull(stream, recvBuf); err != nil {
+					b.Errorf("err: %v", err)
+					return
+				}
+			}
+		}
+	}()
+
+	stream, err := client.Open(context.Background())
+	if err != nil {
+		b.Fatalf("err: %v", err)
+	}
+	defer stream.Close()
+	for i := 0; i < b.N; i++ {
+		if _, err := stream.Write(sendBuf); err != nil {
+			b.Fatalf("err: %v", err)
+		}
+	}
+	<-recvDone
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+const.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"time"
+)
+
+type Error struct {
+	msg                string
+	timeout, temporary bool
+}
+
+func (ye *Error) Error() string {
+	return ye.msg
+}
+
+func (ye *Error) Timeout() bool {
+	return ye.timeout
+}
+
+func (ye *Error) Temporary() bool {
+	return ye.temporary
+}
+
+type GoAwayError struct {
+	ErrorCode uint32
+	Remote    bool
+}
+
+func (e *GoAwayError) Error() string {
+	if e.Remote {
+		return fmt.Sprintf("remote sent go away, code: %d", e.ErrorCode)
+	}
+	return fmt.Sprintf("sent go away, code: %d", e.ErrorCode)
+}
+
+func (e *GoAwayError) Timeout() bool {
+	return false
+}
+
+func (e *GoAwayError) Temporary() bool {
+	return false
+}
+
+func (e *GoAwayError) Is(target error) bool {
+	// to maintain compatibility with errors returned by previous versions
+	if e.Remote && target == ErrRemoteGoAway {
+		return true
+	} else if !e.Remote && target == ErrSessionShutdown {
+		return true
+	} else if target == ErrStreamReset {
+		// A GoAway on a connection also resets all the streams.
+		return true
+	}
+
+	if err, ok := target.(*GoAwayError); ok {
+		return *e == *err
+	}
+	return false
+}
+
+// A StreamError is used for errors returned from Read and Write calls after the stream is Reset
+type StreamError struct {
+	ErrorCode uint32
+	Remote    bool
+}
+
+func (s *StreamError) Error() string {
+	if s.Remote {
+		return fmt.Sprintf("stream reset by remote, error code: %d", s.ErrorCode)
+	}
+	return fmt.Sprintf("stream reset, error code: %d", s.ErrorCode)
+}
+
+func (s *StreamError) Is(target error) bool {
+	if target == ErrStreamReset {
+		return true
+	}
+	e, ok := target.(*StreamError)
+	return ok && *e == *s
+}
+
+var (
+	// ErrInvalidVersion means we received a frame with an
+	// invalid version
+	ErrInvalidVersion = &Error{msg: "invalid protocol version"}
+
+	// ErrInvalidMsgType means we received a frame with an
+	// invalid message type
+	ErrInvalidMsgType = &Error{msg: "invalid msg type"}
+
+	// ErrSessionShutdown is used if there is a shutdown during
+	// an operation
+	ErrSessionShutdown = &GoAwayError{ErrorCode: goAwayNormal, Remote: false}
+
+	// ErrStreamsExhausted is returned if we have no more
+	// stream ids to issue
+	ErrStreamsExhausted = &Error{msg: "streams exhausted"}
+
+	// ErrDuplicateStream is used if a duplicate stream is
+	// opened inbound
+	ErrDuplicateStream = &Error{msg: "duplicate stream initiated"}
+
+	// ErrReceiveWindowExceeded indicates the window was exceeded
+	ErrRecvWindowExceeded = &Error{msg: "recv window exceeded"}
+
+	// ErrTimeout is used when we reach an IO deadline
+	ErrTimeout = &Error{msg: "i/o deadline reached", timeout: true, temporary: true}
+
+	// ErrStreamClosed is returned when using a closed stream
+	ErrStreamClosed = &Error{msg: "stream closed"}
+
+	// ErrUnexpectedFlag is set when we get an unexpected flag
+	ErrUnexpectedFlag = &Error{msg: "unexpected flag"}
+
+	// ErrRemoteGoAway is used when we get a go away from the other side with error code
+	// goAwayNormal(0).
+	ErrRemoteGoAway = &GoAwayError{Remote: true, ErrorCode: goAwayNormal}
+
+	// ErrStreamReset is sent if a stream is reset. This can happen
+	// if the backlog is exceeded, or if there was a remote GoAway.
+	ErrStreamReset = &Error{msg: "stream reset"}
+
+	// ErrConnectionWriteTimeout indicates that we hit the "safety valve"
+	// timeout writing to the underlying stream connection.
+	ErrConnectionWriteTimeout = &Error{msg: "connection write timeout", timeout: true}
+
+	// ErrKeepAliveTimeout is sent if a missed keepalive caused the stream close
+	ErrKeepAliveTimeout = &Error{msg: "keepalive timeout", timeout: true}
+
+	errSendLoopDone = errors.New("send loop done")
+)
+
+const (
+	// protoVersion is the only version we support
+	protoVersion uint8 = 0
+)
+
+const (
+	// Data is used for data frames. They are followed
+	// by length bytes worth of payload.
+	typeData uint8 = iota
+
+	// WindowUpdate is used to change the window of
+	// a given stream. The length indicates the delta
+	// update to the window.
+	typeWindowUpdate
+
+	// Ping is sent as a keep-alive or to measure
+	// the RTT. The StreamID and Length value are echoed
+	// back in the response.
+	typePing
+
+	// GoAway is sent to terminate a session. The StreamID
+	// should be 0 and the length is an error code.
+	typeGoAway
+)
+
+const (
+	// SYN is sent to signal a new stream. May
+	// be sent with a data payload
+	flagSYN uint16 = 1 << iota
+
+	// ACK is sent to acknowledge a new stream. May
+	// be sent with a data payload
+	flagACK
+
+	// FIN is sent to half-close the given stream.
+	// May be sent with a data payload.
+	flagFIN
+
+	// RST is used to hard close a given stream.
+	flagRST
+)
+
+const (
+	// initialStreamWindow is the initial stream window size.
+	// It's not an implementation choice, the value defined in the specification.
+	initialStreamWindow = 256 * 1024
+	maxStreamWindow     = 16 * 1024 * 1024
+	goAwayWaitTime      = 100 * time.Millisecond
+)
+
+const (
+	// goAwayNormal is sent on a normal termination
+	goAwayNormal uint32 = iota
+
+	// goAwayProtoErr sent on a protocol error
+	goAwayProtoErr
+
+	// goAwayInternalErr sent on an internal error
+	goAwayInternalErr
+)
+
+const (
+	sizeOfVersion  = 1
+	sizeOfType     = 1
+	sizeOfFlags    = 2
+	sizeOfStreamID = 4
+	sizeOfLength   = 4
+	headerSize     = sizeOfVersion + sizeOfType + sizeOfFlags +
+		sizeOfStreamID + sizeOfLength
+)
+
+type header [headerSize]byte
+
+func (h header) Version() uint8 {
+	return h[0]
+}
+
+func (h header) MsgType() uint8 {
+	return h[1]
+}
+
+func (h header) Flags() uint16 {
+	return binary.BigEndian.Uint16(h[2:4])
+}
+
+func (h header) StreamID() uint32 {
+	return binary.BigEndian.Uint32(h[4:8])
+}
+
+func (h header) Length() uint32 {
+	return binary.BigEndian.Uint32(h[8:12])
+}
+
+func (h header) String() string {
+	return fmt.Sprintf("Vsn:%d Type:%d Flags:%d StreamID:%d Length:%d",
+		h.Version(), h.MsgType(), h.Flags(), h.StreamID(), h.Length())
+}
+
+func encode(msgType uint8, flags uint16, streamID uint32, length uint32) header {
+	var h header
+	h[0] = protoVersion
+	h[1] = msgType
+	binary.BigEndian.PutUint16(h[2:4], flags)
+	binary.BigEndian.PutUint32(h[4:8], streamID)
+	binary.BigEndian.PutUint32(h[8:12], length)
+	return h
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+const_test.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"testing"
+)
+
+func TestConst(t *testing.T) {
+	if protoVersion != 0 {
+		t.Fatalf("bad: %v", protoVersion)
+	}
+
+	if typeData != 0 {
+		t.Fatalf("bad: %v", typeData)
+	}
+	if typeWindowUpdate != 1 {
+		t.Fatalf("bad: %v", typeWindowUpdate)
+	}
+	if typePing != 2 {
+		t.Fatalf("bad: %v", typePing)
+	}
+	if typeGoAway != 3 {
+		t.Fatalf("bad: %v", typeGoAway)
+	}
+
+	if flagSYN != 1 {
+		t.Fatalf("bad: %v", flagSYN)
+	}
+	if flagACK != 2 {
+		t.Fatalf("bad: %v", flagACK)
+	}
+	if flagFIN != 4 {
+		t.Fatalf("bad: %v", flagFIN)
+	}
+	if flagRST != 8 {
+		t.Fatalf("bad: %v", flagRST)
+	}
+
+	if goAwayNormal != 0 {
+		t.Fatalf("bad: %v", goAwayNormal)
+	}
+	if goAwayProtoErr != 1 {
+		t.Fatalf("bad: %v", goAwayProtoErr)
+	}
+	if goAwayInternalErr != 2 {
+		t.Fatalf("bad: %v", goAwayInternalErr)
+	}
+
+	if headerSize != 12 {
+		t.Fatalf("bad header size")
+	}
+}
+
+func TestEncodeDecode(t *testing.T) {
+	hdr := encode(typeWindowUpdate, flagACK|flagRST, 1234, 4321)
+
+	if hdr.Version() != protoVersion {
+		t.Fatalf("bad: %v", hdr)
+	}
+	if hdr.MsgType() != typeWindowUpdate {
+		t.Fatalf("bad: %v", hdr)
+	}
+	if hdr.Flags() != flagACK|flagRST {
+		t.Fatalf("bad: %v", hdr)
+	}
+	if hdr.StreamID() != 1234 {
+		t.Fatalf("bad: %v", hdr)
+	}
+	if hdr.Length() != 4321 {
+		t.Fatalf("bad: %v", hdr)
+	}
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+deadline.go - github.com/libp2p/go-yamux/v5
+// Copied from the go standard library.
+//
+// Copyright 2010 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE-BSD file.
+
+package yamux
+
+import (
+	"sync"
+	"time"
+)
+
+// pipeDeadline is an abstraction for handling timeouts.
+type pipeDeadline struct {
+	mu     sync.Mutex // Guards timer and cancel
+	timer  *time.Timer
+	cancel chan struct{} // Must be non-nil
+}
+
+func makePipeDeadline() pipeDeadline {
+	return pipeDeadline{cancel: make(chan struct{})}
+}
+
+// set sets the point in time when the deadline will time out.
+// A timeout event is signaled by closing the channel returned by waiter.
+// Once a timeout has occurred, the deadline can be refreshed by specifying a
+// t value in the future.
+//
+// A zero value for t prevents timeout.
+func (d *pipeDeadline) set(t time.Time) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.timer != nil && !d.timer.Stop() {
+		<-d.cancel // Wait for the timer callback to finish and close cancel
+	}
+	d.timer = nil
+
+	// Time is zero, then there is no deadline.
+	closed := isClosedChan(d.cancel)
+	if t.IsZero() {
+		if closed {
+			d.cancel = make(chan struct{})
+		}
+		return
+	}
+
+	// Time in the future, setup a timer to cancel in the future.
+	if dur := time.Until(t); dur > 0 {
+		if closed {
+			d.cancel = make(chan struct{})
+		}
+		d.timer = time.AfterFunc(dur, func() {
+			close(d.cancel)
+		})
+		return
+	}
+
+	// Time in the past, so close immediately.
+	if !closed {
+		close(d.cancel)
+	}
+}
+
+// wait returns a channel that is closed when the deadline is exceeded.
+func (d *pipeDeadline) wait() chan struct{} {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.cancel
+}
+
+func isClosedChan(c <-chan struct{}) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
+	}
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+go.mod - github.com/libp2p/go-yamux/v5
+module github.com/libp2p/go-yamux/v5
+
+go 1.23
+
+require (
+	github.com/libp2p/go-buffer-pool v0.0.2
+	github.com/stretchr/testify v1.7.0
+)
+
+require (
+	github.com/davecgh/go-spew v1.1.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
+)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+go.sum - github.com/libp2p/go-yamux/v5
+github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
+github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/libp2p/go-buffer-pool v0.0.2 h1:QNK2iAFa8gjAe1SPz6mHSMuCcjs+X1wlHzeOSqcmlfs=
+github.com/libp2p/go-buffer-pool v0.0.2/go.mod h1:MvaB6xw5vOrDl8rYZGLFdKAuk/hRoRZd1Vi32+RXyFM=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5CcY=
+github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c h1:dUUwHk2QECo/6vqA44rthZ8ie2QXMNeKRTHCNY2nXvo=
+gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+mux.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"time"
+)
+
+// Config is used to tune the Yamux session
+type Config struct {
+	// AcceptBacklog is used to limit how many streams may be
+	// waiting an accept.
+	AcceptBacklog int
+
+	// PingBacklog is used to limit how many ping acks we can queue.
+	PingBacklog int
+
+	// EnableKeepalive is used to do a period keep alive
+	// messages using a ping.
+	EnableKeepAlive bool
+
+	// KeepAliveInterval is how often to perform the keep alive
+	KeepAliveInterval time.Duration
+
+	// MeasureRTTInterval is how often to re-measure the round trip time
+	MeasureRTTInterval time.Duration
+
+	// ConnectionWriteTimeout is meant to be a "safety valve" timeout after
+	// we which will suspect a problem with the underlying connection and
+	// close it. This is only applied to writes, where's there's generally
+	// an expectation that things will move along quickly.
+	ConnectionWriteTimeout time.Duration
+
+	// MaxIncomingStreams is maximum number of concurrent incoming streams
+	// that we accept. If the peer tries to open more streams, those will be
+	// reset immediately.
+	MaxIncomingStreams uint32
+
+	// InitialStreamWindowSize is used to control the initial
+	// window size that we allow for a stream.
+	InitialStreamWindowSize uint32
+
+	// MaxStreamWindowSize is used to control the maximum
+	// window size that we allow for a stream.
+	MaxStreamWindowSize uint32
+
+	// LogOutput is used to control the log destination
+	LogOutput io.Writer
+
+	// ReadBufSize controls the size of the read buffer.
+	//
+	// Set to 0 to disable it.
+	ReadBufSize int
+
+	// WriteCoalesceDelay is the maximum amount of time we'll delay
+	// coalescing a packet before sending it. This should be on the order of
+	// micro-milliseconds.
+	WriteCoalesceDelay time.Duration
+
+	// MaxMessageSize is the maximum size of a message that we'll send on a
+	// stream. This ensures that a single stream doesn't hog a connection.
+	MaxMessageSize uint32
+}
+
+// DefaultConfig is used to return a default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		AcceptBacklog:           256,
+		PingBacklog:             32,
+		EnableKeepAlive:         true,
+		KeepAliveInterval:       30 * time.Second,
+		MeasureRTTInterval:      30 * time.Second,
+		ConnectionWriteTimeout:  10 * time.Second,
+		MaxIncomingStreams:      1000,
+		InitialStreamWindowSize: initialStreamWindow,
+		MaxStreamWindowSize:     maxStreamWindow,
+		LogOutput:               os.Stderr,
+		ReadBufSize:             4096,
+		MaxMessageSize:          64 * 1024,
+		WriteCoalesceDelay:      100 * time.Microsecond,
+	}
+}
+
+// VerifyConfig is used to verify the sanity of configuration
+func VerifyConfig(config *Config) error {
+	if config.AcceptBacklog <= 0 {
+		return fmt.Errorf("backlog must be positive")
+	}
+	if config.EnableKeepAlive && config.KeepAliveInterval == 0 {
+		return fmt.Errorf("keep-alive interval must be positive")
+	}
+	if config.MeasureRTTInterval == 0 {
+		return fmt.Errorf("measure-rtt interval must be positive")
+	}
+
+	if config.InitialStreamWindowSize < initialStreamWindow {
+		return errors.New("InitialStreamWindowSize must be larger or equal 256 kB")
+	}
+	if config.MaxStreamWindowSize < config.InitialStreamWindowSize {
+		return errors.New("MaxStreamWindowSize must be larger than the InitialStreamWindowSize")
+	}
+	if config.MaxMessageSize < 1024 {
+		return fmt.Errorf("MaxMessageSize must be greater than a kilobyte")
+	}
+	if config.WriteCoalesceDelay < 0 {
+		return fmt.Errorf("WriteCoalesceDelay must be >= 0")
+	}
+	if config.PingBacklog < 1 {
+		return fmt.Errorf("PingBacklog must be > 0")
+	}
+	return nil
+}
+
+// Server is used to initialize a new server-side connection.
+// There must be at most one server-side connection. If a nil config is
+// provided, the DefaultConfiguration will be used.
+func Server(conn net.Conn, config *Config, mm func() (MemoryManager, error)) (*Session, error) {
+	if config == nil {
+		config = DefaultConfig()
+	}
+	if err := VerifyConfig(config); err != nil {
+		return nil, err
+	}
+	return newSession(config, conn, false, config.ReadBufSize, mm), nil
+}
+
+// Client is used to initialize a new client-side connection.
+// There must be at most one client-side connection.
+func Client(conn net.Conn, config *Config, mm func() (MemoryManager, error)) (*Session, error) {
+	if config == nil {
+		config = DefaultConfig()
+	}
+
+	if err := VerifyConfig(config); err != nil {
+		return nil, err
+	}
+	return newSession(config, conn, true, config.ReadBufSize, mm), nil
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ping.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import "time"
+
+type ping struct {
+	id uint32
+	// written to by the session on ping response
+	pingResponse chan struct{}
+
+	// closed by the Ping call that sent the ping when done.
+	done chan struct{}
+	// result set before done is closed.
+	err      error
+	duration time.Duration
+}
+
+func newPing(id uint32) *ping {
+	return &ping{
+		id:           id,
+		pingResponse: make(chan struct{}, 1),
+		done:         make(chan struct{}),
+	}
+}
+
+func (p *ping) finish(val time.Duration, err error) {
+	p.err = err
+	p.duration = val
+	close(p.done)
+}
+
+func (p *ping) wait() (time.Duration, error) {
+	<-p.done
+	return p.duration, p.err
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+session.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"log"
+	"math"
+	"net"
+	"os"
+	"runtime/debug"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	pool "github.com/libp2p/go-buffer-pool"
+)
+
+// The MemoryManager allows management of memory allocations.
+// Memory is allocated:
+// 1. When opening / accepting a new stream. This uses the highest priority.
+// 2. When trying to increase the stream receive window. This uses a lower priority.
+// This is a subset of the libp2p's resource manager ResourceScopeSpan interface.
+type MemoryManager interface {
+	ReserveMemory(size int, prio uint8) error
+
+	// ReleaseMemory explicitly releases memory previously reserved with ReserveMemory
+	ReleaseMemory(size int)
+
+	// Done ends the span and releases associated resources.
+	Done()
+}
+
+type nullMemoryManagerImpl struct{}
+
+func (n nullMemoryManagerImpl) ReserveMemory(size int, prio uint8) error { return nil }
+func (n nullMemoryManagerImpl) ReleaseMemory(size int)                   {}
+func (n nullMemoryManagerImpl) Done()                                    {}
+
+var nullMemoryManager = &nullMemoryManagerImpl{}
+
+// Session is used to wrap a reliable ordered connection and to
+// multiplex it into multiple streams.
+type Session struct {
+	rtt int64 // to be accessed atomically, in nanoseconds
+
+	// localGoAway indicates that we should stop
+	// accepting futher connections. Must be first for alignment.
+	localGoAway int32
+
+	// nextStreamID is the next stream we should
+	// send. This depends if we are a client/server.
+	nextStreamID uint32
+
+	// config holds our configuration
+	config *Config
+
+	// logger is used for our logs
+	logger *log.Logger
+
+	// conn is the underlying connection
+	conn net.Conn
+
+	// reader is a buffered reader
+	reader io.Reader
+
+	newMemoryManager func() (MemoryManager, error)
+
+	// pings is used to track inflight pings
+	pingLock   sync.Mutex
+	pingID     uint32
+	activePing *ping
+
+	// streams maps a stream id to a stream, and inflight has an entry
+	// for any outgoing stream that has not yet been established. Both are
+	// protected by streamLock.
+	numIncomingStreams uint32
+	streams            map[uint32]*Stream
+	inflight           map[uint32]struct{}
+	streamLock         sync.Mutex
+
+	// synCh acts like a semaphore. It is sized to the AcceptBacklog which
+	// is assumed to be symmetric between the client and server. This allows
+	// the client to avoid exceeding the backlog and instead blocks the open.
+	synCh chan struct{}
+
+	// acceptCh is used to pass ready streams to the client
+	acceptCh chan *Stream
+
+	// sendCh is used to send messages
+	sendCh chan []byte
+
+	// pingCh and pingCh are used to send pings and pongs
+	pongCh, pingCh chan uint32
+
+	// recvDoneCh is closed when recv() exits to avoid a race
+	// between stream registration and stream shutdown
+	recvDoneCh chan struct{}
+	// recvErr is the error the receive loop ended with
+	recvErr error
+
+	// sendDoneCh is closed when send() exits to avoid a race
+	// between returning from a Stream.Write and exiting from the send loop
+	// (which may be reading a buffer on-load-from Stream.Write).
+	sendDoneCh chan struct{}
+
+	// client is true if we're the client and our stream IDs should be odd.
+	client bool
+
+	// shutdown is used to safely close a session
+	shutdown     bool
+	shutdownErr  error
+	shutdownCh   chan struct{}
+	shutdownLock sync.Mutex
+
+	// keepaliveTimer is a periodic timer for keepalive messages. It's nil
+	// when keepalives are disabled.
+	keepaliveLock   sync.Mutex
+	keepaliveTimer  *time.Timer
+	keepaliveActive bool
+}
+
+// newSession is used to construct a new session
+func newSession(config *Config, conn net.Conn, client bool, readBuf int, newMemoryManager func() (MemoryManager, error)) *Session {
+	var reader io.Reader = conn
+	if readBuf > 0 {
+		reader = bufio.NewReaderSize(reader, readBuf)
+	}
+	if newMemoryManager == nil {
+		newMemoryManager = func() (MemoryManager, error) { return nullMemoryManager, nil }
+	}
+	s := &Session{
+		config:           config,
+		client:           client,
+		logger:           log.New(config.LogOutput, "", log.LstdFlags),
+		conn:             conn,
+		reader:           reader,
+		streams:          make(map[uint32]*Stream),
+		inflight:         make(map[uint32]struct{}),
+		synCh:            make(chan struct{}, config.AcceptBacklog),
+		acceptCh:         make(chan *Stream, config.AcceptBacklog),
+		sendCh:           make(chan []byte, 64),
+		pongCh:           make(chan uint32, config.PingBacklog),
+		pingCh:           make(chan uint32),
+		recvDoneCh:       make(chan struct{}),
+		sendDoneCh:       make(chan struct{}),
+		shutdownCh:       make(chan struct{}),
+		newMemoryManager: newMemoryManager,
+	}
+	if client {
+		s.nextStreamID = 1
+	} else {
+		s.nextStreamID = 2
+	}
+	if config.EnableKeepAlive {
+		s.startKeepalive()
+	}
+	go s.recv()
+	go s.send()
+	go s.startMeasureRTT()
+	return s
+}
+
+// IsClosed does a safe check to see if we have shutdown
+func (s *Session) IsClosed() bool {
+	select {
+	case <-s.shutdownCh:
+		return true
+	default:
+		return false
+	}
+}
+
+// CloseChan returns a read-only channel which is closed as
+// soon as the session is closed.
+func (s *Session) CloseChan() <-chan struct{} {
+	return s.shutdownCh
+}
+
+// NumStreams returns the number of currently open streams
+func (s *Session) NumStreams() int {
+	s.streamLock.Lock()
+	num := len(s.streams)
+	s.streamLock.Unlock()
+	return num
+}
+
+// Open is used to create a new stream as a net.Conn
+func (s *Session) Open(ctx context.Context) (net.Conn, error) {
+	conn, err := s.OpenStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+// OpenStream is used to create a new stream
+func (s *Session) OpenStream(ctx context.Context) (*Stream, error) {
+	if s.IsClosed() {
+		return nil, s.shutdownErr
+	}
+
+	// Block if we have too many inflight SYNs
+	select {
+	case s.synCh <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.shutdownCh:
+		return nil, s.shutdownErr
+	}
+
+	span, err := s.newMemoryManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource scope span: %w", err)
+	}
+	if err := span.ReserveMemory(initialStreamWindow, 255); err != nil {
+		return nil, err
+	}
+
+GET_ID:
+	// Get an ID, and check for stream exhaustion
+	id := atomic.LoadUint32(&s.nextStreamID)
+	if id >= math.MaxUint32-1 {
+		span.Done()
+		return nil, ErrStreamsExhausted
+	}
+	if !atomic.CompareAndSwapUint32(&s.nextStreamID, id, id+2) {
+		goto GET_ID
+	}
+
+	// Register the stream
+	stream := newStream(s, id, streamInit, initialStreamWindow, span)
+	s.streamLock.Lock()
+	s.streams[id] = stream
+	s.inflight[id] = struct{}{}
+	s.streamLock.Unlock()
+
+	// Send the window update to create
+	if err := stream.sendWindowUpdate(ctx.Done()); err != nil {
+		defer span.Done()
+		select {
+		case <-s.synCh:
+		default:
+			s.logger.Printf("[ERR] yamux: aborted stream open without inflight syn semaphore")
+		}
+		return nil, err
+	}
+	return stream, nil
+}
+
+// Accept is used to block until the next available stream
+// is ready to be accepted.
+func (s *Session) Accept() (net.Conn, error) {
+	conn, err := s.AcceptStream()
+	if err != nil {
+		return nil, err
+	}
+	return conn, err
+}
+
+// AcceptStream is used to block until the next available stream
+// is ready to be accepted.
+func (s *Session) AcceptStream() (*Stream, error) {
+	for {
+		select {
+		case stream := <-s.acceptCh:
+			if err := stream.sendWindowUpdate(nil); err != nil {
+				// don't return accept errors.
+				s.logger.Printf("[WARN] error sending window update before accepting: %s", err)
+				continue
+			}
+			return stream, nil
+		case <-s.shutdownCh:
+			return nil, s.shutdownErr
+		}
+	}
+}
+
+// Close is used to close the session and all streams. It doesn't send a GoAway before
+// closing the connection.
+func (s *Session) Close() error {
+	return s.close(ErrSessionShutdown, false, goAwayNormal)
+}
+
+// CloseWithError is used to close the session and all streams after sending a GoAway message with errCode.
+// Blocks for ConnectionWriteTimeout to write the GoAway message.
+//
+// The GoAway may not actually be sent depending on the semantics of the underlying net.Conn.
+// For TCP connections, it may be dropped depending on LINGER value or if there's unread data in the kernel
+// receive buffer.
+func (s *Session) CloseWithError(errCode uint32) error {
+	return s.close(&GoAwayError{Remote: false, ErrorCode: errCode}, true, errCode)
+}
+
+func (s *Session) close(shutdownErr error, sendGoAway bool, errCode uint32) error {
+	s.shutdownLock.Lock()
+	defer s.shutdownLock.Unlock()
+
+	if s.shutdown {
+		return nil
+	}
+	s.shutdown = true
+	if s.shutdownErr == nil {
+		s.shutdownErr = shutdownErr
+	}
+	close(s.shutdownCh)
+	s.stopKeepalive()
+
+	// Only send GoAway if we have an error code.
+	if sendGoAway && errCode != goAwayNormal {
+		// wait for write loop to exit
+		// We need to write the current frame completely before sending a goaway.
+		// This will wait for at most s.config.ConnectionWriteTimeout
+		<-s.sendDoneCh
+		ga := s.goAway(errCode)
+		if err := s.conn.SetWriteDeadline(time.Now().Add(goAwayWaitTime)); err == nil {
+			_, _ = s.conn.Write(ga[:]) // there's nothing we can do on error here
+		}
+		s.conn.SetWriteDeadline(time.Time{})
+	}
+
+	s.conn.Close()
+	<-s.sendDoneCh
+	<-s.recvDoneCh
+
+	resetErr := shutdownErr
+	if _, ok := resetErr.(*GoAwayError); !ok {
+		resetErr = fmt.Errorf("%w: connection closed: %w", ErrStreamReset, shutdownErr)
+	}
+	s.streamLock.Lock()
+	defer s.streamLock.Unlock()
+	for id, stream := range s.streams {
+		stream.forceClose(resetErr)
+		delete(s.streams, id)
+		stream.memorySpan.Done()
+	}
+	return nil
+}
+
+// GoAway can be used to prevent accepting further
+// connections. It does not close the underlying conn.
+func (s *Session) GoAway() error {
+	return s.sendMsg(s.goAway(goAwayNormal), nil, nil, true)
+}
+
+// goAway is used to send a goAway message
+func (s *Session) goAway(reason uint32) header {
+	atomic.SwapInt32(&s.localGoAway, 1)
+	hdr := encode(typeGoAway, 0, 0, reason)
+	return hdr
+}
+
+func (s *Session) measureRTT() {
+	rtt, err := s.Ping()
+	if err != nil {
+		return
+	}
+	if !atomic.CompareAndSwapInt64(&s.rtt, 0, rtt.Nanoseconds()) {
+		prev := atomic.LoadInt64(&s.rtt)
+		smoothedRTT := prev/2 + rtt.Nanoseconds()/2
+		atomic.StoreInt64(&s.rtt, smoothedRTT)
+	}
+}
+
+func (s *Session) startMeasureRTT() {
+	s.measureRTT()
+	t := time.NewTicker(s.config.MeasureRTTInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.CloseChan():
+			return
+		case <-t.C:
+			s.measureRTT()
+		}
+	}
+}
+
+// 0 if we don't yet have a measurement
+func (s *Session) RTT() time.Duration {
+	return time.Duration(atomic.LoadInt64(&s.rtt))
+}
+
+// Ping is used to measure the RTT response time
+func (s *Session) Ping() (dur time.Duration, err error) {
+	// Prepare a ping.
+	s.pingLock.Lock()
+	// If there's an active ping, jump on the bandwagon.
+	if activePing := s.activePing; activePing != nil {
+		s.pingLock.Unlock()
+		return activePing.wait()
+	}
+
+	// Ok, our job to send the ping.
+	activePing := newPing(s.pingID)
+	s.pingID++
+	s.activePing = activePing
+	s.pingLock.Unlock()
+
+	defer func() {
+		// complete ping promise
+		activePing.finish(dur, err)
+
+		// Unset it.
+		s.pingLock.Lock()
+		s.activePing = nil
+		s.pingLock.Unlock()
+	}()
+
+	// Send the ping request, waiting at most one connection write timeout
+	// to flush it.
+	timer := time.NewTimer(s.config.ConnectionWriteTimeout)
+	defer timer.Stop()
+	select {
+	case s.pingCh <- activePing.id:
+	case <-timer.C:
+		return 0, ErrTimeout
+	case <-s.shutdownCh:
+		return 0, s.shutdownErr
+	}
+
+	// The "time" starts once we've actually sent the ping. Otherwise, we'll
+	// measure the time it takes to flush the queue as well.
+	start := time.Now()
+
+	// Wait for a response, again waiting at most one write timeout.
+	if !timer.Stop() {
+		<-timer.C
+	}
+	timer.Reset(s.config.ConnectionWriteTimeout)
+	select {
+	case <-activePing.pingResponse:
+	case <-timer.C:
+		return 0, ErrTimeout
+	case <-s.shutdownCh:
+		return 0, s.shutdownErr
+	}
+
+	// Compute the RTT
+	return time.Since(start), nil
+}
+
+// startKeepalive starts the keepalive process.
+func (s *Session) startKeepalive() {
+	s.keepaliveLock.Lock()
+	defer s.keepaliveLock.Unlock()
+	s.keepaliveTimer = time.AfterFunc(s.config.KeepAliveInterval, func() {
+		s.keepaliveLock.Lock()
+		if s.keepaliveTimer == nil || s.keepaliveActive {
+			// keepalives have been stopped or a keepalive is active.
+			s.keepaliveLock.Unlock()
+			return
+		}
+		s.keepaliveActive = true
+		s.keepaliveLock.Unlock()
+
+		_, err := s.Ping()
+
+		s.keepaliveLock.Lock()
+		s.keepaliveActive = false
+		if s.keepaliveTimer != nil {
+			s.keepaliveTimer.Reset(s.config.KeepAliveInterval)
+		}
+		s.keepaliveLock.Unlock()
+
+		if err != nil {
+			s.logger.Printf("[ERR] yamux: keepalive failed: %v", err)
+			s.close(ErrKeepAliveTimeout, false, 0)
+		}
+	})
+}
+
+// stopKeepalive stops the keepalive process.
+func (s *Session) stopKeepalive() {
+	s.keepaliveLock.Lock()
+	defer s.keepaliveLock.Unlock()
+	if s.keepaliveTimer != nil {
+		s.keepaliveTimer.Stop()
+		s.keepaliveTimer = nil
+	}
+}
+
+func (s *Session) extendKeepalive() {
+	s.keepaliveLock.Lock()
+	if s.keepaliveTimer != nil && !s.keepaliveActive {
+		// Don't stop the timer and drain the channel. This is an
+		// AfterFunc, not a normal timer, and any attempts to drain the
+		// channel will block forever.
+		//
+		// Go will stop the timer for us internally anyways. The docs
+		// say one must stop the timer before calling reset but that's
+		// to ensure that the timer doesn't end up firing immediately
+		// after calling Reset.
+		s.keepaliveTimer.Reset(s.config.KeepAliveInterval)
+	}
+	s.keepaliveLock.Unlock()
+}
+
+// send sends the header and body.
+// If waitForShutDown is true, it will wait for shutdown to complete even if the send loop has exited. This
+// ensures accurate error reporting. waitForShutDown should be true for callers other than the recvLoop.
+// The recvLoop should set waitForShutdown to false to avoid a deadlock.
+// For details see: https://github.com/libp2p/go-yamux/issues/129
+// and the test `TestSessionCloseDeadlock`
+func (s *Session) sendMsg(hdr header, body []byte, deadline <-chan struct{}, waitForShutDown bool) error {
+	select {
+	case <-s.shutdownCh:
+		return s.shutdownErr
+	default:
+	}
+
+	select {
+	case <-deadline:
+		return ErrTimeout
+	default:
+	}
+
+	// duplicate as we're sending this async.
+	buf := pool.Get(headerSize + len(body))
+	copy(buf[:headerSize], hdr[:])
+	copy(buf[headerSize:], body)
+
+	select {
+	case <-s.shutdownCh:
+		pool.Put(buf)
+		return s.shutdownErr
+	case <-s.sendDoneCh:
+		pool.Put(buf)
+		if waitForShutDown {
+			<-s.shutdownCh
+			return s.shutdownErr
+		}
+		return errSendLoopDone
+	case s.sendCh <- buf:
+		return nil
+	case <-deadline:
+		pool.Put(buf)
+		return ErrTimeout
+	}
+}
+
+// send is a long running goroutine that sends data
+func (s *Session) send() {
+	if err := s.sendLoop(); err != nil {
+		// If we are shutting down because remote closed the connection, prefer the recvLoop error
+		// over the sendLoop error. The receive loop might have error code received in a GoAway frame,
+		// which was received just before the TCP RST that closed the sendLoop.
+		//
+		// If we are closing because of an write error, we use the error from the sendLoop and not the recvLoop.
+		// We hold the shutdownLock, close the connection, and wait for the receive loop to finish and
+		// use the sendLoop error. Holding the shutdownLock ensures that the recvLoop doesn't trigger connection close
+		// but the sendLoop does.
+		s.shutdownLock.Lock()
+		if s.shutdownErr == nil {
+			s.conn.Close()
+			<-s.recvDoneCh
+			if _, ok := s.recvErr.(*GoAwayError); ok {
+				err = s.recvErr
+			}
+			s.shutdownErr = err
+		}
+		s.shutdownLock.Unlock()
+		s.close(err, false, 0)
+	}
+}
+
+func (s *Session) sendLoop() (err error) {
+	defer func() {
+		if rerr := recover(); rerr != nil {
+			fmt.Fprintf(os.Stderr, "caught panic: %s\n%s\n", rerr, debug.Stack())
+			err = fmt.Errorf("panic in yamux send loop: %s", rerr)
+		}
+	}()
+
+	defer close(s.sendDoneCh)
+
+	// Extend the write deadline if we've passed the halfway point. This can
+	// be expensive so this ensures we only have to do this once every
+	// ConnectionWriteTimeout/2 (usually 5s).
+	var lastWriteDeadline time.Time
+	extendWriteDeadline := func() error {
+		now := time.Now()
+		// If over half of the deadline has elapsed, extend it.
+		if now.Add(s.config.ConnectionWriteTimeout / 2).After(lastWriteDeadline) {
+			lastWriteDeadline = now.Add(s.config.ConnectionWriteTimeout)
+			return s.conn.SetWriteDeadline(lastWriteDeadline)
+		}
+		return nil
+	}
+
+	writer := s.conn
+
+	// FIXME: https://github.com/libp2p/go-libp2p/issues/644
+	// Write coalescing is disabled for now.
+
+	// writer := pool.Writer{W: s.conn}
+
+	// var writeTimeout *time.Timer
+	// var writeTimeoutCh <-chan time.Time
+	// if s.config.WriteCoalesceDelay > 0 {
+	//	writeTimeout = time.NewTimer(s.config.WriteCoalesceDelay)
+	//	defer writeTimeout.Stop()
+
+	//	writeTimeoutCh = writeTimeout.C
+	// } else {
+	//	ch := make(chan time.Time)
+	//	close(ch)
+	//	writeTimeoutCh = ch
+	// }
+
+	for {
+		// yield after processing the last message, if we've shutdown.
+		// s.sendCh is a buffered channel and Go doesn't guarantee select order.
+		select {
+		case <-s.shutdownCh:
+			return nil
+		default:
+		}
+
+		var buf []byte
+		// Make sure to send any pings & pongs first so they don't get stuck behind writes.
+		select {
+		case pingID := <-s.pingCh:
+			buf = pool.Get(headerSize)
+			hdr := encode(typePing, flagSYN, 0, pingID)
+			copy(buf, hdr[:])
+		case pingID := <-s.pongCh:
+			buf = pool.Get(headerSize)
+			hdr := encode(typePing, flagACK, 0, pingID)
+			copy(buf, hdr[:])
+		default:
+			// Then send normal data.
+			select {
+			case buf = <-s.sendCh:
+			case pingID := <-s.pingCh:
+				buf = pool.Get(headerSize)
+				hdr := encode(typePing, flagSYN, 0, pingID)
+				copy(buf, hdr[:])
+			case pingID := <-s.pongCh:
+				buf = pool.Get(headerSize)
+				hdr := encode(typePing, flagACK, 0, pingID)
+				copy(buf, hdr[:])
+			case <-s.shutdownCh:
+				return nil
+				// default:
+				//	select {
+				//	case buf = <-s.sendCh:
+				//	case <-s.shutdownCh:
+				//		return nil
+				//	case <-writeTimeoutCh:
+				//		if err := writer.Flush(); err != nil {
+				//			if os.IsTimeout(err) {
+				//				err = ErrConnectionWriteTimeout
+				//			}
+				//			return err
+				//		}
+
+				//		select {
+				//		case buf = <-s.sendCh:
+				//		case <-s.shutdownCh:
+				//			return nil
+				//		}
+
+				//		if writeTimeout != nil {
+				//			writeTimeout.Reset(s.config.WriteCoalesceDelay)
+				//		}
+				//	}
+			}
+		}
+
+		if err := extendWriteDeadline(); err != nil {
+			pool.Put(buf)
+			return err
+		}
+
+		_, err := writer.Write(buf)
+		pool.Put(buf)
+
+		if err != nil {
+			if os.IsTimeout(err) {
+				err = ErrConnectionWriteTimeout
+			}
+			return err
+		}
+	}
+}
+
+// recv is a long running goroutine that accepts new data
+func (s *Session) recv() {
+	if err := s.recvLoop(); err != nil {
+		s.close(err, false, 0)
+	}
+}
+
+// Ensure that the index of the handler (typeData/typeWindowUpdate/etc) matches the message type
+var (
+	handlers = []func(*Session, header) error{
+		typeData:         (*Session).handleStreamMessage,
+		typeWindowUpdate: (*Session).handleStreamMessage,
+		typePing:         (*Session).handlePing,
+		typeGoAway:       (*Session).handleGoAway,
+	}
+)
+
+// recvLoop continues to receive data until a fatal error is encountered
+func (s *Session) recvLoop() (err error) {
+	defer func() {
+		if rerr := recover(); rerr != nil {
+			fmt.Fprintf(os.Stderr, "caught panic: %s\n%s\n", rerr, debug.Stack())
+			err = fmt.Errorf("panic in yamux receive loop: %s", rerr)
+		}
+	}()
+	defer func() {
+		s.recvErr = err
+		close(s.recvDoneCh)
+	}()
+	var hdr header
+	for {
+		// fmt.Printf("ReadFull from %#v\n", s.reader)
+		// Read the header
+		if _, err := io.ReadFull(s.reader, hdr[:]); err != nil {
+			if err != io.EOF && !strings.Contains(err.Error(), "closed") && !strings.Contains(err.Error(), "reset by peer") {
+				s.logger.Printf("[ERR] yamux: Failed to read header: %v", err)
+			}
+			return err
+		}
+
+		// Reset the keepalive timer every time we receive data.
+		// There's no reason to keepalive if we're active. Worse, if the
+		// peer is busy sending us stuff, the pong might get stuck
+		// behind a bunch of data.
+		s.extendKeepalive()
+
+		// Verify the version
+		if hdr.Version() != protoVersion {
+			s.logger.Printf("[ERR] yamux: Invalid protocol version: %d", hdr.Version())
+			return ErrInvalidVersion
+		}
+
+		mt := hdr.MsgType()
+		if mt < typeData || mt > typeGoAway {
+			return ErrInvalidMsgType
+		}
+
+		if err := handlers[mt](s, hdr); err != nil {
+			return err
+		}
+	}
+}
+
+// handleStreamMessage handles either a data or window update frame
+func (s *Session) handleStreamMessage(hdr header) error {
+	// Check for a new stream creation
+	id := hdr.StreamID()
+	flags := hdr.Flags()
+	if flags&flagSYN == flagSYN {
+		if err := s.incomingStream(id); err != nil {
+			return err
+		}
+	}
+
+	// Get the stream
+	s.streamLock.Lock()
+	stream := s.streams[id]
+	s.streamLock.Unlock()
+
+	// If we do not have a stream, likely we sent a RST and/or closed the stream for reading.
+	if stream == nil {
+		// Drain any data on the wire
+		if hdr.MsgType() == typeData && hdr.Length() > 0 {
+			if _, err := io.CopyN(io.Discard, s.reader, int64(hdr.Length())); err != nil {
+				return nil
+			}
+		}
+		return nil
+	}
+
+	// Check if this is a window update
+	if hdr.MsgType() == typeWindowUpdate {
+		stream.incrSendWindow(hdr, flags)
+		return nil
+	}
+
+	// Read the new data
+	if err := stream.readData(hdr, flags, s.reader); err != nil {
+		if sendErr := s.sendMsg(s.goAway(goAwayProtoErr), nil, nil, false); sendErr != nil && sendErr != errSendLoopDone {
+			s.logger.Printf("[WARN] yamux: failed to send go away: %v", sendErr)
+		}
+		return err
+	}
+	return nil
+}
+
+// handlePing is invoked for a typePing frame
+func (s *Session) handlePing(hdr header) error {
+	flags := hdr.Flags()
+	pingID := hdr.Length()
+
+	// Check if this is a query, respond back in a separate context so we
+	// don't interfere with the receiving thread blocking for the write.
+	if flags&flagSYN == flagSYN {
+		select {
+		case s.pongCh <- pingID:
+		default:
+			s.logger.Printf("[WARN] yamux: dropped ping reply")
+		}
+		return nil
+	}
+
+	// Handle a response
+	s.pingLock.Lock()
+	// If we have an active ping, and this is a response to that active
+	// ping, complete the ping.
+	if s.activePing != nil && s.activePing.id == pingID {
+		// Don't assume that the peer won't send multiple responses for
+		// the same ping.
+		select {
+		case s.activePing.pingResponse <- struct{}{}:
+		default:
+		}
+	}
+	s.pingLock.Unlock()
+	return nil
+}
+
+// handleGoAway is invokde for a typeGoAway frame
+func (s *Session) handleGoAway(hdr header) error {
+	code := hdr.Length()
+	switch code {
+	case goAwayNormal:
+		return ErrRemoteGoAway
+	case goAwayProtoErr:
+		s.logger.Printf("[ERR] yamux: received protocol error go away")
+	case goAwayInternalErr:
+		s.logger.Printf("[ERR] yamux: received internal error go away")
+	default:
+		s.logger.Printf("[ERR] yamux: received go away with error code: %d", code)
+	}
+	return &GoAwayError{Remote: true, ErrorCode: code}
+}
+
+// incomingStream is used to create a new incoming stream
+func (s *Session) incomingStream(id uint32) error {
+	if s.client != (id%2 == 0) {
+		s.logger.Printf("[ERR] yamux: both endpoints are clients")
+		return fmt.Errorf("both yamux endpoints are clients")
+	}
+	// Reject immediately if we are doing a go away
+	if atomic.LoadInt32(&s.localGoAway) == 1 {
+		hdr := encode(typeWindowUpdate, flagRST, id, 0)
+		return s.sendMsg(hdr, nil, nil, false)
+	}
+
+	// Allocate a new stream
+	span, err := s.newMemoryManager()
+	if err != nil {
+		return fmt.Errorf("failed to create resource span: %w", err)
+	}
+	if err := span.ReserveMemory(initialStreamWindow, 255); err != nil {
+		return err
+	}
+	stream := newStream(s, id, streamSYNReceived, initialStreamWindow, span)
+
+	s.streamLock.Lock()
+	defer s.streamLock.Unlock()
+
+	// Check if stream already exists
+	if _, ok := s.streams[id]; ok {
+		s.logger.Printf("[ERR] yamux: duplicate stream declared")
+		if sendErr := s.sendMsg(s.goAway(goAwayProtoErr), nil, nil, false); sendErr != nil && sendErr != errSendLoopDone {
+			s.logger.Printf("[WARN] yamux: failed to send go away: %v", sendErr)
+		}
+		span.Done()
+		return ErrDuplicateStream
+	}
+
+	if s.numIncomingStreams >= s.config.MaxIncomingStreams {
+		// too many active streams at the same time
+		s.logger.Printf("[WARN] yamux: MaxIncomingStreams exceeded, forcing stream reset")
+		defer span.Done()
+		hdr := encode(typeWindowUpdate, flagRST, id, 0)
+		return s.sendMsg(hdr, nil, nil, false)
+	}
+
+	s.numIncomingStreams++
+	// Register the stream
+	s.streams[id] = stream
+
+	// Check if we've exceeded the backlog
+	select {
+	case s.acceptCh <- stream:
+		return nil
+	default:
+		// Backlog exceeded! RST the stream
+		defer span.Done()
+		s.logger.Printf("[WARN] yamux: backlog exceeded, forcing stream reset")
+		s.deleteStream(id)
+		hdr := encode(typeWindowUpdate, flagRST, id, 0)
+		return s.sendMsg(hdr, nil, nil, false)
+	}
+}
+
+// closeStream is used to close a stream once both sides have
+// issued a close. If there was an in-flight SYN and the stream
+// was not yet established, then this will give the credit back.
+func (s *Session) closeStream(id uint32) {
+	s.streamLock.Lock()
+	defer s.streamLock.Unlock()
+	if _, ok := s.inflight[id]; ok {
+		select {
+		case <-s.synCh:
+		default:
+			s.logger.Printf("[ERR] yamux: SYN tracking out of sync")
+		}
+		delete(s.inflight, id)
+	}
+	s.deleteStream(id)
+}
+
+func (s *Session) deleteStream(id uint32) {
+	str, ok := s.streams[id]
+	if !ok {
+		return
+	}
+	if s.client == (id%2 == 0) {
+		if s.numIncomingStreams == 0 {
+			s.logger.Printf("[ERR] yamux: numIncomingStreams underflow")
+			// prevent the creation of any new streams
+			s.numIncomingStreams = math.MaxUint32
+		} else {
+			s.numIncomingStreams--
+		}
+	}
+	delete(s.streams, id)
+	str.memorySpan.Done()
+}
+
+// establishStream is used to mark a stream that was in the
+// SYN Sent state as established.
+func (s *Session) establishStream(id uint32) {
+	s.streamLock.Lock()
+	if _, ok := s.inflight[id]; ok {
+		delete(s.inflight, id)
+	} else {
+		s.logger.Printf("[ERR] yamux: established stream without inflight SYN (no tracking entry)")
+	}
+	select {
+	case <-s.synCh:
+	default:
+		s.logger.Printf("[ERR] yamux: established stream without inflight SYN (didn't have semaphore)")
+	}
+	s.streamLock.Unlock()
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+session_norace_test.go - github.com/libp2p/go-yamux/v5
+//go:build !race
+
+package yamux
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"sync"
+	"testing"
+	"time"
+)
+
+func TestSession_PingOfDeath(t *testing.T) {
+	conf := testConfNoKeepAlive()
+	// This test is slow and can easily time out on writes on CI.
+	//
+	// In the future, we might want to prioritize ping-replies over even
+	// other control messages, but that seems like overkill for now.
+	conf.ConnectionWriteTimeout = 1 * time.Second
+	client, server := testClientServerConfig(conf)
+	defer client.Close()
+	defer server.Close()
+
+	count := 10000
+
+	var wg sync.WaitGroup
+	begin := make(chan struct{})
+	for i := 0; i < count; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-begin
+			if _, err := server.Ping(); err != nil {
+				t.Error(err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			<-begin
+			if _, err := client.Ping(); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	close(begin)
+	wg.Wait()
+}
+
+func TestSendData_VeryLarge(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	var n int64 = 1 * 1024 * 1024 * 1024
+	var workers int = 16
+
+	wg := &sync.WaitGroup{}
+	wg.Add(workers * 2)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			stream, err := server.AcceptStream()
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			defer stream.Close()
+
+			buf := make([]byte, 4)
+			_, err = io.ReadFull(stream, buf)
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if !bytes.Equal(buf, []byte{0, 1, 2, 3}) {
+				t.Errorf("bad header")
+				return
+			}
+
+			recv, err := io.Copy(io.Discard, stream)
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if recv != n {
+				t.Errorf("bad: %v", recv)
+				return
+			}
+		}()
+	}
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			stream, err := client.Open(context.Background())
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			defer stream.Close()
+
+			_, err = stream.Write([]byte{0, 1, 2, 3})
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+
+			unlimited := &UnlimitedReader{}
+			sent, err := io.Copy(stream, io.LimitReader(unlimited, n))
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if sent != n {
+				t.Errorf("bad: %v", sent)
+				return
+			}
+		}()
+	}
+
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+	select {
+	case <-doneCh:
+	case <-time.After(20 * time.Second):
+		server.Close()
+		client.Close()
+		wg.Wait()
+		t.Fatal("timeout")
+	}
+}
+
+func TestLargeWindow(t *testing.T) {
+	conf := DefaultConfig()
+	conf.MaxStreamWindowSize *= 2
+
+	client, server := testClientServerConfig(conf)
+	defer client.Close()
+	defer server.Close()
+
+	stream, err := client.Open(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream.Close()
+
+	stream2, err := server.Accept()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream2.Close()
+
+	err = stream.SetWriteDeadline(time.Now().Add(10 * time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, initialStreamWindow)
+	n, err := stream.Write(buf)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if n != len(buf) {
+		t.Fatalf("short write: %d", n)
+	}
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+session_test.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"math/rand"
+	"net"
+	"reflect"
+	"runtime"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+type logCapture struct{ bytes.Buffer }
+
+func (l *logCapture) logs() []string {
+	lines := strings.Split(strings.TrimSpace(l.String()), "\n")
+	for i, line := range lines {
+		// trim leading date.
+		split := strings.SplitN(line, " ", 3)
+		lines[i] = split[2]
+	}
+	return lines
+}
+
+func (l *logCapture) match(expect []string) bool {
+	return reflect.DeepEqual(l.logs(), expect)
+}
+
+type pipeConn struct {
+	net.Conn
+	writeDeadline pipeDeadline
+	writeBlocker  chan struct{}
+	closeCh       chan struct{}
+	closeOnce     sync.Once
+	closeErr      error
+}
+
+func (p *pipeConn) SetDeadline(t time.Time) error {
+	p.writeDeadline.set(t)
+	return p.Conn.SetDeadline(t)
+}
+
+func (p *pipeConn) SetWriteDeadline(t time.Time) error {
+	p.writeDeadline.set(t)
+	return p.Conn.SetWriteDeadline(t)
+}
+
+func (p *pipeConn) Write(b []byte) (int, error) {
+	select {
+	case p.writeBlocker <- struct{}{}:
+	case <-p.writeDeadline.wait():
+		return 0, ErrTimeout
+	case <-p.closeCh:
+		return 0, io.ErrClosedPipe
+	}
+	n, err := p.Conn.Write(b)
+	<-p.writeBlocker
+	return n, err
+}
+
+func (p *pipeConn) Close() error {
+	p.closeOnce.Do(func() {
+		p.writeDeadline.set(time.Time{})
+		p.closeErr = p.Conn.Close()
+		close(p.closeCh)
+	})
+	return p.closeErr
+}
+
+func (p *pipeConn) BlockWrites() {
+	p.writeBlocker <- struct{}{}
+}
+
+func (p *pipeConn) UnblockWrites() {
+	<-p.writeBlocker
+}
+
+func testConn() (conn1, conn2 net.Conn) {
+	c1, c2 := net.Pipe()
+	conn1 = &pipeConn{
+		Conn:          c1,
+		writeDeadline: makePipeDeadline(),
+		writeBlocker:  make(chan struct{}, 1),
+		closeCh:       make(chan struct{}, 1),
+	}
+	conn2 = &pipeConn{
+		Conn:          c2,
+		writeDeadline: makePipeDeadline(),
+		writeBlocker:  make(chan struct{}, 1),
+		closeCh:       make(chan struct{}, 1),
+	}
+	return conn1, conn2
+}
+
+func testConf() *Config {
+	conf := DefaultConfig()
+	conf.AcceptBacklog = 64
+	conf.KeepAliveInterval = 100 * time.Millisecond
+	conf.ConnectionWriteTimeout = 350 * time.Millisecond
+	return conf
+}
+
+func testConfNoKeepAlive() *Config {
+	conf := testConf()
+	conf.EnableKeepAlive = false
+	return conf
+}
+
+func testClientServer() (*Session, *Session) {
+	return testClientServerConfig(testConf())
+}
+
+func testClientServerConfig(conf *Config) (*Session, *Session) {
+	conn1, conn2 := testConn()
+	client, _ := Client(conn1, conf, nil)
+	server, _ := Server(conn2, conf, nil)
+	return client, server
+}
+
+func TestClientClient(t *testing.T) {
+	conf := testConf()
+	conn1, conn2 := testConn()
+	client1, _ := Client(conn1, conf, nil)
+	client2, _ := Client(conn2, conf, nil)
+	defer client1.Close()
+	defer client2.Close()
+
+	_, _ = client1.OpenStream(context.Background())
+	_, err := client2.AcceptStream()
+	if err == nil {
+		t.Fatalf("should have failed to open a stream with two clients")
+	}
+	_, _ = client2.OpenStream(context.Background())
+	_, err = client1.AcceptStream()
+	if err == nil {
+		t.Fatalf("should have failed to open a stream with two clients")
+	}
+	if !client1.IsClosed() || !client2.IsClosed() {
+		t.Fatalf("sessions should have been closed by errors")
+	}
+}
+
+func TestServerServer(t *testing.T) {
+	conf := testConf()
+	conn1, conn2 := testConn()
+	server1, _ := Server(conn1, conf, nil)
+	server2, _ := Server(conn2, conf, nil)
+	defer server1.Close()
+	defer server2.Close()
+
+	_, _ = server1.OpenStream(context.Background())
+	_, err := server2.AcceptStream()
+	if err == nil {
+		t.Fatalf("should have failed to open a stream with two servers")
+	}
+	_, _ = server2.OpenStream(context.Background())
+	_, err = server1.AcceptStream()
+	if err == nil {
+		t.Fatalf("should have failed to open a stream with two servers")
+	}
+	if !server1.IsClosed() || !server2.IsClosed() {
+		t.Fatalf("sessions should have been closed by errors")
+	}
+}
+
+func TestOpenStreamTimeout(t *testing.T) {
+	const limit = 7
+	cfg := testConf()
+	cfg.AcceptBacklog = limit
+	client, _ := testClientServerConfig(cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for i := 0; i < limit; i++ {
+		if _, err := client.OpenStream(ctx); err != nil {
+			t.Fatalf("didn't expect OpenStream to fail %s", err.Error())
+		}
+	}
+	if _, err := client.OpenStream(ctx); err != context.DeadlineExceeded {
+		t.Fatal("expected OpenStream to run into the deadline")
+	}
+}
+
+func TestStreamAfterShutdown(t *testing.T) {
+	do := func(cb func(s *Stream)) {
+		var wg sync.WaitGroup
+		client, server := testClientServer()
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			s, err := client.OpenStream(context.Background())
+			if err == nil {
+				cb(s)
+				_ = s.Reset()
+			}
+			client.Close()
+		}()
+		go func() {
+			defer wg.Done()
+			server.Close()
+		}()
+		wg.Wait()
+	}
+	// test reset
+	for i := 0; i < 100; i++ {
+		do(func(s *Stream) {})
+	}
+	// test close
+	for i := 0; i < 100; i++ {
+		do(func(s *Stream) {
+			s.Close()
+		})
+	}
+
+	// test write
+	for i := 0; i < 100; i++ {
+		do(func(s *Stream) {
+			_, _ = s.Write([]byte{10})
+		})
+	}
+
+	// test read
+	for i := 0; i < 100; i++ {
+		do(func(s *Stream) {
+			_, _ = s.Read([]byte{10})
+		})
+	}
+}
+
+func TestPing(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	clientConn := client.conn.(*pipeConn)
+	time.Sleep(time.Millisecond)
+
+	clientConn.BlockWrites()
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		clientConn.UnblockWrites()
+	}()
+
+	rtt, err := client.Ping()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if rtt == 0 {
+		t.Fatalf("bad: %v", rtt)
+	}
+
+	clientConn.BlockWrites()
+	go func() {
+		time.Sleep(time.Millisecond)
+		clientConn.UnblockWrites()
+	}()
+
+	rtt, err = server.Ping()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if rtt == 0 {
+		t.Fatalf("bad: %v", rtt)
+	}
+}
+
+func TestCloseBeforeAck(t *testing.T) {
+	cfg := testConf()
+	cfg.AcceptBacklog = 8
+	client, server := testClientServerConfig(cfg)
+
+	defer client.Close()
+	defer server.Close()
+
+	for i := 0; i < 8; i++ {
+		s, err := client.OpenStream(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+	}
+
+	for i := 0; i < 8; i++ {
+		s, err := server.AcceptStream()
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s, err := client.OpenStream(context.Background())
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		s.Close()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second * 5):
+		client.Close()
+		server.Close()
+		<-done
+		t.Fatal("timed out trying to open stream")
+	}
+}
+
+func TestAccept(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	if client.NumStreams() != 0 {
+		t.Fatalf("bad")
+	}
+	if server.NumStreams() != 0 {
+		t.Fatalf("bad")
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(4)
+
+	go func() {
+		defer wg.Done()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		if id := stream.StreamID(); id != 1 {
+			t.Errorf("bad: %v", id)
+			return
+		}
+		if err := stream.Close(); err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		stream, err := client.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		if id := stream.StreamID(); id != 2 {
+			t.Errorf("bad: %v", id)
+			return
+		}
+		if err := stream.Close(); err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		stream, err := server.OpenStream(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		if id := stream.StreamID(); id != 2 {
+			t.Errorf("bad: %v", id)
+			return
+		}
+		if err := stream.Close(); err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		stream, err := client.OpenStream(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		if id := stream.StreamID(); id != 1 {
+			t.Errorf("bad: %v", id)
+			return
+		}
+		if err := stream.Close(); err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+	}()
+
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+
+	select {
+	case <-doneCh:
+	case <-time.After(time.Second):
+		server.Close()
+		client.Close()
+		wg.Wait()
+		t.Fatal("timeout")
+	}
+}
+
+func TestNonNilInterface(t *testing.T) {
+	_, server := testClientServer()
+	server.Close()
+
+	conn, err := server.Accept()
+	if err != nil && conn != nil {
+		t.Error("bad: accept should return a connection of nil value")
+	}
+
+	conn, err = server.Open(context.Background())
+	if err != nil && conn != nil {
+		t.Error("bad: open should return a connection of nil value")
+	}
+}
+
+func TestSendData_Small(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		defer stream.Close()
+
+		if server.NumStreams() != 1 {
+			t.Errorf("bad")
+			return
+		}
+
+		buf := make([]byte, 4)
+		for i := 0; i < 1000; i++ {
+			n, err := stream.Read(buf)
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n != 4 {
+				t.Errorf("short read: %d", n)
+				return
+			}
+			if string(buf) != "test" {
+				t.Errorf("bad: %s", buf)
+				return
+			}
+		}
+
+		if err := stream.CloseWrite(); err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		n, err := stream.Read([]byte{0})
+		if n != 0 || err != io.EOF {
+			t.Errorf("err: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		stream, err := client.OpenStream(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		defer stream.Close()
+
+		if client.NumStreams() != 1 {
+			t.Errorf("bad")
+			return
+		}
+
+		for i := 0; i < 1000; i++ {
+			n, err := stream.Write([]byte("test"))
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n != 4 {
+				t.Errorf("short write %d", n)
+				return
+			}
+		}
+
+		if err := stream.CloseWrite(); err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		n, err := stream.Read([]byte{0})
+		if n != 0 || err != io.EOF {
+			t.Errorf("err: %v", err)
+		}
+	}()
+
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+	select {
+	case <-doneCh:
+	case <-time.After(time.Second):
+		client.Close()
+		server.Close()
+		wg.Wait()
+		t.Fatal("timeout")
+	}
+
+	if client.NumStreams() != 0 {
+		t.Fatalf("bad")
+	}
+	if server.NumStreams() != 0 {
+		t.Fatalf("bad")
+	}
+}
+
+func TestSendData_Large(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	const (
+		sendSize = 250 * 1024 * 1024
+		recvSize = 4 * 1024
+	)
+
+	data := make([]byte, sendSize)
+	for idx := range data {
+		data[idx] = byte(idx % 256)
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+
+		var sz int
+		buf := make([]byte, recvSize)
+		for i := 0; i < sendSize/recvSize; i++ {
+			n, err := io.ReadFull(stream, buf)
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n != recvSize {
+				t.Errorf("short read: %d", n)
+				return
+			}
+			sz += n
+			for idx := range buf {
+				if buf[idx] != byte(idx%256) {
+					t.Errorf("bad: %v %v %v", i, idx, buf[idx])
+					return
+				}
+			}
+		}
+
+		if err := stream.Close(); err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		stream, err := client.Open(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+
+		n, err := stream.Write(data)
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		if n != len(data) {
+			t.Errorf("short write %d", n)
+			return
+		}
+
+		if err := stream.Close(); err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+	}()
+
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+	select {
+	case <-doneCh:
+	case <-time.After(20 * time.Second):
+		client.Close()
+		server.Close()
+		wg.Wait()
+		t.Fatal("timeout")
+	}
+}
+
+func TestGoAway(t *testing.T) {
+	// This test is noisy.
+	conf := testConf()
+	conf.LogOutput = io.Discard
+
+	client, server := testClientServerConfig(conf)
+	defer client.Close()
+	defer server.Close()
+
+	if err := server.GoAway(); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	for i := 0; i < 100; i++ {
+		s, err := client.Open(context.Background())
+		if err == nil {
+			s.Close()
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		if err != ErrRemoteGoAway {
+			t.Fatalf("expected %s, got %s", ErrRemoteGoAway, err)
+		} else {
+			return
+		}
+	}
+	t.Fatalf("expected GoAway error")
+}
+
+func TestCloseWithError(t *testing.T) {
+	// This test is noisy.
+	conf := testConf()
+	conf.LogOutput = io.Discard
+
+	client, server := testClientServerConfig(conf)
+	defer client.Close()
+	defer server.Close()
+
+	if err := server.CloseWithError(42); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	for i := 0; i < 100; i++ {
+		s, err := client.Open(context.Background())
+		if err == nil {
+			s.Close()
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		if !errors.Is(err, &GoAwayError{ErrorCode: 42, Remote: true}) {
+			t.Fatalf("err: %v", err)
+		}
+		return
+	}
+	t.Fatalf("expected GoAway error")
+}
+
+func TestManyStreams(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	wg := &sync.WaitGroup{}
+
+	acceptor := func(i int) {
+		defer wg.Done()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		defer stream.Close()
+
+		buf := make([]byte, 512)
+		for {
+			n, err := stream.Read(buf)
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n == 0 {
+				t.Errorf("err: %v", err)
+				return
+			}
+		}
+	}
+	sender := func(i int) {
+		defer wg.Done()
+		stream, err := client.Open(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		defer stream.Close()
+
+		msg := fmt.Sprintf("%08d", i)
+		for i := 0; i < 1000; i++ {
+			n, err := stream.Write([]byte(msg))
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n != len(msg) {
+				t.Errorf("short write %d", n)
+				return
+			}
+		}
+	}
+
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go acceptor(i)
+		go sender(i)
+	}
+
+	wg.Wait()
+}
+
+func TestManyStreams_PingPong(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	wg := &sync.WaitGroup{}
+
+	ping := []byte("ping")
+	pong := []byte("pong")
+
+	acceptor := func(i int) {
+		defer wg.Done()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		defer stream.Close()
+
+		buf := make([]byte, 4)
+		for {
+			// Read the 'ping'
+			n, err := io.ReadFull(stream, buf)
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n != 4 {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if !bytes.Equal(buf, ping) {
+				t.Errorf("bad: %s", buf)
+				return
+			}
+
+			// Write out the 'pong'
+			n, err = stream.Write(pong)
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n != 4 {
+				t.Errorf("err: %v", err)
+				return
+			}
+		}
+	}
+	sender := func(i int) {
+		defer wg.Done()
+		stream, err := client.OpenStream(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		defer stream.Close()
+
+		buf := make([]byte, 4)
+		for i := 0; i < 1000; i++ {
+			// Send the 'ping'
+			n, err := stream.Write(ping)
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n != 4 {
+				t.Errorf("short write %d", n)
+				return
+			}
+
+			// Read the 'pong'
+			n, err = io.ReadFull(stream, buf)
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if n != 4 {
+				t.Errorf("err: %v", err)
+				return
+			}
+			if !bytes.Equal(buf, pong) {
+				t.Errorf("bad: %s", buf)
+				return
+			}
+		}
+	}
+
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go acceptor(i)
+		go sender(i)
+	}
+
+	wg.Wait()
+}
+
+func TestCloseRead(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	stream, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if _, err = stream.Write([]byte("a")); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	stream2, err := server.AcceptStream()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	stream2.CloseRead()
+
+	buf := make([]byte, 4)
+	n, err := stream2.Read(buf)
+	if n != 0 || err == nil {
+		t.Fatalf("read after close: %d %s", n, err)
+	}
+}
+
+func TestHalfClose(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	stream, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if _, err = stream.Write([]byte("a")); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	stream2, err := server.AcceptStream()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	stream2.CloseWrite() // Half close
+
+	buf := make([]byte, 4)
+	n, err := io.ReadAtLeast(stream2, buf, 1)
+	if err != nil && err != io.EOF {
+		t.Fatalf("err: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("bad: %v", n)
+	}
+
+	// Send more
+	if _, err = stream.Write([]byte("bcd")); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	stream.CloseWrite()
+
+	// write after close
+	n, err = stream.Write([]byte("foobar"))
+	if n != 0 || err == nil {
+		t.Fatalf("wrote after close: %d %s", n, err)
+	}
+
+	// Read after close
+	n, err = io.ReadAtLeast(stream2, buf, 3)
+	if err != nil && err != io.EOF {
+		t.Fatalf("err: %v", err)
+	}
+	if n != 3 {
+		t.Fatalf("bad: %v", n)
+	}
+
+	// EOF after close
+	n, err = stream2.Read(buf)
+	if err != io.EOF {
+		t.Fatalf("err: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("bad: %v", n)
+	}
+}
+
+func TestReadDeadline(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	stream, err := client.Open(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream.Close()
+
+	stream2, err := server.Accept()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream2.Close()
+
+	if err := stream.SetReadDeadline(time.Now().Add(5 * time.Millisecond)); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	buf := make([]byte, 4)
+	if _, err := stream.Read(buf); err != ErrTimeout {
+		t.Fatalf("err: %v", err)
+	}
+}
+
+func TestWriteDeadlineWindowFull(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	stream, err := client.Open(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream.Close()
+
+	stream2, err := server.Accept()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream2.Close()
+
+	if err := stream.SetWriteDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	buf := make([]byte, 512)
+	for i := 0; i < int(initialStreamWindow); i++ {
+		_, err := stream.Write(buf)
+		if err != nil && err == ErrTimeout {
+			return
+		} else if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+	}
+	t.Fatalf("Expected timeout")
+}
+
+func TestBacklogExceeded(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	// Fill the backlog
+	max := client.config.AcceptBacklog
+	for i := 0; i < max; i++ {
+		stream, err := client.Open(context.Background())
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		defer stream.Close()
+
+		if _, err := stream.Write([]byte("foo")); err != nil {
+			t.Fatalf("err: %v", err)
+		}
+	}
+
+	// Attempt to open a new stream
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := client.Open(context.Background())
+		errCh <- err
+	}()
+
+	// Shutdown the server
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		server.Close()
+	}()
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatalf("open should fail")
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("timeout")
+	}
+}
+
+func TestKeepAlive(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	// Ping value should increase
+	require.Eventually(t, func() bool {
+		client.pingLock.Lock()
+		defer client.pingLock.Unlock()
+		return client.pingID > 0
+	}, time.Second, 50*time.Millisecond, "should ping")
+
+	require.Eventually(t, func() bool {
+		server.pingLock.Lock()
+		defer server.pingLock.Unlock()
+		return server.pingID > 0
+	}, time.Second, 50*time.Millisecond, "should ping")
+}
+
+func TestKeepAlive_Timeout(t *testing.T) {
+	conn1, conn2 := testConn()
+
+	clientConf := testConf()
+	clientConf.ConnectionWriteTimeout = time.Hour // We're testing keep alives, not connection writes
+	clientConf.EnableKeepAlive = false            // Just test one direction, so it's deterministic who hangs up on whom
+	client, _ := Client(conn1, clientConf, nil)
+	defer client.Close()
+
+	serverLogs := new(logCapture)
+	serverConf := testConf()
+	serverConf.LogOutput = serverLogs
+
+	server, _ := Server(conn2, serverConf, nil)
+	defer server.Close()
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := server.Accept() // Wait until server closes
+		errCh <- err
+	}()
+
+	// Prevent the client from responding
+	clientConn := client.conn.(*pipeConn)
+	clientConn.BlockWrites()
+	defer clientConn.UnblockWrites()
+
+	select {
+	case err := <-errCh:
+		if err != ErrKeepAliveTimeout {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("timeout waiting for timeout")
+	}
+
+	if !server.IsClosed() {
+		t.Fatalf("server should have closed")
+	}
+
+	if !serverLogs.match([]string{"[ERR] yamux: keepalive failed: i/o deadline reached"}) {
+		t.Fatalf("server log incorect: %v", serverLogs.logs())
+	}
+}
+
+type UnlimitedReader struct{}
+
+func (u *UnlimitedReader) Read(p []byte) (int, error) {
+	runtime.Gosched()
+	return len(p), nil
+}
+
+func TestBacklogExceeded_Accept(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+
+	max := 5 * client.config.AcceptBacklog
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer server.Close()
+		for i := 0; i < max; i++ {
+			stream, err := server.Accept()
+			if err != nil {
+				t.Errorf("err: %v", err)
+				return
+			}
+			defer stream.Close()
+		}
+	}()
+
+	// Fill the backlog
+	for i := 0; i < max; i++ {
+		stream, err := client.Open(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+		}
+		defer stream.Close()
+
+		if _, err := stream.Write([]byte("foo")); err != nil {
+			t.Errorf("err: %v", err)
+		}
+	}
+	<-done
+}
+
+func TestSession_WindowUpdateWriteDuringRead(t *testing.T) {
+	client, server := testClientServerConfig(testConfNoKeepAlive())
+	defer client.Close()
+	defer server.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Choose a huge flood size that we know will result in a window update.
+	flood := int64(client.config.MaxStreamWindowSize) + 1
+
+	sync := make(chan struct{})
+
+	// The server will accept a new stream and then flood data to it.
+	go func() {
+		defer wg.Done()
+
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			server.Close()
+			return
+		}
+		defer stream.Close()
+
+		<-sync
+		sync <- struct{}{}
+
+		_, err = stream.Write(make([]byte, flood))
+		if err == nil {
+			t.Errorf("expected write to fail due to no window update")
+			return
+		}
+	}()
+
+	// The client will open a stream, block outbound writes, and then
+	// listen to the flood from the server, which should time out since
+	// it won't be able to send the window update.
+	go func() {
+		defer wg.Done()
+
+		stream, err := client.OpenStream(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+			server.Close()
+			return
+		}
+		defer stream.Close()
+
+		sync <- struct{}{}
+		conn := client.conn.(*pipeConn)
+		conn.BlockWrites()
+		<-sync
+
+		_, err = io.ReadFull(stream, make([]byte, flood))
+		if err == nil {
+			t.Errorf("expected read to fail")
+		}
+	}()
+
+	wg.Wait()
+}
+
+func TestSession_PartialReadWindowUpdate(t *testing.T) {
+	client, server := testClientServerConfig(testConfNoKeepAlive())
+	defer client.Close()
+	defer server.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Choose a huge flood size that we know will result in a window update.
+	flood := int64(initialStreamWindow)
+	var wr *Stream
+
+	// The server will accept a new stream and then flood data to it.
+	go func() {
+		defer wg.Done()
+
+		var err error
+		wr, err = server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+
+		sendWindow := atomic.LoadUint32(&wr.sendWindow)
+		if sendWindow != initialStreamWindow {
+			t.Errorf("sendWindow: exp=%d, got=%d", initialStreamWindow, sendWindow)
+		}
+
+		n, err := wr.Write(make([]byte, flood))
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		if int64(n) != flood {
+			t.Errorf("short write: %d", n)
+			return
+		}
+		sendWindow = atomic.LoadUint32(&wr.sendWindow)
+		if sendWindow != 0 {
+			t.Errorf("sendWindow: exp=%d, got=%d", 0, sendWindow)
+			return
+		}
+	}()
+
+	stream, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream.Close()
+
+	wg.Wait()
+
+	_, err = io.ReadFull(stream, make([]byte, flood/2))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var (
+		expWithoutWindowIncrease = uint32(flood / 2)
+		expWithWindowIncrease    = uint32(flood)
+		sendWindow               uint32
+	)
+
+	// This test is racy. Wait a short period, then longer and longer. At
+	// most ~1s.
+	for i := 1; i < 15; i++ {
+		time.Sleep(time.Duration(i*i) * time.Millisecond)
+		sendWindow = atomic.LoadUint32(&wr.sendWindow)
+		if sendWindow == expWithoutWindowIncrease || sendWindow == expWithWindowIncrease {
+			return
+		}
+	}
+	t.Errorf("sendWindow: exp=%d or %d, got=%d", expWithoutWindowIncrease, expWithWindowIncrease, sendWindow)
+}
+
+// func TestSession_WindowAutoSizing(t *testing.T) {
+// 	const initialWindow uint32 = 10
+// 	conf := testConfNoKeepAlive()
+// 	conf.InitialStreamWindowSize = initialWindow
+// 	client, server := testClientServerConfig(conf)
+// 	defer client.Close()
+// 	defer server.Close()
+
+// 	receiveAndConsume := func(str *Stream, size uint32) {
+// 		if _, err := str.Read(make([]byte, size)); err != nil {
+// 			t.Fatal(err)
+// 		}
+// 	}
+
+// 	clientStr, err := client.OpenStream(context.Background())
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	serverStr, err := server.AcceptStream()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+
+// 	const rtt = 20 * time.Millisecond
+// 	t.Run("finding the window size", func(t *testing.T) {
+// 		// Consume a maximum of 1234 bytes per RTT.
+// 		// We expect the window to be scaled such that we send one update every 2 RTTs.
+// 		go func() {
+// 			for {
+// 				serverStr.Write(make([]byte, 100))
+// 			}
+// 		}()
+
+// 		var counter int
+// 		ticker := time.NewTicker(rtt)
+// 		for range ticker.C {
+// 			receiveAndConsume(clientStr, 1234)
+// 			counter++
+// 			if counter > 25 {
+// 				break
+// 			}
+// 		}
+// 		fmt.Println(clientStr.recvWindow)
+// 	})
+// 	// t.Run("capping the window size", func(t *testing.T) {
+// 	// 	const maxWindow = 78 * initialWindow
+// 	// 	buf := newSegmentedBuffer(initialWindow, maxWindow, func() time.Duration { return rtt })
+// 	// 	start := time.Now()
+// 	// 	// Consume a maximum of 1234 bytes per RTT.
+// 	// 	// We expect the window to be scaled such that we send one update every 2 RTTs.
+// 	// 	now := start
+// 	// 	delta := initialWindow
+// 	// 	for i := 0; i < 100; i++ {
+// 	// 		now = now.Add(rtt)
+// 	// 		receiveAndConsume(&buf, delta)
+// 	// 		grow, d := buf.GrowTo(false, now)
+// 	// 		if grow {
+// 	// 			delta = d
+// 	// 		}
+// 	// 	}
+// 	// 	if buf.windowSize != maxWindow {
+// 	// 		t.Fatalf("expected the window size to be at max (%d), got %d", maxWindow, buf.windowSize)
+// 	// 	}
+// 	// })
+// }
+
+func TestSession_sendMsg_Timeout(t *testing.T) {
+	client, server := testClientServerConfig(testConfNoKeepAlive())
+	defer client.Close()
+	defer server.Close()
+
+	conn := client.conn.(*pipeConn)
+	conn.BlockWrites()
+
+	hdr := encode(typePing, flagACK, 0, 0)
+	for {
+		err := client.sendMsg(hdr, nil, nil, true)
+		if err == nil {
+			continue
+		} else if err == ErrConnectionWriteTimeout {
+			break
+		} else {
+			t.Fatalf("err: %v", err)
+		}
+	}
+}
+
+func TestWindowOverflow(t *testing.T) {
+	// Ensures:
+	//
+	// 1. We don't accept a message that's too big.
+	// 2. We unlock after resetting the stream.
+	for i := uint32(1); i < 100; i += 2 {
+		func() {
+			client, server := testClientServerConfig(testConfNoKeepAlive())
+			defer client.Close()
+			defer server.Close()
+
+			hdr1 := encode(typeData, flagSYN, i, 0)
+			_ = client.sendMsg(hdr1, nil, nil, true)
+			s, err := server.AcceptStream()
+			if err != nil {
+				t.Fatal(err)
+			}
+			msg := make([]byte, client.config.MaxStreamWindowSize*2)
+			hdr2 := encode(typeData, 0, i, uint32(len(msg)))
+			_ = client.sendMsg(hdr2, msg, nil, true)
+			_, err = io.ReadAll(s)
+			if err == nil {
+				t.Fatal("expected to read no data")
+			}
+		}()
+	}
+}
+
+func TestSession_ConnectionWriteTimeout(t *testing.T) {
+	client, server := testClientServerConfig(testConfNoKeepAlive())
+	defer client.Close()
+	defer server.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	sync := make(chan struct{})
+
+	go func() {
+		defer wg.Done()
+
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+
+		<-sync
+		sync <- struct{}{}
+
+		defer stream.Close()
+	}()
+
+	// The client will open the stream and then block outbound writes, we'll
+	// tee up a write and make sure it eventually times out.
+	go func() {
+		defer wg.Done()
+
+		stream, err := client.OpenStream(context.Background())
+		if err != nil {
+			t.Errorf("err: %v", err)
+			return
+		}
+		defer stream.Close()
+
+		sync <- struct{}{}
+		conn := client.conn.(*pipeConn)
+		conn.BlockWrites()
+		<-sync
+
+		// Fill up the write queue and wait for the write to timeout.
+		for {
+			_, err := stream.Write([]byte("hello"))
+			if err == nil {
+				continue
+			} else if err == ErrConnectionWriteTimeout {
+				break
+			} else {
+				t.Errorf("err: %v", err)
+				return
+			}
+		}
+	}()
+
+	wg.Wait()
+}
+
+func TestStreamResetWrite(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	wait := make(chan struct{})
+	go func() {
+		defer close(wait)
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Errorf("err: %v", err)
+		}
+
+		time.Sleep(time.Millisecond * 50)
+
+		_, err = stream.Write([]byte("foo"))
+		if err == nil {
+			t.Errorf("should have failed to write")
+		}
+	}()
+
+	stream, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	err = stream.Reset()
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-wait
+}
+
+// Because reads should succeed after closing the stream.
+func TestStreamHalfClose2(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	wait := make(chan struct{})
+
+	go func() {
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Error(err)
+		}
+		<-wait
+		_, err = stream.Write([]byte("asdf"))
+		if err != nil {
+			t.Error(err)
+		}
+		stream.Close()
+		wait <- struct{}{}
+	}()
+
+	stream, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Error(err)
+	}
+	defer stream.Close()
+
+	stream.CloseWrite()
+	wait <- struct{}{}
+
+	buf, err := io.ReadAll(stream)
+	if err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(buf, []byte("asdf")) {
+		t.Fatalf("didn't get expected data")
+	}
+	<-wait
+}
+
+func TestStreamResetRead(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	wc := new(sync.WaitGroup)
+	wc.Add(2)
+	go func() {
+		defer wc.Done()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Error(err)
+		}
+
+		_, err = io.ReadAll(stream)
+		if err == nil {
+			t.Errorf("expected reset")
+		}
+	}()
+
+	stream, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Error(err)
+	}
+
+	go func() {
+		defer wc.Done()
+
+		_, err := io.ReadAll(stream)
+		if err == nil {
+			t.Errorf("expected reset")
+		}
+	}()
+
+	time.Sleep(1 * time.Second)
+	err = stream.Reset()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wc.Wait()
+}
+
+func TestStreamResetWithError(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	wc := new(sync.WaitGroup)
+	wc.Add(1)
+	go func() {
+		defer wc.Done()
+		stream, err := server.AcceptStream()
+		if err != nil {
+			t.Error(err)
+		}
+
+		se := &StreamError{}
+		_, err = io.ReadAll(stream)
+		if !errors.As(err, &se) {
+			t.Errorf("expected StreamError, got type:%T, err: %s", err, err)
+			return
+		}
+		expected := &StreamError{Remote: true, ErrorCode: 42}
+		assert.Equal(t, se, expected)
+	}()
+
+	stream, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Error(err)
+	}
+
+	time.Sleep(1 * time.Second)
+	err = stream.ResetWithError(42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	se := &StreamError{}
+	_, err = io.ReadAll(stream)
+	if !errors.As(err, &se) {
+		t.Errorf("expected StreamError, got type:%T, err: %s", err, err)
+		return
+	}
+	expected := &StreamError{Remote: false, ErrorCode: 42}
+	assert.Equal(t, se, expected)
+	wc.Wait()
+}
+
+func TestLotsOfWritesWithStreamDeadline(t *testing.T) {
+	config := testConf()
+	config.EnableKeepAlive = false
+
+	client, server := testClientServerConfig(config)
+	defer client.Close()
+	defer server.Close()
+
+	waitCh := make(chan struct{})
+	doneCh := make(chan struct{})
+
+	// Server side accepts two streams. The first one is the clogger.
+	go func() {
+		defer close(doneCh)
+		_, err := server.AcceptStream()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		stream2, err := server.AcceptStream()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		waitCh <- struct{}{}
+
+		// Wait until all writes have timed out on the client.
+		<-waitCh
+
+		// stream2 should've received no messages, as they all expired in the buffer.
+		err = stream2.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if b, err := io.ReadAll(stream2); len(b) != 0 || err != ErrTimeout {
+			t.Errorf("writes from the client should've expired; got: %v, bytes: %v", err, b)
+			return
+		}
+	}()
+
+	// stream1 is the clogger.
+	stream1, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// all writes on stream2 will time out.
+	stream2, err := client.OpenStream(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream2.Reset() // nolint
+
+	// wait for the server to accept the streams.
+	<-waitCh
+
+	clientConn := client.conn.(*pipeConn)
+	clientConn.BlockWrites()
+
+	// Send a clogging write on stream1.
+	go func() {
+		err := stream1.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_, _ = stream1.Write([]byte{100})
+	}()
+
+	// Keep writing till we fill the buffer and timeout.
+	var wg sync.WaitGroup
+	err = stream2.SetWriteDeadline(time.Now().Add(100 * time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		_, err := stream2.Write([]byte("foobar"))
+		if err == nil {
+			continue
+		} else if err == ErrTimeout {
+			break
+		} else {
+			t.Errorf("expected stream timeout error, got: %v", err)
+			break
+		}
+	}
+
+	// All writes completed and timed out; notify the server.
+	wg.Wait()
+	select {
+	case waitCh <- struct{}{}:
+	default:
+	}
+	<-doneCh
+}
+
+func TestReadDeadlineInterrupt(t *testing.T) {
+	client, server := testClientServer()
+	defer client.Close()
+	defer server.Close()
+
+	stream, err := client.Open(context.Background())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream.Close()
+
+	stream2, err := server.Accept()
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	defer stream2.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		buf := make([]byte, 4)
+		if _, err := stream.Read(buf); err != ErrTimeout {
+			t.Errorf("err: %v", err)
+			return
+		}
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("read shouldn't have finished")
+	case <-time.After(5 * time.Millisecond):
+	}
+
+	if err := stream.SetReadDeadline(time.Now().Add(5 * time.Millisecond)); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("read should have finished")
+	}
+
+	for i := 0; i < 5; i++ {
+		buf := make([]byte, 4)
+		if _, err := stream.Read(buf); err != ErrTimeout {
+			t.Fatalf("err: %v", err)
+		}
+	}
+}
+
+// Make sure that a transfer doesn't stall, no matter what values the peers use for their InitialStreamWindow.
+func TestInitialStreamWindow(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		const (
+			maxWindow    = 5 * initialStreamWindow
+			transferSize = 10 * maxWindow
+		)
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		randomUint32 := func(min, max uint32) uint32 { return uint32(r.Int63n(int64(max-min))) + min }
+
+		cconf := DefaultConfig()
+		cconf.InitialStreamWindowSize = randomUint32(initialStreamWindow, maxWindow)
+		sconf := DefaultConfig()
+		sconf.InitialStreamWindowSize = randomUint32(initialStreamWindow, maxWindow)
+
+		conn1, conn2 := testConn()
+		client, _ := Client(conn1, cconf, nil)
+		server, _ := Server(conn2, sconf, nil)
+
+		errChan := make(chan error, 1)
+		go func() {
+			defer close(errChan)
+			str, err := client.OpenStream(context.Background())
+			if err != nil {
+				errChan <- err
+				return
+			}
+			defer str.Close()
+			if _, err := str.Write(make([]byte, transferSize)); err != nil {
+				errChan <- err
+				return
+			}
+		}()
+
+		str, err := server.AcceptStream()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(str)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if uint32(len(data)) != transferSize {
+			t.Fatalf("expected %d bytes to be transferred, got %d", transferSize, len(data))
+		}
+	}
+}
+
+func TestMaxIncomingStreams(t *testing.T) {
+	const maxIncomingStreams = 5
+	conn1, conn2 := testConn()
+	client, err := Client(conn1, DefaultConfig(), nil)
+	require.NoError(t, err)
+	defer client.Close()
+
+	conf := DefaultConfig()
+	conf.MaxIncomingStreams = maxIncomingStreams
+	server, err := Server(conn2, conf, nil)
+	require.NoError(t, err)
+	defer server.Close()
+
+	strChan := make(chan *Stream, maxIncomingStreams)
+	go func() {
+		defer close(strChan)
+		for {
+			str, err := server.AcceptStream()
+			if err != nil {
+				return
+			}
+			_, err = str.Write([]byte("foobar"))
+			require.NoError(t, err)
+			strChan <- str
+		}
+	}()
+
+	for i := 0; i < maxIncomingStreams; i++ {
+		str, err := client.OpenStream(context.Background())
+		require.NoError(t, err)
+		_, err = str.Read(make([]byte, 6))
+		require.NoError(t, err)
+		require.NoError(t, str.CloseWrite())
+	}
+	// The server now has maxIncomingStreams incoming streams.
+	// It will now reset the next stream that is opened.
+	str, err := client.OpenStream(context.Background())
+	require.NoError(t, err)
+	str.SetDeadline(time.Now().Add(time.Second))
+	_, err = str.Read([]byte{0})
+	require.ErrorIs(t, err, ErrStreamReset)
+
+	// Now close one of the streams.
+	// This should then allow the client to open a new stream.
+	require.NoError(t, (<-strChan).Close())
+	str, err = client.OpenStream(context.Background())
+	require.NoError(t, err)
+	str.SetDeadline(time.Now().Add(time.Second))
+	_, err = str.Read([]byte{0})
+	require.NoError(t, err)
+}
+
+func TestErrorCodeErrorIsErrStreamReset(t *testing.T) {
+	se := &StreamError{}
+	require.True(t, errors.Is(se, ErrStreamReset))
+	ge := &GoAwayError{}
+	require.True(t, errors.Is(ge, ErrStreamReset))
+}
+
+func testTCPConn(t *testing.T) (net.Conn, net.Conn) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	// Channel to receive the server-side connection
+	serverConnCh := make(chan net.Conn, 1)
+	errCh := make(chan error, 1)
+
+	// Accept connection in goroutine
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		serverConnCh <- conn
+	}()
+
+	// Connect to the listener
+	clientConn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for server connection or error
+	select {
+	case serverConn := <-serverConnCh:
+		return clientConn, serverConn
+	case err := <-errCh:
+		clientConn.Close()
+		t.Fatal(err)
+		return nil, nil
+	case <-time.After(time.Second):
+		clientConn.Close()
+		t.Fatal("timeout waiting for connection")
+		return nil, nil
+	}
+}
+
+// TestSessionCloseDeadlock is a regression test for a deadlock on closing connections.
+// See: https://github.com/libp2p/go-yamux/issues/129 for details
+func TestSessionCloseDeadlock(t *testing.T) {
+	const n = 10
+	const numWrites = 1000
+	var closeWG sync.WaitGroup
+	closeWG.Add(numWrites * n)
+	for i := 0; i < n; i++ {
+		go func() {
+			conn1, conn2 := testTCPConn(t)
+			conf := DefaultConfig()
+			conf.LogOutput = io.Discard
+			client, err := Client(conn1, conf, nil)
+			require.NoError(t, err)
+			defer client.Close()
+
+			conf = DefaultConfig()
+			conf.LogOutput = io.Discard
+			server, err := Server(conn2, conf, nil)
+			require.NoError(t, err)
+			defer server.Close()
+
+			// Create a stream from client
+			stream, err := client.OpenStream(context.Background())
+			require.NoError(t, err)
+			defer stream.Close()
+
+			// Accept the stream on server side
+			serverStream, err := server.AcceptStream()
+			require.NoError(t, err)
+			defer serverStream.Close()
+
+			// Send an incomplete dataframe to the server to ensure that the recvloop is reading the rest
+			// of the message.
+			buf := make([]byte, 1<<10)
+			hdr := encode(typeData, serverStream.sendFlags(), serverStream.id, uint32(len(buf))+1000)
+			err = server.sendMsg(hdr, buf, nil, true)
+			require.NoError(t, err)
+
+			time.Sleep(1 * time.Second) // Let the read loop block on reading rest of the data frame
+
+			// Make many writes so that these writes takes up all the buffer space in the channel
+			// and the recvLoop deadlocks because it's unable to send the goAwayProtoErr
+			var writeWG sync.WaitGroup
+			writeWG.Add(numWrites)
+			for i := 0; i < numWrites; i++ {
+				go func() {
+					defer closeWG.Done()
+					buf := make([]byte, 1) // make small writes so that we queue up the channel
+					writeWG.Done()         // This is used to trigger concurrent streamWrite with CloseWrite.
+					stream.Write(buf)
+				}()
+			}
+			// Wait for the client to exit
+			writeWG.Wait()
+			// Close the Write half of the client conn so that the send loop exits first.
+			err = conn1.(*net.TCPConn).CloseWrite()
+			require.NoError(t, err)
+		}()
+	}
+	closeWG.Wait()
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+spec.md - github.com/libp2p/go-yamux/v5
+# Specification
+
+We use this document to detail the internal specification of Yamux.
+This is used both as a guide for implementing Yamux, but also for
+alternative interoperable libraries to be built.
+
+# Framing
+
+Yamux uses a streaming connection underneath, but imposes a message
+framing so that it can be shared between many logical streams. Each
+frame contains a header like:
+
+* Version (8 bits)
+* Type (8 bits)
+* Flags (16 bits)
+* StreamID (32 bits)
+* Length (32 bits)
+
+This means that each header has a 12 byte overhead.
+All fields are encoded in network order (big endian).
+Each field is described below:
+
+## Version Field
+
+The version field is used for future backward compatibility. At the
+current time, the field is always set to 0, to indicate the initial
+version.
+
+## Type Field
+
+The type field is used to switch the frame message type. The following
+message types are supported:
+
+* 0x0 Data - Used to transmit data. May transmit zero length payloads
+  depending on the flags.
+
+* 0x1 Window Update - Used to updated the senders receive window size.
+  This is used to implement per-session flow control.
+
+* 0x2 Ping - Used to measure RTT. It can also be used to heart-beat
+  and do keep-alives over TCP.
+
+* 0x3 Go Away - Used to close a session.
+
+## Flag Field
+
+The flags field is used to provide additional information related
+to the message type. The following flags are supported:
+
+* 0x1 SYN - Signals the start of a new stream. May be sent with a data or
+  window update message. Also sent with a ping to indicate outbound.
+
+* 0x2 ACK - Acknowledges the start of a new stream. May be sent with a data
+  or window update message. Also sent with a ping to indicate response.
+
+* 0x4 FIN - Performs a half-close of a stream. May be sent with a data
+  message or window update.
+
+* 0x8 RST - Reset a stream immediately. May be sent with a data or
+  window update message.
+
+## StreamID Field
+
+The StreamID field is used to identify the logical stream the frame
+is addressing. The client side should use odd ID's, and the server even.
+This prevents any collisions. Additionally, the 0 ID is reserved to represent
+the session.
+
+Both Ping and Go Away messages should always use the 0 StreamID.
+
+## Length Field
+
+The meaning of the length field depends on the message type:
+
+* Data - provides the length of bytes following the header
+* Window update - provides a delta update to the window size
+* Ping - Contains an opaque value, echoed back
+* Go Away - Contains an error code
+
+# Message Flow
+
+There is no explicit connection setup, as Yamux relies on an underlying
+transport to be provided. However, there is a distinction between client
+and server side of the connection.
+
+## Opening a stream
+
+To open a stream, an initial data or window update frame is sent
+with a new StreamID. The SYN flag should be set to signal a new stream.
+
+The receiver must then reply with either a data or window update frame
+with the StreamID along with the ACK flag to accept the stream or with
+the RST flag to reject the stream.
+
+Because we are relying on the reliable stream underneath, a connection
+can begin sending data once the SYN flag is sent. The corresponding
+ACK does not need to be received. This is particularly well suited
+for an RPC system where a client wants to open a stream and immediately
+fire a request without waiting for the RTT of the ACK.
+
+This does introduce the possibility of a connection being rejected
+after data has been sent already. This is a slight semantic difference
+from TCP, where the conection cannot be refused after it is opened.
+Clients should be prepared to handle this by checking for an error
+that indicates a RST was received.
+
+## Closing a stream
+
+To close a stream, either side sends a data or window update frame
+along with the FIN flag. This does a half-close indicating the sender
+will send no further data.
+
+Once both sides have closed the connection, the stream is closed.
+
+Alternatively, if an error occurs, the RST flag can be used to
+hard close a stream immediately.
+
+## Flow Control
+
+When Yamux is initially starts each stream with a 256KB window size.
+There is no window size for the session.
+
+To prevent the streams from stalling, window update frames should be
+sent regularly. Yamux can be configured to provide a larger limit for
+windows sizes. Both sides assume the initial 256KB window, but can
+immediately send a window update as part of the SYN/ACK indicating a
+larger window.
+
+Both sides should track the number of bytes sent in Data frames
+only, as only they are tracked as part of the window size.
+
+## Session termination
+
+When a session is being terminated, the Go Away message should
+be sent. The Length should be set to one of the following to
+provide an error code:
+
+* 0x0 Normal termination
+* 0x1 Protocol error
+* 0x2 Internal error
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+stream.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"io"
+	"math"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+type streamState int
+
+const (
+	streamInit streamState = iota
+	streamSYNSent
+	streamSYNReceived
+	streamEstablished
+	streamFinished
+)
+
+type halfStreamState int
+
+const (
+	halfOpen halfStreamState = iota
+	halfClosed
+	halfReset
+)
+
+// Stream is used to represent a logical stream
+// within a session.
+type Stream struct {
+	sendWindow uint32
+
+	memorySpan MemoryManager
+
+	id      uint32
+	session *Session
+
+	recvWindow uint32
+	epochStart time.Time
+
+	state                 streamState
+	writeState, readState halfStreamState
+	writeErr, readErr     error
+	stateLock             sync.Mutex
+
+	recvBuf segmentedBuffer
+
+	recvNotifyCh chan struct{}
+	sendNotifyCh chan struct{}
+
+	readDeadline, writeDeadline pipeDeadline
+}
+
+// newStream is used to construct a new stream within a given session for an ID.
+// It assumes that a memory allocation has been obtained for the initialWindow.
+func newStream(session *Session, id uint32, state streamState, initialWindow uint32, memorySpan MemoryManager) *Stream {
+	s := &Stream{
+		id:            id,
+		session:       session,
+		state:         state,
+		sendWindow:    initialStreamWindow,
+		readDeadline:  makePipeDeadline(),
+		writeDeadline: makePipeDeadline(),
+		memorySpan:    memorySpan,
+		// Initialize the recvBuf with initialStreamWindow, not config.InitialStreamWindowSize.
+		// The peer isn't allowed to send more data than initialStreamWindow until we've sent
+		// the first window update (which will grant it up to config.InitialStreamWindowSize).
+		recvBuf:      newSegmentedBuffer(initialWindow),
+		recvWindow:   session.config.InitialStreamWindowSize,
+		epochStart:   time.Now(),
+		recvNotifyCh: make(chan struct{}, 1),
+		sendNotifyCh: make(chan struct{}, 1),
+	}
+	return s
+}
+
+// Session returns the associated stream session
+func (s *Stream) Session() *Session {
+	return s.session
+}
+
+// StreamID returns the ID of this stream
+func (s *Stream) StreamID() uint32 {
+	return s.id
+}
+
+// Read is used to read from the stream
+func (s *Stream) Read(b []byte) (n int, err error) {
+START:
+	s.stateLock.Lock()
+	state := s.readState
+	resetErr := s.readErr
+	s.stateLock.Unlock()
+
+	switch state {
+	case halfOpen:
+		// Open -> read
+	case halfClosed:
+		empty := s.recvBuf.Len() == 0
+		if empty {
+			return 0, io.EOF
+		}
+		// Closed, but we have data pending -> read.
+	case halfReset:
+		return 0, resetErr
+	default:
+		panic("unknown state")
+	}
+
+	// If there is no data available, block
+	if s.recvBuf.Len() == 0 {
+		select {
+		case <-s.recvNotifyCh:
+			goto START
+		case <-s.readDeadline.wait():
+			return 0, ErrTimeout
+		}
+	}
+
+	// Read any bytes
+	n, _ = s.recvBuf.Read(b)
+
+	// Send a window update potentially
+	err = s.sendWindowUpdate(s.readDeadline.wait())
+	return n, err
+}
+
+// Write is used to write to the stream
+func (s *Stream) Write(b []byte) (int, error) {
+	var total int
+	for total < len(b) {
+		n, err := s.write(b[total:])
+		total += n
+		if err != nil {
+			return total, err
+		}
+	}
+	return total, nil
+}
+
+// write is used to write to the stream, may return on
+// a short write.
+func (s *Stream) write(b []byte) (n int, err error) {
+	var flags uint16
+	var max uint32
+	var hdr header
+
+START:
+	s.stateLock.Lock()
+	state := s.writeState
+	resetErr := s.writeErr
+	s.stateLock.Unlock()
+
+	switch state {
+	case halfOpen:
+		// Open for writing -> write
+	case halfClosed:
+		return 0, ErrStreamClosed
+	case halfReset:
+		return 0, resetErr
+	default:
+		panic("unknown state")
+	}
+
+	// If there is no data available, block
+	window := atomic.LoadUint32(&s.sendWindow)
+	if window == 0 {
+		select {
+		case <-s.sendNotifyCh:
+			goto START
+		case <-s.writeDeadline.wait():
+			return 0, ErrTimeout
+		}
+	}
+
+	// Determine the flags if any
+	flags = s.sendFlags()
+
+	// Send up to min(message, window
+	max = min(window, s.session.config.MaxMessageSize-headerSize, uint32(len(b)))
+
+	// Send the header
+	hdr = encode(typeData, flags, s.id, max)
+	if err = s.session.sendMsg(hdr, b[:max], s.writeDeadline.wait(), true); err != nil {
+		return 0, err
+	}
+
+	// Reduce our send window
+	atomic.AddUint32(&s.sendWindow, ^uint32(max-1))
+
+	// Unlock
+	return int(max), err
+}
+
+// sendFlags determines any flags that are appropriate
+// based on the current stream state
+func (s *Stream) sendFlags() uint16 {
+	s.stateLock.Lock()
+	defer s.stateLock.Unlock()
+	var flags uint16
+	switch s.state {
+	case streamInit:
+		flags |= flagSYN
+		s.state = streamSYNSent
+	case streamSYNReceived:
+		flags |= flagACK
+		s.state = streamEstablished
+	}
+	return flags
+}
+
+// sendWindowUpdate potentially sends a window update enabling
+// further writes to take place. Must be invoked with the lock.
+func (s *Stream) sendWindowUpdate(deadline <-chan struct{}) error {
+	// Determine the flags if any
+	flags := s.sendFlags()
+
+	// Update the receive window.
+	needed, delta := s.recvBuf.GrowTo(s.recvWindow, flags != 0)
+	if !needed {
+		return nil
+	}
+
+	now := time.Now()
+	if rtt := s.session.RTT(); flags == 0 && rtt > 0 && now.Sub(s.epochStart) < rtt*4 {
+		var recvWindow uint32
+		if s.recvWindow > math.MaxUint32/2 {
+			recvWindow = min(math.MaxUint32, s.session.config.MaxStreamWindowSize)
+		} else {
+			recvWindow = min(s.recvWindow*2, s.session.config.MaxStreamWindowSize)
+		}
+		if recvWindow > s.recvWindow {
+			grow := recvWindow - s.recvWindow
+			if err := s.memorySpan.ReserveMemory(int(grow), 128); err == nil {
+				s.recvWindow = recvWindow
+				_, delta = s.recvBuf.GrowTo(s.recvWindow, true)
+			}
+		}
+	}
+
+	s.epochStart = now
+	hdr := encode(typeWindowUpdate, flags, s.id, delta)
+	return s.session.sendMsg(hdr, nil, deadline, true)
+}
+
+// sendClose is used to send a FIN
+func (s *Stream) sendClose() error {
+	flags := s.sendFlags()
+	flags |= flagFIN
+	hdr := encode(typeWindowUpdate, flags, s.id, 0)
+	return s.session.sendMsg(hdr, nil, nil, true)
+}
+
+// sendReset is used to send a RST
+func (s *Stream) sendReset(errCode uint32) error {
+	hdr := encode(typeWindowUpdate, flagRST, s.id, errCode)
+	return s.session.sendMsg(hdr, nil, nil, true)
+}
+
+// Reset resets the stream (forcibly closes the stream)
+func (s *Stream) Reset() error {
+	return s.ResetWithError(0)
+}
+
+func (s *Stream) ResetWithError(errCode uint32) error {
+	sendReset := false
+	s.stateLock.Lock()
+	switch s.state {
+	case streamFinished:
+		s.stateLock.Unlock()
+		return nil
+	case streamInit:
+		// we haven't sent anything, so we don't need to send a reset.
+	case streamSYNSent, streamSYNReceived, streamEstablished:
+		sendReset = true
+	default:
+		panic("unhandled state")
+	}
+
+	// at least one direction is open, we need to reset.
+
+	// If we've already sent/received an EOF, no need to reset that side.
+	if s.writeState == halfOpen {
+		s.writeState = halfReset
+		s.writeErr = &StreamError{Remote: false, ErrorCode: errCode}
+	}
+	if s.readState == halfOpen {
+		s.readState = halfReset
+		s.readErr = &StreamError{Remote: false, ErrorCode: errCode}
+	}
+	s.state = streamFinished
+	s.notifyWaiting()
+	s.stateLock.Unlock()
+	if sendReset {
+		_ = s.sendReset(errCode)
+	}
+	s.cleanup()
+	return nil
+}
+
+// CloseWrite is used to close the stream for writing.
+func (s *Stream) CloseWrite() error {
+	s.stateLock.Lock()
+	switch s.writeState {
+	case halfOpen:
+		// Open for writing -> close write
+	case halfClosed:
+		s.stateLock.Unlock()
+		return nil
+	case halfReset:
+		s.stateLock.Unlock()
+		return s.writeErr
+	default:
+		panic("invalid state")
+	}
+	s.writeState = halfClosed
+	cleanup := s.readState != halfOpen
+	if cleanup {
+		s.state = streamFinished
+	}
+	s.stateLock.Unlock()
+	s.notifyWaiting()
+
+	err := s.sendClose()
+	if cleanup {
+		// we're fully closed, might as well be nice to the user and
+		// free everything early.
+		s.cleanup()
+	}
+	return err
+}
+
+// CloseRead is used to close the stream for reading.
+// Note: Remote is not notified.
+func (s *Stream) CloseRead() error {
+	cleanup := false
+	s.stateLock.Lock()
+	switch s.readState {
+	case halfOpen:
+		// Open for reading -> close read
+	case halfClosed, halfReset:
+		s.stateLock.Unlock()
+		return nil
+	default:
+		panic("invalid state")
+	}
+	s.readState = halfReset
+	s.readErr = ErrStreamReset
+	cleanup = s.writeState != halfOpen
+	if cleanup {
+		s.state = streamFinished
+	}
+	s.stateLock.Unlock()
+	s.notifyWaiting()
+	if cleanup {
+		// we're fully closed, might as well be nice to the user and
+		// free everything early.
+		s.cleanup()
+	}
+	return nil
+}
+
+// Close is used to close the stream.
+func (s *Stream) Close() error {
+	_ = s.CloseRead() // can't fail.
+	return s.CloseWrite()
+}
+
+// forceClose is used for when the session is exiting
+func (s *Stream) forceClose(err error) {
+	s.stateLock.Lock()
+	if s.readState == halfOpen {
+		s.readState = halfReset
+		s.readErr = err
+	}
+	if s.writeState == halfOpen {
+		s.writeState = halfReset
+		s.writeErr = err
+	}
+	s.state = streamFinished
+	s.notifyWaiting()
+	s.stateLock.Unlock()
+
+	s.readDeadline.set(time.Time{})
+	s.writeDeadline.set(time.Time{})
+}
+
+// called when fully closed to release any system resources.
+func (s *Stream) cleanup() {
+	s.session.closeStream(s.id)
+	s.readDeadline.set(time.Time{})
+	s.writeDeadline.set(time.Time{})
+}
+
+// processFlags is used to update the state of the stream
+// based on set flags, if any. Lock must be held
+func (s *Stream) processFlags(hdr header, flags uint16) {
+	// Close the stream without holding the state lock
+	var closeStream bool
+	defer func() {
+		if closeStream {
+			s.cleanup()
+		}
+	}()
+
+	if flags&flagACK == flagACK {
+		s.stateLock.Lock()
+		if s.state == streamSYNSent {
+			s.state = streamEstablished
+		}
+		s.stateLock.Unlock()
+		s.session.establishStream(s.id)
+	}
+	if flags&flagFIN == flagFIN {
+		var notify bool
+		s.stateLock.Lock()
+		if s.readState == halfOpen {
+			s.readState = halfClosed
+			if s.writeState != halfOpen {
+				// We're now fully closed.
+				closeStream = true
+				s.state = streamFinished
+			}
+			notify = true
+		}
+		s.stateLock.Unlock()
+		if notify {
+			s.notifyWaiting()
+		}
+	}
+	if flags&flagRST == flagRST {
+		s.stateLock.Lock()
+		var resetErr error = ErrStreamReset
+		// Length in a window update frame with RST flag encodes an error code.
+		if hdr.MsgType() == typeWindowUpdate {
+			resetErr = &StreamError{Remote: true, ErrorCode: hdr.Length()}
+		}
+		if s.readState == halfOpen {
+			s.readState = halfReset
+			s.readErr = resetErr
+		}
+		if s.writeState == halfOpen {
+			s.writeState = halfReset
+			s.writeErr = resetErr
+		}
+		s.state = streamFinished
+		s.stateLock.Unlock()
+		closeStream = true
+		s.notifyWaiting()
+	}
+}
+
+// notifyWaiting notifies all the waiting channels
+func (s *Stream) notifyWaiting() {
+	asyncNotify(s.recvNotifyCh)
+	asyncNotify(s.sendNotifyCh)
+}
+
+// incrSendWindow updates the size of our send window
+func (s *Stream) incrSendWindow(hdr header, flags uint16) {
+	s.processFlags(hdr, flags)
+	// Increase window, unblock a sender
+	atomic.AddUint32(&s.sendWindow, hdr.Length())
+	asyncNotify(s.sendNotifyCh)
+}
+
+// readData is used to handle a data frame
+func (s *Stream) readData(hdr header, flags uint16, conn io.Reader) error {
+	s.processFlags(hdr, flags)
+
+	// Check that our recv window is not exceeded
+	length := hdr.Length()
+	if length == 0 {
+		return nil
+	}
+
+	// Copy into buffer
+	if err := s.recvBuf.Append(conn, length); err != nil {
+		s.session.logger.Printf("[ERR] yamux: Failed to read stream data on stream %d: %v", s.id, err)
+		return err
+	}
+	// Unblock the reader
+	asyncNotify(s.recvNotifyCh)
+	return nil
+}
+
+// SetDeadline sets the read and write deadlines
+func (s *Stream) SetDeadline(t time.Time) error {
+	if err := s.SetReadDeadline(t); err != nil {
+		return err
+	}
+	if err := s.SetWriteDeadline(t); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetReadDeadline sets the deadline for future Read calls.
+func (s *Stream) SetReadDeadline(t time.Time) error {
+	s.stateLock.Lock()
+	defer s.stateLock.Unlock()
+	if s.readState == halfOpen {
+		s.readDeadline.set(t)
+	}
+	return nil
+}
+
+// SetWriteDeadline sets the deadline for future Write calls
+func (s *Stream) SetWriteDeadline(t time.Time) error {
+	s.stateLock.Lock()
+	defer s.stateLock.Unlock()
+	if s.writeState == halfOpen {
+		s.writeDeadline.set(t)
+	}
+	return nil
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+util.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"fmt"
+	"io"
+	"sync"
+
+	pool "github.com/libp2p/go-buffer-pool"
+)
+
+// asyncSendErr is used to try an async send of an error
+func asyncSendErr(ch chan error, err error) {
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- err:
+	default:
+	}
+}
+
+// asyncNotify is used to signal a waiting goroutine
+func asyncNotify(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+// min computes the minimum of a set of values
+func min(values ...uint32) uint32 {
+	m := values[0]
+	for _, v := range values[1:] {
+		if v < m {
+			m = v
+		}
+	}
+	return m
+}
+
+// The segmented buffer looks like:
+//
+//	|     data      | empty space       |
+//	 < window (10)                     >
+//	 < len (5)     > < cap (5)         >
+//
+// As data is read, the buffer gets updated like so:
+//
+//	|     data   | empty space       |
+//	 < window (8)                   >
+//	 < len (3)  > < cap (5)         >
+//
+// It can then grow as follows (given a "max" of 10):
+//
+//	|     data   | empty space          |
+//	 < window (10)                     >
+//	 < len (3)  > < cap (7)            >
+//
+// Data can then be written into the empty space, expanding len,
+// and shrinking cap:
+//
+//	|     data       | empty space      |
+//	 < window (10)                     >
+//	 < len (5)      > < cap (5)        >
+type segmentedBuffer struct {
+	cap uint32
+	len uint32
+	bm  sync.Mutex
+	// read position in b[bPos].
+	// We must not reslice any of the buffers in b, as we need to put them back into the pool.
+	readPos int
+	// bPos is an index in b slice. If bPos == len(b), it means that buffer is empty.
+	bPos int
+	// b is used as a growable buffer. Each Append adds []byte to the end of b.
+	// If there is no space available at the end of the buffer (len(b) == cap(b)), but it has space
+	// at the beginning (bPos > 0 and at least 1/4 of the buffer is empty), data inside b is shifted to the beginning.
+	// Each Read reads from b[bPos] and increments bPos if b[bPos] was fully read.
+	b [][]byte
+}
+
+// NewSegmentedBuffer allocates a ring buffer.
+func newSegmentedBuffer(initialCapacity uint32) segmentedBuffer {
+	return segmentedBuffer{cap: initialCapacity, b: make([][]byte, 0, 16)}
+}
+
+// Len is the amount of data in the receive buffer.
+func (s *segmentedBuffer) Len() uint32 {
+	s.bm.Lock()
+	defer s.bm.Unlock()
+	return s.len
+}
+
+// If the space to write into + current buffer size has grown to half of the window size,
+// grow up to that max size, and indicate how much additional space was reserved.
+func (s *segmentedBuffer) GrowTo(max uint32, force bool) (bool, uint32) {
+	s.bm.Lock()
+	defer s.bm.Unlock()
+
+	currentWindow := s.cap + s.len
+	if currentWindow >= max {
+		return force, 0
+	}
+	delta := max - currentWindow
+
+	if delta < (max/2) && !force {
+		return false, 0
+	}
+
+	s.cap += delta
+	return true, delta
+}
+
+func (s *segmentedBuffer) Read(b []byte) (int, error) {
+	s.bm.Lock()
+	defer s.bm.Unlock()
+	if s.bPos == len(s.b) {
+		return 0, io.EOF
+	}
+	data := s.b[s.bPos][s.readPos:]
+	n := copy(b, data)
+	if n == len(data) {
+		pool.Put(s.b[s.bPos])
+		s.b[s.bPos] = nil
+		s.bPos++
+		s.readPos = 0
+	} else {
+		s.readPos += n
+	}
+	if n > 0 {
+		s.len -= uint32(n)
+	}
+	return n, nil
+}
+
+func (s *segmentedBuffer) checkOverflow(l uint32) error {
+	s.bm.Lock()
+	defer s.bm.Unlock()
+	if s.cap < l {
+		return fmt.Errorf("receive window exceeded (remain: %d, recv: %d)", s.cap, l)
+	}
+	return nil
+}
+
+func (s *segmentedBuffer) Append(input io.Reader, length uint32) error {
+	if err := s.checkOverflow(length); err != nil {
+		return err
+	}
+
+	dst := pool.Get(int(length))
+	n, err := io.ReadFull(input, dst)
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	s.bm.Lock()
+	defer s.bm.Unlock()
+	if n > 0 {
+		s.len += uint32(n)
+		s.cap -= uint32(n)
+		// s.b has no available space at the end, but has space at the beginning
+		if len(s.b) == cap(s.b) && s.bPos > 0 {
+			if s.bPos == len(s.b) {
+				// the buffer is empty, so just move pos
+				s.bPos = 0
+				s.b = s.b[:0]
+			} else if s.bPos > cap(s.b)/4 {
+				// at least 1/4 of buffer is empty, so shift data to the left to free space at the end
+				copied := copy(s.b, s.b[s.bPos:])
+				// clear references to copied data
+				for i := copied; i < len(s.b); i++ {
+					s.b[i] = nil
+				}
+				s.b = s.b[:copied]
+				s.bPos = 0
+			}
+		}
+		s.b = append(s.b, dst[0:n])
+	}
+	return err
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+util_test.go - github.com/libp2p/go-yamux/v5
+package yamux
+
+import (
+	"bytes"
+	"io"
+	"testing"
+)
+
+func TestAsyncSendErr(t *testing.T) {
+	ch := make(chan error)
+	asyncSendErr(ch, ErrTimeout)
+	select {
+	case <-ch:
+		t.Fatalf("should not get")
+	default:
+	}
+
+	ch = make(chan error, 1)
+	asyncSendErr(ch, ErrTimeout)
+	select {
+	case <-ch:
+	default:
+		t.Fatalf("should get")
+	}
+}
+
+func TestAsyncNotify(t *testing.T) {
+	ch := make(chan struct{})
+	asyncNotify(ch)
+	select {
+	case <-ch:
+		t.Fatalf("should not get")
+	default:
+	}
+
+	ch = make(chan struct{}, 1)
+	asyncNotify(ch)
+	select {
+	case <-ch:
+	default:
+		t.Fatalf("should get")
+	}
+}
+
+func TestMin(t *testing.T) {
+	if min(1, 2) != 1 {
+		t.Fatalf("bad")
+	}
+	if min(2, 1) != 1 {
+		t.Fatalf("bad")
+	}
+}
+
+func TestSegmentedBuffer(t *testing.T) {
+	buf := newSegmentedBuffer(100)
+	assert := func(len, cap uint32) {
+		if buf.Len() != len {
+			t.Fatalf("expected length %d, got %d", len, buf.Len())
+		}
+		buf.bm.Lock()
+		defer buf.bm.Unlock()
+		if buf.cap != cap {
+			t.Fatalf("expected length %d, got %d", len, buf.Len())
+		}
+	}
+	assert(0, 100)
+	if err := buf.Append(bytes.NewReader([]byte("fooo")), 3); err != nil {
+		t.Fatal(err)
+	}
+	assert(3, 97)
+
+	out := make([]byte, 2)
+	n, err := io.ReadFull(&buf, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("expected to read 2 bytes, read %d", n)
+	}
+	assert(1, 97)
+	if grew, amount := buf.GrowTo(100, false); grew || amount != 0 {
+		t.Fatal("should not grow when too small")
+	}
+	if grew, amount := buf.GrowTo(100, true); !grew || amount != 2 {
+		t.Fatal("should have grown by 2")
+	}
+
+	if err := buf.Append(bytes.NewReader(make([]byte, 50)), 50); err != nil {
+		t.Fatal(err)
+	}
+	assert(51, 49)
+	if grew, amount := buf.GrowTo(100, false); grew || amount != 0 {
+		t.Fatal("should not grow when data hasn't been read")
+	}
+	read, err := io.CopyN(io.Discard, &buf, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read != 50 {
+		t.Fatal("expected to read 50 bytes")
+	}
+
+	assert(1, 49)
+	if grew, amount := buf.GrowTo(100, false); !grew || amount != 50 {
+		t.Fatal("should have grown when below half, even with reserved space")
+	}
+	assert(1, 99)
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+version.json - github.com/libp2p/go-yamux/v5
+{
+  "version": "v5.1.0"
+}
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 LICENSE - github.com/mattn/go-colorable
 The MIT License (MIT)
 
