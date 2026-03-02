@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/urfave/cli/v3"
 	"gitlab.com/gitlab-org/gitaly/v18"
+	gitalyclient "gitlab.com/gitlab-org/gitaly/v18/client"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/backup"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/bootstrap"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/bootstrap/starter"
@@ -306,6 +307,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			grpc.WithStatsHandler(tracing.NewGRPCClientStatsHandler()),
 			client.UnaryInterceptor(),
 			client.StreamInterceptor(),
+			gitalyclient.WithGitalyDNSResolver(gitalyclient.DefaultDNSResolverBuilderConfig()),
 		),
 	)
 	defer func() {

@@ -2,10 +2,13 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
 
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gitalyauth "gitlab.com/gitlab-org/gitaly/v18/auth"
@@ -13,8 +16,10 @@ import (
 	gitalycfgauth "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/auth"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/server/auth"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	gitalyx509 "gitlab.com/gitlab-org/gitaly/v18/internal/x509"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
@@ -253,4 +258,118 @@ func TestPool_Dial_same_addr_another_token(t *testing.T) {
 	conn, err = pool.Dial(ctx, addr, "token")
 	require.NoError(t, err)
 	verifyConnection(t, ctx, conn, codes.OK)
+}
+
+func TestPool_Dial_dnsPlusTLS(t *testing.T) {
+	t.Setenv(gitalyx509.SSLCertFile, "./testdata/gitalycert.pem")
+
+	ctx := testhelper.Context(t)
+
+	_, port, cleanup := runTLSServer(t, "secret-token")
+	defer cleanup()
+
+	pool := NewPoolWithOptions(
+		WithDialOptions(WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig())),
+	)
+	defer testhelper.MustClose(t, pool)
+
+	urls := []string{
+		fmt.Sprintf("dns+tls:///localhost:%s", port),
+		fmt.Sprintf("dns+tls:localhost:%s", port),
+	}
+
+	for _, url := range urls {
+		t.Run(fmt.Sprintf("url=%s", url), func(t *testing.T) {
+			conn, err := pool.Dial(ctx, url, "secret-token")
+			require.NoError(t, err)
+			verifyConnection(t, ctx, conn, codes.OK)
+		})
+	}
+}
+
+func TestPool_Dial_dnsPlusTLS_withDNSAuthority(t *testing.T) {
+	t.Setenv(gitalyx509.SSLCertFile, "./testdata/gitaly_snioverride_cert.pem")
+
+	ctx := testhelper.Context(t)
+
+	serverHost, port, cleanup := runTLSServerWithSNIOverride(t, "secret-token", "127.0.0.1:0")
+	defer cleanup()
+
+	dnsServer := testhelper.NewFakeDNSServer(t).WithHandler(dns.TypeA, func(host string) []string {
+		if host == "sni.override.test." {
+			return []string{serverHost}
+		}
+		return nil
+	}).Start()
+
+	pool := NewPoolWithOptions(
+		WithDialOptions(WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig())),
+	)
+	defer testhelper.MustClose(t, pool)
+
+	addr := fmt.Sprintf("dns+tls://%s/sni.override.test:%s", dnsServer.Addr(), port)
+	conn, err := pool.Dial(ctx, addr, "secret-token")
+	require.NoError(t, err)
+	verifyConnection(t, ctx, conn, codes.OK)
+}
+
+func runTLSServer(t *testing.T, creds string) (*health.Server, string, func()) {
+	_, port, cleanup := runTLSServerWithAddr(t, creds, "localhost:0", "testdata/gitalycert.pem", "testdata/gitalykey.pem")
+	return nil, port, cleanup
+}
+
+func runTLSServerWithSNIOverride(t *testing.T, creds, addr string) (string, string, func()) {
+	return runTLSServerWithAddr(t, creds, addr, "testdata/gitaly_snioverride_cert.pem", "testdata/gitaly_snioverride_key.pem")
+}
+
+func runTLSServerWithAddr(t *testing.T, creds, addr, certFile, keyFile string) (string, string, func()) {
+	t.Helper()
+
+	ctx := testhelper.Context(t)
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", addr)
+	require.NoError(t, err)
+
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	require.NoError(t, err)
+
+	var opts []grpc.ServerOption
+	opts = append(opts, grpc.Creds(credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	})))
+
+	if creds != "" {
+		opts = append(opts,
+			grpc.ChainStreamInterceptor(
+				auth.StreamServerInterceptor(gitalycfgauth.Config{
+					Token: creds,
+				}),
+			),
+			grpc.ChainUnaryInterceptor(
+				auth.UnaryServerInterceptor(gitalycfgauth.Config{
+					Token: creds,
+				}),
+			),
+		)
+	}
+
+	server := grpc.NewServer(opts...)
+
+	healthServer := health.NewServer()
+	grpc_health_v1.RegisterHealthServer(server, healthServer)
+
+	errQ := make(chan error)
+	go func() {
+		errQ <- server.Serve(listener)
+	}()
+
+	host, port, err := net.SplitHostPort(listener.Addr().String())
+	require.NoError(t, err)
+
+	_ = healthServer
+	return host, port, func() {
+		server.Stop()
+		require.NoError(t, <-errQ)
+	}
 }
