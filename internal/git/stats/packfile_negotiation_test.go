@@ -197,6 +197,37 @@ func TestPackNegoWithMultipleFilters(t *testing.T) {
 	})
 }
 
+func TestPackNegoWithCommandAndAgent(t *testing.T) {
+	buf := &bytes.Buffer{}
+	gittest.WritePktlineString(t, buf, "command=fetch")
+	gittest.WritePktlineString(t, buf, "agent=git/foobar")
+	gittest.WritePktlineString(t, buf, "want "+oid1+" cap")
+	gittest.WritePktlineFlush(t, buf)
+	gittest.WritePktlineString(t, buf, "done")
+
+	requireParses(t, buf, PackfileNegotiation{
+		Command:   "fetch",
+		UserAgent: "git/foobar",
+		Wants:     1,
+		Caps:      []string{"cap"},
+	})
+}
+
+func TestPackNegoWithAgentCapability(t *testing.T) {
+	buf := &bytes.Buffer{}
+	gittest.WritePktlineString(t, buf, "command=fetch")
+	gittest.WritePktlineString(t, buf, "want "+oid1+" cap agent=git/foobar")
+	gittest.WritePktlineFlush(t, buf)
+	gittest.WritePktlineString(t, buf, "done")
+
+	requireParses(t, buf, PackfileNegotiation{
+		Command:   "fetch",
+		UserAgent: "git/foobar",
+		Wants:     1,
+		Caps:      []string{"cap", "agent=git/foobar"},
+	})
+}
+
 func TestPackNegoFullBlown(t *testing.T) {
 	buf := &bytes.Buffer{}
 	gittest.WritePktlineString(t, buf, "want "+oid1+" cap1 cap2")
