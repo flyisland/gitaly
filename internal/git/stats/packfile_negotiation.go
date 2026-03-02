@@ -190,4 +190,8 @@ func (n *PackfileNegotiation) UpdateLogFields(ctx context.Context) {
 	if n.Shallows > 0 {
 		log.CustomFieldsFromContext(ctx).RecordMetadata("negotiation.shallows", n.Shallows)
 	}
+
+	log.FromContext(ctx).
+		WithFields(log.CustomFieldsFromContext(ctx).Fields()).
+		InfoContext(ctx, "packfile negotiation complete")
 }
