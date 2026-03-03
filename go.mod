@@ -15,7 +15,7 @@ require (
 	github.com/containerd/cgroups/v3 v3.1.3
 	github.com/dgraph-io/badger/v4 v4.9.0
 	github.com/fatih/color v1.18.0
-	github.com/getsentry/sentry-go v0.42.0
+	github.com/getsentry/sentry-go v0.43.0
 	github.com/git-lfs/git-lfs/v3 v3.7.0
 	github.com/go-enry/go-enry/v2 v2.9.4
 	github.com/go-enry/go-license-detector/v4 v4.3.0
