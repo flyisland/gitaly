@@ -1163,6 +1163,9 @@ type CountCommitsRequest struct {
 	// repository is the repository in which we want to count the number of commits.
 	Repository *Repository `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
 	// revision is a commitish which is the start point for the traversal of commits.
+	// Deprecated: Use the 'revisions' field instead. See https://gitlab.com/gitlab-org/gitlab/-/issues/588471
+	//
+	// Deprecated: Marked as deprecated in commit.proto.
 	Revision []byte `protobuf:"bytes,2,opt,name=revision,proto3" json:"revision,omitempty"`
 	// after is used to filter commits more recent than a specific date.
 	After *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=after,proto3" json:"after,omitempty"`
@@ -1174,6 +1177,9 @@ type CountCommitsRequest struct {
 	MaxCount int32 `protobuf:"varint,6,opt,name=max_count,json=maxCount,proto3" json:"max_count,omitempty"`
 	// all is used to consider all refs (including HEAD) as the start point for the traversal.
 	// all and Revision options are mutually exclusive.
+	// Deprecated: Use revisions with '--all' pseudo-revision instead. See https://gitlab.com/gitlab-org/gitlab/-/issues/588471
+	//
+	// Deprecated: Marked as deprecated in commit.proto.
 	All bool `protobuf:"varint,7,opt,name=all,proto3" json:"all,omitempty"`
 	// first_parent ensures that only the first parent commit is followed in the traversal.
 	FirstParent bool `protobuf:"varint,8,opt,name=first_parent,json=firstParent,proto3" json:"first_parent,omitempty"`
@@ -1182,7 +1188,8 @@ type CountCommitsRequest struct {
 	// revisions is the set of revisions which should be walked to enumerate
 	// commits. Accepts all notation as documented in gitrevisions(7) as well as
 	// the pseudo-revisions `--not` and `--all` as documented in git-rev-list(1).
-	// If set, this takes precedence over 'revision' and 'all' fields.
+	// This is the preferred way to specify revisions; the 'revision' and 'all'
+	// fields are deprecated.
 	Revisions     [][]byte `protobuf:"bytes,10,rep,name=revisions,proto3" json:"revisions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1225,6 +1232,7 @@ func (x *CountCommitsRequest) GetRepository() *Repository {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in commit.proto.
 func (x *CountCommitsRequest) GetRevision() []byte {
 	if x != nil {
 		return x.Revision
@@ -1260,6 +1268,7 @@ func (x *CountCommitsRequest) GetMaxCount() int32 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in commit.proto.
 func (x *CountCommitsRequest) GetAll() bool {
 	if x != nil {
 		return x.All
@@ -4455,17 +4464,17 @@ const file_commit_proto_rawDesc = "" +
 	"\x06COMMIT\x10\x00\x12\b\n" +
 	"\x04BLOB\x10\x01\x12\b\n" +
 	"\x04TREE\x10\x02\x12\a\n" +
-	"\x03TAG\x10\x03\"\x93\x03\n" +
+	"\x03TAG\x10\x03\"\x9b\x03\n" +
 	"\x13CountCommitsRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
-	"repository\x12\x1a\n" +
-	"\brevision\x18\x02 \x01(\fR\brevision\x120\n" +
+	"repository\x12\x1e\n" +
+	"\brevision\x18\x02 \x01(\fB\x02\x18\x01R\brevision\x120\n" +
 	"\x05after\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05after\x122\n" +
 	"\x06before\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x06before\x12\x12\n" +
 	"\x04path\x18\x05 \x01(\fR\x04path\x12\x1b\n" +
-	"\tmax_count\x18\x06 \x01(\x05R\bmaxCount\x12\x10\n" +
-	"\x03all\x18\a \x01(\bR\x03all\x12!\n" +
+	"\tmax_count\x18\x06 \x01(\x05R\bmaxCount\x12\x14\n" +
+	"\x03all\x18\a \x01(\bB\x02\x18\x01R\x03all\x12!\n" +
 	"\ffirst_parent\x18\b \x01(\bR\vfirstParent\x12<\n" +
 	"\x0eglobal_options\x18\t \x01(\v2\x15.gitaly.GlobalOptionsR\rglobalOptions\x12\x1c\n" +
 	"\trevisions\x18\n" +

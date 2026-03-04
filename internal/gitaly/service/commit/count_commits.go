@@ -26,10 +26,10 @@ func (s *server) CountCommits(ctx context.Context, in *gitalypb.CountCommitsRequ
 		for _, revision := range in.GetRevisions() {
 			subCmd.Args = append(subCmd.Args, string(revision))
 		}
-	} else if in.GetAll() {
+	} else if in.GetAll() { //nolint:staticcheck // All is deprecated in favor of revisions field
 		subCmd.Flags = append(subCmd.Flags, gitcmd.Flag{Name: "--all"})
 	} else {
-		subCmd.Args = []string{string(in.GetRevision())}
+		subCmd.Args = []string{string(in.GetRevision())} //nolint:staticcheck // Revision is deprecated in favor of revisions field
 	}
 
 	if before := in.GetBefore(); before != nil {
@@ -91,10 +91,12 @@ func validateCountCommitsRequest(ctx context.Context, locator storage.Locator, i
 		return nil
 	}
 
+	//nolint:staticcheck // Revision is deprecated in favor of revisions field
 	if err := git.ValidateRevision(in.GetRevision(), git.AllowEmptyRevision()); err != nil {
 		return err
 	}
 
+	//nolint:staticcheck // Revision and All are deprecated in favor of revisions field
 	if len(in.GetRevision()) == 0 && !in.GetAll() {
 		return fmt.Errorf("empty Revision and false All")
 	}
