@@ -21,8 +21,10 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 )
 
 type testService struct {
@@ -36,6 +38,20 @@ func (ts *testService) WriteRef(context.Context, *gitalypb.WriteRefRequest) (*gi
 
 func (ts *testService) RemoveRepository(context.Context, *gitalypb.RemoveRepositoryRequest) (*gitalypb.RemoveRepositoryResponse, error) {
 	return &gitalypb.RemoveRepositoryResponse{}, nil
+}
+
+// Mutator, Unary, FailedPrecondition error
+func (ts *testService) CreateRepository(context.Context, *gitalypb.CreateRepositoryRequest) (*gitalypb.CreateRepositoryResponse, error) {
+	return nil, status.Error(codes.FailedPrecondition, "designed to error with FailedPrecondition")
+}
+
+// Mutator, Unary, ResourceExhausted error
+func (ts *testService) FetchRemote(context.Context, *gitalypb.FetchRemoteRequest) (*gitalypb.FetchRemoteResponse, error) {
+	return nil, status.Error(codes.ResourceExhausted, "designed to error with ResourceExhausted")
+}
+
+func (ts *testService) HasLocalBranches(context.Context, *gitalypb.HasLocalBranchesRequest) (*gitalypb.HasLocalBranchesResponse, error) {
+	return nil, status.Error(codes.PermissionDenied, "designed to error with PermissionDenied")
 }
 
 // Mutator, Unary, Erroring
@@ -368,6 +384,76 @@ func TestInterceptors(t *testing.T) {
 
 		housekeepingMiddleware.WaitForWorkers()
 		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()), "no invocations after the interval")
+	})
+
+	t.Run("when a unary mutator returns a FailedPrecondition error", func(t *testing.T) {
+		repo := &gitalypb.Repository{
+			RelativePath: "myrepo-failedprecondition",
+		}
+
+		for range 2 {
+			_, err := gitalypb.NewRepositoryServiceClient(conn).CreateRepository(ctx, &gitalypb.CreateRepositoryRequest{
+				Repository: repo,
+			})
+			require.EqualError(t, err, "rpc error: code = FailedPrecondition desc = designed to error with FailedPrecondition",
+				"middleware preserves the original error")
+		}
+
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"FailedPrecondition errors should skip housekeeping")
+	})
+
+	t.Run("when a unary mutator returns a ResourceExhausted error", func(t *testing.T) {
+		repo := &gitalypb.Repository{
+			RelativePath: "myrep-ResourceExhausted",
+		}
+
+		sendFn := func() {
+			_, err := gitalypb.NewRepositoryServiceClient(conn).FetchRemote(ctx, &gitalypb.FetchRemoteRequest{
+				Repository: repo,
+			})
+			require.EqualError(t, err, "rpc error: code = ResourceExhausted desc = designed to error with ResourceExhausted",
+				"middleware preserves the original error")
+		}
+
+		sendFn()
+
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"no invocations under the interval")
+
+		sendFn()
+
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"ResourceExhausted errors should skip housekeeping")
+	})
+
+	t.Run("when a unary mutator returns a PermissionDenied error", func(t *testing.T) {
+		repo := &gitalypb.Repository{
+			RelativePath: "myrep-PermissionDenied",
+		}
+
+		sendFn := func() {
+			_, err := gitalypb.NewRepositoryServiceClient(conn).HasLocalBranches(ctx, &gitalypb.HasLocalBranchesRequest{
+				Repository: repo,
+			})
+			require.EqualError(t, err, "rpc error: code = PermissionDenied desc = designed to error with PermissionDenied",
+				"middleware preserves the original error")
+		}
+
+		sendFn()
+
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"no invocations under the interval")
+
+		sendFn()
+
+		housekeepingMiddleware.WaitForWorkers()
+		require.Equal(t, 0, housekeepingManager.getOptimizeRepositoryInvocations(repo.GetRelativePath()),
+			"PermissionDenied errors should skip housekeeping")
 	})
 
 	t.Run("when the OptimizeRepository RPC is invoked", func(t *testing.T) {

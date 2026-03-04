@@ -2,6 +2,7 @@ package housekeeping
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/housekeeping"
@@ -16,6 +17,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/middleware"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -154,8 +157,18 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 			// Execute the handler first so that housekeeping incorporates the latest writes. We also ensure that
 			// the scheduling logic doesn't run for invalid requests.
 			resp, err := handler(ctx, req)
+			// No point in housekeeping if a mutator request was invalid, rate-limited, or unauthorised.
+			// For the rest of the errors, we allow housekeeping execution.
 			if err != nil {
-				return resp, err
+				if st, ok := status.FromError(err); ok {
+					if slices.Index([]codes.Code{
+						codes.FailedPrecondition,
+						codes.ResourceExhausted,
+						codes.PermissionDenied,
+					}, st.Code()) >= 0 {
+						return resp, err
+					}
+				}
 			}
 
 			// No point in housekeeping a deleted repo.
@@ -165,6 +178,7 @@ func (m *Middleware) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 
 			_, forceHousekeeping := forceHousekeepingRPCs[methodInfo.FullMethodName()]
 			m.scheduleHousekeeping(ctx, targetRepo, forceHousekeeping)
+
 			return resp, err
 		case protoregistry.OpAccessor:
 			m.scheduleHousekeepingIfNeeded(ctx, key, targetRepo)
