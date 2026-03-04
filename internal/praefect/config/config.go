@@ -349,6 +349,12 @@ func FromReader(reader io.Reader) (Config, error) {
 
 	conf.setDefaults()
 
+	if conf.Auth.TokenFile != "" {
+		if err := conf.Auth.SetTokenFromFile(); err != nil {
+			return Config{}, err
+		}
+	}
+
 	return *conf, nil
 }
 
@@ -434,6 +440,10 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	if err := c.Auth.Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -452,6 +462,7 @@ func (c *Config) ValidateV2() error {
 		Append(c.Reconciliation.Validate(), "reconciliation").
 		Append(c.Replication.Validate(), "replication").
 		Append(c.Prometheus.Validate(), "prometheus").
+		Append(c.Auth.Validate(), "auth").
 		Append(c.TLS.Validate(), "tls").
 		Append(c.Failover.Validate(), "failover").
 		Append(cfgerror.Comparable(c.GracefulStopTimeout.Duration()).GreaterOrEqual(0), "graceful_stop_timeout").

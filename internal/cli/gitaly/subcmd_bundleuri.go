@@ -56,7 +56,7 @@ func bundleURIAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("get Gitaly address: %w", err)
 	}
 
-	conn, err := dial(ctx, address, cfg.Auth.Token, 10*time.Second)
+	conn, err := dial(ctx, address, cfg.Auth.GetToken(), 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("connect to Gitaly: %w", err)
 	}

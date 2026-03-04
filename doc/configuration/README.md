@@ -61,6 +61,16 @@ Authentication is disabled when the token setting in `config.toml` is absent or 
 token = "the secret token"
 ```
 
+You can store the token in a file and reference it using `token_file`.
+The file must have permissions `0600` or `0400` to ensure it is only readable by the owner.
+The `token` and `token_file` options are mutually exclusive.
+
+```toml
+[auth]
+# Read token from a file (must have 0600 or 0400 permissions)
+token_file = "/path/to/token/file"
+```
+
 It is possible to temporarily disable authentication with the 'transitioning'
 setting. This allows you to monitor (see below) if all clients are
 authenticating correctly without causing a service outage for clients

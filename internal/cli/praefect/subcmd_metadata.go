@@ -98,7 +98,7 @@ func metadataAction(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("get node address: %w", err)
 	}
 
-	conn, err := glcli.Dial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
+	conn, err := glcli.Dial(ctx, nodeAddr, conf.Auth.GetToken(), defaultDialTimeout)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}

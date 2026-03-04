@@ -168,7 +168,7 @@ func NewHooksPayload(
 		ObjectFormat:          objectHash.Format,
 		RuntimeDir:            cfg.RuntimeDir,
 		InternalSocket:        cfg.InternalSocketPath(),
-		InternalSocketToken:   cfg.Auth.Token,
+		InternalSocketToken:   cfg.Auth.GetToken(),
 		Transaction:           tx,
 		UserDetails:           userDetails,
 		RequestedHooks:        requestedHooks,

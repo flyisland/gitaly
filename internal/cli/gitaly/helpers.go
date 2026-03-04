@@ -42,7 +42,7 @@ func loadConfigAndCreateRaftClient(ctx context.Context, configPath string) (gita
 	}
 
 	// Establish gRPC connection
-	conn, err := cli.Dial(ctx, address, cfg.Auth.Token, defaultConnectionTimeout)
+	conn, err := cli.Dial(ctx, address, cfg.Auth.GetToken(), defaultConnectionTimeout)
 	if err != nil {
 		return nil, nil, fmt.Errorf("establish gRPC connection to %s: %w", address, err)
 	}
