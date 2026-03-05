@@ -10,23 +10,30 @@ Please read [Pack-objects cache for CI Git clones epic](https://gitlab.com/group
 
 ## High-level architecture
 
-```plaintext
-Gitaly (PostUploadPack)  git-upload-pack  gitaly-hooks  Gitaly (PackObjectsHook)  git-pack-objects
-------------+----------  -------+-------  -----+------  -----------+------------  -------+--------
-            |  fetch request    |              |                   |                     |
-            +------------------>| pack request |                   |                     |
-            |                   +------------->|   gRPC request    |                     |
-            |                   |              +------------------>| pack request (miss) |
-            |                   |              |                   +-------------------->|
-            |                   |              |                   |                     |
-            |                   |              |                   |<--------------------+
-            |                   |              |<------------------+   packfile data     |
-            |                   |<-------------+   gRPC response   |                     |
-            |<------------------+ packfile data|                   |                     |
-            |   fetch response  |              |                   |                     |
-            |                   |              |                   |                     |
-------------+----------  -------+-------  -----+------  -----------+------------  -------+--------
-Gitaly (PostUploadPack)  git-upload-pack  gitaly-hooks  Gitaly (PackObjectsHook)  git-pack-objects
+```mermaid
+sequenceDiagram
+    participant A as Gitaly (PostUploadPack)
+    participant B as git-upload-pack
+    participant C as gitaly-hooks
+    participant D as Gitaly (PackObjectsHook)
+    participant E as git-pack-objects
+
+    Note over A,B: pipe
+    A->>B: fetch request
+    Note over B,C: pipe
+    B->>C: pack request
+    Note over C,D: socket/sidechannel
+    C->>D: gRPC request
+    Note over D,E: pipe
+    D->>E: pack request (miss)
+    Note over E,D: pipe
+    E-->>D: packfile data
+    Note over C,D: socket/sidechannel
+    D-->>C:  gRPC response
+    Note over C,B: pipe
+    C-->>B: packfile data
+    Note over A,B: pipe
+    B-->>A: fetch response
 ```
 
 The whole pack-objects cache path depends on
