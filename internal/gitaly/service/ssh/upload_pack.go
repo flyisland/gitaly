@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/bundleuri"
@@ -82,6 +83,10 @@ func (s *server) sshUploadPack(ctx context.Context, req *gitalypb.SSHUploadPackW
 		gitcmd.WithGitProtocol(s.logger, req),
 		gitcmd.WithConfig(config...),
 		gitcmd.WithPackObjectsHookEnv(objectHash, repoProto, "ssh"),
+	}
+
+	if s.cfg.Hooks.PackObjectsHookMaxProc > 0 {
+		commandOpts = append(commandOpts, gitcmd.WithEnv("GOMAXPROCS="+strconv.Itoa(int(s.cfg.Hooks.PackObjectsHookMaxProc))))
 	}
 
 	timeoutTicker := s.uploadPackRequestTimeoutTickerFactory()

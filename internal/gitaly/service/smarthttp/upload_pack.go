@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/bundleuri"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/command"
@@ -141,6 +142,10 @@ func (s *server) runUploadPack(ctx context.Context, req *gitalypb.PostUploadPack
 		gitcmd.WithGitProtocol(s.logger, req),
 		gitcmd.WithConfig(gitConfig...),
 		gitcmd.WithPackObjectsHookEnv(objectHash, req.GetRepository(), "http"),
+	}
+
+	if s.cfg.Hooks.PackObjectsHookMaxProc > 0 {
+		commandOpts = append(commandOpts, gitcmd.WithEnv("GOMAXPROCS="+strconv.Itoa(int(s.cfg.Hooks.PackObjectsHookMaxProc))))
 	}
 
 	cmd, err := repo.Exec(ctx, gitcmd.Command{
