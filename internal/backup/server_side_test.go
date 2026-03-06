@@ -104,8 +104,7 @@ func TestServerSideAdapter_Create(t *testing.T) {
 			backupSink, err := backup.ResolveSink(ctx, backupRoot)
 			require.NoError(t, err)
 
-			backupLocator, err := backup.ResolveLocator("pointer", backupSink)
-			require.NoError(t, err)
+			backupLocator := backup.ResolveLocator(backupSink)
 
 			cfg := testcfg.Build(t)
 			cfg.SocketPath = testserver.RunGitalyServer(t, cfg, setup.RegisterAll,
@@ -215,8 +214,7 @@ func TestServerSideAdapter_Restore(t *testing.T) {
 			backupSink, err := backup.ResolveSink(ctx, backupRoot)
 			require.NoError(t, err)
 
-			backupLocator, err := backup.ResolveLocator("manifest", backupSink)
-			require.NoError(t, err)
+			backupLocator := backup.ResolveLocator(backupSink)
 
 			cfg := testcfg.Build(t)
 			cfg.SocketPath = testserver.RunGitalyServer(t, cfg, setup.RegisterAll,

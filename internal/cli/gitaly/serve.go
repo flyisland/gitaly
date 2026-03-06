@@ -697,10 +697,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		if err != nil {
 			return fmt.Errorf("resolve backup sink: %w", err)
 		}
-		backupLocator, err = backup.ResolveLocator(cfg.Backup.Layout, backupSink)
-		if err != nil {
-			return fmt.Errorf("resolve backup locator: %w", err)
-		}
+		backupLocator = backup.ResolveLocator(backupSink)
 	}
 
 	var bundleURIManager *bundleuri.GenerationManager

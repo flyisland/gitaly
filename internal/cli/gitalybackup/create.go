@@ -135,11 +135,7 @@ func (cmd *createSubcommand) run(ctx context.Context, logger log.Logger, stdin i
 			return fmt.Errorf("create: resolve sink: %w", err)
 		}
 
-		locator, err := backup.ResolveLocator(cmd.layout, sink)
-		if err != nil {
-			return fmt.Errorf("create: resolve locator: %w", err)
-		}
-
+		locator := backup.ResolveLocator(sink)
 		manager = backup.NewManager(sink, logger, locator, pool)
 	}
 

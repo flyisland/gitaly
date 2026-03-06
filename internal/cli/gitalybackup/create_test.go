@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -45,8 +44,7 @@ func TestCreateSubcommand(t *testing.T) {
 				backupSink, err := backup.ResolveSink(ctx, backupRoot)
 				require.NoError(t, err)
 
-				backupLocator, err := backup.ResolveLocator("pointer", backupSink)
-				require.NoError(t, err)
+				backupLocator := backup.ResolveLocator(backupSink)
 
 				return []testserver.GitalyServerOpt{
 					testserver.WithBackupSink(backupSink),
@@ -64,8 +62,7 @@ func TestCreateSubcommand(t *testing.T) {
 				backupSink, err := backup.ResolveSink(ctx, backupRoot)
 				require.NoError(t, err)
 
-				backupLocator, err := backup.ResolveLocator("pointer", backupSink)
-				require.NoError(t, err)
+				backupLocator := backup.ResolveLocator(backupSink)
 
 				return []testserver.GitalyServerOpt{
 					testserver.WithBackupSink(backupSink),
@@ -111,7 +108,6 @@ func TestCreateSubcommand(t *testing.T) {
 			}))
 
 			args := append([]string{"create"}, tc.Flags(path)...)
-			args = append(args, "--layout", "pointer")
 
 			stdout, stderr, exitCode := runGitalyBackup(t, ctx, cfg, &stdin, args...)
 			require.Empty(t, stderr)
@@ -119,7 +115,7 @@ func TestCreateSubcommand(t *testing.T) {
 			require.Equal(t, 1, exitCode)
 
 			for _, repo := range repos {
-				bundlePath := filepath.Join(path, strings.TrimSuffix(repo.GetRelativePath(), ".git"), "the-new-backup", "001.bundle")
+				bundlePath := filepath.Join(path, repo.GetStorageName(), repo.GetRelativePath(), "the-new-backup", "001.bundle")
 				require.FileExists(t, bundlePath)
 			}
 		})

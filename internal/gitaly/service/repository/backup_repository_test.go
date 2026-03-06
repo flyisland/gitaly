@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -174,8 +173,7 @@ func TestServerBackupRepository(t *testing.T) {
 			backupSink, err := backup.ResolveSink(ctx, backupRoot)
 			require.NoError(t, err)
 
-			backupLocator, err := backup.ResolveLocator("pointer", backupSink)
-			require.NoError(t, err)
+			backupLocator := backup.ResolveLocator(backupSink)
 
 			vanityRepo := &gitalypb.Repository{
 				StorageName:  "does-not-exist",
@@ -198,9 +196,12 @@ func TestServerBackupRepository(t *testing.T) {
 			require.NoError(t, err)
 			testhelper.ProtoEqual(t, &gitalypb.BackupRepositoryResponse{}, response)
 
-			relativePath := strings.TrimSuffix(vanityRepo.GetRelativePath(), ".git")
-			refsPath := filepath.Join(relativePath, data.backupID, "001.refs")
+			manifestPath := filepath.Join("manifests", vanityRepo.GetStorageName(), vanityRepo.GetRelativePath(), "+latest.toml")
+			manifest, err := backupSink.GetReader(ctx, manifestPath)
+			require.NoError(t, err)
+			testhelper.MustClose(t, manifest)
 
+			refsPath := filepath.Join(vanityRepo.GetStorageName(), vanityRepo.GetRelativePath(), data.backupID, "001.refs")
 			refs, err := backupSink.GetReader(ctx, refsPath)
 			require.NoError(t, err)
 			testhelper.MustClose(t, refs)
@@ -215,8 +216,7 @@ func BenchmarkBackupRepository(b *testing.B) {
 	backupSink, err := backup.ResolveSink(ctx, backupRoot)
 	require.NoError(b, err)
 
-	backupLocator, err := backup.ResolveLocator("pointer", backupSink)
-	require.NoError(b, err)
+	backupLocator := backup.ResolveLocator(backupSink)
 
 	cfg, client := setupRepositoryService(b,
 		testserver.WithBackupSink(backupSink),
