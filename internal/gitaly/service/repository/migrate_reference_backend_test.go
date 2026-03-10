@@ -15,6 +15,7 @@ import (
 )
 
 func TestMigrateReferenceBackend(t *testing.T) {
+	testhelper.SkipQuarantinedTest(t, "https://gitlab.com/gitlab-org/gitaly/-/issues/7107")
 	t.Parallel()
 
 	ctx := testhelper.Context(t)
