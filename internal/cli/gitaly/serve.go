@@ -40,6 +40,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mdfile"
 	nodeimpl "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/node"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/raftmgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/relational"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/migration"
@@ -700,6 +701,17 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			return fmt.Errorf("resolve backup sink: %w", err)
 		}
 		backupLocator = backup.ResolveLocator(backupSink)
+	}
+
+	var poolMetadataStore relational.PoolStore
+	if cfg.PoolMetadata.DatabasePath != "" {
+		var err error
+		poolMetadataStore, err = relational.NewSQLitePoolStore(cfg.PoolMetadata.DatabasePath)
+		if err != nil {
+			return fmt.Errorf("create pool metadata store: %w", err)
+		}
+		defer func() { _ = poolMetadataStore.Close() }()
+		logger.Info(fmt.Sprintf("pool metadata store configured: %s", cfg.PoolMetadata.DatabasePath))
 	}
 
 	var bundleURIManager *bundleuri.GenerationManager
