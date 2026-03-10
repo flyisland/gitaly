@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.9.2 (2026-03-10)
+
+No changes.
+
 ## 18.9.1 (2026-02-24)
 
 No changes.
