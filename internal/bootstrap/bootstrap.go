@@ -172,12 +172,19 @@ func (b *Bootstrap) Start() error {
 	return nil
 }
 
-// Wait will signal process readiness to the parent and than wait for an exit condition
-// SIGTERM, SIGINT and a runtime error will trigger an immediate shutdown
-// in case of an upgrade there will be a grace period to complete the ongoing requests
-// stopAction will be invoked during a graceful stop. It must wait until the shutdown is completed.
+// Wait will signal process readiness to the parent and then wait for an exit condition:
+// such as SIGTERM, SIGINT, SIGHUP (when tableflip is not used).
+// A runtime error will trigger an immediate shutdown.
+// In case of an upgrade there will be a grace period to complete the ongoing requests.
+// `stopAction` will be invoked during a graceful stop. It must wait until the shutdown is completed.
 func (b *Bootstrap) Wait(gracePeriodTicker helper.Ticker, stopAction func()) error {
 	signals := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
+
+	// SIGHUP is already captured above when tableflip is used.
+	// When tableflip is not used, we need to handle it here.
+	if enabled, _ := env.GetBool(EnvUpgradesEnabled, false); !enabled {
+		signals = append(signals, syscall.SIGHUP)
+	}
 	shutdown := make(chan os.Signal, len(signals))
 	signal.Notify(shutdown, signals...)
 
