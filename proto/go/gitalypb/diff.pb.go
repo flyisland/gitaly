@@ -1814,7 +1814,12 @@ type GetPatchIDRequest struct {
 	// new_revision is the new revision that shall be used to compute the patch
 	// from that will then be passed to git-patch-id(1). Accepts revisions as
 	// specified in gitrevisions(5).
-	NewRevision   []byte `protobuf:"bytes,3,opt,name=new_revision,json=newRevision,proto3" json:"new_revision,omitempty"`
+	NewRevision []byte `protobuf:"bytes,3,opt,name=new_revision,json=newRevision,proto3" json:"new_revision,omitempty"`
+	// context_free computes the diff with zero context lines (-U0) before
+	// hashing. This produces patch IDs that remain stable across rebases
+	// where only the merge base changes but the actual code modifications
+	// are identical. When false (default), uses the standard 3 context lines.
+	ContextFree   bool `protobuf:"varint,4,opt,name=context_free,json=contextFree,proto3" json:"context_free,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1868,6 +1873,13 @@ func (x *GetPatchIDRequest) GetNewRevision() []byte {
 		return x.NewRevision
 	}
 	return nil
+}
+
+func (x *GetPatchIDRequest) GetContextFree() bool {
+	if x != nil {
+		return x.ContextFree
+	}
+	return false
 }
 
 // GetPatchIDResponse is a response for the GetPatchID RPC.
@@ -3081,13 +3093,14 @@ const file_diff_proto_rawDesc = "" +
 	"\vTYPE_CHANGE\x10\x03\x12\n" +
 	"\n" +
 	"\x06COPIED\x10\x04\x12\v\n" +
-	"\aRENAMED\x10\x05\"\x93\x01\n" +
+	"\aRENAMED\x10\x05\"\xb6\x01\n" +
 	"\x11GetPatchIDRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
 	"repository\x12!\n" +
 	"\fold_revision\x18\x02 \x01(\fR\voldRevision\x12!\n" +
-	"\fnew_revision\x18\x03 \x01(\fR\vnewRevision\"/\n" +
+	"\fnew_revision\x18\x03 \x01(\fR\vnewRevision\x12!\n" +
+	"\fcontext_free\x18\x04 \x01(\bR\vcontextFree\"/\n" +
 	"\x12GetPatchIDResponse\x12\x19\n" +
 	"\bpatch_id\x18\x01 \x01(\tR\apatchId\";\n" +
 	"\tRangePair\x12\x16\n" +
