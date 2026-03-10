@@ -642,7 +642,7 @@ func TestCommitDiff(t *testing.T) {
 				return
 			}
 
-			assertExactReceivedDiffs(t, stream, tc.setup().expectedDiff)
+			assertExactReceivedDiffs(t, stream, data.expectedDiff)
 		})
 	}
 }
