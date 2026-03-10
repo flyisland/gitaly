@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"strings"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
@@ -62,11 +64,44 @@ func (l ManifestLoader) WriteManifest(ctx context.Context, backup *Backup, backu
 	return nil
 }
 
+// ReadLatestManifest returns the manifest for the most recent completed backup run for a specific repo.
+// This iterates through manifests/$storageName/$relativePath path on the object storage and finds the latest
+// entry according to the object's modification time. This is only used if no manifest file found for the
+// given repository using the backup_id retrieved from ReadLatestBackupID function.
+func (l ManifestLoader) ReadLatestManifest(ctx context.Context, repo storage.Repository) (*Backup, error) {
+	manifestDir := manifestDirectory(repo)
+	iter := l.sink.List(manifestDir)
+
+	var latestKey string
+	var latestModTime time.Time
+	for iter.Next(ctx) {
+		modTime := iter.ModTime()
+		// Use modification time as primary sort key, with lexicographic
+		// tiebreaker when timestamps are equal (e.g. rapid writes on
+		// filesystems with coarse time resolution).
+		if latestKey == "" || modTime.After(latestModTime) || (modTime.Equal(latestModTime) && iter.Path() > latestKey) {
+			latestKey = iter.Path()
+			latestModTime = modTime
+		}
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("iterate manifest directory: %w", err)
+	}
+
+	if latestKey == "" {
+		return nil, ErrDoesntExist
+	}
+
+	latestBackupID := strings.TrimSuffix(path.Base(latestKey), ".toml")
+
+	return l.ReadManifest(ctx, repo, latestBackupID)
+}
+
+func manifestDirectory(repo storage.Repository) string {
+	return path.Join("manifests", repo.GetStorageName(), repo.GetRelativePath())
+}
+
 func manifestPath(repo storage.Repository, backupID string) string {
-	storageName := repo.GetStorageName()
-	// Other locators strip the .git suffix off of relative paths. This suffix
-	// is determined by gitlab-rails not gitaly. So here we leave the relative
-	// path as-is so that new backups can be more independent.
-	relativePath := repo.GetRelativePath()
-	return path.Join("manifests", storageName, relativePath, backupID+".toml")
+	return path.Join(manifestDirectory(repo), backupID+".toml")
 }

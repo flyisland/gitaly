@@ -36,6 +36,7 @@ func (s *server) BackupRepository(ctx context.Context, in *gitalypb.BackupReposi
 		Repository:       in.GetRepository(),
 		VanityRepository: in.GetVanityRepository(),
 		BackupID:         in.GetBackupId(),
+		LatestBackupID:   in.GetLatestBackupId(),
 		Incremental:      in.GetIncremental(),
 	})
 

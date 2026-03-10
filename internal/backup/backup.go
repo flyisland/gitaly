@@ -89,7 +89,7 @@ type Locator interface {
 
 	// BeginIncremental returns the backup with the last element of Steps being
 	// the tentative step needed to create an incremental backup.
-	BeginIncremental(ctx context.Context, repo storage.Repository, backupID string) (*Backup, error)
+	BeginIncremental(ctx context.Context, repo storage.Repository, currentBackupID, latestBackupID string) (*Backup, error)
 
 	// Commit persists the backup so that it can be looked up by FindLatest. It
 	// is expected that the last element of Steps will be the newly created
@@ -273,8 +273,7 @@ func (mgr *Manager) Create(ctx context.Context, req *CreateRequest) error {
 
 	var backup *Backup
 	if req.Incremental {
-		var err error
-		backup, err = mgr.locator.BeginIncremental(ctx, req.VanityRepository, req.BackupID)
+		backup, err = mgr.locator.BeginIncremental(ctx, req.VanityRepository, req.BackupID, req.LatestBackupID)
 		if err != nil {
 			return fmt.Errorf("manager: %w", err)
 		}
@@ -339,22 +338,20 @@ func (mgr *Manager) Restore(ctx context.Context, req *RestoreRequest) error {
 	}
 
 	var backup *Backup
-	if req.BackupID == "" {
-		backup, err = mgr.locator.FindLatest(ctx, req.VanityRepository)
-		switch {
-		case errors.Is(err, ErrDoesntExist):
-			return removeRepository(ctx, repo, err)
-		case err != nil:
-			return fmt.Errorf("manager: %w", err)
-		}
-	} else {
+	if req.BackupID != "" {
 		backup, err = mgr.locator.Find(ctx, req.VanityRepository, req.BackupID)
-		switch {
-		case errors.Is(err, ErrDoesntExist):
-			return fmt.Errorf("manager: %w: %w", ErrDoesntExist, err)
-		case err != nil:
-			return fmt.Errorf("manager: %w", err)
+	}
+	// Fall back to per-repo latest when no backup ID was provided (e.g.
+	// backup_ids/ folder not yet populated after upgrade) or when the
+	// specific backup ID doesn't exist for this repo (partial backup run).
+	if req.BackupID == "" || (errors.Is(err, ErrDoesntExist) && req.UseLatest) {
+		backup, err = mgr.locator.FindLatest(ctx, req.VanityRepository)
+		if errors.Is(err, ErrDoesntExist) {
+			return removeRepository(ctx, repo, err)
 		}
+	}
+	if err != nil {
+		return fmt.Errorf("manager: %w", err)
 	}
 
 	if len(backup.Steps) == 0 {
@@ -418,7 +415,10 @@ func (mgr *IDManager) ReadLatestBackupID(ctx context.Context) (string, error) {
 	var latestModTime time.Time
 	for iter.Next(ctx) {
 		modTime := iter.ModTime()
-		if latestKey == "" || modTime.After(latestModTime) {
+		// Use modification time as primary sort key, with lexicographic
+		// tiebreaker when timestamps are equal (e.g. rapid writes on
+		// filesystems with coarse time resolution).
+		if latestKey == "" || modTime.After(latestModTime) || (modTime.Equal(latestModTime) && iter.Path() > latestKey) {
 			latestKey = iter.Path()
 			latestModTime = modTime
 		}

@@ -49,11 +49,24 @@ func (l ManifestLocator) BeginFull(ctx context.Context, repo storage.Repository,
 // BeginIncremental returns a tentative step needed to create a new incremental
 // backup. The incremental backup is always based off of the latest backup. If
 // there is no latest backup, a new full backup step is returned using backupID.
-func (l ManifestLocator) BeginIncremental(ctx context.Context, repo storage.Repository, backupID string) (*Backup, error) {
-	backup, err := l.Loader.ReadManifest(ctx, repo, latestManifestName)
+func (l ManifestLocator) BeginIncremental(ctx context.Context, repo storage.Repository, currentBackupID, latestBackupID string) (*Backup, error) {
+	var backup *Backup
+	var err error
+	if latestBackupID != "" {
+		backup, err = l.Find(ctx, repo, latestBackupID)
+		if errors.Is(err, ErrDoesntExist) {
+			// This repo wasn't part of the backup run identified by
+			// latestBackupID (e.g. partial failure or newly added repo).
+			// Fall back to per-repo latest manifest.
+			backup, err = l.Loader.ReadLatestManifest(ctx, repo)
+		}
+	} else {
+		backup, err = l.Loader.ReadLatestManifest(ctx, repo)
+	}
+
 	switch {
 	case errors.Is(err, ErrDoesntExist):
-		return l.BeginFull(ctx, repo, backupID), nil
+		return l.BeginFull(ctx, repo, currentBackupID), nil
 	case err != nil:
 		return nil, fmt.Errorf("manifest: begin incremental: %w", err)
 	}
@@ -70,12 +83,12 @@ func (l ManifestLocator) BeginIncremental(ctx context.Context, repo storage.Repo
 		previousRefPath = backup.Steps[len(backup.Steps)-1].RefPath
 	}
 
-	backup.ID = backupID
+	backup.ID = currentBackupID
 	backup.Steps = append(backup.Steps, Step{
-		BundlePath:      filepath.Join(storageName, relativePath, backupID, fmt.Sprintf("%03d.bundle", n)),
-		RefPath:         filepath.Join(storageName, relativePath, backupID, fmt.Sprintf("%03d.refs", n)),
+		BundlePath:      filepath.Join(storageName, relativePath, currentBackupID, fmt.Sprintf("%03d.bundle", n)),
+		RefPath:         filepath.Join(storageName, relativePath, currentBackupID, fmt.Sprintf("%03d.refs", n)),
 		PreviousRefPath: previousRefPath,
-		CustomHooksPath: filepath.Join(storageName, relativePath, backupID, fmt.Sprintf("%03d.custom_hooks.tar", n)),
+		CustomHooksPath: filepath.Join(storageName, relativePath, currentBackupID, fmt.Sprintf("%03d.custom_hooks.tar", n)),
 	})
 
 	return backup, nil
@@ -86,6 +99,8 @@ func (l ManifestLocator) Commit(ctx context.Context, backup *Backup) error {
 	if err := l.Loader.WriteManifest(ctx, backup, backup.ID); err != nil {
 		return fmt.Errorf("manifest: commit: %w", err)
 	}
+	// Write +latest for backward compatibility incase of rollback.
+	// Remove if there are no issues with the new manifest format after a few releases.
 	if err := l.Loader.WriteManifest(ctx, backup, latestManifestName); err != nil {
 		return fmt.Errorf("manifest: commit latest: %w", err)
 	}
@@ -93,9 +108,9 @@ func (l ManifestLocator) Commit(ctx context.Context, backup *Backup) error {
 	return nil
 }
 
-// FindLatest loads the manifest called +latest.
+// FindLatest loads the latest manifest for the provided repo using timestamp order.
 func (l ManifestLocator) FindLatest(ctx context.Context, repo storage.Repository) (*Backup, error) {
-	backup, err := l.Loader.ReadManifest(ctx, repo, latestManifestName)
+	backup, err := l.Loader.ReadLatestManifest(ctx, repo)
 	if err != nil {
 		return nil, fmt.Errorf("manifest: find latest: %w", err)
 	}

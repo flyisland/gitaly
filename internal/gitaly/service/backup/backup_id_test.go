@@ -1,7 +1,6 @@
 package backup_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -78,8 +77,7 @@ func TestWriteBackupID(t *testing.T) {
 			}
 			require.NoError(t, iter.Err())
 			require.Len(t, keys, 1)
-			require.True(t, strings.HasSuffix(keys[0], "_"+tc.backupID),
-				"expected key %q to end with _%s", keys[0], tc.backupID)
+			require.Equal(t, "backup_ids/"+tc.backupID, keys[0])
 		})
 	}
 }
@@ -98,10 +96,15 @@ func TestReadLatestBackupID(t *testing.T) {
 			desc:             "returns latest backup ID",
 			expectedBackupID: "third",
 			setup: func(t *testing.T, sink *backup.Sink, backupRoot string) gitalypb.BackupServiceClient {
+				// Write markers separately so they get different modification times.
 				testhelper.WriteFiles(t, backupRoot, map[string]any{
-					"backup_ids/1679922782000000000_first":  "",
-					"backup_ids/1679922782100000000_second": "",
-					"backup_ids/1679922782200000000_third":  "",
+					"backup_ids/first": "",
+				})
+				testhelper.WriteFiles(t, backupRoot, map[string]any{
+					"backup_ids/second": "",
+				})
+				testhelper.WriteFiles(t, backupRoot, map[string]any{
+					"backup_ids/third": "",
 				})
 				_, client := setupBackupService(t, testserver.WithBackupSink(sink))
 				return client

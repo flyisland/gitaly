@@ -118,7 +118,7 @@ func (cmd *restoreSubcommand) run(ctx context.Context, logger log.Logger, stdin 
 		_ = pool.Close()
 	}()
 
-	var manager backup.Strategy
+	var manager backup.Operator
 	if cmd.serverSide {
 		if cmd.backupPath != "" {
 			return fmt.Errorf("restore: path cannot be used with server-side backups")
@@ -130,8 +130,22 @@ func (cmd *restoreSubcommand) run(ctx context.Context, logger log.Logger, stdin 
 		if err != nil {
 			return fmt.Errorf("restore: resolve sink: %w", err)
 		}
-		locator := backup.ResolveLocator(sink)
-		manager = backup.NewManager(sink, logger, locator, pool)
+		manager = backup.NewManager(sink, logger, backup.ResolveLocator(sink), pool)
+	}
+
+	useLatest := false
+	if cmd.backupID == "" {
+		useLatest = true
+		backupID, err := manager.ReadLatestBackupID(ctx)
+		switch {
+		case errors.Is(err, backup.ErrDoesntExist):
+			// No backup_ids/ markers found. Leave cmd.backupID empty so that
+			// each per-repo restore falls back to their own latest files.
+		case err != nil:
+			return fmt.Errorf("read latest backup ID: %w", err)
+		default:
+			cmd.backupID = backupID
+		}
 	}
 
 	// Get the set of existing repositories keyed by storage. We'll later use this to determine any
@@ -175,6 +189,7 @@ func (cmd *restoreSubcommand) run(ctx context.Context, logger log.Logger, stdin 
 			VanityRepository: &repo,
 			AlwaysCreate:     req.AlwaysCreate,
 			BackupID:         cmd.backupID,
+			UseLatest:        useLatest,
 		}))
 	}
 

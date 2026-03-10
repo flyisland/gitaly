@@ -145,6 +145,7 @@ func TestServerSideAdapter_Restore(t *testing.T) {
 		repo             *gitalypb.Repository
 		repoPath         string
 		backupID         string
+		useLatest        bool
 		expectedChecksum *git.Checksum
 	}
 
@@ -204,7 +205,46 @@ func TestServerSideAdapter_Restore(t *testing.T) {
 					backupID: "",
 				}
 			},
-			expectedErr: structerr.NewInternal("server-side restore: restore repository: manifest: find latest: read manifest: sink: new reader for \"manifests/default/@test/restore/latest/missing.git/+latest.toml\": doesn't exist"),
+			expectedErr: structerr.NewInternal("server-side restore: restore repository: manifest: find latest: doesn't exist"),
+		},
+		{
+			desc: "UseLatest falls back to latest when backup ID not found",
+			setup: func(t *testing.T, ctx context.Context, cfg config.Cfg, backupSink *backup.Sink, backupLocator backup.Locator) setupData {
+				_, templateRepoPath := gittest.CreateRepository(t, ctx, cfg)
+				oid := gittest.WriteCommit(t, cfg, templateRepoPath, gittest.WithBranch(git.DefaultBranch))
+				gittest.WriteCommit(t, cfg, templateRepoPath, gittest.WithBranch("feature"), gittest.WithParents(oid))
+				checksum := gittest.ChecksumRepo(t, cfg, templateRepoPath)
+
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+				bkp := backupLocator.BeginFull(ctx, repo, "existing123")
+				step := bkp.Steps[len(bkp.Steps)-1]
+
+				w, err := backupSink.GetWriter(ctx, step.BundlePath)
+				require.NoError(t, err)
+				bundle := gittest.BundleRepo(t, cfg, templateRepoPath, "-")
+				_, err = w.Write(bundle)
+				require.NoError(t, err)
+				require.NoError(t, w.Close())
+
+				w, err = backupSink.GetWriter(ctx, step.RefPath)
+				require.NoError(t, err)
+				refs := gittest.Exec(t, cfg, "-C", templateRepoPath, "show-ref", "--head")
+				_, err = w.Write(refs)
+				require.NoError(t, err)
+				require.NoError(t, w.Close())
+
+				bkp.ObjectFormat = gittest.DefaultObjectHash.Format
+
+				require.NoError(t, backupLocator.Commit(ctx, bkp))
+
+				return setupData{
+					repo:             repo,
+					repoPath:         repoPath,
+					backupID:         "nonexistent456",
+					useLatest:        true,
+					expectedChecksum: checksum,
+				}
+			},
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -235,6 +275,7 @@ func TestServerSideAdapter_Restore(t *testing.T) {
 				Repository:       data.repo,
 				VanityRepository: data.repo,
 				BackupID:         data.backupID,
+				UseLatest:        data.useLatest,
 			})
 			if tc.expectedErr != nil {
 				testhelper.RequireGrpcError(t, tc.expectedErr, err)

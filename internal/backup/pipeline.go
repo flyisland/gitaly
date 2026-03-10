@@ -22,6 +22,21 @@ type Strategy interface {
 	Restore(context.Context, *RestoreRequest) error
 }
 
+// IDHandler handles backup-run-level operations scoped to an entire
+// backup run rather than individual repositories.
+type IDHandler interface {
+	WriteBackupID(ctx context.Context, backupID string) error
+	ReadLatestBackupID(ctx context.Context) (string, error)
+}
+
+// Operator is the full interface implemented by all backup managers. CLI code
+// uses this so a single variable covers both per-repository and run-level
+// operations.
+type Operator interface {
+	Strategy
+	IDHandler
+}
+
 // CreateRequest is the request to create a backup
 type CreateRequest struct {
 	// Server contains gitaly server connection information required to call
@@ -36,6 +51,10 @@ type CreateRequest struct {
 	// BackupID is used to determine a unique path for the backup when a full
 	// backup is created.
 	BackupID string
+	// LatestBackupID is used to determine the last backup if incremental is true.
+	// If incremental is true, LastBackupID is empty and the fallback FindLatest
+	// also returns ErrDoesntExist, it would fallback to creating full backup.
+	LatestBackupID string
 }
 
 // RestoreRequest is the request to restore from a backup
@@ -53,6 +72,12 @@ type RestoreRequest struct {
 	// BackupID is the ID of the full backup to restore. If not specified, the
 	// latest backup is restored..
 	BackupID string
+	// UseLatest is a flag to distinguish if ErrDoesntExist error returned for a backupID
+	// provided by user, or the backupID returned from the ReadLatestBackupID function.
+	// When user provides a backupID, UseLatest is always false. If it is true and the Find
+	// call resulted in ErrDoesntExist, restore falls back to calling FindLatest for that
+	// specific repository.
+	UseLatest bool
 }
 
 // Command handles a specific backup operation
@@ -257,11 +282,11 @@ func (p *Pipeline) Done() (processedRepos map[string]map[repositoryKey]struct{},
 	p.workerWg.Wait()
 
 	if p.pipelineError != nil {
-		return nil, fmt.Errorf("pipeline: %w", p.pipelineError)
+		return p.processedRepos, fmt.Errorf("pipeline: %w", p.pipelineError)
 	}
 
 	if len(p.cmdErrors.errs) > 0 {
-		return nil, fmt.Errorf("pipeline: %w", p.cmdErrors)
+		return p.processedRepos, fmt.Errorf("pipeline: %w", p.cmdErrors)
 	}
 
 	return p.processedRepos, nil

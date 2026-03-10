@@ -142,7 +142,7 @@ func TestRestoreRepository(t *testing.T) {
 					backupID: "",
 				}
 			},
-			expectedErr: structerr.NewInternal("restore repository: manifest: find latest: read manifest: sink: new reader for \"manifests/default/@test/restore/latest/missing.git/+latest.toml\": doesn't exist"),
+			expectedErr: structerr.NewInternal("restore repository: manifest: find latest: doesn't exist"),
 		},
 		{
 			desc: "missing repository",

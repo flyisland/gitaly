@@ -1371,6 +1371,9 @@ message BackupRepositoryRequest {
   // incremental controls whether an incremental backup should be performed. An incremental
   // backup will attempt to locate a previous backup of this repository to base itself off.
   bool incremental = 4;
+  // latest_backup_id is populated when incremental is true to indicate which backup the
+  // newly created incremental backup should be based on.
+  string latest_backup_id = 5;
 }
 
 // BackupRepositoryResponse is a response for the BackupRepository RPC.
@@ -1392,6 +1395,9 @@ message RestoreRepositoryRequest {
   // always_create will force the repository to exist even if no bundle is
   // found. See https://gitlab.com/gitlab-org/gitlab/-/issues/357044
   bool always_create = 4;
+  // use_latest indicates if latest backup should be used if backup_id is not
+  // provided.
+  bool use_latest = 5;
 }
 
 // RestoreRepositoryResponse is a response for the RestoreRepository RPC.

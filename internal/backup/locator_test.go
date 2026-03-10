@@ -50,6 +50,17 @@ bundle_path = '%[1]s/%[2]s/%[3]s/001.bundle'
 ref_path = '%[1]s/%[2]s/%[3]s/001.refs'
 custom_hooks_path = '%[1]s/%[2]s/%[3]s/001.custom_hooks.tar'
 `, repo.GetStorageName(), repo.GetRelativePath(), backupID), string(manifest))
+		// We are still writing +latest for backward compatibility.
+		latest := testhelper.MustReadFile(t, filepath.Join(backupPath, "manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"))
+		require.Equal(t, fmt.Sprintf(`empty = false
+non_existent = false
+object_format = ''
+
+[[steps]]
+bundle_path = '%[1]s/%[2]s/%[3]s/001.bundle'
+ref_path = '%[1]s/%[2]s/%[3]s/001.refs'
+custom_hooks_path = '%[1]s/%[2]s/%[3]s/001.custom_hooks.tar'
+`, repo.GetStorageName(), repo.GetRelativePath(), backupID), string(latest))
 	})
 
 	t.Run("BeginIncremental/Commit", func(t *testing.T) {
@@ -58,7 +69,7 @@ custom_hooks_path = '%[1]s/%[2]s/%[3]s/001.custom_hooks.tar'
 		backupPath := testhelper.TempDir(t)
 
 		testhelper.WriteFiles(t, backupPath, map[string]any{
-			filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+			filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 object_format = 'sha1'
 empty = false
 non_existent = false
@@ -74,7 +85,57 @@ custom_hooks_path = '%[1]s/%[2]s/%[3]s/001.custom_hooks.tar'
 		require.NoError(t, err)
 		var l Locator = NewManifestLocator(sink)
 
-		incremental, err := l.BeginIncremental(ctx, repo, backupID)
+		incremental, err := l.BeginIncremental(ctx, repo, backupID, "")
+		require.NoError(t, err)
+		require.NoError(t, l.Commit(ctx, incremental))
+
+		manifest := testhelper.MustReadFile(t, filepath.Join(backupPath, "manifests", repo.GetStorageName(), repo.GetRelativePath(), backupID+".toml"))
+		latestManifest := testhelper.MustReadFile(t, filepath.Join(backupPath, "manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"))
+
+		expectedManifest := fmt.Sprintf(`empty = false
+non_existent = false
+object_format = 'sha1'
+
+[[steps]]
+bundle_path = '%[1]s/%[2]s/%[3]s/001.bundle'
+ref_path = '%[1]s/%[2]s/%[3]s/001.refs'
+custom_hooks_path = '%[1]s/%[2]s/%[3]s/001.custom_hooks.tar'
+
+[[steps]]
+bundle_path = '%[1]s/%[2]s/%[3]s/002.bundle'
+ref_path = '%[1]s/%[2]s/%[3]s/002.refs'
+previous_ref_path = '%[1]s/%[2]s/%[3]s/001.refs'
+custom_hooks_path = '%[1]s/%[2]s/%[3]s/002.custom_hooks.tar'
+`, repo.GetStorageName(), repo.GetRelativePath(), backupID)
+
+		require.Equal(t, expectedManifest, string(manifest))
+		require.Equal(t, expectedManifest, string(latestManifest))
+	})
+
+	t.Run("BeginIncremental/Commit with provided latest backup ID", func(t *testing.T) {
+		t.Parallel()
+
+		backupPath := testhelper.TempDir(t)
+
+		testhelper.WriteFiles(t, backupPath, map[string]any{
+			"backup_ids/the-backup-1": "",
+			filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "the-backup-1.toml"): fmt.Sprintf(`
+object_format = 'sha1'
+empty = false
+non_existent = false
+
+[[steps]]
+bundle_path = '%[1]s/%[2]s/%[3]s/001.bundle'
+ref_path = '%[1]s/%[2]s/%[3]s/001.refs'
+custom_hooks_path = '%[1]s/%[2]s/%[3]s/001.custom_hooks.tar'
+`, repo.GetStorageName(), repo.GetRelativePath(), backupID),
+		})
+
+		sink, err := ResolveSink(ctx, backupPath)
+		require.NoError(t, err)
+		var l Locator = NewManifestLocator(sink)
+
+		incremental, err := l.BeginIncremental(ctx, repo, backupID, "the-backup-1")
 		require.NoError(t, err)
 		require.NoError(t, l.Commit(ctx, incremental))
 
@@ -198,7 +259,7 @@ func TestManifestLocator_FindLatest(t *testing.T) {
 			},
 			setup: func(t *testing.T, ctx context.Context, backupPath string) {
 				testhelper.WriteFiles(t, backupPath, map[string]any{
-					"manifests/default/vanity/repo.git/+latest.toml": `empty = false
+					"manifests/default/vanity/repo.git/abc123.toml": `empty = false
 non_existent = false
 object_format = 'sha1'
 
@@ -216,7 +277,7 @@ custom_hooks_path = 'manifest-path/to/002.custom_hooks.tar'
 				})
 			},
 			expectedBackup: &Backup{
-				ID: "+latest",
+				ID: "abc123",
 				Repository: &gitalypb.Repository{
 					StorageName:  "default",
 					RelativePath: "vanity/repo.git",
