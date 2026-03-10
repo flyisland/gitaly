@@ -7,7 +7,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
@@ -20,12 +19,8 @@ import (
 func TestListLastCommitsForTree(t *testing.T) {
 	t.Parallel()
 
-	testhelper.NewFeatureSets(
-		featureflag.GitLastModified,
-	).Run(t, testListLastCommitsForTree)
-}
+	ctx := testhelper.Context(t)
 
-func testListLastCommitsForTree(t *testing.T, ctx context.Context) {
 	commitResponse := func(path string, commit *gitalypb.GitCommit) *gitalypb.ListLastCommitsForTreeResponse_CommitForTree {
 		return &gitalypb.ListLastCommitsForTreeResponse_CommitForTree{
 			PathBytes: []byte(path),
@@ -397,25 +392,21 @@ func BenchmarkListLastCommitsForTree(b *testing.B) {
 		b.Run(fmt.Sprintf("limit=%d", limit), func(b *testing.B) {
 			request.Limit = limit
 
-			testhelper.NewFeatureSets(
-				featureflag.GitLastModified,
-			).Bench(b, func(b *testing.B, ctx context.Context) {
-				for i := int32(0); i < 120; i += limit {
-					request.Offset = i
+			for i := int32(0); i < 120; i += limit {
+				request.Offset = i
 
-					stream, err := client.ListLastCommitsForTree(ctx, request)
-					require.NoError(b, err)
+				stream, err := client.ListLastCommitsForTree(ctx, request)
+				require.NoError(b, err)
 
-					commits, err := testhelper.ReceiveAndFold(stream.Recv, func(
-						result []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree,
-						response *gitalypb.ListLastCommitsForTreeResponse,
-					) []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree {
-						return append(result, response.GetCommits()...)
-					})
-					require.NoError(b, err)
-					require.NotEmpty(b, commits)
-				}
-			})
+				commits, err := testhelper.ReceiveAndFold(stream.Recv, func(
+					result []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree,
+					response *gitalypb.ListLastCommitsForTreeResponse,
+				) []*gitalypb.ListLastCommitsForTreeResponse_CommitForTree {
+					return append(result, response.GetCommits()...)
+				})
+				require.NoError(b, err)
+				require.NotEmpty(b, commits)
+			}
 		})
 	}
 }
