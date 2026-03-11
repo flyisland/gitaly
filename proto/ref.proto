@@ -552,6 +552,9 @@ message ListRefsRequest {
   // pagination_params controls paging. Refer to PaginationParameter documentation for
   // further info.
   PaginationParameter pagination_params = 7;
+  // ignore_case makes pattern matching and sorting case-insensitive.
+  // This corresponds to the --ignore-case option of git-for-each-ref(1).
+  bool ignore_case = 8;
 }
 
 // ListRefsResponse is a response for the ListRefs RPC. The RPC can return multiple responses

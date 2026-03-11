@@ -55,6 +55,10 @@ func (s *server) ListRefs(in *gitalypb.ListRefsRequest, stream gitalypb.RefServi
 		opts.cmdArgs = append(opts.cmdArgs, gitcmd.ValueFlag{Name: "--points-at", Value: string(oid)})
 	}
 
+	if in.GetIgnoreCase() {
+		opts.cmdArgs = append(opts.cmdArgs, gitcmd.Flag{Name: "--ignore-case"})
+	}
+
 	if err := s.findRefs(ctx, writer, repo, patterns, opts); err != nil {
 		if errors.Is(err, lines.ErrInvalidPageToken) {
 			return structerr.NewInvalidArgument("invalid page token: %w", err)
