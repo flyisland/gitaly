@@ -16,6 +16,62 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
+// BenchmarkCommitDiff compares the performance of the CommitDiff RPC in normal operations, and
+// when a whitespace ignore option is specified by the caller. The left and right commits are set
+// such that a reasonably large number of diffs are computed. This way we ensure setup time is
+// amortised, and we can measure the bulk of time as actual work.
+func BenchmarkCommitDiff(b *testing.B) {
+	ctx := testhelper.Context(b)
+	cfg, client := setupDiffService(b)
+
+	repoProto, _ := gittest.CreateRepository(b, ctx, cfg, gittest.CreateRepositoryConfig{
+		Seed: "benchmark.git",
+	})
+
+	req := &gitalypb.CommitDiffRequest{
+		Repository:    repoProto,
+		LeftCommitId:  "17-10-stable-ee",
+		RightCommitId: "17-11-stable-ee",
+	}
+
+	reqWhitespaceIgnored := &gitalypb.CommitDiffRequest{
+		Repository:        repoProto,
+		LeftCommitId:      "17-10-stable-ee",
+		RightCommitId:     "17-11-stable-ee",
+		WhitespaceChanges: gitalypb.CommitDiffRequest_WHITESPACE_CHANGES_IGNORE_ALL,
+	}
+
+	b.Run("all changes", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			stream, err := client.CommitDiff(ctx, req)
+			require.NoError(b, err)
+
+			for {
+				_, err := stream.Recv()
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				require.NoError(b, err)
+			}
+		}
+	})
+
+	b.Run("whitespace ignored", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			stream, err := client.CommitDiff(ctx, reqWhitespaceIgnored)
+			require.NoError(b, err)
+
+			for {
+				_, err := stream.Recv()
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				require.NoError(b, err)
+			}
+		}
+	})
+}
+
 func TestCommitDiff(t *testing.T) {
 	t.Parallel()
 
