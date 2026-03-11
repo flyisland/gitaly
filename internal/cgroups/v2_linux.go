@@ -243,6 +243,22 @@ func (cvh *cgroupV2Handler) collect(repoPath string, ch chan<- prometheus.Metric
 			}
 		}
 
+		if cpuPressure := metrics.GetCPU().GetPSI(); cpuPressure != nil {
+			if some := cpuPressure.GetSome(); some != nil {
+				cpuPressureSomeAvg10 := cvh.cpuPressure.WithLabelValues(repoPath, "some", "avg10")
+				cpuPressureSomeAvg10.Set(some.GetAvg10())
+				ch <- cpuPressureSomeAvg10
+
+				cpuPressureSomeAvg60 := cvh.cpuPressure.WithLabelValues(repoPath, "some", "avg60")
+				cpuPressureSomeAvg60.Set(some.GetAvg60())
+				ch <- cpuPressureSomeAvg60
+
+				cpuPressureSomeAvg300 := cvh.cpuPressure.WithLabelValues(repoPath, "some", "avg300")
+				cpuPressureSomeAvg300.Set(some.GetAvg300())
+				ch <- cpuPressureSomeAvg300
+			}
+		}
+
 		// Memory events metrics
 		if memEvents := metrics.GetMemoryEvents(); memEvents != nil {
 			ch <- prometheus.MustNewConstMetric(
@@ -373,6 +389,15 @@ func (cvh *cgroupV2Handler) stats() (Stats, error) {
 			stats.ParentStats.IOPSI.Full.Avg60 = full.GetAvg60()
 			stats.ParentStats.IOPSI.Full.Avg300 = full.GetAvg300()
 			stats.ParentStats.IOPSI.Full.Total = full.GetTotal()
+		}
+	}
+
+	if cpuPressure := metrics.GetCPU().GetPSI(); cpuPressure != nil {
+		if some := cpuPressure.GetSome(); some != nil {
+			stats.ParentStats.CPUPSI.Some.Avg10 = some.GetAvg10()
+			stats.ParentStats.CPUPSI.Some.Avg60 = some.GetAvg60()
+			stats.ParentStats.CPUPSI.Some.Avg300 = some.GetAvg300()
+			stats.ParentStats.CPUPSI.Some.Total = some.GetTotal()
 		}
 	}
 

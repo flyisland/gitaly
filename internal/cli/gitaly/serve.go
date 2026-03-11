@@ -406,14 +406,32 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 
 	// Enable the adaptive calculator only if there is any limit needed to be adaptive.
 	if len(adaptiveLimits) > 0 {
+		resourceWatchers := []limiter.ResourceWatcher{
+			watchers.NewCgroupCPUWatcher(cgroupMgr, cfg.AdaptiveLimiting.CPUThrottledThreshold),
+			watchers.NewCgroupMemoryWatcher(cgroupMgr, cfg.AdaptiveLimiting.MemoryThreshold),
+		}
+
+		for _, entry := range []struct {
+			resource watchers.PressureResource
+			cfg      config.PSIResourceConfig
+		}{
+			{watchers.PressureResourceMemory, cfg.AdaptiveLimiting.PSIPressure.Memory},
+			{watchers.PressureResourceIO, cfg.AdaptiveLimiting.PSIPressure.IO},
+			{watchers.PressureResourceCPU, cfg.AdaptiveLimiting.PSIPressure.CPU},
+		} {
+			if !entry.cfg.Enabled {
+				continue
+			}
+			resourceWatchers = append(resourceWatchers,
+				watchers.NewCgroupPressureWatcher(cgroupMgr, logger, entry.resource, entry.cfg),
+			)
+		}
+
 		adaptiveCalculator := limiter.NewAdaptiveCalculator(
 			limiter.DefaultCalibrateFrequency,
 			logger,
 			adaptiveLimits,
-			[]limiter.ResourceWatcher{
-				watchers.NewCgroupCPUWatcher(cgroupMgr, cfg.AdaptiveLimiting.CPUThrottledThreshold),
-				watchers.NewCgroupMemoryWatcher(cgroupMgr, cfg.AdaptiveLimiting.MemoryThreshold),
-			},
+			resourceWatchers,
 		)
 		prometheus.MustRegister(adaptiveCalculator)
 
