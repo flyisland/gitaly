@@ -364,10 +364,15 @@ func (rr *remoteRepository) ResetRefs(ctx context.Context, refs []git.Reference,
 			})
 		}
 	}
+
 	// Add updates to create or modify refs in the new set
+	existingRefTargets := make(map[git.ReferenceName]string, len(existingRefs))
+	for _, ref := range existingRefs {
+		existingRefTargets[ref.Name] = ref.Target
+	}
 	updates := make([]*gitalypb.UpdateReferencesRequest_Update, 0, len(refs))
 	for _, newRef := range refs {
-		if shouldUpdateRef(existingRefs, newRef) {
+		if shouldUpdateRef(existingRefTargets, newRef) {
 			updates = append(updates, &gitalypb.UpdateReferencesRequest_Update{
 				Reference:   []byte(newRef.Name),
 				NewObjectId: []byte(newRef.Target),
@@ -848,10 +853,15 @@ func (r *localRepository) ResetRefs(ctx context.Context, refs []git.Reference, o
 			removeUpdates = append(removeUpdates, git.NewReference(existingRef.Name, objectHash.ZeroOID))
 		}
 	}
-	// Prepare updates to create or modify refs in the new set
+	
+	// Add updates to create or modify refs in the new set
+	existingRefTargets := make(map[git.ReferenceName]string, len(existingRefs))
+	for _, ref := range existingRefs {
+		existingRefTargets[ref.Name] = ref.Target
+	}
 	updates := make([]git.Reference, 0, len(refs))
 	for _, newRef := range refs {
-		if shouldUpdateRef(existingRefs, newRef) {
+		if shouldUpdateRef(existingRefTargets, newRef) {
 			updates = append(updates, newRef)
 		}
 	}
@@ -938,16 +948,14 @@ func shouldRemoveRef(refsToKeep map[git.ReferenceName]struct{}, name git.Referen
 }
 
 // shouldUpdateRef checks if a reference value has changed, and should be updated.
-func shouldUpdateRef(existingRefs []git.Reference, newRef git.Reference) bool {
+func shouldUpdateRef(existingRefs map[git.ReferenceName]string, newRef git.Reference) bool {
 	// Updating HEAD reference is not allowed in UpdateReferences call.
 	if newRef.Name == "HEAD" {
 		return false
 	}
 
-	for _, existingRef := range existingRefs {
-		if existingRef.Name == newRef.Name && existingRef.Target == newRef.Target {
-			return false
-		}
+	if target, exists := existingRefs[newRef.Name]; exists && target == newRef.Target {
+		return false
 	}
 
 	return true
