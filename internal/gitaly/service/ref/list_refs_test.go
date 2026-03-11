@@ -41,6 +41,7 @@ func TestServer_ListRefs(t *testing.T) {
 		{"update-ref", "refs/remote/remote-name/remote-branch", newCommitID.String()},
 		{"symbolic-ref", "HEAD", "refs/heads/main"},
 		{"update-ref", "refs/heads/old", oldCommitID.String()},
+		{"update-ref", "refs/heads/UPPER", newCommitID.String()},
 	} {
 		gittest.Exec(t, cfg, append([]string{"-C", repoPath}, cmd...)...)
 	}
@@ -122,6 +123,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Patterns:   [][]byte{[]byte("refs/")},
 			},
 			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
 				{Name: []byte("refs/heads/main"), Target: newCommitID.String()},
 				{Name: []byte("refs/heads/old"), Target: oldCommitID.String()},
 				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
@@ -143,8 +145,29 @@ func TestServer_ListRefs(t *testing.T) {
 			},
 			expected: []*gitalypb.ListRefsResponse_Reference{
 				{Name: []byte("refs/heads/old"), Target: oldCommitID.String()},
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
 				{Name: []byte("refs/heads/main"), Target: newCommitID.String()},
 				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
+			},
+		},
+		{
+			desc: "sort by refname with ignore case",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/heads/*")},
+				IgnoreCase: true,
+				SortBy: &gitalypb.ListRefsRequest_SortBy{
+					Key:       gitalypb.ListRefsRequest_SortBy_REFNAME,
+					Direction: gitalypb.SortDirection_ASCENDING,
+				},
+			},
+			// With case-insensitive sorting, "main" comes before "UPPER" (m < u alphabetically)
+			// Without ignore_case, "UPPER" would come first (ASCII: U=85 < m=109)
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/main"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/old"), Target: oldCommitID.String()},
+				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
 			},
 		},
 		{
@@ -154,6 +177,7 @@ func TestServer_ListRefs(t *testing.T) {
 				Patterns:   [][]byte{[]byte("refs/heads/*"), []byte("refs/tags/*")},
 			},
 			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
 				{Name: []byte("refs/heads/main"), Target: newCommitID.String()},
 				{Name: []byte("refs/heads/old"), Target: oldCommitID.String()},
 				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
@@ -171,6 +195,7 @@ func TestServer_ListRefs(t *testing.T) {
 			},
 			expected: []*gitalypb.ListRefsResponse_Reference{
 				{Name: []byte("HEAD"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
 				{Name: []byte("refs/heads/main"), Target: newCommitID.String()},
 				{Name: []byte("refs/heads/old"), Target: oldCommitID.String()},
 				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
@@ -318,6 +343,37 @@ func TestServer_ListRefs(t *testing.T) {
 			},
 			expectedGrpcError: codes.InvalidArgument,
 			expectedError:     "rpc error: code = InvalidArgument desc = invalid page token: sending lines: could not find page token",
+		},
+		{
+			desc: "case insensitive pattern matching with lowercase pattern",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/heads/upper")},
+				IgnoreCase: true,
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
+			},
+		},
+		{
+			desc: "case insensitive pattern matching with uppercase pattern",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/heads/MAIN")},
+				IgnoreCase: true,
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/main"), Target: newCommitID.String()},
+			},
+		},
+		{
+			desc: "case sensitive pattern matching does not match different case",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/heads/upper")},
+				IgnoreCase: false,
+			},
+			expected: nil,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {

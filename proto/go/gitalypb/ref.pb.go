@@ -1965,8 +1965,11 @@ type ListRefsRequest struct {
 	// pagination_params controls paging. Refer to PaginationParameter documentation for
 	// further info.
 	PaginationParams *PaginationParameter `protobuf:"bytes,7,opt,name=pagination_params,json=paginationParams,proto3" json:"pagination_params,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// ignore_case makes pattern matching and sorting case-insensitive.
+	// This corresponds to the --ignore-case option of git-for-each-ref(1).
+	IgnoreCase    bool `protobuf:"varint,8,opt,name=ignore_case,json=ignoreCase,proto3" json:"ignore_case,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListRefsRequest) Reset() {
@@ -2046,6 +2049,13 @@ func (x *ListRefsRequest) GetPaginationParams() *PaginationParameter {
 		return x.PaginationParams
 	}
 	return nil
+}
+
+func (x *ListRefsRequest) GetIgnoreCase() bool {
+	if x != nil {
+		return x.IgnoreCase
+	}
+	return false
 }
 
 // ListRefsResponse is a response for the ListRefs RPC. The RPC can return multiple responses
@@ -2750,7 +2760,7 @@ const file_ref_proto_rawDesc = "" +
 	"\vremote_name\x18\x02 \x01(\tR\n" +
 	"remoteName\"K\n" +
 	"\x1dFindAllRemoteBranchesResponse\x12*\n" +
-	"\bbranches\x18\x01 \x03(\v2\x0e.gitaly.BranchR\bbranches\"\x83\x04\n" +
+	"\bbranches\x18\x01 \x03(\v2\x0e.gitaly.BranchR\bbranches\"\xa4\x04\n" +
 	"\x0fListRefsRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
@@ -2760,7 +2770,9 @@ const file_ref_proto_rawDesc = "" +
 	"\asort_by\x18\x04 \x01(\v2\x1e.gitaly.ListRefsRequest.SortByR\x06sortBy\x12(\n" +
 	"\x10pointing_at_oids\x18\x05 \x03(\fR\x0epointingAtOids\x12\x1b\n" +
 	"\tpeel_tags\x18\x06 \x01(\bR\bpeelTags\x12H\n" +
-	"\x11pagination_params\x18\a \x01(\v2\x1b.gitaly.PaginationParameterR\x10paginationParams\x1a\xbb\x01\n" +
+	"\x11pagination_params\x18\a \x01(\v2\x1b.gitaly.PaginationParameterR\x10paginationParams\x12\x1f\n" +
+	"\vignore_case\x18\b \x01(\bR\n" +
+	"ignoreCase\x1a\xbb\x01\n" +
 	"\x06SortBy\x124\n" +
 	"\x03key\x18\x01 \x01(\x0e2\".gitaly.ListRefsRequest.SortBy.KeyR\x03key\x123\n" +
 	"\tdirection\x18\x02 \x01(\x0e2\x15.gitaly.SortDirectionR\tdirection\"F\n" +
