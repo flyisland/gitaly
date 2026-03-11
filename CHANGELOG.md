@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.9.2 (2026-03-10)
+
+No changes.
+
 ## 18.9.1 (2026-02-24)
 
 No changes.
@@ -14,6 +18,10 @@ No changes.
 ### Security (1 change)
 
 - [diff: Support unescaping additional special characters](gitlab-org/gitaly@80ae3dbfbb9d1d572949288ea4277ed1b4b1aff6)
+
+## 18.8.6 (2026-03-10)
+
+No changes.
 
 ## 18.8.5 (2026-02-24)
 
@@ -40,6 +48,10 @@ No changes.
 ### Added (1 change)
 
 - [CountCommits: Add support for pseudo-revisions](gitlab-org/gitaly@85828290f8d1830260408e971db3b7b5e975710c) ([merge request](gitlab-org/gitaly!8349))
+
+## 18.7.6 (2026-03-10)
+
+No changes.
 
 ## 18.7.5 (2026-02-24)
 
