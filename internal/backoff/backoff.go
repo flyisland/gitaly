@@ -20,8 +20,6 @@ type Strategy interface {
 // Backoff(retries) = BaseDelay * (Multiplier ^ retries) + rand(0, Jitter)
 // The backoff time can never exceed the MaxDelay.
 type Exponential struct {
-	sync.Mutex
-
 	// BaseDelay is the minimum delay for the first attempt.
 	BaseDelay time.Duration
 	// MaxDelay is the upper limit for exponential backoff.
@@ -33,6 +31,8 @@ type Exponential struct {
 	Jitter time.Duration
 	// Random source for randomizing delay of each step
 	rand *rand.Rand
+	// randMutex synchronizes access to the `rand` source.
+	randMutex sync.Mutex
 }
 
 // NewDefaultExponential returns an exponential backoff strategy using a set of configurations good
@@ -71,8 +71,8 @@ func NewDefaultExponential(r *rand.Rand) *Exponential {
 // first failure.
 func (e *Exponential) Backoff(retries uint) time.Duration {
 	// Rand's source is not thread-safe. We could create per-goroutine rand source or use a mutex.
-	e.Lock()
-	defer e.Unlock()
+	e.randMutex.Lock()
+	defer e.randMutex.Unlock()
 
 	backoff := math.Min(
 		float64(e.MaxDelay),
