@@ -853,7 +853,7 @@ func (r *localRepository) ResetRefs(ctx context.Context, refs []git.Reference, o
 			removeUpdates = append(removeUpdates, git.NewReference(existingRef.Name, objectHash.ZeroOID))
 		}
 	}
-	
+
 	// Add updates to create or modify refs in the new set
 	existingRefTargets := make(map[git.ReferenceName]string, len(existingRefs))
 	for _, ref := range existingRefs {
