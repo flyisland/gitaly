@@ -151,6 +151,13 @@ type Cfg struct {
 	Raft                   Raft                `json:"raft,omitempty"              toml:"raft,omitempty"`
 	Offloading             Offloading          `json:"offloading,omitempty"        toml:"offloading,omitempty"`
 	UseLibp2pYamux         bool                `json:"use_libp2p_yamux,omitempty"  toml:"use_libp2p_yamux,omitempty"` // WARNING: This config is temporary and experimental. It should never be relied upon.
+	PoolMetadata           PoolMetadataConfig  `json:"pool_metadata,omitempty"     toml:"pool_metadata,omitempty"`
+}
+
+// PoolMetadataConfig configures the pool metadata store.
+type PoolMetadataConfig struct {
+	// DatabasePath is the path to the SQLite database file for storing pool metadata.
+	DatabasePath string `json:"database_path,omitempty" toml:"database_path,omitempty"`
 }
 
 // Transactions configures transaction related options.

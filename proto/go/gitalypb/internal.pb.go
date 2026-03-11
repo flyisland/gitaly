@@ -125,6 +125,310 @@ func (x *WalkReposResponse) GetModificationTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// ScanPoolMetadataRequest initiates a scan of a storage for repository-to-pool relationships
+// by reading alternates files. It contains the name of the storage to scan.
+type ScanPoolMetadataRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// storage_name is the name of the storage to scan.
+	StorageName   string `protobuf:"bytes,1,opt,name=storage_name,json=storageName,proto3" json:"storage_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScanPoolMetadataRequest) Reset() {
+	*x = ScanPoolMetadataRequest{}
+	mi := &file_internal_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScanPoolMetadataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScanPoolMetadataRequest) ProtoMessage() {}
+
+func (x *ScanPoolMetadataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScanPoolMetadataRequest.ProtoReflect.Descriptor instead.
+func (*ScanPoolMetadataRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ScanPoolMetadataRequest) GetStorageName() string {
+	if x != nil {
+		return x.StorageName
+	}
+	return ""
+}
+
+// ScanPoolMetadataResponse contains a repository that is linked to an object pool.
+type ScanPoolMetadataResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// relative_path is the relative path of the repository.
+	RelativePath string `protobuf:"bytes,1,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
+	// pool_disk_path is the disk path of the object pool the repository is linked to.
+	PoolDiskPath  string `protobuf:"bytes,2,opt,name=pool_disk_path,json=poolDiskPath,proto3" json:"pool_disk_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScanPoolMetadataResponse) Reset() {
+	*x = ScanPoolMetadataResponse{}
+	mi := &file_internal_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScanPoolMetadataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScanPoolMetadataResponse) ProtoMessage() {}
+
+func (x *ScanPoolMetadataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScanPoolMetadataResponse.ProtoReflect.Descriptor instead.
+func (*ScanPoolMetadataResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ScanPoolMetadataResponse) GetRelativePath() string {
+	if x != nil {
+		return x.RelativePath
+	}
+	return ""
+}
+
+func (x *ScanPoolMetadataResponse) GetPoolDiskPath() string {
+	if x != nil {
+		return x.PoolDiskPath
+	}
+	return ""
+}
+
+// StorePoolMetadataRequest contains a single repository-to-pool relationship to store.
+type StorePoolMetadataRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// storage_name is the name of the storage.
+	StorageName string `protobuf:"bytes,1,opt,name=storage_name,json=storageName,proto3" json:"storage_name,omitempty"`
+	// relative_path is the relative path of the repository.
+	RelativePath string `protobuf:"bytes,2,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
+	// pool_disk_path is the disk path of the object pool.
+	PoolDiskPath string `protobuf:"bytes,3,opt,name=pool_disk_path,json=poolDiskPath,proto3" json:"pool_disk_path,omitempty"`
+	// is_upstream indicates if this repository is the upstream/source repository for the pool.
+	IsUpstream    bool `protobuf:"varint,4,opt,name=is_upstream,json=isUpstream,proto3" json:"is_upstream,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StorePoolMetadataRequest) Reset() {
+	*x = StorePoolMetadataRequest{}
+	mi := &file_internal_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StorePoolMetadataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StorePoolMetadataRequest) ProtoMessage() {}
+
+func (x *StorePoolMetadataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StorePoolMetadataRequest.ProtoReflect.Descriptor instead.
+func (*StorePoolMetadataRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *StorePoolMetadataRequest) GetStorageName() string {
+	if x != nil {
+		return x.StorageName
+	}
+	return ""
+}
+
+func (x *StorePoolMetadataRequest) GetRelativePath() string {
+	if x != nil {
+		return x.RelativePath
+	}
+	return ""
+}
+
+func (x *StorePoolMetadataRequest) GetPoolDiskPath() string {
+	if x != nil {
+		return x.PoolDiskPath
+	}
+	return ""
+}
+
+func (x *StorePoolMetadataRequest) GetIsUpstream() bool {
+	if x != nil {
+		return x.IsUpstream
+	}
+	return false
+}
+
+// StorePoolMetadataResponse contains the result of storing pool metadata.
+type StorePoolMetadataResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StorePoolMetadataResponse) Reset() {
+	*x = StorePoolMetadataResponse{}
+	mi := &file_internal_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StorePoolMetadataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StorePoolMetadataResponse) ProtoMessage() {}
+
+func (x *StorePoolMetadataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StorePoolMetadataResponse.ProtoReflect.Descriptor instead.
+func (*StorePoolMetadataResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{5}
+}
+
+// ListPoolMetadataRequest requests a list of pools from the metadata database.
+type ListPoolMetadataRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// storage_name is the name of the storage to list pools for.
+	StorageName   string `protobuf:"bytes,1,opt,name=storage_name,json=storageName,proto3" json:"storage_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPoolMetadataRequest) Reset() {
+	*x = ListPoolMetadataRequest{}
+	mi := &file_internal_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPoolMetadataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPoolMetadataRequest) ProtoMessage() {}
+
+func (x *ListPoolMetadataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPoolMetadataRequest.ProtoReflect.Descriptor instead.
+func (*ListPoolMetadataRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListPoolMetadataRequest) GetStorageName() string {
+	if x != nil {
+		return x.StorageName
+	}
+	return ""
+}
+
+// ListPoolMetadataResponse contains a single pool from the metadata database.
+type ListPoolMetadataResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// pool_disk_path is the disk path of the object pool.
+	PoolDiskPath  string `protobuf:"bytes,1,opt,name=pool_disk_path,json=poolDiskPath,proto3" json:"pool_disk_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPoolMetadataResponse) Reset() {
+	*x = ListPoolMetadataResponse{}
+	mi := &file_internal_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPoolMetadataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPoolMetadataResponse) ProtoMessage() {}
+
+func (x *ListPoolMetadataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPoolMetadataResponse.ProtoReflect.Descriptor instead.
+func (*ListPoolMetadataResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListPoolMetadataResponse) GetPoolDiskPath() string {
+	if x != nil {
+		return x.PoolDiskPath
+	}
+	return ""
+}
+
 var File_internal_proto protoreflect.FileDescriptor
 
 const file_internal_proto_rawDesc = "" +
@@ -135,9 +439,28 @@ const file_internal_proto_rawDesc = "" +
 	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\"\x81\x01\n" +
 	"\x11WalkReposResponse\x12#\n" +
 	"\rrelative_path\x18\x01 \x01(\tR\frelativePath\x12G\n" +
-	"\x11modification_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10modificationTime2^\n" +
+	"\x11modification_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10modificationTime\"B\n" +
+	"\x17ScanPoolMetadataRequest\x12'\n" +
+	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\"e\n" +
+	"\x18ScanPoolMetadataResponse\x12#\n" +
+	"\rrelative_path\x18\x01 \x01(\tR\frelativePath\x12$\n" +
+	"\x0epool_disk_path\x18\x02 \x01(\tR\fpoolDiskPath\"\xaf\x01\n" +
+	"\x18StorePoolMetadataRequest\x12'\n" +
+	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\x12#\n" +
+	"\rrelative_path\x18\x02 \x01(\tR\frelativePath\x12$\n" +
+	"\x0epool_disk_path\x18\x03 \x01(\tR\fpoolDiskPath\x12\x1f\n" +
+	"\vis_upstream\x18\x04 \x01(\bR\n" +
+	"isUpstream\"\x1b\n" +
+	"\x19StorePoolMetadataResponse\"B\n" +
+	"\x17ListPoolMetadataRequest\x12'\n" +
+	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\"@\n" +
+	"\x18ListPoolMetadataResponse\x12$\n" +
+	"\x0epool_disk_path\x18\x01 \x01(\tR\fpoolDiskPath2\x8a\x03\n" +
 	"\x0eInternalGitaly\x12L\n" +
-	"\tWalkRepos\x12\x18.gitaly.WalkReposRequest\x1a\x19.gitaly.WalkReposResponse\"\b\xfa\x97(\x04\b\x02\x10\x020\x01B4Z2gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypbb\x06proto3"
+	"\tWalkRepos\x12\x18.gitaly.WalkReposRequest\x1a\x19.gitaly.WalkReposResponse\"\b\xfa\x97(\x04\b\x02\x10\x020\x01\x12a\n" +
+	"\x10ScanPoolMetadata\x12\x1f.gitaly.ScanPoolMetadataRequest\x1a .gitaly.ScanPoolMetadataResponse\"\b\xfa\x97(\x04\b\x02\x10\x020\x01\x12d\n" +
+	"\x11StorePoolMetadata\x12 .gitaly.StorePoolMetadataRequest\x1a!.gitaly.StorePoolMetadataResponse\"\b\xfa\x97(\x04\b\x01\x10\x02(\x01\x12a\n" +
+	"\x10ListPoolMetadata\x12\x1f.gitaly.ListPoolMetadataRequest\x1a .gitaly.ListPoolMetadataResponse\"\b\xfa\x97(\x04\b\x02\x10\x020\x01B4Z2gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypbb\x06proto3"
 
 var (
 	file_internal_proto_rawDescOnce sync.Once
@@ -151,18 +474,30 @@ func file_internal_proto_rawDescGZIP() []byte {
 	return file_internal_proto_rawDescData
 }
 
-var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_internal_proto_goTypes = []any{
-	(*WalkReposRequest)(nil),      // 0: gitaly.WalkReposRequest
-	(*WalkReposResponse)(nil),     // 1: gitaly.WalkReposResponse
-	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
+	(*WalkReposRequest)(nil),          // 0: gitaly.WalkReposRequest
+	(*WalkReposResponse)(nil),         // 1: gitaly.WalkReposResponse
+	(*ScanPoolMetadataRequest)(nil),   // 2: gitaly.ScanPoolMetadataRequest
+	(*ScanPoolMetadataResponse)(nil),  // 3: gitaly.ScanPoolMetadataResponse
+	(*StorePoolMetadataRequest)(nil),  // 4: gitaly.StorePoolMetadataRequest
+	(*StorePoolMetadataResponse)(nil), // 5: gitaly.StorePoolMetadataResponse
+	(*ListPoolMetadataRequest)(nil),   // 6: gitaly.ListPoolMetadataRequest
+	(*ListPoolMetadataResponse)(nil),  // 7: gitaly.ListPoolMetadataResponse
+	(*timestamppb.Timestamp)(nil),     // 8: google.protobuf.Timestamp
 }
 var file_internal_proto_depIdxs = []int32{
-	2, // 0: gitaly.WalkReposResponse.modification_time:type_name -> google.protobuf.Timestamp
+	8, // 0: gitaly.WalkReposResponse.modification_time:type_name -> google.protobuf.Timestamp
 	0, // 1: gitaly.InternalGitaly.WalkRepos:input_type -> gitaly.WalkReposRequest
-	1, // 2: gitaly.InternalGitaly.WalkRepos:output_type -> gitaly.WalkReposResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
+	2, // 2: gitaly.InternalGitaly.ScanPoolMetadata:input_type -> gitaly.ScanPoolMetadataRequest
+	4, // 3: gitaly.InternalGitaly.StorePoolMetadata:input_type -> gitaly.StorePoolMetadataRequest
+	6, // 4: gitaly.InternalGitaly.ListPoolMetadata:input_type -> gitaly.ListPoolMetadataRequest
+	1, // 5: gitaly.InternalGitaly.WalkRepos:output_type -> gitaly.WalkReposResponse
+	3, // 6: gitaly.InternalGitaly.ScanPoolMetadata:output_type -> gitaly.ScanPoolMetadataResponse
+	5, // 7: gitaly.InternalGitaly.StorePoolMetadata:output_type -> gitaly.StorePoolMetadataResponse
+	7, // 8: gitaly.InternalGitaly.ListPoolMetadata:output_type -> gitaly.ListPoolMetadataResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -180,7 +515,7 @@ func file_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_rawDesc), len(file_internal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

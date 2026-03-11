@@ -1,6 +1,8 @@
 package internalgitaly
 
 import (
+	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,4 +28,21 @@ func setupInternalGitalyService(t *testing.T, cfg config.Cfg, internalService gi
 	t.Cleanup(func() { testhelper.MustClose(t, conn) })
 
 	return gitalypb.NewInternalGitalyClient(conn)
+}
+
+type streamClient[T any] interface {
+	Recv() (T, error)
+}
+
+func consumeServerStream[T any](t *testing.T, stream streamClient[T]) []T {
+	var results []T
+	for {
+		resp, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		results = append(results, resp)
+	}
+	return results
 }

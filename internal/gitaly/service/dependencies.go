@@ -13,6 +13,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/hook/updateref"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/counter"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/relational"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr/partition/migration"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/transaction"
@@ -53,6 +54,7 @@ type Dependencies struct {
 	LocalRepositoryFactory localrepo.Factory
 	MigrationStateManager  migration.StateManager
 	ArchiveCache           streamcache.Cache
+	PoolMetadataStore      relational.PoolStore
 }
 
 // GetLogger returns the logger.
@@ -183,4 +185,9 @@ func (dc *Dependencies) GetMigrationStateManager() migration.StateManager {
 // GetArchiveCache returns the archive cache
 func (dc *Dependencies) GetArchiveCache() streamcache.Cache {
 	return dc.ArchiveCache
+}
+
+// GetPoolMetadataStore returns the pool metadata store
+func (dc *Dependencies) GetPoolMetadataStore() relational.PoolStore {
+	return dc.PoolMetadataStore
 }
