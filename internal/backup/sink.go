@@ -67,10 +67,19 @@ func WithBufferSize(size int) SinkOption {
 	}
 }
 
+// WithEnableChecksumAlgorithm enables checksum algorithm injection for S3-compatible
+// providers.
+func WithEnableChecksumAlgorithm(enabled bool) SinkOption {
+	return func(s *Sink) {
+		s.enableChecksumAlgo = enabled
+	}
+}
+
 // Sink uses a storage engine that can be defined by the construction url on creation.
 type Sink struct {
-	bucket     *blob.Bucket
-	bufferSize int
+	bucket             *blob.Bucket
+	bufferSize         int
+	enableChecksumAlgo bool
 }
 
 // SinkOption is a function that configures a Sink.
@@ -132,7 +141,7 @@ func (s Sink) Close() error {
 // GetWriter stores the written data into a relativePath path on the configured
 // bucket. It is the callers responsibility to Close the reader after usage.
 func (s Sink) GetWriter(ctx context.Context, relativePath string) (io.WriteCloser, error) {
-	writer, err := s.bucket.NewWriter(ctx, relativePath, &blob.WriterOptions{
+	opts := &blob.WriterOptions{
 		BufferSize: s.bufferSize,
 		// 'no-store' - we don't want the backup to be cached as the content could be changed,
 		// so we always want a fresh and up to date data
@@ -141,8 +150,13 @@ func (s Sink) GetWriter(ctx context.Context, relativePath string) (io.WriteClose
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#other
 		CacheControl: "no-store, no-transform",
 		ContentType:  "application/octet-stream",
-		BeforeWrite:  injectChecksumAlgorithm,
-	})
+	}
+
+	if s.enableChecksumAlgo {
+		opts.BeforeWrite = injectChecksumAlgorithm
+	}
+
+	writer, err := s.bucket.NewWriter(ctx, relativePath, opts)
 	if err != nil {
 		return nil, fmt.Errorf("sink: new writer for %q: %w", relativePath, err)
 	}
