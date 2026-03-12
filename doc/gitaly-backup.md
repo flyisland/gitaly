@@ -224,6 +224,15 @@ buckets. When Object Lock with retention is configured on the backup bucket:
   uploads, which S3 uses together with Object Lock to enforce integrity and
   retention.
 
+To enable checksum injection for S3-compatible storage backends, set the `enable_trailing_checksum`
+field to `true` in the Gitaly `config.toml` file. This is an optional feature, as not all S3-compatible
+storage backends support trailing checksums.
+
+```toml
+[backup]
+enable_trailing_checksum = true
+```
+
 In this setup, WORM guarantees are provided by the storage backend’s Object
 Lock policy and versioning, not by Gitaly itself. Gitaly currently does not
 track the compatibility list of all providers with object locking and versioning,
