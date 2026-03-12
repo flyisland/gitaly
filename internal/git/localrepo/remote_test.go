@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
@@ -20,8 +21,11 @@ import (
 )
 
 func TestRepo_FetchRemote(t *testing.T) {
-	ctx := testhelper.Context(t)
+	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.FetchRemoteProactiveAuth).Run(t, testRepoFetchRemote)
+}
 
+func testRepoFetchRemote(t *testing.T, ctx context.Context) {
 	cfg := testcfg.Build(t)
 
 	gitCmdFactory := gittest.NewCommandFactory(t, cfg, gitcmd.WithSkipHooks())

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
@@ -72,7 +74,7 @@ func (s *server) fetchRemoteAtomic(ctx context.Context, req *gitalypb.FetchRemot
 		opts.Tags = localrepo.FetchOptsTagsNone
 	}
 
-	if err := buildCommandOpts(&opts, req); err != nil {
+	if err := buildCommandOpts(ctx, &opts, req); err != nil {
 		return false, false, err
 	}
 
@@ -238,7 +240,7 @@ func wereTagsChanged(status gitcmd.FetchPorcelainStatusLine) bool {
 		(status.Type == gitcmd.RefUpdateTypeFetched && strings.HasPrefix(status.Reference, "refs/tags"))
 }
 
-func buildCommandOpts(opts *localrepo.FetchOpts, req *gitalypb.FetchRemoteRequest) error {
+func buildCommandOpts(ctx context.Context, opts *localrepo.FetchOpts, req *gitalypb.FetchRemoteRequest) error {
 	remoteURL := req.GetRemoteParams().GetUrl()
 	var config []gitcmd.ConfigPair
 
@@ -259,6 +261,15 @@ func buildCommandOpts(opts *localrepo.FetchOpts, req *gitalypb.FetchRemoteReques
 	}
 
 	config = append(config, gitcmd.ConfigPair{Key: "remote.inmemory.url", Value: remoteURL})
+
+	if featureflag.FetchRemoteProactiveAuth.IsEnabled(ctx) {
+		if u, err := url.Parse(remoteURL); err == nil && u.User != nil && u.User.Username() != "" {
+			config = append(config, gitcmd.ConfigPair{
+				Key:   "http.proactiveAuth",
+				Value: "basic",
+			})
+		}
+	}
 
 	if authHeader := req.GetRemoteParams().GetHttpAuthorizationHeader(); authHeader != "" {
 		config = append(config, gitcmd.ConfigPair{

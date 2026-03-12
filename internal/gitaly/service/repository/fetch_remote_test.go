@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
@@ -63,9 +65,10 @@ func TestChangeTypes_Coverage(t *testing.T) {
 
 func TestFetchRemote(t *testing.T) {
 	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.FetchRemoteProactiveAuth).Run(t, testFetchRemote)
+}
 
-	ctx := testhelper.Context(t)
-
+func testFetchRemote(t *testing.T, ctx context.Context) {
 	// Some of the tests require multiple calls to the clients each run struct
 	// encompasses the expected data for a single run
 	type run struct {
@@ -1215,10 +1218,76 @@ func TestFetchRemote(t *testing.T) {
 	}
 }
 
+func TestFetchRemote_proactiveAuth(t *testing.T) {
+	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.FetchRemoteProactiveAuth).Run(t, testFetchRemoteProactiveAuth)
+}
+
+func testFetchRemoteProactiveAuth(t *testing.T, ctx context.Context) {
+	t.Helper()
+
+	featureEnabled := featureflag.FetchRemoteProactiveAuth.IsEnabled(ctx)
+
+	for _, tc := range []struct {
+		desc               string
+		remoteURLFormat    string
+		urlWithCredentials bool
+	}{
+		{
+			desc:               "credentials in URL",
+			remoteURLFormat:    "http://user:password@127.0.0.1:%d/%s",
+			urlWithCredentials: true,
+		},
+		{
+			desc:               "no credentials in URL",
+			remoteURLFormat:    "http://127.0.0.1:%d/%s",
+			urlWithCredentials: false,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, client := setupRepositoryService(t)
+			_, remoteRepoPath := gittest.CreateRepository(t, ctx, cfg)
+			repoProto, _ := gittest.CreateRepository(t, ctx, cfg)
+
+			gittest.WriteCommit(t, cfg, remoteRepoPath, gittest.WithBranch("main"))
+
+			var firstRequestHadAuth bool
+			var requestCount int
+			gitCmdFactory := gittest.NewCommandFactory(t, cfg)
+			port := gittest.HTTPServer(t, ctx, gitCmdFactory, remoteRepoPath, func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+				requestCount++
+				if requestCount == 1 {
+					firstRequestHadAuth = r.Header.Get("Authorization") != ""
+				}
+				next.ServeHTTP(w, r)
+			})
+
+			remoteURL := fmt.Sprintf(tc.remoteURLFormat, port, filepath.Base(remoteRepoPath))
+
+			_, err := client.FetchRemote(ctx, &gitalypb.FetchRemoteRequest{
+				Repository: repoProto,
+				RemoteParams: &gitalypb.Remote{
+					Url: remoteURL,
+				},
+			})
+			require.NoError(t, err)
+
+			expectedFirstRequestAuth := featureEnabled && tc.urlWithCredentials
+			require.Equal(t, expectedFirstRequestAuth, firstRequestHadAuth,
+				"feature=%v, urlWithCredentials=%v: expected first request auth=%v, got=%v",
+				featureEnabled, tc.urlWithCredentials, expectedFirstRequestAuth, firstRequestHadAuth)
+		})
+	}
+}
+
 func TestFetchRemote_sshCommand(t *testing.T) {
 	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.FetchRemoteProactiveAuth).Run(t, testFetchRemoteSSHCommand)
+}
 
-	ctx := testhelper.Context(t)
+func testFetchRemoteSSHCommand(t *testing.T, ctx context.Context) {
 	cfg := testcfg.Build(t)
 
 	outputPath := filepath.Join(testhelper.TempDir(t), "output")
@@ -1297,9 +1366,10 @@ func TestFetchRemote_sshCommand(t *testing.T) {
 
 func TestFetchRemote_transaction(t *testing.T) {
 	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.FetchRemoteProactiveAuth).Run(t, testFetchRemoteTransaction)
+}
 
-	ctx := testhelper.Context(t)
-
+func testFetchRemoteTransaction(t *testing.T, ctx context.Context) {
 	remoteCfg := testcfg.Build(t)
 	_, remoteRepoPath := gittest.CreateRepository(t, ctx, remoteCfg, gittest.CreateRepositoryConfig{
 		SkipCreationViaService: true,
@@ -1336,9 +1406,10 @@ func TestFetchRemote_transaction(t *testing.T) {
 
 func TestFetchRemote_pooledRepository(t *testing.T) {
 	t.Parallel()
+	testhelper.NewFeatureSets(featureflag.FetchRemoteProactiveAuth).Run(t, testFetchRemotePooledRepository)
+}
 
-	ctx := testhelper.Context(t)
-
+func testFetchRemotePooledRepository(t *testing.T, ctx context.Context) {
 	// By default git-fetch(1) will always run with `core.alternateRefsCommand=exit 0 #`, which
 	// effectively disables use of alternate refs. We can't just unset this value, so instead we
 	// just write a script that knows to execute git-for-each-ref(1) as expected by this config
