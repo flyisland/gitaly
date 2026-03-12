@@ -473,6 +473,11 @@ message GetPatchIDRequest {
   // from that will then be passed to git-patch-id(1). Accepts revisions as
   // specified in gitrevisions(5).
   bytes new_revision = 3;
+  // context_free computes the diff with zero context lines (-U0) before
+  // hashing. This produces patch IDs that remain stable across rebases
+  // where only the merge base changes but the actual code modifications
+  // are identical. When false (default), uses the standard 3 context lines.
+  bool context_free = 4;
 }
 
 // GetPatchIDResponse is a response for the GetPatchID RPC.

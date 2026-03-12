@@ -337,6 +337,178 @@ func TestGetPatchID(t *testing.T) {
 				}
 			},
 		},
+		{
+			desc: "context_free produces stable patch-id across different bases",
+			setup: func(t *testing.T) setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				// Two bases with the same logical change (TARGET_LINE -> MODIFIED)
+				// but different surrounding lines. With default 3-line context,
+				// git patch-id hashes context content, so different context =
+				// different patch-id. With -U0 only changed lines matter.
+				baseContent1 := `ctx1_a
+ctx1_b
+ctx1_c
+TARGET_LINE
+ctx1_d
+ctx1_e
+ctx1_f
+`
+				changedContent1 := `ctx1_a
+ctx1_b
+ctx1_c
+MODIFIED
+ctx1_d
+ctx1_e
+ctx1_f
+`
+
+				base1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file", Mode: "100644", Content: baseContent1},
+					),
+				)
+				head1 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithParents(base1),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file", Mode: "100644", Content: changedContent1},
+					),
+				)
+
+				baseContent2 := `ctx2_a
+ctx2_b
+ctx2_c
+TARGET_LINE
+ctx2_d
+ctx2_e
+ctx2_f
+`
+				changedContent2 := `ctx2_a
+ctx2_b
+ctx2_c
+MODIFIED
+ctx2_d
+ctx2_e
+ctx2_f
+`
+
+				base2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file", Mode: "100644", Content: baseContent2},
+					),
+				)
+				head2 := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithParents(base2),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file", Mode: "100644", Content: changedContent2},
+					),
+				)
+
+				resp1, err := client.GetPatchID(ctx, &gitalypb.GetPatchIDRequest{
+					Repository:  repoProto,
+					OldRevision: []byte(base1),
+					NewRevision: []byte(head1),
+					ContextFree: true,
+				})
+				require.NoError(t, err)
+
+				resp2, err := client.GetPatchID(ctx, &gitalypb.GetPatchIDRequest{
+					Repository:  repoProto,
+					OldRevision: []byte(base2),
+					NewRevision: []byte(head2),
+					ContextFree: true,
+				})
+				require.NoError(t, err)
+
+				// With context_free, both should produce the same patch-id
+				// because the actual change (TARGET_LINE -> MODIFIED) is the same
+				require.Equal(t, resp1.GetPatchId(), resp2.GetPatchId(),
+					"context_free patch-ids should match for equivalent changes on different bases")
+
+				// Verify that WITHOUT context_free, they differ (different context content is hashed)
+				resp3, err := client.GetPatchID(ctx, &gitalypb.GetPatchIDRequest{
+					Repository:  repoProto,
+					OldRevision: []byte(base1),
+					NewRevision: []byte(head1),
+					ContextFree: false,
+				})
+				require.NoError(t, err)
+
+				resp4, err := client.GetPatchID(ctx, &gitalypb.GetPatchIDRequest{
+					Repository:  repoProto,
+					OldRevision: []byte(base2),
+					NewRevision: []byte(head2),
+					ContextFree: false,
+				})
+				require.NoError(t, err)
+
+				require.NotEqual(t, resp3.GetPatchId(), resp4.GetPatchId(),
+					"default patch-ids should differ for same changes on different bases due to context shift")
+
+				return setupData{
+					request: &gitalypb.GetPatchIDRequest{
+						Repository:  repoProto,
+						OldRevision: []byte(base1),
+						NewRevision: []byte(head1),
+						ContextFree: true,
+					},
+					expectedResponse: resp1,
+				}
+			},
+		},
+		{
+			desc: "context_free still detects actual content changes",
+			setup: func(t *testing.T) setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				base := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file", Mode: "100644", Content: "original"},
+					),
+				)
+				changeA := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithParents(base),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file", Mode: "100644", Content: "change_a"},
+					),
+				)
+				changeB := gittest.WriteCommit(t, cfg, repoPath,
+					gittest.WithParents(base),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Path: "file", Mode: "100644", Content: "change_b"},
+					),
+				)
+
+				respA, err := client.GetPatchID(ctx, &gitalypb.GetPatchIDRequest{
+					Repository:  repoProto,
+					OldRevision: []byte(base),
+					NewRevision: []byte(changeA),
+					ContextFree: true,
+				})
+				require.NoError(t, err)
+
+				respB, err := client.GetPatchID(ctx, &gitalypb.GetPatchIDRequest{
+					Repository:  repoProto,
+					OldRevision: []byte(base),
+					NewRevision: []byte(changeB),
+					ContextFree: true,
+				})
+				require.NoError(t, err)
+
+				require.NotEqual(t, respA.GetPatchId(), respB.GetPatchId(),
+					"context_free patch-ids must differ for different actual changes")
+
+				return setupData{
+					request: &gitalypb.GetPatchIDRequest{
+						Repository:  repoProto,
+						OldRevision: []byte(base),
+						NewRevision: []byte(changeA),
+						ContextFree: true,
+					},
+					expectedResponse: respA,
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
