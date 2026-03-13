@@ -330,11 +330,16 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	// List of tracking adaptive limits. They will be calibrated by the adaptive calculator
 	adaptiveLimits := []limiter.AdaptiveLimiter{}
 
-	perRPCLimits, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+	perRPCLimits, perRPCLimitsUnauthenticated, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 	for _, concurrency := range cfg.Concurrency {
 		// Connect adaptive limits to the adaptive calculator
 		if concurrency.Adaptive {
 			adaptiveLimits = append(adaptiveLimits, perRPCLimits[concurrency.RPC])
+		}
+		if concurrency.Unauthenticated.Adaptive {
+			if unauthLimit, ok := perRPCLimitsUnauthenticated[concurrency.RPC]; ok {
+				adaptiveLimits = append(adaptiveLimits, unauthLimit)
+			}
 		}
 	}
 	perRPCLimitHandler := limithandler.New(

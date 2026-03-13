@@ -185,7 +185,7 @@ func (w *wrappedStream) RecvMsg(m interface{}) error {
 
 // WithConcurrencyLimiters sets up middleware to limit the concurrency of
 // requests based on RPC and repository
-func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit, SetupFunc) {
+func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit, map[string]*limiter.AdaptiveLimit, SetupFunc) {
 	perRPCLimits := map[string]*limiter.AdaptiveLimit{}
 	perRPCLimitsUnauthenticated := map[string]*limiter.AdaptiveLimit{}
 
@@ -223,7 +223,7 @@ func WithConcurrencyLimiters(cfg config.Cfg) (map[string]*limiter.AdaptiveLimit,
 			}
 		}
 	}
-	return perRPCLimits, func(cfg config.Cfg, middleware *LimiterMiddleware) {
+	return perRPCLimits, perRPCLimitsUnauthenticated, func(cfg config.Cfg, middleware *LimiterMiddleware) {
 		acquiringSecondsMetric := prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: "gitaly",
