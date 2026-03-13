@@ -334,7 +334,9 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	for _, concurrency := range cfg.Concurrency {
 		// Connect adaptive limits to the adaptive calculator
 		if concurrency.Adaptive {
-			adaptiveLimits = append(adaptiveLimits, perRPCLimits[concurrency.RPC])
+			if limit, ok := perRPCLimits[concurrency.RPC]; ok {
+				adaptiveLimits = append(adaptiveLimits, limit)
+			}
 		}
 		if concurrency.Unauthenticated.Adaptive {
 			if unauthLimit, ok := perRPCLimitsUnauthenticated[concurrency.RPC]; ok {
