@@ -816,8 +816,6 @@ type BackupConfig struct {
 	Layout string `json:"layout,omitempty" toml:"layout,omitempty"`
 	// BufferSize specifies the size of the buffer used when uploading backup parts to object storage.
 	BufferSize int `json:"buffer_size,omitempty" toml:"buffer_size,omitempty"`
-	// EnableTrailingChecksum enables injecting checksum algorithm for s3 compatible object storages.
-	EnableTrailingChecksum bool `json:"enable_trailing_checksum,omitempty" toml:"enable_trailing_checksum,omitempty"`
 }
 
 // Validate runs validation on all fields and returns any errors found.

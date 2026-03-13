@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
 	"gocloud.dev/blob"
 	"gocloud.dev/blob/azureblob"
@@ -118,18 +116,6 @@ func newFileblobSink(path string) (*Sink, error) {
 	return &Sink{bucket: bucket}, nil
 }
 
-func injectChecksumAlgorithm(asFunc func(interface{}) bool) error {
-	// Only works for aws sdk v2
-	// For awssdk=v1 we deliberately do nothing here:
-	// v1's s3manager.Uploader cannot reliably send checksum headers
-	// and setting UploadInput.ChecksumAlgorithm would cause an error.
-	var putInput *s3.PutObjectInput
-	if asFunc(&putInput) {
-		putInput.ChecksumAlgorithm = types.ChecksumAlgorithmSha256
-	}
-	return nil
-}
-
 // Close releases resources associated with the bucket communication.
 func (s Sink) Close() error {
 	if err := s.bucket.Close(); err != nil {
@@ -141,7 +127,7 @@ func (s Sink) Close() error {
 // GetWriter stores the written data into a relativePath path on the configured
 // bucket. It is the callers responsibility to Close the reader after usage.
 func (s Sink) GetWriter(ctx context.Context, relativePath string) (io.WriteCloser, error) {
-	opts := &blob.WriterOptions{
+	writer, err := s.bucket.NewWriter(ctx, relativePath, &blob.WriterOptions{
 		BufferSize: s.bufferSize,
 		// 'no-store' - we don't want the backup to be cached as the content could be changed,
 		// so we always want a fresh and up to date data
@@ -150,13 +136,7 @@ func (s Sink) GetWriter(ctx context.Context, relativePath string) (io.WriteClose
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#other
 		CacheControl: "no-store, no-transform",
 		ContentType:  "application/octet-stream",
-	}
-
-	if s.enableChecksumAlgo {
-		opts.BeforeWrite = injectChecksumAlgorithm
-	}
-
-	writer, err := s.bucket.NewWriter(ctx, relativePath, opts)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("sink: new writer for %q: %w", relativePath, err)
 	}
