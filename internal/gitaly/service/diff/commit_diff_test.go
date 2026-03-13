@@ -586,8 +586,8 @@ func TestCommitDiff(t *testing.T) {
 							NewMode:      0o100644,
 							FromPath:     []byte("foo"),
 							ToPath:       []byte("foo"),
-							LinesAdded:   0,
-							LinesRemoved: 0,
+							LinesAdded:   1,
+							LinesRemoved: 1,
 						},
 					},
 				}
@@ -909,8 +909,8 @@ func TestCommitDiff_ignoreWhitespaceChange(t *testing.T) {
 		FromPath:     []byte("whitespace-change"),
 		ToPath:       []byte("whitespace-change"),
 		Binary:       false,
-		LinesAdded:   0,
-		LinesRemoved: 0,
+		LinesAdded:   1,
+		LinesRemoved: 1,
 	}
 	expectedNormalDiff := &diff.Diff{
 		FromID:       oldContent.String(),
