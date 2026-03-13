@@ -594,6 +594,48 @@ func TestCommitDiff(t *testing.T) {
 			},
 		},
 		{
+			desc: "whitespace_changes: ignore_all with mixture",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+				blob1 := gittest.WriteBlob(t, cfg, repoPath, []byte(`  the   first line contains whitespace changes
+the second line contains new words
+the third line is the same
+`))
+				blob2 := gittest.WriteBlob(t, cfg, repoPath, []byte(`the first line contains whitespace changes
+the second line contains new new words
+the third line is the same
+`))
+				commit1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "foo", Mode: "100644", OID: blob1},
+				))
+				commit2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "foo", Mode: "100644", OID: blob2},
+				))
+
+				return setupData{
+					request: &gitalypb.CommitDiffRequest{
+						Repository:        repoProto,
+						LeftCommitId:      commit1.String(),
+						RightCommitId:     commit2.String(),
+						WhitespaceChanges: gitalypb.CommitDiffRequest_WHITESPACE_CHANGES_IGNORE_ALL,
+					},
+					expectedDiff: []*diff.Diff{
+						{
+							FromID:       blob1.String(),
+							ToID:         blob2.String(),
+							OldMode:      0o100644,
+							NewMode:      0o100644,
+							FromPath:     []byte("foo"),
+							ToPath:       []byte("foo"),
+							LinesAdded:   1,
+							LinesRemoved: 1,
+							Patch:        []byte("@@ -1,3 +1,3 @@\n the first line contains whitespace changes\n-the second line contains new words\n+the second line contains new new words\n the third line is the same\n"),
+						},
+					},
+				}
+			},
+		},
+		{
 			desc: "blobs exceeding core.bigFileThreshold",
 			setup: func() setupData {
 				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
