@@ -55,7 +55,7 @@ func validateFindAllCommitsRequest(ctx context.Context, locator storage.Locator,
 
 func (s *server) findAllCommits(repo gitcmd.RepositoryExecutor, in *gitalypb.FindAllCommitsRequest, stream gitalypb.CommitService_FindAllCommitsServer, revisions []string) error {
 	sender := &commitsSender{
-		send: func(commits []*gitalypb.GitCommit) error {
+		send: func(commits []*gitalypb.GitCommit, _ *gitalypb.PaginationCursor) error {
 			return stream.Send(&gitalypb.FindAllCommitsResponse{
 				Commits: commits,
 			})

@@ -59,7 +59,7 @@ func (s *server) ListAllCommits(
 	}
 
 	chunker := chunk.New(&commitsSender{
-		send: func(commits []*gitalypb.GitCommit) error {
+		send: func(commits []*gitalypb.GitCommit, _ *gitalypb.PaginationCursor) error {
 			return stream.Send(&gitalypb.ListAllCommitsResponse{
 				Commits: commits,
 			})

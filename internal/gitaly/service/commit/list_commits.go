@@ -127,34 +127,32 @@ func (s *server) ListCommits(
 		return err
 	}
 
-	var lastCommitID string
-	var sentCursor bool
-
-	chunker := chunk.New(&commitsSender{
-		send: func(commits []*gitalypb.GitCommit) error {
-			response := &gitalypb.ListCommitsResponse{
-				Commits: commits,
-			}
-
-			// Send the pagination cursor only in the first response to save bandwidth
-			if !sentCursor && lastCommitID != "" {
-				response.PaginationCursor = &gitalypb.PaginationCursor{
-					NextCursor: lastCommitID,
-				}
-				sentCursor = true
-			}
-
-			return stream.Send(response)
-		},
-	})
-
 	limit := request.GetPaginationParams().GetLimit()
 	parser := catfile.NewParser()
 
-	for i := int32(0); catfileObjectIter.Next(); i++ {
-		// If we hit the pagination limit, then we stop sending commits even if there are
-		// more commits in the pipeline.
-		if limit > 0 && limit <= i {
+	// Track state for pagination cursor detection.
+	// We use the "limit + 1" pattern: read one extra commit beyond the limit
+	// to detect if there are more results. The cursor is sent in the final
+	// response only when hasMoreCommits is true.
+	var commitCount int32
+	var lastReturnedCommitID string
+	var hasMoreCommits bool
+
+	sender := &commitsSender{
+		send: func(commits []*gitalypb.GitCommit, cursor *gitalypb.PaginationCursor) error {
+			return stream.Send(&gitalypb.ListCommitsResponse{
+				Commits:          commits,
+				PaginationCursor: cursor,
+			})
+		},
+	}
+	chunker := chunk.New(sender)
+
+	for catfileObjectIter.Next() {
+		// We've already sent `limit` commits. If we get here, it means
+		// there are more commits available, so we set hasMoreCommits and stop.
+		if limit > 0 && commitCount >= limit {
+			hasMoreCommits = true
 			break
 		}
 
@@ -165,8 +163,9 @@ func (s *server) ListCommits(
 			return structerr.NewInternal("parsing commit: %w", err)
 		}
 
-		// Track the last commit ID for pagination cursor
-		lastCommitID = commit.GitCommit.GetId()
+		// Track the last commit ID for the pagination cursor.
+		lastReturnedCommitID = commit.GitCommit.GetId()
+		commitCount++
 
 		if err := chunker.Send(commit.GitCommit); err != nil {
 			return structerr.NewInternal("sending commit: %w", err)
@@ -175,6 +174,13 @@ func (s *server) ListCommits(
 
 	if err := catfileObjectIter.Err(); err != nil {
 		return structerr.NewInternal("iterating objects: %w", err)
+	}
+
+	// Set the pagination cursor before flushing so it's included in the final response.
+	// The cursor points to the last commit returned, allowing the client to continue
+	// pagination from there.
+	if hasMoreCommits && lastReturnedCommitID != "" {
+		sender.SetPaginationCursor(&gitalypb.PaginationCursor{NextCursor: lastReturnedCommitID})
 	}
 
 	if err := chunker.Flush(); err != nil {

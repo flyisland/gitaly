@@ -87,21 +87,6 @@ func TestListCommits(t *testing.T) {
 			},
 		},
 		{
-			desc: "pagination cursor is returned when limit is set",
-			request: &gitalypb.ListCommitsRequest{
-				Repository: repoProto,
-				Revisions: []string{
-					main3ID.String(),
-				},
-				PaginationParams: &gitalypb.PaginationParameter{
-					Limit: 2,
-				},
-			},
-			expectedCommits: []*gitalypb.GitCommit{
-				main3, main2,
-			},
-		},
-		{
 			desc: "revision range",
 			request: &gitalypb.ListCommitsRequest{
 				Repository: repoProto,
@@ -321,14 +306,6 @@ func TestListCommits(t *testing.T) {
 			})
 			require.NoError(t, err)
 			testhelper.ProtoEqual(t, tc.expectedCommits, commits)
-
-			// Verify pagination cursor is set when limit is used and there are results
-			if tc.request.GetPaginationParams().GetLimit() > 0 && len(tc.expectedCommits) > 0 {
-				require.NotNil(t, firstResponse.GetPaginationCursor())
-				require.NotEmpty(t, firstResponse.GetPaginationCursor().GetNextCursor())
-				// The cursor should be the ID of the last commit in the response
-				require.Equal(t, tc.expectedCommits[len(tc.expectedCommits)-1].GetId(), firstResponse.GetPaginationCursor().GetNextCursor())
-			}
 		})
 	}
 
@@ -345,28 +322,20 @@ func TestListCommits(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		var firstResponse *gitalypb.ListCommitsResponse
-		firstPageCommits, err := testhelper.ReceiveAndFold(stream.Recv, func(result []*gitalypb.GitCommit, response *gitalypb.ListCommitsResponse) []*gitalypb.GitCommit {
-			if firstResponse == nil {
-				firstResponse = response
-			}
-			return append(result, response.GetCommits()...)
-		})
-		require.NoError(t, err)
+		firstPageCommits, cursor := receiveCommitsWithCursor(t, stream)
 		require.Len(t, firstPageCommits, 2)
 		testhelper.ProtoEqual(t, []*gitalypb.GitCommit{main4, main3}, firstPageCommits)
 
-		// Verify cursor is returned
-		require.NotNil(t, firstResponse.GetPaginationCursor())
-		cursor := firstResponse.GetPaginationCursor().GetNextCursor()
-		require.Equal(t, main3.GetId(), cursor)
+		// Verify cursor is returned (in the last response when there are more commits)
+		require.NotNil(t, cursor)
+		require.Equal(t, main3.GetId(), cursor.GetNextCursor())
 
 		// Second request using the cursor
 		stream, err = client.ListCommits(ctx, &gitalypb.ListCommitsRequest{
 			Repository: repoProto,
 			Revisions:  []string{main4ID.String()},
 			PaginationParams: &gitalypb.PaginationParameter{
-				PageToken: cursor,
+				PageToken: cursor.GetNextCursor(),
 				Limit:     2,
 			},
 		})
@@ -378,6 +347,99 @@ func TestListCommits(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, secondPageCommits, 2)
 		testhelper.ProtoEqual(t, []*gitalypb.GitCommit{main2, main1}, secondPageCommits)
+	})
+
+	t.Run("cursor not returned when all commits fit within limit", func(t *testing.T) {
+		t.Parallel()
+
+		// main3 has 4 ancestors (main3, main2, main1, main0)
+		// Request with limit > 4, should get all commits, no cursor
+		stream, err := client.ListCommits(ctx, &gitalypb.ListCommitsRequest{
+			Repository: repoProto,
+			Revisions:  []string{main3ID.String()},
+			PaginationParams: &gitalypb.PaginationParameter{
+				Limit: 100,
+			},
+		})
+		require.NoError(t, err)
+
+		commits, cursor := receiveCommitsWithCursor(t, stream)
+		require.Len(t, commits, 4)
+		require.Nil(t, cursor, "no cursor because all commits were returned")
+	})
+
+	t.Run("cursor not returned when exactly limit commits exist", func(t *testing.T) {
+		t.Parallel()
+
+		// main3 has exactly 4 commits, request with limit=4
+		stream, err := client.ListCommits(ctx, &gitalypb.ListCommitsRequest{
+			Repository: repoProto,
+			Revisions:  []string{main3ID.String()},
+			PaginationParams: &gitalypb.PaginationParameter{
+				Limit: 4,
+			},
+		})
+		require.NoError(t, err)
+
+		commits, cursor := receiveCommitsWithCursor(t, stream)
+		require.Len(t, commits, 4)
+		require.Nil(t, cursor, "no cursor because exactly limit commits exist")
+	})
+
+	t.Run("full pagination flow with correct cursor on each page", func(t *testing.T) {
+		t.Parallel()
+
+		// main4 has 5 commits (main4, main3, main2, main1, main0)
+		// Paginate with limit=2 to test cursor accuracy across pages
+
+		// Page 1: should have cursor (3 more commits exist)
+		stream, err := client.ListCommits(ctx, &gitalypb.ListCommitsRequest{
+			Repository: repoProto,
+			Revisions:  []string{main4ID.String()},
+			PaginationParams: &gitalypb.PaginationParameter{
+				Limit: 2,
+			},
+		})
+		require.NoError(t, err)
+
+		page1Commits, cursor1 := receiveCommitsWithCursor(t, stream)
+		require.Len(t, page1Commits, 2)
+		testhelper.ProtoEqual(t, []*gitalypb.GitCommit{main4, main3}, page1Commits)
+		require.NotNil(t, cursor1)
+		require.Equal(t, main3.GetId(), cursor1.GetNextCursor())
+
+		// Page 2: should have cursor (1 more commit exists)
+		stream, err = client.ListCommits(ctx, &gitalypb.ListCommitsRequest{
+			Repository: repoProto,
+			Revisions:  []string{main4ID.String()},
+			PaginationParams: &gitalypb.PaginationParameter{
+				PageToken: cursor1.GetNextCursor(),
+				Limit:     2,
+			},
+		})
+		require.NoError(t, err)
+
+		page2Commits, cursor2 := receiveCommitsWithCursor(t, stream)
+		require.Len(t, page2Commits, 2)
+		testhelper.ProtoEqual(t, []*gitalypb.GitCommit{main2, main1}, page2Commits)
+		require.NotNil(t, cursor2)
+		require.Equal(t, main1.GetId(), cursor2.GetNextCursor())
+
+		// Page 3 (last): should NOT have cursor
+		stream, err = client.ListCommits(ctx, &gitalypb.ListCommitsRequest{
+			Repository: repoProto,
+			Revisions:  []string{main4ID.String()},
+			PaginationParams: &gitalypb.PaginationParameter{
+				PageToken: cursor2.GetNextCursor(),
+				Limit:     2,
+			},
+		})
+		require.NoError(t, err)
+
+		page3Commits, cursor3 := receiveCommitsWithCursor(t, stream)
+		require.Len(t, page3Commits, 1)
+		testhelper.ProtoEqual(t, []*gitalypb.GitCommit{main0}, page3Commits)
+		require.Nil(t, cursor3, "no cursor on last page")
 	})
 }
 
@@ -420,4 +482,21 @@ func TestListCommits_verify(t *testing.T) {
 			testhelper.RequireGrpcError(t, tc.expectedErr, err)
 		})
 	}
+}
+
+// receiveCommitsWithCursor collects all commits from the stream and returns
+// them along with the pagination cursor. The cursor is sent in the last response
+// only when there are more commits beyond the requested limit.
+func receiveCommitsWithCursor(t *testing.T, stream gitalypb.CommitService_ListCommitsClient) ([]*gitalypb.GitCommit, *gitalypb.PaginationCursor) {
+	t.Helper()
+	var cursor *gitalypb.PaginationCursor
+	commits, err := testhelper.ReceiveAndFold(stream.Recv, func(result []*gitalypb.GitCommit, response *gitalypb.ListCommitsResponse) []*gitalypb.GitCommit {
+		// Cursor is sent in the last response, so we keep updating it
+		if response.GetPaginationCursor() != nil {
+			cursor = response.GetPaginationCursor()
+		}
+		return append(result, response.GetCommits()...)
+	})
+	require.NoError(t, err)
+	return commits, cursor
 }
