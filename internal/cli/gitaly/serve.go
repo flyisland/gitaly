@@ -474,7 +474,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 
 		var logConsumer storage.LogConsumer
 		if cfg.Backup.WALGoCloudURL != "" {
-			walSink, err := backup.ResolveSink(ctx, cfg.Backup.WALGoCloudURL, backup.WithEnableChecksumAlgorithm(cfg.Backup.EnableTrailingChecksum))
+			walSink, err := backup.ResolveSink(ctx, cfg.Backup.WALGoCloudURL)
 			if err != nil {
 				return fmt.Errorf("resolving write-ahead log backup sink: %w", err)
 			}
@@ -714,7 +714,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	var backupLocator backup.Locator
 	if cfg.Backup.GoCloudURL != "" {
 		var err error
-		backupSink, err = backup.ResolveSink(ctx, cfg.Backup.GoCloudURL, backup.WithBufferSize(cfg.Backup.BufferSize), backup.WithEnableChecksumAlgorithm(cfg.Backup.EnableTrailingChecksum))
+		backupSink, err = backup.ResolveSink(ctx, cfg.Backup.GoCloudURL, backup.WithBufferSize(cfg.Backup.BufferSize))
 		if err != nil {
 			return fmt.Errorf("resolve backup sink: %w", err)
 		}
