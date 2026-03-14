@@ -38,7 +38,14 @@ func ResolveSink(ctx context.Context, uri string, opts ...SinkOption) (*Sink, er
 	}
 	var sink *Sink
 	switch scheme {
-	case s3blob.Scheme, azureblob.Scheme, gcsblob.Scheme, memblob.Scheme:
+	case s3blob.Scheme:
+		// Add default request_checksum_calculation=when_required for S3 to maintain
+		// compatibility with third-party S3 providers that don't support checksums.
+		// Users can override this by explicitly setting the parameter in their URI.
+		// Users on AWS S3 who need Object Lock can set request_checksum_calculation=when_supported.
+		uri = withS3DefaultChecksumCalculation(parsed)
+		sink, err = newSink(ctx, uri)
+	case azureblob.Scheme, gcsblob.Scheme, memblob.Scheme:
 		sink, err = newSink(ctx, uri)
 	case fileblob.Scheme, "":
 		// fileblob.OpenBucket requires a bare path without 'file://'.
@@ -114,6 +121,24 @@ func newFileblobSink(path string) (*Sink, error) {
 	}
 
 	return &Sink{bucket: bucket}, nil
+}
+
+// withS3DefaultChecksumCalculation adds request_checksum_calculation=when_required to the
+// S3 URL if a custom endpoint is configured and the parameter is not already specified.
+// This maintains compatibility with third-party S3 providers that don't support AWS SDK checksums.
+// When no custom endpoint is configured (i.e., using AWS S3 directly), checksums are left enabled
+// as they work correctly and are required for features like Object Lock.
+// See https://github.com/google/go-cloud/pull/3634.
+func withS3DefaultChecksumCalculation(parsed *url.URL) string {
+	query := parsed.Query()
+	hasCustomEndpoint := query.Get("endpoint") != ""
+	checksumNotSpecified := query.Get("request_checksum_calculation") == ""
+
+	if hasCustomEndpoint && checksumNotSpecified {
+		query.Set("request_checksum_calculation", "when_required")
+		parsed.RawQuery = query.Encode()
+	}
+	return parsed.String()
 }
 
 // Close releases resources associated with the bucket communication.

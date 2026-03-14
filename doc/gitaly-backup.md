@@ -224,6 +224,13 @@ buckets. When Object Lock with retention is configured on the backup bucket:
   uploads, which S3 uses together with Object Lock to enforce integrity and
   retention.
 
+Since not all s3-compatible storage backends support integrity checks, if `endpoint`
+parameter is configured, Gitaly defaults to disabling these checks by using the query
+parameter `request_checksum_calculation=when_required`.
+To enable checksum calculation for any third-party s3 provider, which is required for
+S3 Object Lock, include the `request_checksum_calculation=when_supported` query parameter
+in the provided `go_cloud_url` within the Gitaly config.
+
 In this setup, WORM guarantees are provided by the storage backend’s Object
 Lock policy and versioning, not by Gitaly itself. Gitaly currently does not
 track the compatibility list of all providers with object locking and versioning,

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -270,4 +271,75 @@ func TestSink_List(t *testing.T) {
 	}
 	require.NoError(t, it.Err())
 	require.Equal(t, expectedObjects, objects)
+}
+
+func TestWithS3DefaultChecksumCalculation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		desc     string
+		inputURL string
+		expected string
+	}{
+		{
+			desc:     "no change for AWS S3 without endpoint",
+			inputURL: "s3://bucket",
+			expected: "s3://bucket",
+		},
+		{
+			desc:     "no change for AWS S3 with region only",
+			inputURL: "s3://bucket?region=us-east-1",
+			expected: "s3://bucket?region=us-east-1",
+		},
+		{
+			desc:     "adds default when custom endpoint is configured",
+			inputURL: "s3://bucket?endpoint=minio.example.com",
+			expected: "s3://bucket?endpoint=minio.example.com&request_checksum_calculation=when_required",
+		},
+		{
+			desc:     "adds default when custom endpoint with other params",
+			inputURL: "s3://bucket?region=us-east-1&endpoint=minio.example.com",
+			expected: "s3://bucket?endpoint=minio.example.com&region=us-east-1&request_checksum_calculation=when_required",
+		},
+		{
+			desc:     "preserves user-specified when_supported with endpoint",
+			inputURL: "s3://bucket?endpoint=minio.example.com&request_checksum_calculation=when_supported",
+			expected: "s3://bucket?endpoint=minio.example.com&request_checksum_calculation=when_supported",
+		},
+		{
+			desc:     "preserves user-specified when_required with endpoint",
+			inputURL: "s3://bucket?endpoint=minio.example.com&request_checksum_calculation=when_required",
+			expected: "s3://bucket?endpoint=minio.example.com&request_checksum_calculation=when_required",
+		},
+		{
+			desc:     "preserves user-specified checksum for AWS S3 without endpoint",
+			inputURL: "s3://bucket?request_checksum_calculation=when_supported",
+			expected: "s3://bucket?request_checksum_calculation=when_supported",
+		},
+		{
+			desc:     "handles bucket with path and custom endpoint",
+			inputURL: "s3://bucket/prefix/path?endpoint=minio.example.com",
+			expected: "s3://bucket/prefix/path?endpoint=minio.example.com&request_checksum_calculation=when_required",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			parsed, err := url.Parse(tc.inputURL)
+			require.NoError(t, err)
+
+			result := withS3DefaultChecksumCalculation(parsed)
+
+			// Parse both URLs to compare query params regardless of order
+			resultParsed, err := url.Parse(result)
+			require.NoError(t, err)
+			expectedParsed, err := url.Parse(tc.expected)
+			require.NoError(t, err)
+
+			require.Equal(t, expectedParsed.Scheme, resultParsed.Scheme)
+			require.Equal(t, expectedParsed.Host, resultParsed.Host)
+			require.Equal(t, expectedParsed.Path, resultParsed.Path)
+			require.Equal(t, expectedParsed.Query(), resultParsed.Query())
+		})
+	}
 }
