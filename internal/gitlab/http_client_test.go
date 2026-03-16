@@ -668,6 +668,117 @@ func TestAccess_postReceive(t *testing.T) {
 	}
 }
 
+func Test_ObjectPoolMembers(t *testing.T) {
+	tempDir := testhelper.TempDir(t)
+
+	WriteShellSecretFile(t, tempDir, "secret_token")
+
+	secretFilePath := filepath.Join(tempDir, ".gitlab_shell_secret")
+
+	testCases := []struct {
+		desc            string
+		handler         func(w http.ResponseWriter, r *http.Request)
+		diskPath        string
+		storage         string
+		upstreamOnly    bool
+		expectedMembers []ObjectPoolMember
+		shouldError     bool
+	}{
+		{
+			desc:     "successful response with members",
+			diskPath: "@pools/ab/cd/abcdef1234567890",
+			storage:  "default",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodGet, r.Method)
+				require.Equal(t, "@pools/ab/cd/abcdef1234567890", r.URL.Query().Get("disk_path"))
+				require.Equal(t, "default", r.URL.Query().Get("storage"))
+				require.Empty(t, r.URL.Query().Get("upstream_only"))
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, err := w.Write([]byte(`[
+					{"relative_path": "@hashed/ab/cd/abcdef.git", "public": true, "is_upstream": true},
+					{"relative_path": "@hashed/ef/gh/efghij.git", "public": false, "is_upstream": false}
+				]`))
+				require.NoError(t, err)
+			},
+			expectedMembers: []ObjectPoolMember{
+				{RelativePath: "@hashed/ab/cd/abcdef.git", Public: true, IsUpstream: true},
+				{RelativePath: "@hashed/ef/gh/efghij.git", Public: false, IsUpstream: false},
+			},
+		},
+		{
+			desc:         "upstream only",
+			diskPath:     "@pools/ab/cd/abcdef1234567890",
+			storage:      "default",
+			upstreamOnly: true,
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "true", r.URL.Query().Get("upstream_only"))
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, err := w.Write([]byte(`[
+					{"relative_path": "@hashed/ab/cd/abcdef.git", "public": true, "is_upstream": true}
+				]`))
+				require.NoError(t, err)
+			},
+			expectedMembers: []ObjectPoolMember{
+				{RelativePath: "@hashed/ab/cd/abcdef.git", Public: true, IsUpstream: true},
+			},
+		},
+		{
+			desc:     "empty members",
+			diskPath: "@pools/ab/cd/abcdef1234567890",
+			storage:  "default",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, err := w.Write([]byte(`[]`))
+				require.NoError(t, err)
+			},
+			expectedMembers: []ObjectPoolMember{},
+		},
+		{
+			desc:     "not found",
+			diskPath: "@pools/ab/cd/nonexistent",
+			storage:  "default",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+			},
+			shouldError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(tc.handler))
+			defer server.Close()
+
+			c, err := NewHTTPClient(
+				testhelper.SharedLogger(t),
+				config.Gitlab{
+					URL:        server.URL,
+					SecretFile: secretFilePath,
+				},
+				config.TLS{},
+				prometheus.Config{},
+			)
+			require.NoError(t, err)
+
+			ctx := testhelper.Context(t)
+
+			members, err := c.ObjectPoolMembers(ctx, tc.diskPath, tc.storage, tc.upstreamOnly)
+			if tc.shouldError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedMembers, members)
+			}
+		})
+	}
+}
+
 func TestAccess_remoteIPForwardedAllowed(t *testing.T) {
 	tempDir := testhelper.TempDir(t)
 

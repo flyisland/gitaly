@@ -326,6 +326,37 @@ func (c *HTTPClient) Check(ctx context.Context) (*CheckInfo, error) {
 	return &info, nil
 }
 
+// ObjectPoolMembers queries the GitLab internal API /gitaly/object_pool_members to list
+// member repositories of an object pool.
+func (c *HTTPClient) ObjectPoolMembers(ctx context.Context, diskPath, storage string, upstreamOnly bool) ([]ObjectPoolMember, error) {
+	ctx = withOriginalRemoteIP(ctx)
+
+	query := url.Values{}
+	query.Set("disk_path", diskPath)
+	query.Set("storage", storage)
+	if upstreamOnly {
+		query.Set("upstream_only", "true")
+	}
+
+	resp, err := c.Get(ctx, fmt.Sprintf("/gitaly/object_pool_members?%s", query.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("get: %w", err)
+	}
+
+	defer c.finalizeResponse(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get: %d", resp.StatusCode)
+	}
+
+	var members []ObjectPoolMember
+	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+		return nil, fmt.Errorf("decode response body: %w", err)
+	}
+
+	return members, nil
+}
+
 func (c *HTTPClient) finalizeResponse(resp *http.Response) {
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		c.logger.WithError(err).WithField("request_uri", resp.Request.RequestURI).Error("discard body error for the request")

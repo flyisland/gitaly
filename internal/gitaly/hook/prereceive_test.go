@@ -303,6 +303,10 @@ func (m *prereceiveAPIMock) PostReceive(context.Context, string, string, string,
 	return true, nil, errors.New("unexpected call")
 }
 
+func (m *prereceiveAPIMock) ObjectPoolMembers(ctx context.Context, diskPath, storage string, upstreamOnly bool) ([]gitlab.ObjectPoolMember, error) {
+	return nil, errors.New("unexpected call")
+}
+
 func TestPrereceive_gitlab(t *testing.T) {
 	t.Parallel()
 

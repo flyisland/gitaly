@@ -31,3 +31,8 @@ func (c stubClient) PreReceive(context.Context, string) (bool, error) {
 func (c stubClient) PostReceive(ctx context.Context, glRepository, glID, changes string, clientCtx []byte, pushOptions ...string) (bool, []PostReceiveMessage, error) {
 	return true, nil, nil
 }
+
+// ObjectPoolMembers is a no-op and returns no members.
+func (c stubClient) ObjectPoolMembers(context.Context, string, string, bool) ([]ObjectPoolMember, error) {
+	return nil, nil
+}
