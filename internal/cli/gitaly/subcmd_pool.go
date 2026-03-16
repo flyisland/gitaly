@@ -129,7 +129,7 @@ func (ps *poolScanner) scanStorage(ctx context.Context, gitalyStorage gitalycfg.
 	fmt.Fprintf(ps.out, "found %d pool members\n", len(members))
 
 	for _, member := range members {
-		fmt.Fprintf(ps.out, "pool member: %s -> %s\n", member.MemberDiskPath, member.PoolDiskPath)
+		fmt.Fprintf(ps.out, "pool member: %s -> %s [isUpstream: %t]\n", member.MemberDiskPath, member.PoolDiskPath, member.IsUpstream)
 	}
 
 	if len(members) > 0 {

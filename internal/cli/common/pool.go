@@ -14,8 +14,7 @@ import (
 type PoolMember struct {
 	MemberDiskPath string
 	PoolDiskPath   string
-	// TODO: Wire up rails API to set this field to determine the source repository of a pool.
-	IsUpstream bool
+	IsUpstream     bool
 }
 
 // ScanPoolMetadata calls the ScanPoolMetadata RPC and returns all repository-to-pool relationships.
@@ -40,6 +39,7 @@ func ScanPoolMetadata(ctx context.Context, client gitalypb.InternalGitalyClient,
 		members = append(members, PoolMember{
 			MemberDiskPath: resp.GetRelativePath(),
 			PoolDiskPath:   resp.GetPoolDiskPath(),
+			IsUpstream:     resp.GetIsUpstream(),
 		})
 	}
 
