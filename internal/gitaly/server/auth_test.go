@@ -245,7 +245,7 @@ func runServer(t *testing.T, cfg config.Cfg) string {
 	catfileCache := catfile.NewCache(cfg)
 	t.Cleanup(catfileCache.Stop)
 	diskCache := cache.New(cfg, locator, logger)
-	_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+	_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 	limitHandler := limithandler.New(cfg, limithandler.LimitConcurrencyByRepo, setupPerRPCConcurrencyLimiters)
 	updaterWithHooks := updateref.NewUpdaterWithHooks(cfg, logger, locator, hookManager, gitCmdFactory, catfileCache)
 
@@ -288,7 +288,7 @@ func runSecureServer(t *testing.T, cfg config.Cfg) string {
 	conns := client.NewPool()
 	t.Cleanup(func() { testhelper.MustClose(t, conns) })
 
-	_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+	_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 	srv, err := NewGitalyServerFactory(
 		cfg,
 		testhelper.SharedLogger(t),

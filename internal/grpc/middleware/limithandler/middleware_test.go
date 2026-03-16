@@ -64,7 +64,7 @@ func TestWithConcurrencyLimiters(t *testing.T) {
 			},
 		},
 	}
-	limits, _ := limithandler.WithConcurrencyLimiters(cfg)
+	limits, _, _ := limithandler.WithConcurrencyLimiters(cfg)
 	require.Equal(t, 3, len(limits))
 
 	limit := limits["/grpc.testing.TestService/UnaryCall"]
@@ -79,6 +79,52 @@ func TestWithConcurrencyLimiters(t *testing.T) {
 
 	limit = limits["/grpc.testing.TestService/AnotherUnaryCall"]
 	require.Equal(t, "perRPC/grpc.testing.TestService/AnotherUnaryCall", limit.Name())
+	require.Equal(t, limiter.AdaptiveSetting{Initial: 10, Min: 5, Max: 15, BackoffFactor: limiter.DefaultBackoffFactor}, limit.Setting())
+	require.Equal(t, 10, limit.Current())
+}
+
+func TestWithConcurrencyLimiters_unauthenticated(t *testing.T) {
+	t.Parallel()
+	cfg := config.Cfg{
+		Concurrency: []config.Concurrency{
+			{
+				RPC: "/grpc.testing.TestService/UnaryCall",
+				ConcurrencyLimits: config.ConcurrencyLimits{
+					MaxPerRepo: 10,
+				},
+				Unauthenticated: config.ConcurrencyLimits{
+					MaxPerRepo: 5,
+				},
+			},
+			{
+				RPC: "/grpc.testing.TestService/AdaptiveCall",
+				ConcurrencyLimits: config.ConcurrencyLimits{
+					Adaptive:     true,
+					MinLimit:     10,
+					InitialLimit: 20,
+					MaxLimit:     30,
+				},
+				Unauthenticated: config.ConcurrencyLimits{
+					Adaptive:     true,
+					MinLimit:     5,
+					InitialLimit: 10,
+					MaxLimit:     15,
+				},
+			},
+		},
+	}
+	limits, limitsUnauth, _ := limithandler.WithConcurrencyLimiters(cfg)
+
+	require.Len(t, limits, 2)
+	require.Len(t, limitsUnauth, 2)
+
+	limit := limitsUnauth["/grpc.testing.TestService/UnaryCall"]
+	require.Equal(t, "perRPC/grpc.testing.TestService/UnaryCall-unauthenticated", limit.Name())
+	require.Equal(t, limiter.AdaptiveSetting{Initial: 5}, limit.Setting())
+	require.Equal(t, 5, limit.Current())
+
+	limit = limitsUnauth["/grpc.testing.TestService/AdaptiveCall"]
+	require.Equal(t, "perRPC/grpc.testing.TestService/AdaptiveCall-unauthenticated", limit.Name())
 	require.Equal(t, limiter.AdaptiveSetting{Initial: 10, Min: 5, Max: 15, BackoffFactor: limiter.DefaultBackoffFactor}, limit.Setting())
 	require.Equal(t, 10, limit.Current())
 }
@@ -103,7 +149,7 @@ func TestUnaryLimitHandler(t *testing.T) {
 		},
 	}
 
-	_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+	_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 	lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 	interceptor := lh.UnaryInterceptor()
 	srv, serverSocketPath := runServer(t, s, grpc.UnaryInterceptor(interceptor))
@@ -181,7 +227,7 @@ func TestUnaryLimitHandler_queueing(t *testing.T) {
 				},
 			},
 		}
-		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+		_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 		lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 
 		s := &queueTestServer{
@@ -255,7 +301,7 @@ func TestUnaryLimitHandler_queueing(t *testing.T) {
 				},
 			},
 		}
-		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+		_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 		lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 
 		s := &queueTestServer{
@@ -520,7 +566,7 @@ func TestStreamLimitHandler(t *testing.T) {
 				},
 			}
 
-			_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+			_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 			lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 			interceptor := lh.StreamInterceptor()
 			srv, serverSocketPath := runServer(t, s, grpc.StreamInterceptor(interceptor))
@@ -576,7 +622,7 @@ func TestStreamLimitHandler_error(t *testing.T) {
 		},
 	}
 
-	_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+	_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 	lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 	interceptor := lh.StreamInterceptor()
 	srv, serverSocketPath := runServer(t, s, grpc.StreamInterceptor(interceptor))
@@ -702,7 +748,7 @@ func TestConcurrencyLimitHandlerMetrics(t *testing.T) {
 		},
 	}
 
-	_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+	_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 	lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 	interceptor := lh.UnaryInterceptor()
 	srv, serverSocketPath := runServer(t, s, grpc.UnaryInterceptor(interceptor))
@@ -804,7 +850,7 @@ func TestAuthenticatedVsUnauthenticatedLimiting(t *testing.T) {
 			},
 		}
 
-		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+		_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 		lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 		srv, serverSocketPath := runServerWithAuth(t, s, lh.UnaryInterceptor(), nil)
 		defer srv.Stop()
@@ -879,7 +925,7 @@ func TestAuthenticatedVsUnauthenticatedLimiting(t *testing.T) {
 			},
 		}
 
-		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+		_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 		lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 		srv, serverSocketPath := runServerWithAuth(t, s, lh.UnaryInterceptor(), nil)
 		defer srv.Stop()
@@ -950,7 +996,7 @@ func TestAuthenticatedVsUnauthenticatedLimiting(t *testing.T) {
 			},
 		}
 
-		_, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
+		_, _, setupPerRPCConcurrencyLimiters := limithandler.WithConcurrencyLimiters(cfg)
 		lh := limithandler.New(cfg, fixedLockKey, setupPerRPCConcurrencyLimiters)
 		srv, serverSocketPath := runServerWithAuth(t, s, nil, lh.StreamInterceptor())
 		defer srv.Stop()
