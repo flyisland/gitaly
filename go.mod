@@ -41,7 +41,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.3.3
-	gitlab.com/gitlab-org/labkit v1.38.0
+	gitlab.com/gitlab-org/labkit v1.38.6
 	go.etcd.io/raft/v3 v3.6.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.65.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
