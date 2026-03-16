@@ -47,7 +47,7 @@ func TestScanPoolMetadata(t *testing.T) {
 				if diskPath == "@pools/aa/bb/test-pool" {
 					return []gitlab.ObjectPoolMember{
 						{
-							RelativePath: "repo-with-pool",
+							RelativePath: "repo-with-pool.git",
 							Public:       true,
 							IsUpstream:   true,
 						},
@@ -55,7 +55,7 @@ func TestScanPoolMetadata(t *testing.T) {
 				} else if diskPath == "@pools/aa/bb/test-pool-2" {
 					return []gitlab.ObjectPoolMember{
 						{
-							RelativePath: "private-repo-with-pool",
+							RelativePath: "private-repo-with-pool.git",
 							Public:       false,
 							IsUpstream:   true, // despite being the upstream, we shouldn't consider it because it's private.
 						},
@@ -96,7 +96,7 @@ func TestScanPoolMetadata(t *testing.T) {
 	t.Run("repository without alternates", func(t *testing.T) {
 		gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
-			RelativePath:           "repo-without-alternates",
+			RelativePath:           "repo-without-alternates.git",
 		})
 
 		stream, err := client.ScanPoolMetadata(ctx, &gitalypb.ScanPoolMetadataRequest{
@@ -114,7 +114,7 @@ func TestScanPoolMetadata(t *testing.T) {
 
 		_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
-			RelativePath:           "repo-with-pool",
+			RelativePath:           "repo-with-pool.git",
 		})
 
 		alternatesFile := filepath.Join(repoPath, "objects", "info", "alternates")
@@ -129,7 +129,7 @@ func TestScanPoolMetadata(t *testing.T) {
 		results := consumeServerStream(t, stream)
 		testhelper.ProtoEqual(t, []*gitalypb.ScanPoolMetadataResponse{
 			{
-				RelativePath: "repo-with-pool",
+				RelativePath: "repo-with-pool.git",
 				PoolDiskPath: poolDiskPath,
 				IsUpstream:   true,
 			},
@@ -143,7 +143,7 @@ func TestScanPoolMetadata(t *testing.T) {
 
 		_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
-			RelativePath:           "private-repo-with-pool",
+			RelativePath:           "private-repo-with-pool.git",
 		})
 
 		alternatesFile := filepath.Join(repoPath, "objects", "info", "alternates")
@@ -158,7 +158,7 @@ func TestScanPoolMetadata(t *testing.T) {
 		results := consumeServerStream(t, stream)
 		testhelper.ProtoEqual(t, []*gitalypb.ScanPoolMetadataResponse{
 			{
-				RelativePath: "private-repo-with-pool",
+				RelativePath: "private-repo-with-pool.git",
 				PoolDiskPath: poolDiskPath,
 				IsUpstream:   false,
 			},
@@ -172,7 +172,7 @@ func TestScanPoolMetadata(t *testing.T) {
 
 		_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
-			RelativePath:           "fork-with-pool",
+			RelativePath:           "fork-with-pool.git",
 		})
 
 		alternatesFile := filepath.Join(repoPath, "objects", "info", "alternates")
@@ -187,7 +187,7 @@ func TestScanPoolMetadata(t *testing.T) {
 		results := consumeServerStream(t, stream)
 		testhelper.ProtoEqual(t, []*gitalypb.ScanPoolMetadataResponse{
 			{
-				RelativePath: "fork-with-pool",
+				RelativePath: "fork-with-pool.git",
 				PoolDiskPath: poolDiskPath,
 				IsUpstream:   false,
 			},
