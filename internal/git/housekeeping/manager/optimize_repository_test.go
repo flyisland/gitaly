@@ -694,16 +694,12 @@ func TestOptimizeRepository(t *testing.T) {
 				gittest.Exec(t, cfg, "-C", repoPath, "repack", "-A", "-d", "--write-bitmap-index")
 				gittest.Exec(t, cfg, "-c", "commitGraph.generationVersion=2", "-C", repoPath, "commit-graph", "write", "--split", "--changed-paths")
 
-				// The repack won't repack the following objects because they're
-				// broken, and thus we'll retry to prune them afterwards.
-				require.NoError(t, os.MkdirAll(filepath.Join(repoPath, "objects", "17"), mode.Directory))
-
+				// Create loose objects exceeding our loose object limit. All of them are unreachable,
+				// so they won't get packed during the all-into-one repack.
 				moreThanTwoWeeksAgo := time.Now().Add(stats.StaleObjectsGracePeriod).Add(-time.Minute)
-
 				for i := 0; i < housekeeping.LooseObjectLimit+1; i++ {
-					// write a blob with correct format but invalid content
-					blobPath := filepath.Join(repoPath, "objects", "17", fmt.Sprintf("%038x", i+1))
-					require.NoError(t, os.WriteFile(blobPath, nil, mode.File))
+					objectID := gittest.WriteBlob(t, cfg, repoPath, []byte(fmt.Sprintf("content %d", i)))
+					blobPath := filepath.Join(repoPath, "objects", string(objectID[0:2]), string(objectID[2:]))
 					require.NoError(t, os.Chtimes(blobPath, moreThanTwoWeeksAgo, moreThanTwoWeeksAgo))
 				}
 
