@@ -19,7 +19,17 @@ func (s *server) ScanPoolMetadata(req *gitalypb.ScanPoolMetadataRequest, stream 
 		return structerr.NewInvalidArgument("get storage: %w", err)
 	}
 
-	sendPoolMember := func(relPath string, _ fs.FileInfo) error {
+	processPoolMember := processPoolMemberFunc(storagePath, stream)
+
+	if err := walk.FindRepositories(ctx, s.locator, storageName, processPoolMember); err != nil {
+		return structerr.NewInternal("%w", err)
+	}
+
+	return nil
+}
+
+func processPoolMemberFunc(storagePath string, stream gitalypb.InternalGitaly_ScanPoolMetadataServer) func (relPath string, _ fs.FileInfo) error {
+	return func(relPath string, fi fs.FileInfo) error {
 		repoPath := filepath.Join(storagePath, relPath)
 
 		altInfo, err := stats.AlternatesInfoForRepository(repoPath)
@@ -50,10 +60,4 @@ func (s *server) ScanPoolMetadata(req *gitalypb.ScanPoolMetadataRequest, stream 
 			PoolDiskPath: poolDiskPath,
 		})
 	}
-
-	if err := walk.FindRepositories(ctx, s.locator, storageName, sendPoolMember); err != nil {
-		return structerr.NewInternal("%w", err)
-	}
-
-	return nil
 }
