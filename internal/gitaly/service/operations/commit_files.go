@@ -14,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/remoterepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/hook"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/hook/updateref"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
@@ -163,9 +164,10 @@ func (s *Server) UserCommitFiles(stream gitalypb.OperationService_UserCommitFile
 		}
 
 		var (
-			unknownErr    unknownIndexError
-			indexErr      indexError
-			customHookErr updateref.CustomHookError
+			unknownErr      unknownIndexError
+			indexErr        indexError
+			notAllowedError hook.NotAllowedError
+			customHookErr   updateref.CustomHookError
 		)
 
 		switch {
@@ -180,6 +182,19 @@ func (s *Server) UserCommitFiles(stream gitalypb.OperationService_UserCommitFile
 				&gitalypb.UserCommitFilesError{
 					Error: &gitalypb.UserCommitFilesError_IndexUpdate{
 						IndexUpdate: indexErr.Proto(),
+					},
+				},
+			)
+		case errors.As(err, &notAllowedError):
+			return structerr.NewPermissionDenied("denied by access checks: %w", err).WithDetail(
+				&gitalypb.UserCommitFilesError{
+					Error: &gitalypb.UserCommitFilesError_AccessCheck{
+						AccessCheck: &gitalypb.AccessCheckError{
+							ErrorMessage: notAllowedError.Message,
+							UserId:       notAllowedError.UserID,
+							Protocol:     notAllowedError.Protocol,
+							Changes:      notAllowedError.Changes,
+						},
 					},
 				},
 			)
