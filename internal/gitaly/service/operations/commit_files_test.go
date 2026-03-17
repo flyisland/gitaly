@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/hook"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/storagemgr"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/transaction"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/backchannel"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/signature"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
@@ -26,7 +32,9 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1115,6 +1123,92 @@ func testUserCommitFilesQuarantine(t *testing.T, ctx context.Context) {
 	exists, err := repo.HasRevision(ctx, oid.Revision()+"^{commit}")
 	require.NoError(t, err)
 	require.False(t, exists, "quarantined commit should have been discarded")
+}
+
+func TestUserCommitFiles_accessCheck(t *testing.T) {
+	t.Parallel()
+
+	testhelper.NewFeatureSets(featureflag.GPGSigning).Run(t, testUserCommitFilesAccessCheck)
+}
+
+func testUserCommitFilesAccessCheck(t *testing.T, ctx context.Context) {
+	testhelper.SkipWithWAL(t, "PartitionManager not injected in test setup")
+	t.Parallel()
+
+	for _, tc := range []struct {
+		desc            string
+		allowed         bool
+		allowedMessage  string
+		allowedErr      error
+		expectedMessage string
+	}{
+		{
+			desc:            "disallowed",
+			allowed:         false,
+			allowedMessage:  "you shall not pass",
+			expectedMessage: "you shall not pass",
+		},
+		{
+			desc:            "failing",
+			allowedErr:      errors.New("failure"),
+			expectedMessage: "failure",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := testcfg.Build(t)
+			backchannelRegistry := backchannel.NewRegistry()
+			txManager := transaction.NewManager(cfg, testhelper.SharedLogger(t), backchannelRegistry)
+
+			hookManager := hook.NewManager(cfg, config.NewLocator(cfg), testhelper.SharedLogger(t), gittest.NewCommandFactory(t, cfg), txManager, gitlab.NewMockClient(
+				t,
+				func(context.Context, gitlab.AllowedParams) (bool, string, error) {
+					return tc.allowed, tc.allowedMessage, tc.allowedErr
+				},
+				gitlab.MockPreReceive,
+				gitlab.MockPostReceive,
+			), hook.NewTransactionRegistry(storagemgr.NewTransactionRegistry()),
+				hook.NewProcReceiveRegistry(),
+				nil,
+			)
+
+			ctx, cfg, client := setupOperationsServiceWithCfg(
+				t, ctx, cfg,
+				testserver.WithBackchannelRegistry(backchannelRegistry),
+				testserver.WithTransactionManager(txManager),
+				testserver.WithHookManager(hookManager),
+			)
+
+			repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+			gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("feature"))
+
+			stream, err := client.UserCommitFiles(ctx)
+			require.NoError(t, err)
+			require.NoError(t, stream.Send(headerRequest(repoProto, gittest.TestUser, "feature", commitFilesMessage, "", "")))
+			require.NoError(t, stream.Send(createFileHeaderRequest("file.txt")))
+			require.NoError(t, stream.Send(actionContentRequest("content")))
+
+			_, err = stream.CloseAndRecv()
+			require.Error(t, err)
+
+			st, ok := status.FromError(err)
+			require.True(t, ok)
+			require.Equal(t, codes.PermissionDenied, st.Code())
+			require.Contains(t, st.Message(), "denied by access checks")
+
+			details := st.Details()
+			require.Len(t, details, 1)
+			commitFilesErr, ok := details[0].(*gitalypb.UserCommitFilesError)
+			require.True(t, ok)
+			accessCheckErr := commitFilesErr.GetAccessCheck()
+			require.NotNil(t, accessCheckErr)
+			require.Equal(t, tc.expectedMessage, accessCheckErr.GetErrorMessage())
+			require.Equal(t, "web", accessCheckErr.GetProtocol())
+			require.Equal(t, gittest.GlID, accessCheckErr.GetUserId())
+			require.Contains(t, string(accessCheckErr.GetChanges()), "refs/heads/feature")
+		})
+	}
 }
 
 func TestSuccessfulUserCommitFilesRequest(t *testing.T) {
