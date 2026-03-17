@@ -356,7 +356,7 @@ func TestManager_Create_incremental(t *testing.T) {
 					gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch))
 
 					testhelper.WriteFiles(tb, backupRoot, map[string]any{
-						filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+						filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 object_format = '%[1]s'
 
 [[steps]]
@@ -379,7 +379,7 @@ custom_hooks_path = '%[2]s/001.custom_hooks.tar'
 					commitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch))
 
 					testhelper.WriteFiles(tb, backupRoot, map[string]any{
-						filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+						filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 object_format = '%[1]s'
 
 [[steps]]
@@ -509,7 +509,7 @@ func TestManager_Restore_latest(t *testing.T) {
 
 						relativePath := stripRelativePath(tb, repo)
 						testhelper.WriteFiles(tb, backupRoot, map[string]any{
-							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 object_format = '%[1]s'
 head_reference = '%[3]s'
 
@@ -537,7 +537,7 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 
 						relativePath := stripRelativePath(tb, repo)
 						testhelper.WriteFiles(tb, backupRoot, map[string]any{
-							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 object_format = '%[1]s'
 head_reference = '%[3]s'
 
@@ -564,7 +564,7 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 						relativePath := stripRelativePath(tb, repo)
 						customHooksPath := filepath.Join(backupRoot, relativePath, "custom_hooks.tar")
 						testhelper.WriteFiles(tb, backupRoot, map[string]any{
-							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 object_format = '%[1]s'
 head_reference = '%[3]s'
 
@@ -604,7 +604,7 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 
 						relativePath := stripRelativePath(tb, repo)
 						testhelper.WriteFiles(tb, backupRoot, map[string]any{
-							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 object_format = '%[1]s'
 empty = true
 non_existent= false
@@ -631,7 +631,7 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 
 						relativePath := stripRelativePath(tb, repo)
 						testhelper.WriteFiles(tb, backupRoot, map[string]any{
-							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 				empty = true
 				non_existent = false
 				object_format = %q
@@ -709,7 +709,7 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 						)
 
 						testhelper.WriteFiles(tb, backupRoot, map[string]any{
-							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "+latest.toml"): fmt.Sprintf(`
+							filepath.Join("manifests", repo.GetStorageName(), repo.GetRelativePath(), "abc123.toml"): fmt.Sprintf(`
 object_format = '%[1]s'
 head_reference = '%[4]s'
 
@@ -1195,4 +1195,88 @@ func createBackupArtifacts(t *testing.T, cfg config.Cfg, repoPath string) (repoC
 	repoRefs = gittest.Exec(t, cfg, "-C", repoPath, "show-ref", "--head")
 
 	return repoChecksum, repoBundle, repoRefs
+}
+
+func TestManager_WriteBackupID(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	backupRoot := testhelper.TempDir(t)
+	sink, err := backup.ResolveSink(ctx, backupRoot)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, sink)
+
+	mgr := backup.NewIDManager(sink)
+
+	require.NoError(t, mgr.WriteBackupID(ctx, "my-backup"))
+
+	require.FileExists(t, filepath.Join(backupRoot, "backup_ids", "my-backup"))
+}
+
+func TestManager_ReadLatestBackupID(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	t.Run("no markers", func(t *testing.T) {
+		t.Parallel()
+
+		backupRoot := testhelper.TempDir(t)
+		sink, err := backup.ResolveSink(ctx, backupRoot)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, sink)
+
+		mgr := backup.NewIDManager(sink)
+
+		_, err = mgr.ReadLatestBackupID(ctx)
+		require.ErrorIs(t, err, backup.ErrDoesntExist)
+	})
+
+	t.Run("single marker", func(t *testing.T) {
+		t.Parallel()
+
+		backupRoot := testhelper.TempDir(t)
+		testhelper.WriteFiles(t, backupRoot, map[string]any{
+			"backup_ids/my-backup": "",
+		})
+
+		sink, err := backup.ResolveSink(ctx, backupRoot)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, sink)
+
+		mgr := backup.NewIDManager(sink)
+
+		id, err := mgr.ReadLatestBackupID(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "my-backup", id)
+	})
+
+	t.Run("multiple markers picks latest by modification time", func(t *testing.T) {
+		t.Parallel()
+
+		backupRoot := testhelper.TempDir(t)
+
+		// Write markers separately so they get different modification times.
+		// The last one written should be picked as latest.
+		testhelper.WriteFiles(t, backupRoot, map[string]any{
+			"backup_ids/old-backup": "",
+		})
+		testhelper.WriteFiles(t, backupRoot, map[string]any{
+			"backup_ids/mid-backup": "",
+		})
+		testhelper.WriteFiles(t, backupRoot, map[string]any{
+			"backup_ids/latest-backup": "",
+		})
+
+		sink, err := backup.ResolveSink(ctx, backupRoot)
+		require.NoError(t, err)
+		defer testhelper.MustClose(t, sink)
+
+		mgr := backup.NewIDManager(sink)
+
+		id, err := mgr.ReadLatestBackupID(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "latest-backup", id)
+	})
 }

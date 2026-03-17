@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -26,6 +28,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+const backupIDPrefix = "backup_ids/"
 
 var (
 	// ErrSkipped means the repository was skipped because there was nothing to backup
@@ -140,9 +144,20 @@ func ResolveLocator(sink *Sink) Locator {
 	return NewManifestLocator(sink)
 }
 
+// IDManager handles run-level backup ID operations against a backup sink.
+// It is safe to use independently of Manager.
+type IDManager struct {
+	sink *Sink
+}
+
+// NewIDManager creates a BackupIDManager for the given sink.
+func NewIDManager(sink *Sink) *IDManager {
+	return &IDManager{sink: sink}
+}
+
 // Manager manages process of the creating/restoring backups.
 type Manager struct {
-	sink    *Sink
+	IDManager
 	locator Locator
 	logger  log.Logger
 
@@ -154,8 +169,8 @@ type Manager struct {
 // NewManager creates and returns initialized *Manager instance.
 func NewManager(sink *Sink, logger log.Logger, locator Locator, pool *client.Pool) *Manager {
 	return &Manager{
-		sink:    sink,
-		locator: locator,
+		IDManager: IDManager{sink: sink},
+		locator:   locator,
 		repositoryFactory: func(ctx context.Context, repo *gitalypb.Repository, server storage.ServerInfo) (Repository, error) {
 			if err := setContextServerInfo(ctx, &server, repo.GetStorageName()); err != nil {
 				return nil, err
@@ -185,8 +200,8 @@ func NewManagerLocal(
 	migrationStateManager migration.StateManager,
 ) *Manager {
 	return &Manager{
-		sink:    sink,
-		locator: locator,
+		IDManager: IDManager{sink: sink},
+		locator:   locator,
 		repositoryFactory: func(ctx context.Context, repo *gitalypb.Repository, server storage.ServerInfo) (Repository, error) {
 			localRepo := localrepo.New(logger, storageLocator, gitCmdFactory, catfileCache, repo)
 
@@ -377,6 +392,47 @@ func (mgr *Manager) Restore(ctx context.Context, req *RestoreRequest) error {
 	// we can just restore the most recent archive.
 	latestStep := backup.Steps[len(backup.Steps)-1]
 	return mgr.restoreCustomHooks(ctx, repo, latestStep.CustomHooksPath)
+}
+
+// WriteBackupID writes the given backup id to the backup sink.
+func (mgr *IDManager) WriteBackupID(ctx context.Context, backupID string) error {
+	key := backupIDPrefix + backupID
+	w, err := mgr.sink.GetWriter(ctx, key)
+	if err != nil {
+		return fmt.Errorf("write backup marker: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("write backup marker: close: %w", err)
+	}
+
+	return nil
+}
+
+// ReadLatestBackupID returns the backup ID of the most recent completed backup run.
+// This iterates through backup_ids/ path on the object storage and finds the latest
+// entry according to the object's modification time.
+func (mgr *IDManager) ReadLatestBackupID(ctx context.Context) (string, error) {
+	iter := mgr.sink.List(backupIDPrefix)
+
+	var latestKey string
+	var latestModTime time.Time
+	for iter.Next(ctx) {
+		modTime := iter.ModTime()
+		if latestKey == "" || modTime.After(latestModTime) {
+			latestKey = iter.Path()
+			latestModTime = modTime
+		}
+	}
+
+	if err := iter.Err(); err != nil {
+		return "", fmt.Errorf("find latest backup ID: %w", err)
+	}
+
+	if latestKey == "" {
+		return "", ErrDoesntExist
+	}
+
+	return path.Base(latestKey), nil
 }
 
 func (mgr *Manager) restoreFromRefs(ctx context.Context, repo Repository, backup *Backup) error {
