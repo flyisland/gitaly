@@ -5,6 +5,7 @@ package gitalypb
 // GitalyProtos is a list of gitaly protobuf files
 var GitalyProtos = []string{
 	"analysis.proto",
+	"backup.proto",
 	"blob.proto",
 	"cleanup.proto",
 	"cluster.proto",

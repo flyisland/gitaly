@@ -7,6 +7,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/server/auth"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service/analysis"
+	gitalybackup "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service/backup"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service/blob"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service/cleanup"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service/commit"
@@ -56,6 +57,7 @@ var (
 // RegisterAll will register all the known gRPC services on  the provided gRPC service instance.
 func RegisterAll(srv *grpc.Server, deps *service.Dependencies) {
 	gitalypb.RegisterAnalysisServiceServer(srv, analysis.NewServer(deps))
+	gitalypb.RegisterBackupServiceServer(srv, gitalybackup.NewServer(deps))
 	gitalypb.RegisterBlobServiceServer(srv, blob.NewServer(deps))
 	gitalypb.RegisterRaftServiceServer(srv, raft.NewServer(deps))
 	gitalypb.RegisterCleanupServiceServer(srv, cleanup.NewServer(deps))
