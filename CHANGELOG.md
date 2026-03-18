@@ -1,5 +1,28 @@
 # Gitaly changelog
 
+## 18.10.0 (2026-03-18)
+
+### Added (2 changes)
+
+- [listRefs: Add ignore_case option for case-insensitive pattern matching](gitlab-org/gitaly@3b1ab04369b042c6655613e133ddc3f7e3f9b4ca) ([merge request](gitlab-org/gitaly!8547))
+- [Add context-free patch-ID support to GetPatchID RPC](gitlab-org/gitaly@41ac4164806c15b855fd7b1fabc5359449f73b9f) ([merge request](gitlab-org/gitaly!8535))
+
+### Fixed (1 change)
+
+- [listcommits: Fix pagination cursor returned on last page](gitlab-org/gitaly@8df71201d313a922f7d2e96a5d1d60b92b5322ac) ([merge request](gitlab-org/gitaly!8477))
+
+### Changed (1 change)
+
+- [backup: Upgrade go cloud version for integrity checks](gitlab-org/gitaly@5c59db2fbcf50d44dcaffff5ca5ddb0f1a7448fa) ([merge request](gitlab-org/gitaly!8559))
+
+### Deprecated (1 change)
+
+- [backup: Remove legacy layouts](gitlab-org/gitaly@fae30ce8aabc92cacd0e853abb68728cee405a91) ([merge request](gitlab-org/gitaly!8500))
+
+### Other (1 change)
+
+- [Deprecate CountCommitsRequest revision and all fields](gitlab-org/gitaly@d1f74eaa3a7d3db3f7851c3aa94764598f3c27ee) ([merge request](gitlab-org/gitaly!8509))
+
 ## 18.9.2 (2026-03-10)
 
 No changes.
