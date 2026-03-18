@@ -52,6 +52,33 @@ AND "primary" IS NOT NULL
 	return primaries, rows.Err()
 }
 
+// translatePaths translates a slice of replica paths to relative paths.
+func translatePaths(ctx context.Context, db *sql.DB, replicaPaths []string) (map[string]string, error) {
+	result := make(map[string]string, len(replicaPaths))
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT replica_path, relative_path FROM repositories WHERE replica_path = ANY($1)`,
+		replicaPaths,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var replicaPath, relativePath string
+		if err := rows.Scan(&replicaPath, &relativePath); err != nil {
+			return nil, fmt.Errorf("scan row: %w", err)
+		}
+		result[replicaPath] = relativePath
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func poolAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
