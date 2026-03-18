@@ -70,6 +70,7 @@ func NewApp() *cli.Command {
 			newSQLMigrateCommand(),
 			newSQLMigrateDownCommand(),
 			newSQLMigrateStatusCommand(),
+			newPoolCommand(),
 			newRemoveRepositoryCommand(),
 			newSetReplicationFactorCommand(),
 		},
