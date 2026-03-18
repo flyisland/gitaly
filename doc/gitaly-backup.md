@@ -9,8 +9,8 @@ Google Cloud Storage, or Azure).
 Gitaly supports two backup approaches:
 
 1. The `gitaly-backup` CLI initiates Remote Procedure Calls (RPCs) to the Gitaly server requesting backup data for one or more repositories.
-The Gitaly server generates the backup data and streams it back to `gitaly-backup` over the RPC connection. `gitaly-backup` then
-transfers the received data to the specified storage destination, as defined by the `-path` argument.
+   The Gitaly server generates the backup data and streams it back to `gitaly-backup` over the RPC connection. `gitaly-backup` then
+   transfers the received data to the specified storage destination, as defined by the `-path` argument.
 
    ```plaintext
     +------------------+      Repository  data        +-----------------+

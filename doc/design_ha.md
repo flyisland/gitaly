@@ -2,8 +2,8 @@
 
 Gitaly Cluster is an active-active cluster configuration for resilient Git operations. [Refer to our specific requirements](https://gitlab.com/gitlab-org/gitaly/issues/1332).
 
-Refer to [epic &289][epic] for current issues and discussions revolving around
-HA MVC development.
+Refer to [epic &289](https://gitlab.com/groups/gitlab-org/-/epics/289) for current issues and discussions revolving
+around HA MVC development.
 
 ## Terminology
 
@@ -90,7 +90,7 @@ sequenceDiagram
   Nodes ABC->>Praefect: Modifications successful!
 ```
 
-*Note: the above interaction between the Praefect and nodes A-B-C is an all-or-nothing transaction. All nodes must complete in success, otherwise a single node failure will cause the entire transaction to fail. This will be improved when replication is introduced.*
+_Note: the above interaction between the Praefect and nodes A-B-C is an all-or-nothing transaction. All nodes must complete in success, otherwise a single node failure will cause the entire transaction to fail. This will be improved when replication is introduced._
 
 ### 3. Replication
 
@@ -286,13 +286,13 @@ between Gitaly Cluster and Geo:
    single Gitaly node goes down by transparently failing over to a
    secondary Gitaly node.
 
-  From operational perspective Geo is a disaster recovery solution. If
-  the primary datacenter goes down, any data stored in GitLab will be
-  preserved in another location. Some data loss is acceptable, since
-  having a significant amount of data--even if it stale--is better than
-  having no data at all. In addition, the Geo-replicated instance can
-  take over for the primary with some manual coordination. However, Geo
-  does not handle failure of a single Gitaly node.
+   From operational perspective Geo is a disaster recovery solution. If
+   the primary datacenter goes down, any data stored in GitLab will be
+   preserved in another location. Some data loss is acceptable, since
+   having a significant amount of data--even if it stale--is better than
+   having no data at all. In addition, the Geo-replicated instance can
+   take over for the primary with some manual coordination. However, Geo
+   does not handle failure of a single Gitaly node.
 
 1. Unlike Geo, strong consistency is most likely a requirement for
    Gitaly Cluster. Gitaly Cluster has to be able to fail over to replicas without
@@ -339,9 +339,7 @@ consistency for reference updates, only. There are multiple paths in GitLab that
 can trigger such a reference update, including but not limited to:
 
 - Clients execute `git-push(1)`.
-
 - Creation of tags using the GitLab `UserCreateTag` RPC.
-
 - Merges and rebases when accepting merge requests.
 
 Common to all of them is that they perform reference updates using `git-core`,
@@ -524,13 +522,10 @@ hooks.
 In order to observe reference transactions, the following metrics can be used:
 
 - `gitaly_praefect_transactions_total`: The number of transactions created.
-
 - `gitaly_praefect_transactions_delay_seconds`: Server-side delay between
   casting a vote and reaching quorum.
-
 - `gitaly_praefect_subtransactions_per_transaction_total`: Number of
   subtransactions created for each transaction.
-
 - `gitaly_praefect_voters_per_transaction_total`: Number of nodes which have
   cast a vote in a given transaction.
 
@@ -578,5 +573,3 @@ v13.1.0-rc3.
     - This may be mitigated by changing the proxy implementation to interpret the destination address as a reference to a shard rather than a specific host. This might open the door to allowing for something like consistent hashing.
   - While Git is distributed in nature, some write operations need to be serialized to avoid race conditions. This includes ref updates.
   - How do we coordinate proxies when applying ref updates? Do we need to?
-
-[epic]: https://gitlab.com/groups/gitlab-org/-/epics/289

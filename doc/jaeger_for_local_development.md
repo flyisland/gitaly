@@ -54,12 +54,12 @@ on other view models, as well as more complicated scenarios.
    services. In this example, it shows the details of each `git` command spawned
    by Gitaly.
 
-   ![Jaeger detail page](./img/jaeger-1.png)
+   ![Jaeger detail page](img/jaeger-1.png)
 
 1. Each span consists of detailed data that's very helpful for development
    purposes. Of course, we can add custom instrumentation.
 
-   ![Jaeger trace2 details](./img/jaeger-2.png)
+   ![Jaeger trace2 details](img/jaeger-2.png)
 
 One great value distributed tracing offers is the ability to
 visualize asynchronous flow in a comprehensive manner. This ability is

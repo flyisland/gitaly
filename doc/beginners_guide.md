@@ -5,8 +5,8 @@
 ### GitLab
 
 Before you can develop on Gitaly, it's required to have the
-[GitLab Development Kit][gdk] properly installed. After installing GitLab, verify
-it to be working by starting the required servers and visiting GitLab at
+[GitLab Development Kit](https://gitlab.com/gitlab-org/gitlab-development-kit/#getting-started) properly installed.
+After installing GitLab, verify it to be working by starting the required servers and visiting GitLab at
 `http://localhost:3000`.
 
 ### Gitaly Proto
@@ -119,9 +119,9 @@ gdk restart gitaly
 
 The general approach is:
 
-1. Add a request/response combination to [Gitaly Proto][gitaly-proto], or edit
+1. Add a request/response combination to [Gitaly Proto](https://gitlab.com/gitlab-org/gitaly/tree/master/proto), or edit
    an existing one
-1. Change [Gitaly][gitaly] accordingly
+1. Change [Gitaly](https://gitlab.com/gitlab-org/gitaly) accordingly
 1. Use the endpoint in other GitLab components (CE/EE, GitLab Workhorse, etc.)
 
 #### Configuration changes
@@ -133,7 +133,8 @@ When modifying the Gitaly or Praefect configuration, the changes should be propa
 
 #### Gitaly Proto
 
-The [Protocol buffer documentation][proto-docs] combined with the `*.proto` files in the `proto/` directory should be enough to get you started. A service needs to be picked that can receive the procedure call. A general rule of thumb is that the service is named either after the Git CLI command, or after the Git object type.
+The [Protocol buffer documentation](https://developers.google.com/protocol-buffers/docs/overview) combined with the
+`*.proto` files in the `proto/` directory should be enough to get you started. A service needs to be picked that can receive the procedure call. A general rule of thumb is that the service is named either after the Git CLI command, or after the Git object type.
 
 If either your request or response data can exceed 100KB you need to use the `stream` keyword. To generate the server and client code, run `make proto`.
 
@@ -177,13 +178,10 @@ To run the test you need a terminal window with working directory
 TEST_PACKAGES=./internal/gitaly/service/repository TEST_OPTIONS="-count=1 -run=TestRepositoryExists" make test-go
 ```
 
-When writing tests, prefer using [testify]'s [require], and [assert] as
-methods to set expectations over functions like `t.Fatal()` and others directly
-called on `testing.T`.
-
-[testify]: https://github.com/stretchr/testify
-[require]: https://github.com/stretchr/testify/tree/master/require
-[assert]: https://github.com/stretchr/testify/tree/master/assert
+When writing tests, prefer using [require](https://github.com/stretchr/testify/tree/master/require),
+and [assert](https://github.com/stretchr/testify/tree/master/assert)
+from [testify](https://github.com/stretchr/testify) as methods to set expectations over functions like `t.Fatal()`
+and others directly called on `testing.T`.
 
 ### Using Delve to debug a test
 
@@ -272,10 +270,4 @@ You can now invoke RPCs with `grpcurl` or open a web GUI with `grpcui`:
 
 To use your custom Gitaly when running Rails tests in GDK, go to the
 `gitlab` directory in your GDK and follow the instructions at
-[Running tests with a locally modified version of Gitaly][custom-gitaly].
-
-[custom-gitaly]: https://docs.gitlab.com/development/gitaly/#running-tests-with-a-locally-modified-version-of-gitaly
-[gdk]: https://gitlab.com/gitlab-org/gitlab-development-kit/#getting-started
-[gitaly]: https://gitlab.com/gitlab-org/gitaly
-[gitaly-proto]: https://gitlab.com/gitlab-org/gitaly/tree/master/proto
-[proto-docs]: https://developers.google.com/protocol-buffers/docs/overview
+[Running tests with a locally modified version of Gitaly](https://docs.gitlab.com/development/gitaly/#running-tests-with-a-locally-modified-version-of-gitaly).

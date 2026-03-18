@@ -9,7 +9,7 @@ the objects.
 
 Now when a third blob of the same file is created, it too has its delta
 calculated against the second blob, only stored as delta, to itself. These three
-blobs now form a delta chain. Git stores these delta chains in [pack files][git-pack],
+blobs now form a delta chain. Git stores these delta chains in [pack files](https://git-scm.com/docs/git-pack-objects),
 and when a `repack` is executed these chains might be recalculated if one of the
 blobs isn't required anymore, or if a better delta base is discovered.
 
@@ -37,17 +37,15 @@ larger as it's not always the case the optimal object can be used as delta base.
 
 Delta Island relies on Git version 2.20 or later, which GitLab is expected to
 use from version 11.11 onwards. The change on the Gitaly side is limited to
-setting a config option [when repacking][delta-config]. This option is set at
-runtime to prevent having to write the configuration file for all repositories.
+setting a config option
+[when repacking](https://gitlab.com/gitlab-org/gitaly/-/merge_requests/1110/diffs#e01aecd9d7ee43aee1959795092f852d07a1e7ed_55_78).
+This option is set at runtime to prevent having to write the configuration file for all repositories.
 
 User impact of this feature includes faster fetches, as Git on the server does
 less work and reuses previous work better.
 
 ## Further reading
 
-As is usually the case, the [tests of Git][git-delta-test] provide a good overview
-of how the feature works.
-
-[git-delta-test]: https://github.com/git/git/blob/041f5ea1cf987a4068ef5f39ba0a09be85952064/t/t5320-delta-islands.sh
-[git-pack]: https://git-scm.com/docs/git-pack-objects
-[delta-config]: https://gitlab.com/gitlab-org/gitaly/merge_requests/1110/diffs#e01aecd9d7ee43aee1959795092f852d07a1e7ed_55_78
+As is usually the case, the
+[tests of Git](https://github.com/git/git/blob/041f5ea1cf987a4068ef5f39ba0a09be85952064/t/t5320-delta-islands.sh)
+provide a good overview of how the feature works.
