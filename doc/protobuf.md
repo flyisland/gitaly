@@ -319,8 +319,8 @@ To declare the scope, mutators must contain one of the following lines:
 - `option(op_type).scope = SERVER;`
 - `option(op_type).scope = STORAGE;`: The associated request must have a field
   tagged with `[(storage)=true]` that indicates the storage's name.
-- `option(op_type).scope = PARTITION;`: The associated request must have both a 
-  field tagged with `[(storage)=true]` and a field tagged with 
+- `option(op_type).scope = PARTITION;`: The associated request must have both a
+  field tagged with `[(storage)=true]` and a field tagged with
   `[(partition)=true]` that indicates the partition's location.
 - `option(op_type).scope = REPOSITORY;`: This is the default scoped and thus
   doesn't need to be explicitly declared. The associated request must have a

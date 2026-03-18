@@ -16,7 +16,7 @@ To log onto a production Gitaly node, first log in to the Teleport production
 instance.
 
 ```shell
-> tsh login --proxy=production.teleport.gitlab.net
+tsh login --proxy=production.teleport.gitlab.net
 ```
 
 This will bring up an Okta login screen through which you will need to
@@ -25,7 +25,7 @@ authenticate using your credentials.
 Find the ID of a Gitaly node you want to SSH into.
 
 ```shell
-> tsh ls -v
+tsh ls -v
 ```
 
 This will yield entries that include the name of the node, the UUID, and some
@@ -38,5 +38,5 @@ gitaly-09-stor-gprd                          27984ac4-cba0-40b3-b9f9-3ee661eb450
 Login to a server over SSH using the UUID in the previous step.
 
 ```shell
-> tsh ssh <username>@27984ac4-cba0-40b3-b9f9-3ee661eb4505
+tsh ssh <username>@27984ac4-cba0-40b3-b9f9-3ee661eb4505
 ```

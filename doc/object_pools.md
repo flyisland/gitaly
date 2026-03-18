@@ -67,7 +67,6 @@ It performs the following tasks:
    [Dangling Objects](#dangling-objects) for more information.
 
 1. Loose references are packed via `git-pack-refs(1)`.
-
 1. The pool is repacked via `git-repack(1)`. The repack produces a single packfile
    including all objects with a bitmap index. In order to improve reuse of
    packfiles where Git will read data from the packfile directly instead of

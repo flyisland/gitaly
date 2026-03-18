@@ -60,7 +60,7 @@ through Gitaly.
 | `post-receive` | used as the Git `post-receive` hook | none | `<old-value>` SP `<new-value>` SP `<ref-name>` LF |
 | `reference-transaction` | used as the Git `reference-transaction` hook | `prepared`, `committed`, or `aborted` | `<old-value>` SP `<new-value>` SP `<ref-name>` LF |
 | `git`          | used as the Git `pack-objects` hook | `pack-objects` `[--stdout]` `[--shallow-file]` | `<object-list>` |
-| `proc-receive` | used as the Git `proc-receive` hook | none | communication with receive-pack in pkt-line format protocol | 
+| `proc-receive` | used as the Git `proc-receive` hook | none | communication with receive-pack in pkt-line format protocol |
 
 ## Hook-specific logic
 
@@ -88,19 +88,19 @@ it will call `git-update-ref(1)` to do the reference update.
 #### Implementation details
 
 The `ReceivePack` RPC executes `git-receive-pack(1)` which executes the `proc-receive`
-hook via the `gitaly-hook` binary. The hook is independent of the main Gitaly service 
+hook via the `gitaly-hook` binary. The hook is independent of the main Gitaly service
 and hence doesn't have access to the WAL.
 
 To overcome this, the `ReceivePack` RPC registers a waiter with the `ProcReceiveRegistry`
-against the request's transaction ID. The `proc-receive` hook, when invoked, streams the 
+against the request's transaction ID. The `proc-receive` hook, when invoked, streams the
 data to the `ProcReceiveHook` RPC. The `ProcReceiveHook` RPC then obtains a new
-`ProcReceiveHandler` and transmits the handler to the registry. 
+`ProcReceiveHandler` and transmits the handler to the registry.
 
 The `ReceivePack` RPC obtains the handler and uses the handler to communicate with the
 `ProcReceiveHook` RPC. It obtains the reference updates requests and tries to commit them
 to the WAL and relays acceptance/rejections to the `ProcReceiveHook` RPC via the handler.
 
-The `ProcReceiveHook` streams all the data concurrently back to the `proc-receive` hook. 
+The `ProcReceiveHook` streams all the data concurrently back to the `proc-receive` hook.
 
 ```mermaid
 sequenceDiagram
@@ -116,10 +116,10 @@ sequenceDiagram
         ProcReceiveHook->>+ ProcReceiveHandler: new handler
         ProcReceiveHandler ->>- ProcReceiveHook: OK
         ProcReceiveHook ->>+ ProcReceiveRegistry: transmit handler
- 
+
         deactivate ProcReceiveHook
     end
-    
+
     ProcReceiveHandler ->>+ ReceivePack: receive ref updates
     activate ProcReceiveHandler
 

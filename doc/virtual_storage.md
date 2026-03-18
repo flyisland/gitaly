@@ -71,7 +71,7 @@ Praefect identifies inconsistencies in the storage cluster by cross-referencing 
 
 Expected state of physical storages can be attained by cross joining the configured physical storages with the expected repositories of the virtual storage in the `repositories` table. It's important to use configured storages as some physical storages might have been added to or removed from the virtual storage.
 
-Possible inconsistencies and their reconciliations are listed below. Each of the scenarios assume a virtual storage called `default` with a primary storage `gitaly-1` and a secondary storage  `gitaly-2`.
+Possible inconsistencies and their reconciliations are listed below. Each of the scenarios assume a virtual storage called `default` with a primary storage `gitaly-1` and a secondary storage `gitaly-2`.
 
 ### Missing Repository
 
@@ -218,11 +218,8 @@ of the removed storages are manually removed.
 ## Known Problems
 
 1. When a primary is demoted, it might be in process of accepting a write. If there is a concurrent write to the new primary, one of the writes is going to be lost as the primary increments its generation even if it was not on the latest one. This issues and the solution proposed is tracked in [#2969](https://gitlab.com/gitlab-org/gitaly/-/issues/2969).
-
 1. Not all repositories have generation records in a cluster that was upgraded. This issue will be solved once an appropriate migration tool is implemented. The issue is tracked in [#3003](https://gitlab.com/gitlab-org/gitaly/-/issues/3033).
-
 1. There are some mutator operations that increment the generation of a repository even though they do not mutate the references. This causes repositories to be considered outdated without a reason. This issue is tracked in [#2977](https://gitlab.com/gitlab-org/gitaly/-/issues/2977)
-
 1. Mutators are applied to the primary and reference transaction participants prior to recording the work in anyway. If the mutator succeeds but incrementing the generation fails, Praefect will know about the inconsistent state. This issue is tracked in [#2960](https://gitlab.com/gitlab-org/gitaly/-/issues/2960).
 
 ## Footnotes

@@ -7,21 +7,17 @@ flags are part of the `context.Context` of each RPC. The `featureflag` package
 will help you with flow control.
 
 Most of this documentation assumes operations on `gitlab.com`. For
-customers, an [HTTP API is available][ff-api].
+customers, an [HTTP API is available](https://docs.gitlab.com/api/features/).
 
 In order to roll out feature flags to `gitlab.com`, you should follow
 the documented rollout process below.
 
-Once you have [developed your feature][#development-with-feature-flags] you [start
-by creating an issue for the rollout][issue-for-feature-rollout].
+Once you have [developed your feature](#development-with-feature-flags) you
+[start by creating an issue for the rollout](https://gitlab.com/gitlab-org/gitaly/-/work_items/new?issuable_template=Feature%20Flag%20Roll%20Out).
 
-The "Feature Flag Roll Out" [template for the
-issue][feature-issue-template] has a checklist for the rest of the
-steps.
-
-[ff-api]: https://docs.gitlab.com/api/features/#features-flags-api
-[issue-for-feature-rollout]: https://gitlab.com/gitlab-org/gitaly/-/issues/new?issuable_template=Feature%20Flag%20Roll%20Out
-[feature-issue-template]: https://gitlab.com/gitlab-org/gitaly/-/blob/master/.gitlab/issue_templates/Feature%20Flag%20Roll%20Out.md
+The "Feature Flag Roll Out"
+[template for the issue](https://gitlab.com/gitlab-org/gitaly/-/blob/master/.gitlab/issue_templates/Feature%20Flag%20Roll%20Out.md)
+has a checklist for the rest of the steps.
 
 ### Development with feature flags
 
@@ -31,11 +27,9 @@ flags in GitLab Rails and Gitaly.
 
 #### Feature flags in GitLab Rails
 
-GitLab defines a very clear and strict [workflow for development][rails-feature-development].
+GitLab defines a very clear and strict [workflow for development](https://docs.gitlab.com/development/feature_flags/).
 Because the flag evaluation is invoked in Rails, we have the flexibility of picking the desired
 actors for a feature flag.
-
-[rails-feature-development]: https://docs.gitlab.com/development/feature_flags/
 
 #### Feature flags in Gitaly
 
@@ -80,7 +74,8 @@ graph TD
 >   means Gitaly background jobs, such as repository maintenance, cannot use feature flags.
 
 To check feature flags in the source code, that flag must be defined in
-[internal/metadatta/featureflag][gitaly-featureflag-folder] folder. For example:
+[`internal/featureflag`](https://gitlab.com/gitlab-org/gitaly/-/tree/master/internal/featureflag) folder.
+For example:
 
 ```go
 package featureflag
@@ -114,8 +109,9 @@ func (s *server) FindLicense(ctx context.Context, req *gitalypb.FindLicenseReque
 }
 ```
 
-In the test suite, it's recommended to use the [NewFeatureSets][test-featureset] helper.
-This helper repeats the test twice for each on/off state of the flag.
+In the test suite, it's recommended to use the
+[`NewFeatureSets`](https://gitlab.com/gitlab-org/gitaly/-/blob/265b4218fb4c7670b9ac0810d96f1beff271932f/internal/testhelper/featureset.go#L47)
+helper. This helper repeats the test twice for each on/off state of the flag.
 
 ```go
 func TestSuccessfulFindLicenseRequest(t *testing.T) {
@@ -137,40 +133,32 @@ in detail in the following sections.
 /chatops run feature set gitaly_go_find_license true --staging
 ```
 
-[gitaly-featureflag-folder]: https://gitlab.com/gitlab-org/gitaly/-/tree/master/internal/featureflag
-[test-featureset]: https://gitlab.com/gitlab-org/gitaly/blob/c6fb49b9c6e854c0a2803f53106af501d6006cb8/internal/testhelper/featureset.go#L55-55
-
 ### Flag management with chatops
 
-Feature flags are [enabled through chatops][enable-flags] (which is
-just a consumer [of the API][ff-api]). In
-[`#chat-ops-test`][chan-chat-ops-test] try:
+Feature flags are [enabled through chatops](https://docs.gitlab.com/development/feature_flags/controls/) (which is
+just a consumer [of the API](https://docs.gitlab.com/api/features/)). In
+[`#chat-ops-test`](https://gitlab.slack.com/archives/CB2S7NNDP) try:
 
 ```shell
 /chatops run feature list --match gitaly_
 ```
 
 If you get a permission error you need to request access first. That
-can be done [in the `#production` channel][production-request-acl].
+can be done [in the `#production` channel](https://gitlab.slack.com/archives/C101F3796).
 
 For Gitaly, you have to prepend `gitaly_` to your feature flag when
 enabling or disabling. For example: to check if
-[`gitaly_go_user_delete_tag`][chan-production] is enabled on staging
+[`gitaly_go_user_delete_tag`](https://gitlab.com/gitlab-org/gitaly/-/work_items/3371) is enabled on staging
 run:
 
 ```shell
 /chatops run feature get gitaly_go_user_delete_tag --staging
 ```
 
-[enable-flags]: https://docs.gitlab.com/development/feature_flags/controls/
-[chan-chat-ops-test]: https://gitlab.slack.com/archives/CB2S7NNDP
-[production-request-acl]: https://gitlab.slack.com/archives/C101F3796
-[chan-production]: https://gitlab.com/gitlab-org/gitaly/-/issues/3371
-
 ## Feature flags issue checklist
 
 The rest of this section is help for the individual checklist steps in
-[the issue template][feature-issue-template]. If this is your first
+[the issue template](https://gitlab.com/gitlab-org/gitaly/-/blob/master/.gitlab/issue_templates/Feature%20Flag%20Roll%20Out.md). If this is your first
 time doing this you might want to first skip ahead to the help below,
 you'll likely need to file some access requests.
 
@@ -179,27 +167,27 @@ you'll likely need to file some access requests.
 The lifecycle of feature flags is monitored via issue labels.
 
 When the issue is created from a template it'll be created with
-[`featureflag::disabled`][featureflag-disabled]. Then as part of the
-checklist the person rolling it out will add
-[`featureflag::staging`][featureflag-staging] and
-[`featureflag::production`][featureflag-production] flags to it.
-
-[featureflag-disabled]: https://gitlab.com/gitlab-org/gitaly/-/issues?label_name[]=featureflag%3A%3Adisabled
-[featureflag-staging]: https://gitlab.com/gitlab-org/gitaly/-/issues?label_name[]=featureflag%3A%3Astaging
-[featureflag-production]: https://gitlab.com/gitlab-org/gitaly/-/issues?label_name[]=featureflag%3A%3Aproduction
+[`featureflag::disabled`](https://gitlab.com/gitlab-org/gitaly/-/work_items?label_name[]=featureflag%3A%3Adisabled).
+Then as part of the checklist the person rolling it out will add
+[`featureflag::staging`](https://gitlab.com/gitlab-org/gitaly/-/work_items?label_name[]=featureflag%3A%3Astaging) and
+[`featureflag::production`](https://gitlab.com/gitlab-org/gitaly/-/work_items?label_name[]=featureflag%3A%3Aproduction)
+flags to it.
 
 ### Is the required code deployed?
 
-A quick way to see if your MR is deployed is to check if [the release
-bot][release-bot] has deployed it to staging, canary or production by
-checking if the MR has [a `workflow::staging`][deployed-staging],
-[`workflow::canary`][deployed-canary] or
-[`workflow::production`][deployed-production] label.
+A quick way to see if your MR is deployed is to check if
+[the release bot](https://gitlab.com/gitlab-release-tools-bot) has deployed it to staging, canary or production by
+checking if the MR has a
+[`workflow::staging`](https://gitlab.com/gitlab-org/gitaly/-/merge_requests?state=merged&label_name=workflow%3A%3Astaging),
+[`workflow::canary`](https://gitlab.com/gitlab-org/gitaly/-/merge_requests?state=merged&label_name=workflow%3A%3Acanary)
+or
+[`workflow::production`](https://gitlab.com/gitlab-org/gitaly/-/merge_requests?state=merged&label_name=workflow%3A%3Aproduction)
+label.
 
-The [/help action on GitLab.com][help-action] shows the currently
+[`/help` action on GitLab.com](https://gitlab.com/help) shows the currently
 deployed hash. Copy that `HASH` and look at `GITALY_SERVER_VERSION` in
-[`gitlab-org/gitlab.git`][gitlab-git] to see what the embedded Gitaly
-version is. Or in [a `gitaly.git` checkout][gitaly-git] run this to see
+[`gitlab-org/gitlab.git`](https://gitlab.com/gitlab-org/gitlab/) to see what the embedded Gitaly
+version is. Or in a [`gitaly.git` checkout](https://gitlab.com/gitlab-org/gitaly/) run this to see
 what commits aren't deployed yet:
 
 ```shell
@@ -210,21 +198,12 @@ git shortlog $(curl -s "https://gitlab.com/gitlab-org/gitlab/-/raw/HASH/GITALY_S
 See the [documentation on releases below](#gitaly-releases) for more
 details on the tagging and release process.
 
-[release-bot]: https://gitlab.com/gitlab-release-tools-bot
-[deployed-staging]: https://gitlab.com/gitlab-org/gitaly/-/merge_requests?state=merged&label_name=workflow%3A%3Aproduction
-[deployed-canary]: https://gitlab.com/gitlab-org/gitaly/-/merge_requests?state=merged&label_name=workflow%3A%3Aproduction
-[deployed-production]: https://gitlab.com/gitlab-org/gitaly/-/merge_requests?state=merged&label_name=workflow%3A%3Aproduction
-[help-action]: https://gitlab.com/help
-[gitlab-git]: https://gitlab.com/gitlab-org/gitlab/
-[gitaly-git]: https://gitlab.com/gitlab-org/gitaly/
-
 ### Enable on staging
 
 #### Prerequisites
 
-You'll need chatops access. See [ChatOps on GitLab.com][chatops-access].
-
-[chatops-access]: https://docs.gitlab.com/development/chatops_on_gitlabcom/#requesting-access
+You'll need chatops access. See
+[ChatOps on GitLab.com](https://docs.gitlab.com/development/chatops_on_gitlabcom/#requesting-access).
 
 #### Steps
 
@@ -240,21 +219,18 @@ Where `X` is the name of your feature.
 
 Access to <https://staging.gitlab.com/users> is not the same as on
 GitLab.com (or signing in with Google on the `@gitlab.com` account). You
-must [request access to it][staging-access-request].
+must [request access to it](https://gitlab.com/gitlab-com/team-member-epics/access-requests/-/work_items/new?issuable_template=Individual_Bulk_Access_Request).
 
 As of December 2020 clicking "Sign in" on
 <https://about.staging.gitlab.com> will redirect to <https://gitlab.com>,
 so make sure to use the `/users` link.
 
-As of writing signing in at [that link][staging-users-link] will land
+As of writing signing in at [that link](https://staging.gitlab.com/users) will land
 you on the `/users` 404 page once you're logged in. You should then
 typically manually modify the URL
 `https://staging.gitlab.com/YOURUSER`
 (e.g. <https://staging.gitlab.com/avar>) or another way to get at a test
 repository, and manually test from there.
-
-[staging-access-request]: https://gitlab.com/gitlab-com/team-member-epics/access-requests/-/issues/new?issuable_template=Individual_Bulk_Access_Request
-[staging-users-link]: https://staging.gitlab.com/users
 
 #### Steps
 
@@ -267,7 +243,7 @@ Then enable `X` on staging, run the following in the `#staging` Slack channel:
 /chatops run feature set gitaly_X true --staging
 ```
 
-Use the [gitaly_feature_flag_checks_total](https://prometheus.gstg.gitlab.net/graph?g0.expr=sum%20by%20(flag)%20(rate(gitaly_feature_flag_checks_total%5B5m%5D))&g0.tab=1&g0.stacked=0&g0.range_input=1h)
+Use the [`gitaly_feature_flag_checks_total`](https://prometheus.gstg.gitlab.net/graph?g0.expr=sum%20by%20(flag)%20(rate(gitaly_feature_flag_checks_total%5B5m%5D))&g0.tab=1&g0.stacked=0&g0.range_input=1h)
 Prometheus metric to check if the feature flag is deployed.
 
 Use the [Gitaly:overview dashboard](https://dashboards.gitlab.net/d/gitaly-main/gitaly3a-overview?orgId=1&var-PROMETHEUS_DS=PA258B30F88C30650&var-environment=gstg&var-stage=main)
@@ -278,9 +254,7 @@ to observe the overall status of Gitaly.
 It's a good idea to run the feature for a full day on staging, this is
 because there are daily smoke tests that run daily in that
 environment. These are handled by
-[`gitlab-org/gitlab-qa.git`][gitlab-qa-git]
-
-[gitlab-qa-git]: https://gitlab.com/gitlab-org/gitlab-qa#how-do-we-use-it
+[`gitlab-org/gitlab-qa.git`](https://gitlab.com/gitlab-org/gitlab-qa#how-do-we-use-it)
 
 ### Enable in production
 
@@ -299,16 +273,14 @@ higher the risk and the broader the scope of the gated feature.
 
 The following chatops commands must run in the `#production` channel.
 
-After the [Improve feature flags in Gitaly][improve-flag-epic] epic is addressed,
+After the [Improve feature flags in Gitaly](https://gitlab.com/groups/gitlab-org/-/work_items/8005) epic is addressed,
 Gitaly will support various strategies for us to pick from.
 
-Use the [gitaly_feature_flag_checks_total](https://prometheus.gprd.gitlab.net/graph?g0.expr=sum%20by%20(flag)%20(rate(gitaly_feature_flag_checks_total%5B5m%5D))&g0.tab=1&g0.stacked=0&g0.range_input=1h)
+Use the [`gitaly_feature_flag_checks_total`](https://prometheus.gprd.gitlab.net/graph?g0.expr=sum%20by%20(flag)%20(rate(gitaly_feature_flag_checks_total%5B5m%5D))&g0.tab=1&g0.stacked=0&g0.range_input=1h)
 Prometheus metric to check if the feature flag is deployed.
 
 Use the [Gitaly:overview dashboard](https://dashboards.gitlab.net/d/gitaly-main/gitaly3a-overview?orgId=1&var-PROMETHEUS_DS=PA258B30F88C30650&var-environment=gprd&var-stage=main)
 to observe the overall status of Gitaly.
-
-[improve-flag-epic]: https://gitlab.com/groups/gitlab-org/-/epics/8005
 
 #### Rollout to a set of users
 
@@ -394,15 +366,13 @@ Followed by:
 ```
 
 Note that you need both the `100` and `true` as separate commands. See
-[the documentation on actor gates][actor-gates]
+[the documentation on actor gates](https://docs.gitlab.com/development/feature_flags/controls/#process).
 
 If the feature is left at `50%` but is also set to `true` by default
 the `50%` will win, even if `OnByDefault: true` is
 [set for it](#feature-lifecycle-after-it-is-live). It'll only be 100% live once
 the feature flag code is deleted. So make sure you don't skip the
 `100%` step.
-
-[actor-gates]: https://docs.gitlab.com/development/feature_flags/controls/#process
 
 #### Discussion
 
@@ -431,7 +401,7 @@ close monitoring at 50%.
 
 After a feature is running at `100%` for what ever's deemed to be a
 safe amount of time we should change it to be `OnByDefault: true`. See
-[this MR for an example][example-on-by-default-mr].
+[this MR for an example](https://gitlab.com/gitlab-org/gitaly/-/merge_requests/3033).
 
 We should add a changelog entry when `OnByDefault: true` is flipped.
 
@@ -454,11 +424,9 @@ so we could remove its code before the Go code has a chance to update
 with its default, and would still want to call it. So therefore you
 need to do any such removal in two GitLab release cycles.
 
-See the example of [MR !3033][example-on-by-default-mr] and [MR !3056][example-post-go-ruby-code-removal-mr] for how to
+See the example of [MR !3033](https://gitlab.com/gitlab-org/gitaly/-/merge_requests/3033) and
+[MR !3056](https://gitlab.com/gitlab-org/gitaly/-/merge_requests/3056) for how to
 do such a two-phase removal.
-
-[example-on-by-default-mr]: https://gitlab.com/gitlab-org/gitaly/-/merge_requests/3033
-[example-post-go-ruby-code-removal-mr]: https://gitlab.com/gitlab-org/gitaly/-/merge_requests/3056
 
 #### Remove the feature flag via chatops
 
@@ -490,7 +458,7 @@ Then delete it if that's the data you're expecting:
 
 ## Git Version Upgrades
 
-With the introduction of [bundled Git][bundled-git] we have gained the ability
+With the introduction of [bundled Git](git-execution-environments.md) we have gained the ability
 to do feature-flag-based rollouts of new Git versions, and using feature flags
 for these upgrades has since then become mandatory.
 
@@ -508,17 +476,13 @@ that we have no such issues with zero-downtime upgrades:
 1. We roll out the new bundled Git binaries in parallel to the old bundled
    Git binaries. The new version is guarded behind a feature flag at this
    point in time.
-
 1. We roll out the feature flag and eventually remove it.
-
 1. We remove the old bundled Git binaries.
 
 Note that it is no longer required to wait one release before removing the old
 bundled Git binaries. This is because the binaries are now embedded into the
 Gitaly binary, thus an upgrade can be performed atomically. A Gitaly process
 is in complete control of its Git execution environment when using bundled Git.
-
-[bundled-git]: git-execution-environments.md
 
 ### Detailed Process
 
@@ -529,10 +493,8 @@ issue template.
 ## Gitaly Releases
 
 Gitaly releases are tagged automatically by
-[`release-tools`][release-tools] when a Release Manager tags a GitLab
+[`release-tools`](https://gitlab.com/gitlab-org/release-tools) when a Release Manager tags a GitLab
 version.
-
-[release-tools]: https://gitlab.com/gitlab-org/release-tools
 
 ### Major or minor releases
 
