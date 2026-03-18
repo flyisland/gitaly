@@ -4,9 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 
 	"github.com/urfave/cli/v3"
+	glcli "gitlab.com/gitlab-org/gitaly/v18/internal/cli"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/cli/common"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 const poolCmdName = "pool"
@@ -77,6 +82,102 @@ func translatePaths(ctx context.Context, db *sql.DB, replicaPaths []string) (map
 	}
 
 	return result, nil
+}
+
+// findNode returns the Node config for the given virtual storage and storage name, or an error if
+// no matching node is found.
+func findNode(conf config.Config, virtualStorage, storageName string) (*config.Node, error) {
+	for _, vs := range conf.VirtualStorages {
+		if vs.Name != virtualStorage {
+			continue
+		}
+		for _, node := range vs.Nodes {
+			if node.Storage == storageName {
+				return node, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("node %q not found in virtual storage %q", storageName, virtualStorage)
+}
+
+// scanPrimaries queries the given virtualStorage for its primary nodes, scans each one for object pool
+// members, and returns deduplicated results.
+func scanPrimaries(ctx context.Context, db *sql.DB, conf config.Config, virtualStorage string) ([]common.PoolMember, error) {
+	// poolMemberKey is used to deduplicate pool members across multiple primaries.
+	type poolMemberKey struct {
+		memberPath string
+		poolPath   string
+	}
+
+	type scanResult struct {
+		members []common.PoolMember
+		err     error
+	}
+
+	primaries, err := getPrimaries(ctx, db, virtualStorage)
+	if err != nil {
+		return nil, fmt.Errorf("get primaries: %w", err)
+	}
+
+	resultCh := make(chan scanResult, len(primaries))
+
+	var wg sync.WaitGroup
+	for _, storageName := range primaries {
+		wg.Add(1)
+		go func(storageName string) {
+			defer wg.Done()
+
+			node, err := findNode(conf, virtualStorage, storageName)
+			if err != nil {
+				resultCh <- scanResult{err: err}
+				return
+			}
+
+			conn, err := glcli.Dial(ctx, node.Address, node.Token, defaultDialTimeout)
+			if err != nil {
+				resultCh <- scanResult{err: fmt.Errorf("dial %s: %w", storageName, err)}
+				return
+			}
+
+			scanned, scanErr := common.ScanPoolMetadata(ctx, gitalypb.NewInternalGitalyClient(conn), storageName)
+			if err := conn.Close(); err != nil {
+				err = errors.Join(err, fmt.Errorf("scan %s: %w", storageName, scanErr))
+				resultCh <- scanResult{err: fmt.Errorf("close connection to %s: %w", storageName, err)}
+				return
+			}
+			if scanErr != nil {
+				resultCh <- scanResult{err: fmt.Errorf("scan %s: %w", storageName, scanErr)}
+				return
+			}
+
+			resultCh <- scanResult{members: scanned}
+		}(storageName)
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	seen := make(map[poolMemberKey]struct{})
+	var members []common.PoolMember
+
+	for result := range resultCh {
+		if result.err != nil {
+			return nil, result.err
+		}
+
+		for _, m := range result.members {
+			key := poolMemberKey{memberPath: m.MemberDiskPath, poolPath: m.PoolDiskPath}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			members = append(members, m)
+		}
+	}
+
+	return members, nil
 }
 
 func poolAction(ctx context.Context, cmd *cli.Command) error {
