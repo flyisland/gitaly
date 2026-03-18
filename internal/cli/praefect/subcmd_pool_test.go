@@ -125,6 +125,7 @@ func TestFindNode(t *testing.T) {
 type mockInternalGitalyServer struct {
 	gitalypb.UnimplementedInternalGitalyServer
 	scanResponsesByStorage map[string][]*gitalypb.ScanPoolMetadataResponse
+	storedByStorage        map[string][]*gitalypb.StorePoolMetadataRequest
 }
 
 func (s *mockInternalGitalyServer) ScanPoolMetadata(
@@ -137,6 +138,22 @@ func (s *mockInternalGitalyServer) ScanPoolMetadata(
 		}
 	}
 	return nil
+}
+
+func (s *mockInternalGitalyServer) StorePoolMetadata(
+	stream grpc.ClientStreamingServer[gitalypb.StorePoolMetadataRequest, gitalypb.StorePoolMetadataResponse],
+) error {
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		if s.storedByStorage == nil {
+			s.storedByStorage = make(map[string][]*gitalypb.StorePoolMetadataRequest)
+		}
+		s.storedByStorage[req.GetStorageName()] = append(s.storedByStorage[req.GetStorageName()], req)
+	}
+	return stream.SendAndClose(&gitalypb.StorePoolMetadataResponse{})
 }
 
 func registerInternalGitalyServer(impl *mockInternalGitalyServer) svcRegistrar {
@@ -240,4 +257,103 @@ func TestScanPrimaries_deduplication(t *testing.T) {
 		[]common.PoolMember{{MemberDiskPath: "@cluster/repositories/aa/bb/1", PoolDiskPath: "@cluster/pools/cc/dd/4"}},
 		members,
 		"results are deduplicated")
+}
+
+func TestStoreOnAllNodes(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	fakeSrv := &mockInternalGitalyServer{}
+	ln, clean := listenAndServe(t, []svcRegistrar{registerInternalGitalyServer(fakeSrv)})
+	defer clean()
+
+	addr := "unix://" + ln.Addr().String()
+	conf := config.Config{
+		VirtualStorages: []*config.VirtualStorage{
+			{
+				Name: "default",
+				Nodes: []*config.Node{
+					{Storage: "gitaly-1", Address: addr},
+					{Storage: "gitaly-2", Address: addr},
+				},
+			},
+		},
+	}
+
+	require.NoError(t, storeOnAllNodes(ctx, conf, "default", []common.PoolMember{
+		{MemberDiskPath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
+	}))
+
+	testhelper.ProtoEqual(t, []*gitalypb.StorePoolMetadataRequest{
+		{StorageName: "gitaly-1", RelativePath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
+	}, fakeSrv.storedByStorage["gitaly-1"])
+	testhelper.ProtoEqual(t, []*gitalypb.StorePoolMetadataRequest{
+		{StorageName: "gitaly-2", RelativePath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
+	}, fakeSrv.storedByStorage["gitaly-2"])
+}
+
+func TestStoreOnAllNodes_skipsDifferentVirtualStorage(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	fakeSrv := &mockInternalGitalyServer{}
+	ln, clean := listenAndServe(t, []svcRegistrar{registerInternalGitalyServer(fakeSrv)})
+	defer clean()
+
+	addr := "unix://" + ln.Addr().String()
+	conf := config.Config{
+		VirtualStorages: []*config.VirtualStorage{
+			{
+				Name:  "default",
+				Nodes: []*config.Node{{Storage: "gitaly-1", Address: addr}},
+			},
+			{
+				Name:  "other",
+				Nodes: []*config.Node{{Storage: "gitaly-3", Address: addr}},
+			},
+		},
+	}
+
+	require.NoError(t, storeOnAllNodes(ctx, conf, "default", []common.PoolMember{
+		{MemberDiskPath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
+	}))
+
+	require.Contains(t, fakeSrv.storedByStorage, "gitaly-1")
+	require.NotContains(t, fakeSrv.storedByStorage, "gitaly-3")
+}
+
+func TestStoreOnAllNodes_failsOnError(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+
+	fakeSrv := &mockInternalGitalyServer{}
+	ln, clean := listenAndServe(t, []svcRegistrar{registerInternalGitalyServer(fakeSrv)})
+	defer clean()
+
+	addr := "unix://" + ln.Addr().String()
+	conf := config.Config{
+		VirtualStorages: []*config.VirtualStorage{
+			{
+				Name: "default",
+				Nodes: []*config.Node{
+					// This node is unreachable; it comes first so the whole operation fails.
+					{Storage: "gitaly-bad", Address: "tcp://127.0.0.1:1"},
+					// This node would be reachable, but should never be reached.
+					{Storage: "gitaly-good", Address: addr},
+				},
+			},
+		},
+	}
+
+	members := []common.PoolMember{
+		{MemberDiskPath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
+	}
+
+	err := storeOnAllNodes(ctx, conf, "default", members)
+	require.Error(t, err, "should report the dial failure")
+
+	require.Empty(t, fakeSrv.storedByStorage, "subsequent nodes must not be stored after failure")
 }

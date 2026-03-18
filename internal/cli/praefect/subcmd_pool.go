@@ -3,6 +3,7 @@ package praefect
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -178,6 +179,32 @@ func scanPrimaries(ctx context.Context, db *sql.DB, conf config.Config, virtualS
 	}
 
 	return members, nil
+}
+
+// storeOnAllNodes sends members to all Gitaly storages within the specified virtualStorage.
+func storeOnAllNodes(ctx context.Context, conf config.Config, virtualStorage string, members []common.PoolMember) error {
+	for _, vs := range conf.VirtualStorages {
+		if vs.Name != virtualStorage {
+			continue
+		}
+		for _, node := range vs.Nodes {
+			conn, err := glcli.Dial(ctx, node.Address, node.Token, defaultDialTimeout)
+			if err != nil {
+				return fmt.Errorf("dial %s: %w", node.Storage, err)
+			}
+
+			storeErr := common.StorePoolMetadata(ctx, gitalypb.NewInternalGitalyClient(conn), node.Storage, members)
+			if err := conn.Close(); err != nil {
+				err = errors.Join(err, fmt.Errorf("store on %s: %w", node.Storage, storeErr))
+				return fmt.Errorf("close connection to %s: %w", node.Storage, err)
+			}
+			if storeErr != nil {
+				return fmt.Errorf("store on %s: %w", node.Storage, storeErr)
+			}
+		}
+	}
+
+	return nil
 }
 
 func poolAction(ctx context.Context, cmd *cli.Command) error {
