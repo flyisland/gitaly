@@ -51,6 +51,11 @@ func (bm *BurdenMonitor) pollAllEntries() {
 	for _, entry := range entries {
 		bm.pollEntryCommands(entry)
 	}
+
+	byCPU := bm.EntriesSortedBy(SortByCPU)
+	byMemory := bm.EntriesSortedBy(SortByMemory)
+	bm.logger.WithField("top_10_by_cpu", byCPU[:min(10, len(byCPU))])
+	bm.logger.WithField("top_10_by_memory", byMemory[:min(10, len(byMemory))])
 }
 
 func (bm *BurdenMonitor) pollEntryCommands(entry *RPCEntry) {
@@ -73,6 +78,7 @@ func (bm *BurdenMonitor) pollEntryCommands(entry *RPCEntry) {
 
 		cmd.UserTime = stats.UserTime
 		cmd.SystemTime = stats.SystemTime
+		cmd.WallTime = time.Since(cmd.StartTime)
 		cmd.AnonRSS = stats.AnonRSS
 	}
 }

@@ -13,6 +13,7 @@ type CommandStats struct {
 
 	UserTime   time.Duration `json:"user_time"`
 	SystemTime time.Duration `json:"system_time"`
+	WallTime   time.Duration `json:"wall_time"`
 	AnonRSS    int64         `json:"anon_rss"`
 
 	Completed bool `json:"completed"`
@@ -34,6 +35,18 @@ type RPCEntry struct {
 
 	mu       sync.RWMutex
 	Commands map[int]*CommandStats `json:"commands"`
+}
+
+// TotalWallTime returns the sum of wall time across all commands.
+func (e *RPCEntry) TotalWallTime() time.Duration {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	var total time.Duration
+	for _, cmd := range e.Commands {
+		total += cmd.WallTime
+	}
+	return total
 }
 
 // TotalCPUTime returns the sum of user and system CPU time across all commands.
@@ -97,5 +110,6 @@ func (e *RPCEntry) MarkCommandCompleted(pid int, userTime, systemTime time.Durat
 
 	cmd.UserTime = userTime
 	cmd.SystemTime = systemTime
+	cmd.WallTime = time.Since(cmd.StartTime)
 	cmd.Completed = true
 }
