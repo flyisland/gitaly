@@ -18,6 +18,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/bootstrap"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/bootstrap/starter"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/bundleuri"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/burdenmonitor"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/cache"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
@@ -678,6 +679,9 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	housekeepingMiddleware := housekeepingmw.NewHousekeepingMiddleware(logger, protoregistry.GitalyProtoPreregistered, localrepoFactory, housekeepingManager, housekeepingMiddlewareConfig)
 	defer housekeepingMiddleware.WaitForWorkers()
 
+	bm := burdenmonitor.New(logger)
+	bm.StartPoller(ctx)
+
 	gitalyServerFactory := server.NewGitalyServerFactory(
 		cfg,
 		logger,
@@ -784,13 +788,18 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		}
 
 		var srv *grpc.Server
+		opts := []server.Option{
+			server.WithUnaryInterceptor(bm.UnaryInterceptor()),
+			server.WithStreamInterceptor(bm.StreamInterceptor()),
+		}
+
 		if c.HandoverOnUpgrade {
-			srv, err = gitalyServerFactory.CreateExternal(c.IsSecure())
+			srv, err = gitalyServerFactory.CreateExternal(c.IsSecure(), opts...)
 			if err != nil {
 				return fmt.Errorf("create external gRPC server: %w", err)
 			}
 		} else {
-			srv, err = gitalyServerFactory.CreateInternal()
+			srv, err = gitalyServerFactory.CreateInternal(opts...)
 			if err != nil {
 				return fmt.Errorf("create internal gRPC server: %w", err)
 			}
