@@ -514,6 +514,7 @@ gitlab-advanced-sast:
   cache:
     - *cache_go_configuration
 
+
 secret_detection:
   needs: []
   stage: analyze
