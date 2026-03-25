@@ -513,6 +513,8 @@ gitlab-advanced-sast:
   stage: analyze
   cache:
     - *cache_go_configuration
+  tags:
+    - saas-linux-xlarge-amd64
 
 secret_detection:
   needs: []
