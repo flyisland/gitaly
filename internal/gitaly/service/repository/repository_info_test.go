@@ -685,10 +685,17 @@ func TestRepositoryInfo(t *testing.T) {
 				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
 				poolRelativePath := gittest.NewObjectPoolName(t)
-				gittest.CreateObjectPool(t, ctx, cfg, repo, gittest.CreateObjectPoolConfig{
+				_, poolPath := gittest.CreateObjectPool(t, ctx, cfg, repo, gittest.CreateObjectPoolConfig{
 					RelativePath:               poolRelativePath,
 					LinkRepositoryToObjectPool: true,
 				})
+
+				// Create a packfile in the pool.
+				writeFile(t, 123, poolPath, "objects", "pack", "pack-1234.pack")
+
+				// Create a loose object in the repo and in the pool.
+				writeFile(t, 123, poolPath, "objects", "ef", "12")
+				writeFile(t, 456, repoPath, "objects", "ab", "10")
 
 				var objectsDirectory string
 				if testhelper.IsPraefectEnabled() {
@@ -710,7 +717,8 @@ func TestRepositoryInfo(t *testing.T) {
 				}
 
 				repoSize, err := dirSizeInBytes(repoPath, filter)
-
+				require.NoError(t, err)
+				poolSize, err := dirSizeInBytes(poolPath, filter)
 				require.NoError(t, err)
 
 				return setupData{
@@ -718,14 +726,19 @@ func TestRepositoryInfo(t *testing.T) {
 						Repository: repo,
 					},
 					expectedResponse: &gitalypb.RepositoryInfoResponse{
-						Size: uint64(repoSize),
+						Size: uint64(repoSize + poolSize),
 						References: &gitalypb.RepositoryInfoResponse_ReferencesInfo{
 							ReferenceBackend: gittest.FilesOrReftables(
 								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_FILES,
 								gitalypb.RepositoryInfoResponse_ReferencesInfo_REFERENCE_BACKEND_REFTABLE,
 							),
 						},
-						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{},
+						Objects: &gitalypb.RepositoryInfoResponse_ObjectsInfo{
+							LooseObjectsCount: 2,
+							RecentSize:        702,
+							Size:              702,
+							PackfileCount:     1,
+						},
 						Alternates: &gitalypb.RepositoryInfoResponse_AlternatesInfo{
 							ObjectDirectories: []string{objectsDirectory},
 							LastModified:      repoAlternateModifiedTimestamp(t, repoPath),

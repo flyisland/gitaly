@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"time"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
@@ -38,7 +40,76 @@ func (s *server) RepositoryInfo(
 		return nil, fmt.Errorf("deriving repository info: %w", err)
 	}
 
+	// If the repository is linked to an object pool, collect pool stats and merge them in so
+	// that the response reflects the complete stats.
+	if repoInfo.Alternates.Exists && len(repoInfo.Alternates.AbsoluteObjectDirectories()) > 0 {
+		poolRepoPath := filepath.Dir(repoInfo.Alternates.AbsoluteObjectDirectories()[0])
+
+		storagePath, err := s.locator.GetStorageByName(ctx, request.GetRepository().GetStorageName())
+		if err != nil {
+			return nil, fmt.Errorf("getting storage path: %w", err)
+		}
+
+		poolRelativePath, err := filepath.Rel(storagePath, poolRepoPath)
+		if err != nil {
+			return nil, fmt.Errorf("computing pool relative path: %w", err)
+		}
+
+		poolRepo := s.localRepoFactory.Build(&gitalypb.Repository{
+			StorageName:  request.GetRepository().GetStorageName(),
+			RelativePath: poolRelativePath,
+		})
+
+		poolLooseObjects, err := stats.LooseObjectsInfoForRepository(ctx, poolRepo, time.Now().Add(stats.StaleObjectsGracePeriod))
+		if err != nil {
+			return nil, fmt.Errorf("deriving pool loose objects info: %w", err)
+		}
+
+		poolPackfiles, err := stats.PackfilesInfoForRepository(ctx, poolRepo)
+		if err != nil {
+			return nil, fmt.Errorf("deriving pool packfiles info: %w", err)
+		}
+
+		poolSize, err := dirSizeInBytes(poolRepoPath, filter)
+		if err != nil {
+			return nil, fmt.Errorf("calculating pool repository size: %w", err)
+		}
+
+		repoSize += poolSize
+		repoInfo = mergePoolInfo(repoInfo, stats.RepositoryInfo{
+			LooseObjects: poolLooseObjects,
+			Packfiles:    poolPackfiles,
+		})
+	}
+
 	return convertRepositoryInfo(uint64(repoSize), repoInfo)
+}
+
+// mergePoolInfo merges pool repository stats into the member repository stats.
+func mergePoolInfo(member, pool stats.RepositoryInfo) stats.RepositoryInfo {
+	member.LooseObjects.Count += pool.LooseObjects.Count
+	member.LooseObjects.Size += pool.LooseObjects.Size
+	member.LooseObjects.StaleCount += pool.LooseObjects.StaleCount
+	member.LooseObjects.StaleSize += pool.LooseObjects.StaleSize
+	member.LooseObjects.GarbageCount += pool.LooseObjects.GarbageCount
+	member.LooseObjects.GarbageSize += pool.LooseObjects.GarbageSize
+
+	member.Packfiles.Count += pool.Packfiles.Count
+	member.Packfiles.Size += pool.Packfiles.Size
+	member.Packfiles.ReverseIndexCount += pool.Packfiles.ReverseIndexCount
+	member.Packfiles.CruftCount += pool.Packfiles.CruftCount
+	member.Packfiles.CruftSize += pool.Packfiles.CruftSize
+	member.Packfiles.KeepCount += pool.Packfiles.KeepCount
+	member.Packfiles.KeepSize += pool.Packfiles.KeepSize
+	member.Packfiles.GarbageCount += pool.Packfiles.GarbageCount
+	member.Packfiles.GarbageSize += pool.Packfiles.GarbageSize
+
+	// The bitmaps and multi-pack-index are only available in the linked pool repository.
+	member.Packfiles.Bitmap = pool.Packfiles.Bitmap
+	member.Packfiles.MultiPackIndex = pool.Packfiles.MultiPackIndex
+	member.Packfiles.MultiPackIndexBitmap = pool.Packfiles.MultiPackIndexBitmap
+
+	return member
 }
 
 func convertRepositoryInfo(repoSize uint64, repoInfo stats.RepositoryInfo) (*gitalypb.RepositoryInfoResponse, error) {
