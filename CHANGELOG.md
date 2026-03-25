@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.10.1 (2026-03-24)
+
+No changes.
+
 ## 18.10.0 (2026-03-18)
 
 ### Added (2 changes)
@@ -23,6 +27,12 @@
 
 - [Deprecate CountCommitsRequest revision and all fields](gitlab-org/gitaly@d1f74eaa3a7d3db3f7851c3aa94764598f3c27ee) ([merge request](gitlab-org/gitaly!8509))
 
+## 18.9.3 (2026-03-24)
+
+### Changed (1 change)
+
+- [backup: Upgrade go cloud version for integrity checks](gitlab-org/security/gitaly@2f7823302b477a44702f95c61a0c66225e519269)
+
 ## 18.9.2 (2026-03-10)
 
 No changes.
@@ -41,6 +51,10 @@ No changes.
 ### Security (1 change)
 
 - [diff: Support unescaping additional special characters](gitlab-org/gitaly@80ae3dbfbb9d1d572949288ea4277ed1b4b1aff6)
+
+## 18.8.7 (2026-03-24)
+
+No changes.
 
 ## 18.8.6 (2026-03-10)
 
