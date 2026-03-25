@@ -55,12 +55,12 @@ func UnaryServerInterceptor(conf gitalycfgauth.Config) grpc.UnaryServerIntercept
 
 func checkFunc(conf gitalycfgauth.Config) func(ctx context.Context) (context.Context, error) {
 	return func(ctx context.Context) (context.Context, error) {
-		if len(conf.Token) == 0 {
+		if len(conf.GetToken()) == 0 {
 			countStatus("server disabled authentication", conf.Transitioning).Inc()
 			return ctx, nil
 		}
 
-		err := gitalyauth.CheckToken(ctx, conf.Token, time.Now())
+		err := gitalyauth.CheckToken(ctx, conf.GetToken(), time.Now())
 		switch status.Code(err) {
 		case codes.OK:
 			countStatus(okLabel(conf.Transitioning), conf.Transitioning).Inc()

@@ -32,6 +32,9 @@ listen_addr = "127.0.0.1:2305"
 #  Optional: authenticate Gitaly requests using a shared secret. This token works the same way as a gitaly token
 # [auth]
 #   token = 'abc123secret'
+#   # Read the token from a file (must have 0600 or 0400 permissions).
+#   # The token and token_file options are mutually exclusive.
+#   token_file = '/path/to/token/file'
 #
 # # One or more Gitaly servers need to be configured to be managed. The names
 # of each server are used to link multiple nodes, or `gitaly_server`s together

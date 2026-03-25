@@ -176,7 +176,7 @@ func (cmd *removeRepository) exec(ctx context.Context, logger log.Logger, db *sq
 	_, err = cmd.removeRepository(ctx, &gitalypb.Repository{
 		StorageName:  cmd.virtualStorage,
 		RelativePath: cmd.relativePath,
-	}, addr, cfg.Auth.Token)
+	}, addr, cfg.Auth.GetToken())
 	if err != nil {
 		return fmt.Errorf("repository removal failed: %w", err)
 	}

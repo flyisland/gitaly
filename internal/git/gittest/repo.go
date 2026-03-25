@@ -102,8 +102,8 @@ func DialService(tb testing.TB, ctx context.Context, cfg config.Cfg) *grpc.Clien
 	tb.Helper()
 
 	dialOptions := []grpc.DialOption{client.UnaryInterceptor(), client.StreamInterceptor()}
-	if cfg.Auth.Token != "" {
-		dialOptions = append(dialOptions, grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(cfg.Auth.Token)))
+	if cfg.Auth.GetToken() != "" {
+		dialOptions = append(dialOptions, grpc.WithPerRPCCredentials(gitalyauth.RPCCredentialsV2(cfg.Auth.GetToken())))
 	}
 
 	var addr string

@@ -161,7 +161,7 @@ func (t *GrpcTransport) prepareRaftMessageRequests(ctx context.Context, logReade
 
 func (t *GrpcTransport) sendToNode(ctx context.Context, addr string, reqs []*gitalypb.RaftMessageRequest) (returnErr error) {
 	// get the connection to the node
-	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.Token)
+	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.GetToken())
 	if err != nil {
 		return fmt.Errorf("get connection to address %s: %w", addr, err)
 	}
@@ -354,7 +354,7 @@ func (t *GrpcTransport) SendSnapshot(ctx context.Context, pk *gitalypb.RaftParti
 // getRaftClient returns a Raft client connection for the given address
 func (t *GrpcTransport) getRaftClient(ctx context.Context, addr string) (gitalypb.RaftServiceClient, error) {
 	// get the connection to the node
-	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.Token)
+	conn, err := t.connectionPool.Dial(ctx, addr, t.cfg.Auth.GetToken())
 	if err != nil {
 		return nil, fmt.Errorf("get connection to address %s: %w", addr, err)
 	}

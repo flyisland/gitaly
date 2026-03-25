@@ -130,7 +130,7 @@ func serveAction(ctx context.Context, cmd *cli.Command) error {
 	}
 	defer func() { _ = tracingCloser.Close() }()
 
-	if cfg.Auth.Transitioning && len(cfg.Auth.Token) > 0 {
+	if cfg.Auth.Transitioning && len(cfg.Auth.GetToken()) > 0 {
 		logger.Warn("Authentication is enabled but not enforced because transitioning=true. Gitaly will accept unauthenticated requests.")
 	}
 

@@ -82,7 +82,7 @@ func datalossAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	conn, err := glcli.Dial(ctx, nodeAddr, conf.Auth.Token, defaultDialTimeout)
+	conn, err := glcli.Dial(ctx, nodeAddr, conf.Auth.GetToken(), defaultDialTimeout)
 	if err != nil {
 		return fmt.Errorf("error dialing: %w", err)
 	}

@@ -959,6 +959,12 @@ func Load(file io.Reader) (Cfg, error) {
 		}
 	}
 
+	if cfg.Auth.TokenFile != "" {
+		if err := cfg.Auth.SetTokenFromFile(); err != nil {
+			return Cfg{}, err
+		}
+	}
+
 	if err := cfg.Sanitize(); err != nil {
 		return Cfg{}, err
 	}
@@ -978,6 +984,7 @@ func (cfg *Cfg) Validate() error {
 		cfg.validateStorages,
 		cfg.validateGit,
 		cfg.validateGitlabSecret,
+		cfg.Auth.Validate,
 		cfg.validateBinDir,
 		cfg.validateRuntimeDir,
 		cfg.validateMaintenance,
@@ -1021,6 +1028,7 @@ func (cfg *Cfg) ValidateV2() error {
 			return cfg.validateStorages()
 		}},
 		{field: "prometheus", validate: cfg.Prometheus.Validate},
+		{field: "auth", validate: cfg.Auth.Validate},
 		{field: "tls", validate: cfg.TLS.Validate},
 		{field: "gitlab", validate: cfg.Gitlab.Validate},
 		{field: "gitlab-shell", validate: cfg.GitlabShell.Validate},

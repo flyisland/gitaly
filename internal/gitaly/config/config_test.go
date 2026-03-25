@@ -267,6 +267,20 @@ sentry_dsn = "abc123"`)
 	}, cfg.Logging)
 }
 
+func TestLoadAuth(t *testing.T) {
+	t.Parallel()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(tokenFile, []byte("file-token\n"), 0o600))
+
+	cfg, err := Load(strings.NewReader(fmt.Sprintf(`
+		[auth]
+		token_file = %q
+	`, tokenFile)))
+	require.NoError(t, err)
+	require.Equal(t, "file-token", cfg.Auth.GetToken())
+}
+
 func TestLoadPrometheus(t *testing.T) {
 	tmpFile := strings.NewReader(`
 		prometheus_listen_addr=":9236"

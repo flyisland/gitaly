@@ -22,7 +22,7 @@ storages:
 			if addr != "" {
 				gitalyServers[s.Name] = storage.ServerInfo{
 					Address: addr,
-					Token:   cfg.Auth.Token,
+					Token:   cfg.Auth.GetToken(),
 				}
 				continue storages
 			}

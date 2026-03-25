@@ -95,7 +95,7 @@ func runPraefectProxy(tb testing.TB, gitalyCfg config.Cfg, gitalyAddr string) Pr
 				{
 					Storage: storage.Name,
 					Address: gitalyAddr,
-					Token:   gitalyCfg.Auth.Token,
+					Token:   gitalyCfg.Auth.GetToken(),
 				},
 			},
 		})
@@ -104,7 +104,7 @@ func runPraefectProxy(tb testing.TB, gitalyCfg config.Cfg, gitalyAddr string) Pr
 	return StartPraefect(tb, praefectconfig.Config{
 		SocketPath: testhelper.GetTemporaryGitalySocketFileName(tb),
 		Auth: auth.Config{
-			Token: gitalyCfg.Auth.Token,
+			Token: gitalyCfg.Auth.GetToken(),
 		},
 		DB: testdb.GetConfig(tb, testdb.New(tb).Name),
 		Failover: praefectconfig.Failover{
@@ -241,7 +241,7 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 			assert.NoError(tb, internalServer.Serve(internalListener), "failure to serve internal gRPC")
 		}()
 
-		waitHealthy(tb, ctx, "unix://"+internalListener.Addr().String(), cfg.Auth.Token)
+		waitHealthy(tb, ctx, "unix://"+internalListener.Addr().String(), cfg.Auth.GetToken())
 	}
 
 	secure := cfg.TLS.CertPath != "" && cfg.TLS.KeyPath != ""
@@ -278,7 +278,7 @@ func runGitaly(tb testing.TB, cfg config.Cfg, registrar func(srv *grpc.Server, d
 		assert.NoError(tb, externalServer.Serve(listener), "failure to serve external gRPC")
 	}()
 
-	waitHealthy(tb, ctx, addr, cfg.Auth.Token)
+	waitHealthy(tb, ctx, addr, cfg.Auth.GetToken())
 
 	return externalServer, addr, gsd.disablePraefect
 }
