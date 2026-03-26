@@ -341,9 +341,6 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Enable unauthenticated limiter
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LimitUnauthenticated, true)
 
-	// Disable TrackMaxRssAnon by default, it should be enabled explicitly via feature sets.
-	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.TrackMaxRssAnon, false)
-
 	for _, opt := range opts {
 		ctx = opt(ctx)
 	}

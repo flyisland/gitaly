@@ -413,9 +413,7 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 		return nil, fmt.Errorf("starting process %v: %w", cmd.Args, err)
 	}
 
-	if featureflag.TrackMaxRssAnon.IsEnabled(ctx) {
-		go trackMaxRssAnon(ctx, cmd.Process.Pid, &command.maxRssAnon, command.processExitedCh)
-	}
+	go trackMaxRssAnon(ctx, cmd.Process.Pid, &command.maxRssAnon, command.processExitedCh)
 
 	inFlightCommandGauge.WithLabelValues(command.metricsService, command.metricsMethod, command.metricsCmd, command.metricsSubCmd).Inc()
 	commandcounter.Increment()
@@ -666,7 +664,7 @@ func (c *Command) logProcessComplete() {
 		})
 	}
 
-	if featureflag.TrackMaxRssAnon.IsEnabled(ctx) && c.maxRssAnon.Load() > 0 {
+	if c.maxRssAnon.Load() > 0 {
 		entry = entry.WithFields(log.Fields{
 			"command.maxrssanon_bytes": c.maxRssAnon.Load(),
 		})
@@ -699,9 +697,7 @@ func (c *Command) logProcessComplete() {
 			customFields.RecordSum("command.majflt", int(rusage.Majflt))
 		}
 
-		if featureflag.TrackMaxRssAnon.IsEnabled(ctx) {
-			customFields.RecordMax("command.maxrssanon_bytes", int(c.maxRssAnon.Load()))
-		}
+		customFields.RecordMax("command.maxrssanon_bytes", int(c.maxRssAnon.Load()))
 
 		if c.cgroupPath != "" {
 			customFields.RecordMetadata("command.cgroup_path", c.cgroupPath)
@@ -741,9 +737,7 @@ func (c *Command) logProcessComplete() {
 			attribute.Int64("majflt", rusage.Majflt),
 		)
 	}
-	if featureflag.TrackMaxRssAnon.IsEnabled(ctx) {
-		attributes = append(attributes, attribute.Int64("maxrssanon_bytes", c.maxRssAnon.Load()))
-	}
+	attributes = append(attributes, attribute.Int64("maxrssanon_bytes", c.maxRssAnon.Load()))
 	if c.cgroupPath != "" {
 		attributes = append(attributes, attribute.String("cgroup_path", c.cgroupPath))
 	}
