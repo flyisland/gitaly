@@ -2,6 +2,8 @@ package ref
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"testing"
@@ -272,7 +274,7 @@ func TestServer_ListRefs(t *testing.T) {
 				{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
 				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
 			},
-			expectedCursor: "refs/tags/lightweight-tag",
+			expectedCursor: mustEncodeListRefsPageToken("refs/tags/lightweight-tag"),
 		},
 		{
 			desc: "pagination with page token and no limit",
@@ -375,6 +377,21 @@ func TestServer_ListRefs(t *testing.T) {
 			},
 			expected: nil,
 		},
+		{
+			desc: "pagination with encoded page token and limit",
+			request: &gitalypb.ListRefsRequest{
+				Repository: repo,
+				Patterns:   [][]byte{[]byte("refs/tags/*")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					PageToken: mustEncodeListRefsPageToken("refs/tags/annotated-tag"),
+					Limit:     2,
+				},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+				{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
@@ -473,6 +490,21 @@ func TestListRefs_pagination(t *testing.T) {
 
 		testhelper.ProtoEqual(t, page, expectedRefs)
 		require.NotEmpty(t, nextPage)
+	})
+
+	t.Run("cursor is base64-encoded JSON", func(t *testing.T) {
+		_, nextPage := getPage(t, ctx, client, repo, "", 2)
+		require.NotEmpty(t, nextPage)
+
+		decodedBytes, err := base64.StdEncoding.DecodeString(nextPage)
+		require.NoError(t, err, "cursor should be valid base64")
+
+		var token struct {
+			RefName string `json:"ref_name"`
+		}
+		err = json.Unmarshal(decodedBytes, &token)
+		require.NoError(t, err, "cursor should be valid JSON")
+		require.Equal(t, "refs/tags/lightweight-tag", token.RefName)
 	})
 
 	t.Run("first page includes all results", func(t *testing.T) {
@@ -589,4 +621,46 @@ func getPage(t *testing.T, ctx context.Context, client gitalypb.RefServiceClient
 	}
 
 	return refs, nextCursor
+}
+
+func TestEncodeDecodeListRefsPageToken(t *testing.T) {
+	t.Parallel()
+
+	t.Run("round trip", func(t *testing.T) {
+		refName := "refs/heads/main"
+		encoded, err := encodeListRefsPageToken(refName)
+		require.NoError(t, err)
+		require.NotEqual(t, refName, encoded)
+		decoded := decodeListRefsPageToken(encoded)
+		require.Equal(t, refName, decoded)
+	})
+
+	t.Run("raw ref name fallback", func(t *testing.T) {
+		// A raw ref name is not valid base64, so it should be returned as-is
+		raw := "refs/tags/my-tag"
+		decoded := decodeListRefsPageToken(raw)
+		require.Equal(t, raw, decoded)
+	})
+
+	t.Run("valid base64 but invalid JSON fallback", func(t *testing.T) {
+		token := base64.StdEncoding.EncodeToString([]byte("not-json"))
+		decoded := decodeListRefsPageToken(token)
+		require.Equal(t, token, decoded)
+	})
+
+	t.Run("valid base64 and JSON but empty ref_name fallback", func(t *testing.T) {
+		jsonBytes, err := json.Marshal(listRefsPageToken{RefName: ""})
+		require.NoError(t, err)
+		token := base64.StdEncoding.EncodeToString(jsonBytes)
+		decoded := decodeListRefsPageToken(token)
+		require.Equal(t, token, decoded)
+	})
+}
+
+func mustEncodeListRefsPageToken(refName string) string {
+	token, err := encodeListRefsPageToken(refName)
+	if err != nil {
+		panic(err)
+	}
+	return token
 }
