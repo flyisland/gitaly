@@ -76,14 +76,18 @@ func (w *writer) flush(hasNextPage bool) error {
 	return nil
 }
 
-// addLine adds a new line to the writer buffer, and flushes if the maximum
-// size has been achieved
+// addLine adds a new line to the writer buffer. If the buffer is at capacity,
+// it flushes the existing lines first before appending the new line. This
+// ensures the last line always remains in the buffer for the final flush in
+// consume(), which has the correct hasNextPage value.
 func (w *writer) addLine(p []byte) error {
-	w.lines = CopyAndAppend(w.lines, p)
-
 	if len(w.lines) >= ItemsPerMessage {
-		return w.flush(false)
+		if err := w.flush(false); err != nil {
+			return err
+		}
 	}
+
+	w.lines = CopyAndAppend(w.lines, p)
 
 	return nil
 }

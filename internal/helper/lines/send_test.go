@@ -8,6 +8,61 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestLinesSend_hasNextPageAtChunkBoundary(t *testing.T) {
+	// Override ItemsPerMessage to a small value for testing
+	oldItemsPerMessage := ItemsPerMessage
+	ItemsPerMessage = 2
+	t.Cleanup(func() { ItemsPerMessage = oldItemsPerMessage })
+
+	// 3 items total, limit=2 (equal to ItemsPerMessage).
+	// The bug was that when the limit aligns with the chunk size,
+	// hasNextPage was incorrectly reported as false.
+	reader := bytes.NewBufferString("a\nb\nc")
+	var allOut [][]byte
+	var lastNextPage bool
+
+	sender := func(in [][]byte, hasNextPage bool) error {
+		allOut = append(allOut, in...)
+		lastNextPage = hasNextPage
+		return nil
+	}
+
+	err := Send(reader, sender, SenderOpts{
+		Limit:     2,
+		Delimiter: '\n',
+	})
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{[]byte("a"), []byte("b")}, allOut)
+	require.True(t, lastNextPage, "hasNextPage should be true when limit equals chunk size and more items exist")
+}
+
+func TestLinesSend_noNextPageAtChunkBoundaryWhenExhausted(t *testing.T) {
+	// Override ItemsPerMessage to a small value for testing
+	oldItemsPerMessage := ItemsPerMessage
+	ItemsPerMessage = 2
+	t.Cleanup(func() { ItemsPerMessage = oldItemsPerMessage })
+
+	// 2 items total, limit=2 (equal to ItemsPerMessage), no more items.
+	// hasNextPage should be false since all items fit within the limit.
+	reader := bytes.NewBufferString("a\nb")
+	var allOut [][]byte
+	var lastNextPage bool
+
+	sender := func(in [][]byte, hasNextPage bool) error {
+		allOut = append(allOut, in...)
+		lastNextPage = hasNextPage
+		return nil
+	}
+
+	err := Send(reader, sender, SenderOpts{
+		Limit:     2,
+		Delimiter: '\n',
+	})
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{[]byte("a"), []byte("b")}, allOut)
+	require.False(t, lastNextPage, "hasNextPage should be false when all items fit within the limit")
+}
+
 func TestLinesSend(t *testing.T) {
 	expected := [][]byte{
 		[]byte("mepmep"),
