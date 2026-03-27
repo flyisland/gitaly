@@ -3,6 +3,7 @@ package ref
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/lines"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/text"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
@@ -487,6 +489,40 @@ func TestListRefs_pagination(t *testing.T) {
 		testhelper.ProtoEqual(t, page, expectedRefs)
 		require.Empty(t, nextPage)
 	})
+}
+
+func TestListRefs_paginationCursorAtChunkBoundary(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg, client := setupRefService(t)
+
+	// This test relies on ItemsPerMessage being 3 (set in testhelper_test.go).
+	require.Equal(t, 3, lines.ItemsPerMessage,
+		"this test assumes ItemsPerMessage is 3; update test data if changed")
+
+	repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+	commitID := gittest.WriteCommit(t, cfg, repoPath)
+
+	// Create 5 tags so that limit=3 (equal to ItemsPerMessage) has more results beyond the limit.
+	for i := 1; i <= 5; i++ {
+		gittest.Exec(t, cfg, "-C", repoPath, "tag", fmt.Sprintf("tag-%03d", i), commitID.String())
+	}
+
+	// With 5 tags and limit=3, we must get a cursor back.
+	// Before the fix, the cursor was nil when limit was a multiple of ItemsPerMessage.
+	page, nextPage := getPage(t, ctx, client, repo, "", 3)
+	require.Len(t, page, 3)
+	require.NotEmpty(t, nextPage, "cursor must be set when limit equals chunk size and more refs exist")
+
+	// Verify we can use the cursor to get the remaining refs
+	page2, nextPage2 := getPage(t, ctx, client, repo, nextPage, 3)
+	require.Len(t, page2, 2)
+	require.Empty(t, nextPage2, "cursor should be empty on last page")
+
+	// Verify all refs can be collected via pagination
+	allRefs := collectAllRefs(t, ctx, client, repo, 3)
+	require.Len(t, allRefs, 5, "pagination should return all refs across pages")
 }
 
 func TestListRefs_validate(t *testing.T) {
