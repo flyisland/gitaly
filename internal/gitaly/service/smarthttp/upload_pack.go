@@ -76,7 +76,7 @@ func (s *server) runStatsCollector(ctx context.Context, r io.Reader) (io.Reader,
 			s.logger.WithError(err).DebugContext(ctx, "failed parsing packfile negotiation")
 			return
 		}
-		stats.UpdateMetrics(s.packfileNegotiationMetrics)
+		stats.UpdateMetrics(s.packfileNegotiationMetrics, s.packfileNegotiationDeepenMetrics)
 		stats.UpdateLogFields(ctx)
 
 		sc.statsCh <- stats

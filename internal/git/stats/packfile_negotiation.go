@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -152,22 +153,28 @@ func (n *PackfileNegotiation) Parse(body io.Reader) error {
 	return nil
 }
 
-// UpdateMetrics updates Prometheus counters with features that have been used
+// UpdateMetrics updates Prometheus metrics with features that have been used
 // during a packfile negotiation.
-func (n *PackfileNegotiation) UpdateMetrics(metrics *prometheus.CounterVec) {
+func (n *PackfileNegotiation) UpdateMetrics(c *prometheus.CounterVec, h prometheus.Histogram) {
 	if n.Command != "" {
-		metrics.WithLabelValues(n.Command).Inc()
+		c.WithLabelValues(n.Command).Inc()
 	}
 	if n.Deepen != "" {
-		metrics.WithLabelValues("deepen").Inc()
+		c.WithLabelValues("deepen").Inc()
 	}
 	if n.Filter != "" {
-		metrics.WithLabelValues("filter").Inc()
+		c.WithLabelValues("filter").Inc()
 	}
 	if n.Haves > 0 {
-		metrics.WithLabelValues("have").Inc()
+		c.WithLabelValues("have").Inc()
 	}
-	metrics.WithLabelValues("total").Inc()
+	c.WithLabelValues("total").Inc()
+
+	if depth, ok := strings.CutPrefix(n.Deepen, "deepen "); ok {
+		if d, err := strconv.Atoi(depth); err == nil {
+			h.Observe(float64(d))
+		}
+	}
 }
 
 // UpdateLogFields add fields on the logger instance to provide

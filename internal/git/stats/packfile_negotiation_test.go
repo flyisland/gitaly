@@ -2,11 +2,14 @@ package stats
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
 const (
@@ -226,6 +229,65 @@ func TestPackNegoWithAgentCapability(t *testing.T) {
 		Wants:     1,
 		Caps:      []string{"cap", "agent=git/foobar"},
 	})
+}
+
+func TestUpdateMetricsDeepenHistogram(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		desc            string
+		deepen          string
+		expectedSamples int
+	}{
+		{
+			desc:            "deepen-since is not observed",
+			deepen:          "deepen-since 1234567890",
+			expectedSamples: 0,
+		},
+		{
+			desc:            "deepen-not is not observed",
+			deepen:          "deepen-not " + oid1,
+			expectedSamples: 0,
+		},
+		{
+			desc:            "empty deepen is not observed",
+			deepen:          "",
+			expectedSamples: 0,
+		},
+		{
+			desc:            "depth 1",
+			deepen:          "deepen 1",
+			expectedSamples: 1,
+		},
+		{
+			desc:            "depth 10",
+			deepen:          "deepen 10",
+			expectedSamples: 1,
+		},
+		{
+			desc:            "depth 10000",
+			deepen:          "deepen 10000",
+			expectedSamples: 1,
+		},
+		{
+			desc:            "sentinel value 0x7fffffff (INFINITE_DEPTH) is observed",
+			deepen:          fmt.Sprintf("deepen %d", 0x7fffffff),
+			expectedSamples: 1,
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			negotiationMetrics := prometheus.NewCounterVec(prometheus.CounterOpts{}, []string{"git_negotiation_feature"})
+			deepenHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{Name: "test_packfile_negotiation_deepen"})
+			pn := PackfileNegotiation{Deepen: tc.deepen}
+			pn.UpdateMetrics(negotiationMetrics, deepenHistogram)
+
+			testhelper.RequireHistogramSampleCounts(t, deepenHistogram, map[string]int{
+				"test_packfile_negotiation_deepen": tc.expectedSamples,
+			})
+		})
+	}
 }
 
 func TestPackNegoFullBlown(t *testing.T) {

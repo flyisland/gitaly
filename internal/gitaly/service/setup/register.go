@@ -51,7 +51,32 @@ var (
 		},
 		[]string{"git_negotiation_feature"},
 	)
+
+	smarthttpPackfileNegotiationDeepenMetrics = newPackfileNegotiationDeepenHistogram("smarthttp")
+	sshPackfileNegotiationDeepenMetrics       = newPackfileNegotiationDeepenHistogram("ssh")
 )
+
+func newPackfileNegotiationDeepenHistogram(subsystem string) prometheus.Histogram {
+	return promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "gitaly",
+			Subsystem: subsystem,
+			Name:      "packfile_negotiation_deepen",
+			Help:      "Distribution of deepen values requested during packfile negotiation",
+			// These buckets help us capture the extreme ends of the "deepen" value (1 and INFINITE_DEPTH),
+			// as well as a few interesting ranges in between.
+			Buckets: append(
+				[]float64{1, 2, 5, 10},
+				append(
+					// Upper-bound this to the value immediately preceding INFINITE_DEPTH.
+					// The count of buckets is pretty arbitrary.
+					prometheus.ExponentialBucketsRange(20, float64(0x7ffffffe), 4),
+					float64(0x7fffffff),
+				)...,
+			),
+		},
+	)
+}
 
 // RegisterAll will register all the known gRPC services on  the provided gRPC service instance.
 func RegisterAll(srv *grpc.Server, deps *service.Dependencies) {
@@ -66,9 +91,11 @@ func RegisterAll(srv *grpc.Server, deps *service.Dependencies) {
 	gitalypb.RegisterRepositoryServiceServer(srv, repository.NewServer(deps))
 	gitalypb.RegisterSSHServiceServer(srv, ssh.NewServer(deps,
 		ssh.WithPackfileNegotiationMetrics(sshPackfileNegotiationMetrics),
+		ssh.WithPackfileNegotiationDeepenMetrics(sshPackfileNegotiationDeepenMetrics),
 	))
 	gitalypb.RegisterSmartHTTPServiceServer(srv, smarthttp.NewServer(deps,
 		smarthttp.WithPackfileNegotiationMetrics(smarthttpPackfileNegotiationMetrics),
+		smarthttp.WithPackfileNegotiationDeepenMetrics(smarthttpPackfileNegotiationDeepenMetrics),
 	))
 	gitalypb.RegisterConflictsServiceServer(srv, conflicts.NewServer(deps))
 	gitalypb.RegisterRemoteServiceServer(srv, remote.NewServer(deps))
