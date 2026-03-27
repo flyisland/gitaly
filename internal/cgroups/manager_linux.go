@@ -19,7 +19,6 @@ import (
 
 	cgrps "github.com/containerd/cgroups/v3"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/prometheus/client_golang/prometheus"
 	cgroupscfg "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
@@ -31,7 +30,6 @@ type cgroupHandler interface {
 	setupParent(parentResources *specs.LinuxResources) error
 	createCgroup(repoResources *specs.LinuxResources, cgroupPath string) error
 	addToCgroup(pid int, cgroupPath string) error
-	collect(repoPath string, ch chan<- prometheus.Metric)
 	currentProcessCgroup() string
 	repoPath(groupID int) string
 	stats(path string) (CgroupStats, error)
@@ -229,29 +227,6 @@ func (cgm *CGroupManager) calcGroupID(rand randomizer, key string, count uint, a
 
 	// Shift random distance [0, allocation) from the starting point. Wrap-around if needed.
 	return (groupID + uint(rand.Intn(int(allocationCount)))) % count
-}
-
-// Describe is used to generate description information for each CGroupManager prometheus metric
-func (cgm *CGroupManager) Describe(ch chan<- *prometheus.Desc) {
-	prometheus.DescribeByCollect(cgm, ch)
-}
-
-// Collect is used to collect the current values of all CGroupManager prometheus metrics
-func (cgm *CGroupManager) Collect(ch chan<- prometheus.Metric) {
-	if !cgm.cfg.MetricsEnabled {
-		return
-	}
-
-	for i := 0; i < int(cgm.cfg.Repositories.Count); i++ {
-		repoPath := cgm.handler.repoPath(i)
-
-		cgLock := cgm.status.getLock(repoPath)
-		if !cgLock.isCreated() {
-			continue
-		}
-
-		cgm.handler.collect(repoPath, ch)
-	}
 }
 
 // Stats returns cgroup accounting statistics collected by reading

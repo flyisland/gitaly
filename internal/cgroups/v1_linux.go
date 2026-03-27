@@ -10,7 +10,6 @@ import (
 
 	"github.com/containerd/cgroups/v3/cgroup1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	cgroupscfg "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
@@ -21,7 +20,6 @@ type cgroupV1Handler struct {
 	logger    log.Logger
 	hierarchy func() ([]cgroup1.Subsystem, error)
 
-	*cgroupsMetrics
 	pid int
 }
 
@@ -33,7 +31,6 @@ func newV1Handler(cfg cgroupscfg.Config, logger log.Logger, pid int) *cgroupV1Ha
 		hierarchy: func() ([]cgroup1.Subsystem, error) {
 			return defaultSubsystems(cfg.Mountpoint)
 		},
-		cgroupsMetrics: newV1CgroupsMetrics(),
 	}
 }
 
@@ -85,70 +82,6 @@ func (cvh *cgroupV1Handler) loadCgroup(cgroupPath string) (cgroup1.Cgroup, error
 		return nil, fmt.Errorf("failed loading %s cgroup: %w", cgroupPath, err)
 	}
 	return control, nil
-}
-
-func (cvh *cgroupV1Handler) collect(repoPath string, ch chan<- prometheus.Metric) {
-	logger := cvh.logger.WithField("cgroup_path", repoPath)
-	control, err := cvh.loadCgroup(repoPath)
-	if err != nil {
-		logger.WithError(err).Warn("unable to load cgroup controller")
-		return
-	}
-
-	if metrics, err := control.Stat(); err != nil {
-		logger.WithError(err).Warn("unable to get cgroup stats")
-	} else {
-		memoryMetric := cvh.memoryReclaimAttemptsTotal.WithLabelValues(repoPath)
-		memoryMetric.Set(float64(metrics.GetMemory().GetUsage().GetFailcnt()))
-		ch <- memoryMetric
-
-		cpuUserMetric := cvh.cpuUsage.WithLabelValues(repoPath, "user")
-		cpuUserMetric.Set(float64(metrics.GetCPU().GetUsage().GetUser()))
-		ch <- cpuUserMetric
-
-		ch <- prometheus.MustNewConstMetric(
-			cvh.cpuCFSPeriods,
-			prometheus.CounterValue,
-			float64(metrics.GetCPU().GetThrottling().GetPeriods()),
-			repoPath,
-		)
-
-		ch <- prometheus.MustNewConstMetric(
-			cvh.cpuCFSThrottledPeriods,
-			prometheus.CounterValue,
-			float64(metrics.GetCPU().GetThrottling().GetThrottledPeriods()),
-			repoPath,
-		)
-
-		ch <- prometheus.MustNewConstMetric(
-			cvh.cpuCFSThrottledTime,
-			prometheus.CounterValue,
-			float64(metrics.GetCPU().GetThrottling().GetThrottledTime())/float64(time.Second),
-			repoPath,
-		)
-
-		cpuKernelMetric := cvh.cpuUsage.WithLabelValues(repoPath, "kernel")
-		cpuKernelMetric.Set(float64(metrics.GetCPU().GetUsage().GetKernel()))
-		ch <- cpuKernelMetric
-	}
-
-	if subsystems, err := cvh.hierarchy(); err != nil {
-		logger.WithError(err).Warn("unable to get cgroup hierarchy")
-	} else {
-		for _, subsystem := range subsystems {
-			processes, err := control.Processes(subsystem.Name(), true)
-			if err != nil {
-				logger.WithField("subsystem", subsystem.Name()).
-					WithError(err).
-					Warn("unable to get process list")
-				continue
-			}
-
-			procsMetric := cvh.procs.WithLabelValues(repoPath, string(subsystem.Name()))
-			procsMetric.Set(float64(len(processes)))
-			ch <- procsMetric
-		}
-	}
 }
 
 func (cvh *cgroupV1Handler) repoPath(groupID int) string {

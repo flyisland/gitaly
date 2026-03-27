@@ -4,7 +4,6 @@ import (
 	"io"
 	"os/exec"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/dontpanic"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
@@ -133,8 +132,6 @@ type Manager interface {
 	// cgroupfs files. Those statistics are generic for both Cgroup V1
 	// and Cgroup V2.
 	Stats() (Stats, error)
-	Describe(ch chan<- *prometheus.Desc)
-	Collect(ch chan<- prometheus.Metric)
 }
 
 // NewManager returns the appropriate Cgroups manager

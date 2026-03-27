@@ -17,7 +17,6 @@ import (
 	"github.com/containerd/cgroups/v3/cgroup2"
 	stats2 "github.com/containerd/cgroups/v3/cgroup2/stats"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	cgroupscfg "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/kernel"
@@ -80,7 +79,6 @@ type cgroupV2Handler struct {
 	cfg    cgroupscfg.Config
 	logger log.Logger
 
-	*cgroupsMetrics
 	pid             int
 	cloneIntoCgroup bool
 }
@@ -95,7 +93,6 @@ func newV2Handler(cfg cgroupscfg.Config, logger log.Logger, pid int) *cgroupV2Ha
 		cfg:             cfg,
 		logger:          logger,
 		pid:             pid,
-		cgroupsMetrics:  newV2CgroupsMetrics(),
 		cloneIntoCgroup: cloneIntoCgroup,
 	}
 }
@@ -142,177 +139,6 @@ func (cvh *cgroupV2Handler) loadCgroup(cgroupPath string) (*cgroup2.Manager, err
 		return nil, fmt.Errorf("failed loading %s cgroup: %w", cgroupPath, err)
 	}
 	return control, nil
-}
-
-func (cvh *cgroupV2Handler) collect(repoPath string, ch chan<- prometheus.Metric) {
-	logger := cvh.logger.WithField("cgroup_path", repoPath)
-	control, err := cvh.loadCgroup(repoPath)
-	if err != nil {
-		logger.WithError(err).Warn("unable to load cgroup controller")
-		return
-	}
-
-	if metrics, err := control.Stat(); err != nil {
-		logger.WithError(err).Warn("unable to get cgroup stats")
-	} else {
-		cpuUserMetric := cvh.cpuUsage.WithLabelValues(repoPath, "user")
-		cpuUserMetric.Set(float64(metrics.GetCPU().GetUserUsec()))
-		ch <- cpuUserMetric
-
-		ch <- prometheus.MustNewConstMetric(
-			cvh.cpuCFSPeriods,
-			prometheus.CounterValue,
-			float64(metrics.GetCPU().GetNrPeriods()),
-			repoPath,
-		)
-
-		ch <- prometheus.MustNewConstMetric(
-			cvh.cpuCFSThrottledPeriods,
-			prometheus.CounterValue,
-			float64(metrics.GetCPU().GetNrThrottled()),
-			repoPath,
-		)
-
-		ch <- prometheus.MustNewConstMetric(
-			cvh.cpuCFSThrottledTime,
-			prometheus.CounterValue,
-			float64(metrics.GetCPU().GetThrottledUsec())/float64(time.Second),
-			repoPath,
-		)
-
-		cpuKernelMetric := cvh.cpuUsage.WithLabelValues(repoPath, "kernel")
-		cpuKernelMetric.Set(float64(metrics.GetCPU().GetSystemUsec()))
-		ch <- cpuKernelMetric
-
-		// PSI Memory Pressure metrics
-		if memPressure := metrics.GetMemory().GetPSI(); memPressure != nil {
-			if some := memPressure.GetSome(); some != nil {
-				memPressureSomeAvg10 := cvh.memoryPressure.WithLabelValues(repoPath, "some", "avg10")
-				memPressureSomeAvg10.Set(some.GetAvg10())
-				ch <- memPressureSomeAvg10
-
-				memPressureSomeAvg60 := cvh.memoryPressure.WithLabelValues(repoPath, "some", "avg60")
-				memPressureSomeAvg60.Set(some.GetAvg60())
-				ch <- memPressureSomeAvg60
-
-				memPressureSomeAvg300 := cvh.memoryPressure.WithLabelValues(repoPath, "some", "avg300")
-				memPressureSomeAvg300.Set(some.GetAvg300())
-				ch <- memPressureSomeAvg300
-			}
-			if full := memPressure.GetFull(); full != nil {
-				memPressureFullAvg10 := cvh.memoryPressure.WithLabelValues(repoPath, "full", "avg10")
-				memPressureFullAvg10.Set(full.GetAvg10())
-				ch <- memPressureFullAvg10
-
-				memPressureFullAvg60 := cvh.memoryPressure.WithLabelValues(repoPath, "full", "avg60")
-				memPressureFullAvg60.Set(full.GetAvg60())
-				ch <- memPressureFullAvg60
-
-				memPressureFullAvg300 := cvh.memoryPressure.WithLabelValues(repoPath, "full", "avg300")
-				memPressureFullAvg300.Set(full.GetAvg300())
-				ch <- memPressureFullAvg300
-			}
-		}
-
-		// PSI IO Pressure metrics
-		if ioPressure := metrics.GetIo().GetPSI(); ioPressure != nil {
-			if some := ioPressure.GetSome(); some != nil {
-				ioPressureSomeAvg10 := cvh.ioPressure.WithLabelValues(repoPath, "some", "avg10")
-				ioPressureSomeAvg10.Set(some.GetAvg10())
-				ch <- ioPressureSomeAvg10
-
-				ioPressureSomeAvg60 := cvh.ioPressure.WithLabelValues(repoPath, "some", "avg60")
-				ioPressureSomeAvg60.Set(some.GetAvg60())
-				ch <- ioPressureSomeAvg60
-
-				ioPressureSomeAvg300 := cvh.ioPressure.WithLabelValues(repoPath, "some", "avg300")
-				ioPressureSomeAvg300.Set(some.GetAvg300())
-				ch <- ioPressureSomeAvg300
-			}
-			if full := ioPressure.GetFull(); full != nil {
-				ioPressureFullAvg10 := cvh.ioPressure.WithLabelValues(repoPath, "full", "avg10")
-				ioPressureFullAvg10.Set(full.GetAvg10())
-				ch <- ioPressureFullAvg10
-
-				ioPressureFullAvg60 := cvh.ioPressure.WithLabelValues(repoPath, "full", "avg60")
-				ioPressureFullAvg60.Set(full.GetAvg60())
-				ch <- ioPressureFullAvg60
-
-				ioPressureFullAvg300 := cvh.ioPressure.WithLabelValues(repoPath, "full", "avg300")
-				ioPressureFullAvg300.Set(full.GetAvg300())
-				ch <- ioPressureFullAvg300
-			}
-		}
-
-		if cpuPressure := metrics.GetCPU().GetPSI(); cpuPressure != nil {
-			if some := cpuPressure.GetSome(); some != nil {
-				cpuPressureSomeAvg10 := cvh.cpuPressure.WithLabelValues(repoPath, "some", "avg10")
-				cpuPressureSomeAvg10.Set(some.GetAvg10())
-				ch <- cpuPressureSomeAvg10
-
-				cpuPressureSomeAvg60 := cvh.cpuPressure.WithLabelValues(repoPath, "some", "avg60")
-				cpuPressureSomeAvg60.Set(some.GetAvg60())
-				ch <- cpuPressureSomeAvg60
-
-				cpuPressureSomeAvg300 := cvh.cpuPressure.WithLabelValues(repoPath, "some", "avg300")
-				cpuPressureSomeAvg300.Set(some.GetAvg300())
-				ch <- cpuPressureSomeAvg300
-			}
-		}
-
-		// Memory events metrics
-		if memEvents := metrics.GetMemoryEvents(); memEvents != nil {
-			ch <- prometheus.MustNewConstMetric(
-				cvh.memoryEventsHigh,
-				prometheus.CounterValue,
-				float64(memEvents.GetHigh()),
-				repoPath,
-			)
-			ch <- prometheus.MustNewConstMetric(
-				cvh.memoryEventsMax,
-				prometheus.CounterValue,
-				float64(memEvents.GetMax()),
-				repoPath,
-			)
-			ch <- prometheus.MustNewConstMetric(
-				cvh.memoryEventsOOM,
-				prometheus.CounterValue,
-				float64(memEvents.GetOom()),
-				repoPath,
-			)
-		}
-
-		// Page fault metrics
-		ch <- prometheus.MustNewConstMetric(
-			cvh.pgFault,
-			prometheus.CounterValue,
-			float64(metrics.GetMemory().GetPgfault()),
-			repoPath,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			cvh.pgMajFault,
-			prometheus.CounterValue,
-			float64(metrics.GetMemory().GetPgmajfault()),
-			repoPath,
-		)
-	}
-
-	if subsystems, err := control.Controllers(); err != nil {
-		logger.WithError(err).Warn("unable to get cgroup hierarchy")
-	} else {
-		processes, err := control.Procs(true)
-		if err != nil {
-			logger.WithError(err).
-				Warn("unable to get process list")
-			return
-		}
-
-		for _, subsystem := range subsystems {
-			procsMetric := cvh.procs.WithLabelValues(repoPath, subsystem)
-			procsMetric.Set(float64(len(processes)))
-			ch <- procsMetric
-		}
-	}
 }
 
 func (cvh *cgroupV2Handler) repoPath(groupID int) string {
