@@ -159,34 +159,31 @@ func (cvh *cgroupV1Handler) currentProcessCgroup() string {
 	return config.GetGitalyProcessTempDir(cvh.cfg.HierarchyRoot, cvh.pid)
 }
 
-func (cvh *cgroupV1Handler) stats() (Stats, error) {
-	processCgroupPath := cvh.currentProcessCgroup()
-
-	control, err := cvh.loadCgroup(processCgroupPath)
+func (cvh *cgroupV1Handler) stats(path string) (CgroupStats, error) {
+	control, err := cvh.loadCgroup(path)
 	if err != nil {
-		return Stats{}, err
+		return CgroupStats{}, err
 	}
 
 	metrics, err := control.Stat()
 	if err != nil {
-		return Stats{}, fmt.Errorf("failed to fetch metrics %s: %w", processCgroupPath, err)
+		return CgroupStats{}, fmt.Errorf("failed to fetch metrics %s: %w", path, err)
 	}
 
-	return Stats{
-		ParentStats: CgroupStats{
-			CPUThrottledCount:    metrics.GetCPU().GetThrottling().GetThrottledPeriods(),
-			CPUThrottledDuration: float64(metrics.GetCPU().GetThrottling().GetThrottledTime()) / float64(time.Second),
-			MemoryUsage:          metrics.GetMemory().GetUsage().GetUsage(),
-			MemoryLimit:          metrics.GetMemory().GetUsage().GetLimit(),
-			OOMKills:             metrics.GetMemoryOomControl().GetOomKill(),
-			UnderOOM:             metrics.GetMemoryOomControl().GetUnderOom() != 0,
-			TotalAnon:            metrics.GetMemory().GetTotalRSS(),
-			TotalActiveAnon:      metrics.GetMemory().GetTotalActiveAnon(),
-			TotalInactiveAnon:    metrics.GetMemory().GetTotalInactiveAnon(),
-			TotalFile:            metrics.GetMemory().GetTotalCache(),
-			TotalActiveFile:      metrics.GetMemory().GetTotalActiveFile(),
-			TotalInactiveFile:    metrics.GetMemory().GetTotalInactiveFile(),
-		},
+	return CgroupStats{
+		Path:                 path,
+		CPUThrottledCount:    metrics.GetCPU().GetThrottling().GetThrottledPeriods(),
+		CPUThrottledDuration: float64(metrics.GetCPU().GetThrottling().GetThrottledTime()) / float64(time.Second),
+		MemoryUsage:          metrics.GetMemory().GetUsage().GetUsage(),
+		MemoryLimit:          metrics.GetMemory().GetUsage().GetLimit(),
+		OOMKills:             metrics.GetMemoryOomControl().GetOomKill(),
+		UnderOOM:             metrics.GetMemoryOomControl().GetUnderOom() != 0,
+		TotalAnon:            metrics.GetMemory().GetTotalRSS(),
+		TotalActiveAnon:      metrics.GetMemory().GetTotalActiveAnon(),
+		TotalInactiveAnon:    metrics.GetMemory().GetTotalInactiveAnon(),
+		TotalFile:            metrics.GetMemory().GetTotalCache(),
+		TotalActiveFile:      metrics.GetMemory().GetTotalActiveFile(),
+		TotalInactiveFile:    metrics.GetMemory().GetTotalInactiveFile(),
 	}, nil
 }
 

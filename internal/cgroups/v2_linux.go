@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/containerd/cgroups/v3/cgroup2"
+	stats2 "github.com/containerd/cgroups/v3/cgroup2/stats"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
@@ -322,85 +323,63 @@ func (cvh *cgroupV2Handler) currentProcessCgroup() string {
 	return config.GetGitalyProcessTempDir(cvh.cfg.HierarchyRoot, cvh.pid)
 }
 
-func (cvh *cgroupV2Handler) stats() (Stats, error) {
-	processCgroupPath := cvh.currentProcessCgroup()
-
-	control, err := cvh.loadCgroup(processCgroupPath)
+func (cvh *cgroupV2Handler) stats(path string) (CgroupStats, error) {
+	control, err := cvh.loadCgroup(path)
 	if err != nil {
-		return Stats{}, err
+		return CgroupStats{}, err
 	}
 
 	metrics, err := control.Stat()
 	if err != nil {
-		return Stats{}, fmt.Errorf("failed to fetch metrics %s: %w", processCgroupPath, err)
+		return CgroupStats{}, fmt.Errorf("failed to fetch metrics %s: %w", path, err)
 	}
 
-	stats := Stats{
-		ParentStats: CgroupStats{
-			CPUThrottledCount:    metrics.GetCPU().GetNrThrottled(),
-			CPUThrottledDuration: float64(metrics.GetCPU().GetThrottledUsec()) / float64(time.Second),
-			MemoryUsage:          metrics.GetMemory().GetUsage(),
-			MemoryLimit:          metrics.GetMemory().GetUsageLimit(),
-			// memory.stat breaks down the cgroup's memory footprint into different types of memory. In
-			// Cgroup V2, this file includes the consumption of the cgroup's entire subtree. Total_* stats
-			// were removed.
-			TotalAnon:         metrics.GetMemory().GetAnon(),
-			TotalActiveAnon:   metrics.GetMemory().GetActiveAnon(),
-			TotalInactiveAnon: metrics.GetMemory().GetInactiveAnon(),
-			TotalFile:         metrics.GetMemory().GetFile(),
-			TotalActiveFile:   metrics.GetMemory().GetActiveFile(),
-			TotalInactiveFile: metrics.GetMemory().GetInactiveFile(),
-			PgFault:           metrics.GetMemory().GetPgfault(),
-			PgMajFault:        metrics.GetMemory().GetPgmajfault(),
-		},
+	stats := CgroupStats{
+		Path:                 path,
+		CPUThrottledCount:    metrics.GetCPU().GetNrThrottled(),
+		CPUThrottledDuration: float64(metrics.GetCPU().GetThrottledUsec()) / float64(time.Second),
+		MemoryUsage:          metrics.GetMemory().GetUsage(),
+		MemoryLimit:          metrics.GetMemory().GetUsageLimit(),
+		// memory.stat breaks down the cgroup's memory footprint into different types of memory. In
+		// Cgroup V2, this file includes the consumption of the cgroup's entire subtree. Total_* stats
+		// were removed.
+		TotalAnon:         metrics.GetMemory().GetAnon(),
+		TotalActiveAnon:   metrics.GetMemory().GetActiveAnon(),
+		TotalInactiveAnon: metrics.GetMemory().GetInactiveAnon(),
+		TotalFile:         metrics.GetMemory().GetFile(),
+		TotalActiveFile:   metrics.GetMemory().GetActiveFile(),
+		TotalInactiveFile: metrics.GetMemory().GetInactiveFile(),
+		PgFault:           metrics.GetMemory().GetPgfault(),
+		PgMajFault:        metrics.GetMemory().GetPgmajfault(),
 	}
 
 	if memEvents := metrics.GetMemoryEvents(); memEvents != nil {
-		stats.ParentStats.OOMKills = memEvents.GetOomKill()
-		stats.ParentStats.MemoryHighEvents = memEvents.GetHigh()
-		stats.ParentStats.MemoryMaxEvents = memEvents.GetMax()
-		stats.ParentStats.MemoryOOMEvents = memEvents.GetOom()
+		stats.OOMKills = memEvents.GetOomKill()
+		stats.MemoryHighEvents = memEvents.GetHigh()
+		stats.MemoryMaxEvents = memEvents.GetMax()
+		stats.MemoryOOMEvents = memEvents.GetOom()
 	}
 
-	if memPressure := metrics.GetMemory().GetPSI(); memPressure != nil {
-		if some := memPressure.GetSome(); some != nil {
-			stats.ParentStats.MemoryPSI.Some.Avg10 = some.GetAvg10()
-			stats.ParentStats.MemoryPSI.Some.Avg60 = some.GetAvg60()
-			stats.ParentStats.MemoryPSI.Some.Avg300 = some.GetAvg300()
-			stats.ParentStats.MemoryPSI.Some.Total = some.GetTotal()
-		}
-		if full := memPressure.GetFull(); full != nil {
-			stats.ParentStats.MemoryPSI.Full.Avg10 = full.GetAvg10()
-			stats.ParentStats.MemoryPSI.Full.Avg60 = full.GetAvg60()
-			stats.ParentStats.MemoryPSI.Full.Avg300 = full.GetAvg300()
-			stats.ParentStats.MemoryPSI.Full.Total = full.GetTotal()
-		}
-	}
-
-	if ioPressure := metrics.GetIo().GetPSI(); ioPressure != nil {
-		if some := ioPressure.GetSome(); some != nil {
-			stats.ParentStats.IOPSI.Some.Avg10 = some.GetAvg10()
-			stats.ParentStats.IOPSI.Some.Avg60 = some.GetAvg60()
-			stats.ParentStats.IOPSI.Some.Avg300 = some.GetAvg300()
-			stats.ParentStats.IOPSI.Some.Total = some.GetTotal()
-		}
-		if full := ioPressure.GetFull(); full != nil {
-			stats.ParentStats.IOPSI.Full.Avg10 = full.GetAvg10()
-			stats.ParentStats.IOPSI.Full.Avg60 = full.GetAvg60()
-			stats.ParentStats.IOPSI.Full.Avg300 = full.GetAvg300()
-			stats.ParentStats.IOPSI.Full.Total = full.GetTotal()
+	setPSI := func(psim *PSIMetrics, psiStats *stats2.PSIStats) {
+		if psiStats != nil {
+			if some := psiStats.GetSome(); some != nil {
+				psim.Some.Avg10 = some.GetAvg10()
+				psim.Some.Avg60 = some.GetAvg60()
+				psim.Some.Avg300 = some.GetAvg300()
+				psim.Some.Total = some.GetTotal()
+			}
+			if full := psiStats.GetFull(); full != nil {
+				psim.Full.Avg10 = full.GetAvg10()
+				psim.Full.Avg60 = full.GetAvg60()
+				psim.Full.Avg300 = full.GetAvg300()
+				psim.Full.Total = full.GetTotal()
+			}
 		}
 	}
 
-	if cpuPressure := metrics.GetCPU().GetPSI(); cpuPressure != nil {
-		if some := cpuPressure.GetSome(); some != nil {
-			stats.ParentStats.CPUPSI.Some.Avg10 = some.GetAvg10()
-			stats.ParentStats.CPUPSI.Some.Avg60 = some.GetAvg60()
-			stats.ParentStats.CPUPSI.Some.Avg300 = some.GetAvg300()
-			stats.ParentStats.CPUPSI.Some.Total = some.GetTotal()
-		}
-	}
-
+	setPSI(&stats.MemoryPSI, metrics.GetMemory().GetPSI())
+	setPSI(&stats.IOPSI, metrics.GetIo().GetPSI())
+	setPSI(&stats.CPUPSI, metrics.GetCPU().GetPSI())
 	return stats, nil
 }
 

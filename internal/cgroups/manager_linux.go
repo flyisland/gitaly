@@ -34,7 +34,7 @@ type cgroupHandler interface {
 	collect(repoPath string, ch chan<- prometheus.Metric)
 	currentProcessCgroup() string
 	repoPath(groupID int) string
-	stats() (Stats, error)
+	stats(path string) (CgroupStats, error)
 	supportsCloneIntoCgroup() bool
 }
 
@@ -257,7 +257,14 @@ func (cgm *CGroupManager) Collect(ch chan<- prometheus.Metric) {
 // Stats returns cgroup accounting statistics collected by reading
 // cgroupfs files.
 func (cgm *CGroupManager) Stats() (Stats, error) {
-	return cgm.handler.stats()
+	parentStats, err := cgm.handler.stats(cgm.currentProcessCgroup())
+	if err != nil {
+		return Stats{}, err
+	}
+
+	return Stats{
+		ParentStats: parentStats,
+	}, nil
 }
 
 func (cgm *CGroupManager) currentProcessCgroup() string {

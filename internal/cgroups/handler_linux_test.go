@@ -756,7 +756,11 @@ func TestStats(t *testing.T) {
 				{"memory.oom_control", ""},
 				{"cpu.stat", ""},
 			},
-			expectedStats: Stats{},
+			expectedStats: Stats{
+				ParentStats: CgroupStats{
+					Path: "gitaly/gitaly-1",
+				},
+			},
 		},
 		{
 			desc:    "cgroupfs recorded some stats",
@@ -785,6 +789,7 @@ total_active_file 135000000`},
 			},
 			expectedStats: Stats{
 				ParentStats: CgroupStats{
+					Path:                 "gitaly/gitaly-1",
 					CPUThrottledCount:    50,
 					CPUThrottledDuration: 0.001,
 					MemoryUsage:          1234000000,
@@ -808,7 +813,11 @@ total_active_file 135000000`},
 				{"memory.max", "0"},
 				{"cpu.stat", ""},
 			},
-			expectedStats: Stats{},
+			expectedStats: Stats{
+				ParentStats: CgroupStats{
+					Path: "gitaly/gitaly-1",
+				},
+			},
 		},
 		{
 			desc:    "cgroupfs recorded some stats",
@@ -841,6 +850,7 @@ full avg10=5.00 avg60=3.00 avg300=1.50 total=456789`},
 			},
 			expectedStats: Stats{
 				ParentStats: CgroupStats{
+					Path:                 "gitaly/gitaly-1",
 					CPUThrottledCount:    50,
 					CPUThrottledDuration: 0.001,
 					MemoryUsage:          1234000000,

@@ -33,6 +33,8 @@ type PSIMetrics struct {
 // CgroupStats stores the current usage statistics of the resources managed by
 // cgroup manager. They are fetched from the cgroupfs statistic files.
 type CgroupStats struct {
+	// Path is the path to the cgroup
+	Path string
 	// CPUThrottledCount is much the CPU was throttled, this field is fetched from the `nr_throttled` field of
 	// `cpu.stat` file.
 	CPUThrottledCount uint64
@@ -93,9 +95,7 @@ type CgroupStats struct {
 
 // Stats stores statistics of all cgroups managed by a manager
 type Stats struct {
-	// ParentStats stores the statistics of the parent cgroup. There should be
-	// an array of per-repository cgroups, but we haven't used that information
-	// yet.
+	// ParentStats stores the statistics of the parent cgroup.
 	ParentStats CgroupStats
 }
 
