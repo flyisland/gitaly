@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
@@ -110,9 +111,13 @@ type monitorState struct {
 	lastPollInterval time.Duration
 }
 
-type defaultMonitor struct {
+// DefaultMonitor is the default implementation of a LoadMonitor
+type DefaultMonitor struct {
 	// cfg is the configuration for a manager's instance
 	cfg Config
+
+	// metrics holds the various metrics this monitor emits
+	metrics *monitorMetrics
 
 	// logger the logger used in the monitor
 	logger log.Logger
@@ -162,10 +167,10 @@ type defaultMonitor struct {
 	doneCh chan struct{}
 }
 
-var _ Monitor = (*defaultMonitor)(nil)
+var _ Monitor = (*DefaultMonitor)(nil)
 
 // NewLoadMonitor creates a new Monitor using the defaultMonitor implementation.
-func NewLoadMonitor(cfg Config, logger log.Logger, cgroupManager cgroups.Manager) Monitor {
+func NewLoadMonitor(cfg Config, logger log.Logger, cgroupManager cgroups.Manager) *DefaultMonitor {
 	if cfg.PollInterval == 0 {
 		cfg.PollInterval = defaultPollInterval
 	}
@@ -174,9 +179,10 @@ func NewLoadMonitor(cfg Config, logger log.Logger, cgroupManager cgroups.Manager
 		cfg.NotifyTimeout = defaultConditionTimeout
 	}
 
-	m := &defaultMonitor{
+	m := &DefaultMonitor{
 		cfg:           cfg,
 		logger:        logger,
+		metrics:       newMonitorMetrics(),
 		cgroupManager: cgroupManager,
 		state: monitorState{
 			consumers: make([]eventConsumer, 0),
@@ -191,7 +197,7 @@ func NewLoadMonitor(cfg Config, logger log.Logger, cgroupManager cgroups.Manager
 // Start starts the monitor main loop.
 // It polls the stats provider at every `PollInterval` and then calls
 // `notify()` to evaluate all Conditions against the newly polled stats.
-func (m *defaultMonitor) Start(ctx context.Context) error {
+func (m *DefaultMonitor) Start(ctx context.Context) error {
 	if !m.markAsRunning() {
 		return ErrAlreadyStarted
 	}
@@ -223,7 +229,7 @@ func (m *defaultMonitor) Start(ctx context.Context) error {
 				}
 
 				m.notify(ctx)
-				m.collect()
+				m.setMetrics()
 			}
 		}
 	}()
@@ -232,7 +238,7 @@ func (m *defaultMonitor) Start(ctx context.Context) error {
 
 // Stop will stop the Monitor and wait for a graceful shutdown to
 // occur before returning.
-func (m *defaultMonitor) Stop() {
+func (m *DefaultMonitor) Stop() {
 	// Return immediately if the Monitor is not running yet
 	if !m.isRunning() {
 		return
@@ -259,7 +265,7 @@ func (m *defaultMonitor) Stop() {
 // The Conditions are evaluated at every PollInterval.
 // The Monitor will notify the returned Event channel
 // only when a condition is met.
-func (m *defaultMonitor) NotifyOn(conditions ...Condition) (<-chan Event, error) {
+func (m *DefaultMonitor) NotifyOn(conditions ...Condition) (<-chan Event, error) {
 	// Make sure we do not create a consumer while the Monitor is shutting down
 	// as this could lead to this channel not being closed on shutdown.
 	m.shutdownMutex.Lock()
@@ -285,11 +291,21 @@ func (m *defaultMonitor) NotifyOn(conditions ...Condition) (<-chan Event, error)
 	return out, nil
 }
 
+// Describe is used to generate description information for each emitted Prometheus metrics
+func (m *DefaultMonitor) Describe(ch chan<- *prometheus.Desc) {
+	m.metrics.Describe(ch)
+}
+
+// Collect is used to collect the current values of each emitted Prometheus metrics
+func (m *DefaultMonitor) Collect(ch chan<- prometheus.Metric) {
+	m.metrics.Collect(ch)
+}
+
 // poll Polls the StatsProvider to get resource usage information.
 // It then sets the previous and current Stats on the Monitor, which
 // will be used to evaluate the consumer's Condition.
 // This method is not thread safe
-func (m *defaultMonitor) poll() error {
+func (m *DefaultMonitor) poll() error {
 	// Record the time right before polling
 	now := time.Now()
 
@@ -321,7 +337,7 @@ func (m *defaultMonitor) poll() error {
 // the current function, we discard the event if the channel is
 // blocked for writing. It is the consumer's responsibility to
 // read the channel properly.
-func (m *defaultMonitor) notify(ctx context.Context) (timeoutExpired bool) {
+func (m *DefaultMonitor) notify(ctx context.Context) (timeoutExpired bool) {
 	// Consumers can be added via `NotifyOn()` concurrently
 	// to this method. Let's make a copy of the consumers and
 	// work with the copy. That way we don't hold the lock for
@@ -403,13 +419,13 @@ func (m *defaultMonitor) notify(ctx context.Context) (timeoutExpired bool) {
 }
 
 // collect collects Prometheus metrics from the polled stats
-func (m *defaultMonitor) collect() {
-	// TODO: implement later in another MR
+func (m *DefaultMonitor) setMetrics() {
+	m.metrics.setStats(m.state.currentStats)
 }
 
 // shutdown closes all consumer's channel to notify
 // them that the Manager has been closed.
-func (m *defaultMonitor) shutdown() {
+func (m *DefaultMonitor) shutdown() {
 	m.shutdownOnce.Do(func() {
 		m.started.Store(false)
 
@@ -428,11 +444,11 @@ func (m *defaultMonitor) shutdown() {
 
 // markAsRunning returns true if the Monitor can be started, false otherwise.
 // Currently, it only makes sure Start is not called twice using an atomic value.
-func (m *defaultMonitor) markAsRunning() bool {
+func (m *DefaultMonitor) markAsRunning() bool {
 	return m.started.CompareAndSwap(false, true)
 }
 
 // isRunning returns true if the Monitor is already running
-func (m *defaultMonitor) isRunning() bool {
+func (m *DefaultMonitor) isRunning() bool {
 	return m.started.Load()
 }
