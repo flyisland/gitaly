@@ -2,6 +2,8 @@ package ref
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -44,7 +46,12 @@ func (s *server) ListRefs(in *gitalypb.ListRefsRequest, stream gitalypb.RefServi
 	}
 
 	sorting := sortDirectionByEnum[in.GetSortBy().GetDirection()] + sortKeyByEnum[in.GetSortBy().GetKey()]
-	opts := buildFindRefsOpts(ctx, in.GetPaginationParams())
+	paginationParams := in.GetPaginationParams()
+	if paginationParams != nil && paginationParams.GetPageToken() != "" {
+		decodedToken := decodeListRefsPageToken(paginationParams.GetPageToken())
+		paginationParams.PageToken = decodedToken
+	}
+	opts := buildFindRefsOpts(ctx, paginationParams)
 	opts.cmdArgs = []gitcmd.Option{
 		// %00 inserts the null character into the output (see for-each-ref docs)
 		gitcmd.ValueFlag{Name: "--format", Value: strings.Join(format, "%00")},
@@ -128,7 +135,11 @@ func newListRefsWriter(stream gitalypb.RefService_ListRefsServer, headOID git.Ob
 		if len(refNames) > 0 && hasNextPage {
 			lastName := refNames[len(refNames)-1].GetName()
 
-			response.PaginationCursor = &gitalypb.PaginationCursor{NextCursor: string(lastName)}
+			encodedCursor, err := encodeListRefsPageToken(string(lastName))
+			if err != nil {
+				return fmt.Errorf("encoding page token: %w", err)
+			}
+			response.PaginationCursor = &gitalypb.PaginationCursor{NextCursor: encodedCursor}
 		}
 
 		return stream.Send(response)
@@ -145,4 +156,38 @@ var sortKeyByEnum = map[gitalypb.ListRefsRequest_SortBy_Key]string{
 var sortDirectionByEnum = map[gitalypb.SortDirection]string{
 	gitalypb.SortDirection_ASCENDING:  "",
 	gitalypb.SortDirection_DESCENDING: "-",
+}
+
+type listRefsPageToken struct {
+	RefName string `json:"ref_name"`
+}
+
+// encodeListRefsPageToken encodes a ref name into a base64-encoded JSON page token.
+func encodeListRefsPageToken(refName string) (string, error) {
+	jsonEncoded, err := json.Marshal(listRefsPageToken{RefName: refName})
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(jsonEncoded), nil
+}
+
+// decodeListRefsPageToken decodes a page token. If the token is a valid base64-encoded
+// JSON struct with a non-empty ref_name, it extracts the ref name. Otherwise, it falls
+// back to treating the token as a raw ref name for backward compatibility.
+func decodeListRefsPageToken(token string) string {
+	decodedBytes, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return token
+	}
+
+	var pt listRefsPageToken
+	if err := json.Unmarshal(decodedBytes, &pt); err != nil {
+		return token
+	}
+
+	if pt.RefName == "" {
+		return token
+	}
+
+	return pt.RefName
 }
