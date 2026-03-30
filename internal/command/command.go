@@ -658,7 +658,6 @@ func (c *Command) logProcessComplete() {
 	rusage, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage)
 	if ok {
 		entry = entry.WithFields(log.Fields{
-			"command.maxrss":  rusage.Maxrss,
 			"command.inblock": rusage.Inblock,
 			"command.oublock": rusage.Oublock,
 		})
@@ -690,7 +689,6 @@ func (c *Command) logProcessComplete() {
 		customFields.RecordSum("command.real_time_ms", int(realTime.Milliseconds()))
 
 		if ok {
-			customFields.RecordMax("command.maxrss", int(rusage.Maxrss))
 			customFields.RecordSum("command.inblock", int(rusage.Inblock))
 			customFields.RecordSum("command.oublock", int(rusage.Oublock))
 			customFields.RecordSum("command.minflt", int(rusage.Minflt))
@@ -730,7 +728,6 @@ func (c *Command) logProcessComplete() {
 
 	if ok {
 		attributes = append(attributes,
-			attribute.Int64("maxrss", rusage.Maxrss),
 			attribute.Int64("inblock", rusage.Inblock),
 			attribute.Int64("oublock", rusage.Oublock),
 			attribute.Int64("minflt", rusage.Minflt),
