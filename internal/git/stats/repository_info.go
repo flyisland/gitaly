@@ -332,9 +332,9 @@ type LooseObjectsInfo struct {
 	GarbageSize uint64 `json:"garbage_size"`
 }
 
-// LooseObjectsInfoForRepository derives information about loose objects in the repository. If a
-// cutoff date is given, then this function will only take into account objects which are older than
-// the given point in time.
+// LooseObjectsInfoForRepository derives information about loose objects in the repository. Loose objects
+// created before cutoffDate are also counted as stale objects. cutoffDate should typically be provided
+// as time.Now().Add(stats.StaleObjectsGracePeriod) to align with housekeeping.
 func LooseObjectsInfoForRepository(ctx context.Context, repo *localrepo.Repo, cutoffDate time.Time) (LooseObjectsInfo, error) {
 	repoPath, err := repo.Path(ctx)
 	if err != nil {
