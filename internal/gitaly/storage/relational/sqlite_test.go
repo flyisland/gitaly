@@ -29,7 +29,7 @@ func TestSQLitePoolStore(t *testing.T) {
 		},
 	}
 
-	err = store.StorePoolData(ctx, pools)
+	err = store.StorePoolData(ctx, "default", pools)
 	require.NoError(t, err)
 
 	pool, err := store.GetPoolByDiskPath(ctx, "/path/to/pool1.git")
@@ -143,4 +143,66 @@ func TestIsUpstreamSetCorrectly(t *testing.T) {
 	`).Scan(&upstreamMemberID)
 	require.NoError(t, err)
 	require.Equal(t, "@hashed/xx/yy/member2.git", upstreamMemberID, "upstream should be member2.git")
+}
+
+func TestStorePoolDataScopedToStorage(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "pools.db")
+
+	store, err := NewSQLitePoolStore(dbPath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, store)
+
+	err = store.StorePoolData(ctx, "storage-a", map[string]*PoolMetadata{
+		"@pools/aa/pool1.git": {
+			DiskPath:    "@pools/aa/pool1.git",
+			StorageNode: "storage-b",
+			Members:     []string{"repo-a1.git"},
+			UpdatedAt:   time.Now(),
+		},
+	})
+	require.NoError(t, err)
+
+	err = store.StorePoolData(ctx, "storage-b", map[string]*PoolMetadata{
+		"@pools/bb/pool2.git": {
+			DiskPath:    "@pools/bb/pool2.git",
+			StorageNode: "storage-b",
+			Members:     []string{"repo-b1.git"},
+			UpdatedAt:   time.Now(),
+		},
+	})
+	require.NoError(t, err)
+
+	poolA, err := store.GetPoolByDiskPath(ctx, "@pools/aa/pool1.git")
+	require.NoError(t, err)
+	require.NotNil(t, poolA, "storage-a pool should still exist after storing storage-b data")
+	require.Equal(t, "storage-a", poolA.StorageNode)
+
+	poolB, err := store.GetPoolByDiskPath(ctx, "@pools/bb/pool2.git")
+	require.NoError(t, err)
+	require.NotNil(t, poolB)
+	require.Equal(t, "storage-b", poolB.StorageNode)
+
+	err = store.ForEachPoolByStorage(ctx, "storage-a", func(pool *PoolMetadata) error {
+		require.Equal(t, "@pools/aa/pool1.git", pool.DiskPath)
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = store.ForEachPoolByStorage(ctx, "storage-b", func(pool *PoolMetadata) error {
+		require.Equal(t, "@pools/bb/pool2.git", pool.DiskPath)
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = store.StorePoolData(ctx, "storage-a", map[string]*PoolMetadata{})
+	require.NoError(t, err)
+
+	poolA, err = store.GetPoolByDiskPath(ctx, "@pools/aa/pool1.git")
+	require.NoError(t, err)
+	require.Nil(t, poolA, "storage-a pool should be cleared after empty rescan")
+
+	poolB, err = store.GetPoolByDiskPath(ctx, "@pools/bb/pool2.git")
+	require.NoError(t, err)
+	require.NotNil(t, poolB, "storage-b pool should be untouched")
 }
