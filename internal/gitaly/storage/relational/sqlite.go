@@ -56,8 +56,9 @@ func (s *SQLitePoolStore) Close() error {
 	return s.db.Close()
 }
 
-// StorePoolData stores the given pool metadata in the database.
-func (s *SQLitePoolStore) StorePoolData(ctx context.Context, poolsByDiskPath map[string]*PoolMetadata) (returnErr error) {
+// StorePoolData stores the given pool metadata in the database, replacing all
+// existing data for the specified storage.
+func (s *SQLitePoolStore) StorePoolData(ctx context.Context, storageName string, poolsByDiskPath map[string]*PoolMetadata) (returnErr error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)

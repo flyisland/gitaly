@@ -21,10 +21,11 @@ func TestSQLitePoolStore(t *testing.T) {
 
 	pools := map[string]*PoolMetadata{
 		"/path/to/pool1.git": {
-			DiskPath:  "/path/to/pool1.git",
-			Members:   []string{"member1.git", "member2.git"},
-			Upstream:  "member1.git",
-			UpdatedAt: time.Now(),
+			DiskPath:    "/path/to/pool1.git",
+			StorageNode: "default",
+			Members:     []string{"member1.git", "member2.git"},
+			Upstream:    "member1.git",
+			UpdatedAt:   time.Now(),
 		},
 	}
 
@@ -90,14 +91,15 @@ func TestOneUpstreamPerPoolConstraint(t *testing.T) {
 
 	pools := map[string]*PoolMetadata{
 		"/path/to/pool1.git": {
-			DiskPath:  "/path/to/pool1.git",
-			Members:   []string{"member1.git", "member2.git"},
-			Upstream:  "member1.git",
-			UpdatedAt: time.Now(),
+			DiskPath:    "/path/to/pool1.git",
+			StorageNode: "default",
+			Members:     []string{"member1.git", "member2.git"},
+			Upstream:    "member1.git",
+			UpdatedAt:   time.Now(),
 		},
 	}
 
-	err = store.StorePoolData(ctx, pools)
+	err = store.StorePoolData(ctx, "default", pools)
 	require.NoError(t, err)
 
 	_, err = store.db.ExecContext(ctx, `
@@ -117,14 +119,15 @@ func TestIsUpstreamSetCorrectly(t *testing.T) {
 
 	pools := map[string]*PoolMetadata{
 		"@hashed/ab/cd/pool1.git": {
-			DiskPath:  "@hashed/ab/cd/pool1.git",
-			Members:   []string{"@hashed/xx/yy/member1.git", "@hashed/xx/yy/member2.git", "@hashed/xx/yy/member3.git"},
-			Upstream:  "@hashed/xx/yy/member2.git",
-			UpdatedAt: time.Now(),
+			DiskPath:    "@hashed/ab/cd/pool1.git",
+			StorageNode: "default",
+			Members:     []string{"@hashed/xx/yy/member1.git", "@hashed/xx/yy/member2.git", "@hashed/xx/yy/member3.git"},
+			Upstream:    "@hashed/xx/yy/member2.git",
+			UpdatedAt:   time.Now(),
 		},
 	}
 
-	err = store.StorePoolData(ctx, pools)
+	err = store.StorePoolData(ctx, "default", pools)
 	require.NoError(t, err)
 
 	var upstreamCount int

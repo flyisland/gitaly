@@ -16,7 +16,7 @@ type PoolMetadata struct {
 
 // PoolStore provides storage for object pool metadata.
 type PoolStore interface {
-	StorePoolData(ctx context.Context, poolsByDiskPath map[string]*PoolMetadata) error
+	StorePoolData(ctx context.Context, storageName string, poolsByDiskPath map[string]*PoolMetadata) error
 	GetPoolByDiskPath(ctx context.Context, poolDiskPath string) (*PoolMetadata, error)
 	ListPools(ctx context.Context) ([]*PoolMetadata, error)
 	ForEachPoolByStorage(ctx context.Context, storageName string, fn func(*PoolMetadata) error) error

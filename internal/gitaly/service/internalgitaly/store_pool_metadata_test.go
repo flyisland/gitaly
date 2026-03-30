@@ -47,7 +47,7 @@ func TestStorePoolMetadata(t *testing.T) {
 	t.Run("successful store single pool", func(t *testing.T) {
 		var storedPools map[string]*relational.PoolMetadata
 		mockStore := &mockPoolStore{
-			storePoolDataFunc: func(_ context.Context, poolsByDiskPath map[string]*relational.PoolMetadata) error {
+			storePoolDataFunc: func(_ context.Context, _ string, poolsByDiskPath map[string]*relational.PoolMetadata) error {
 				storedPools = poolsByDiskPath
 				return nil
 			},
@@ -86,10 +86,33 @@ func TestStorePoolMetadata(t *testing.T) {
 		require.Equal(t, "repo1.git", pool.Upstream)
 	})
 
+	t.Run("empty storage name is invalid", func(t *testing.T) {
+		mockStore := &mockPoolStore{
+			storePoolDataFunc: func(_ context.Context, _ string, _ map[string]*relational.PoolMetadata) error {
+				t.Fatal("expected pool store not to be called")
+				return nil
+			},
+		}
+
+		_, client := setupWithPoolStore(t, mockStore)
+
+		stream, err := client.StorePoolMetadata(ctx)
+		require.NoError(t, err)
+
+		err = stream.Send(&gitalypb.StorePoolMetadataRequest{
+			RelativePath: "repo1.git",
+			PoolDiskPath: "@pools/aa/bb/pool1.git",
+		})
+		require.NoError(t, err)
+
+		_, err = stream.CloseAndRecv()
+		testhelper.RequireGrpcError(t, structerr.NewInvalidArgument("storage_name is required"), err)
+	})
+
 	t.Run("successful store multiple pools", func(t *testing.T) {
 		var storedPools map[string]*relational.PoolMetadata
 		mockStore := &mockPoolStore{
-			storePoolDataFunc: func(_ context.Context, poolsByDiskPath map[string]*relational.PoolMetadata) error {
+			storePoolDataFunc: func(_ context.Context, _ string, poolsByDiskPath map[string]*relational.PoolMetadata) error {
 				storedPools = poolsByDiskPath
 				return nil
 			},
@@ -125,7 +148,7 @@ func TestStorePoolMetadata(t *testing.T) {
 
 	t.Run("store error", func(t *testing.T) {
 		mockStore := &mockPoolStore{
-			storePoolDataFunc: func(_ context.Context, poolsByDiskPath map[string]*relational.PoolMetadata) error {
+			storePoolDataFunc: func(_ context.Context, _ string, poolsByDiskPath map[string]*relational.PoolMetadata) error {
 				return structerr.NewInternal("database error")
 			},
 		}
