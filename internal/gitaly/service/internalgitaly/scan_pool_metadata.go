@@ -1,11 +1,16 @@
 package internalgitaly
 
 import (
+	"context"
+	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/walk"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
@@ -19,7 +24,20 @@ func (s *server) ScanPoolMetadata(req *gitalypb.ScanPoolMetadataRequest, stream 
 		return structerr.NewInvalidArgument("get storage: %w", err)
 	}
 
-	sendPoolMember := func(relPath string, _ fs.FileInfo) error {
+	processPoolMember := processPoolMemberFunc(ctx, storagePath, storageName, s.gitlabClient, stream)
+
+	if err := walk.FindRepositories(ctx, s.locator, storageName, processPoolMember); err != nil {
+		return structerr.NewInternal("%w", err)
+	}
+
+	return nil
+}
+
+func processPoolMemberFunc(ctx context.Context, storagePath, storageName string, gitlabClient gitlab.Client, stream gitalypb.InternalGitaly_ScanPoolMetadataServer) func(relPath string, _ fs.FileInfo) error {
+	poolUpstreams := make(map[string]gitlab.ObjectPoolMember)
+	var poolUpstreamsMu sync.Mutex
+
+	return func(relPath string, fi fs.FileInfo) error {
 		repoPath := filepath.Join(storagePath, relPath)
 
 		altInfo, err := stats.AlternatesInfoForRepository(repoPath)
@@ -45,15 +63,35 @@ func (s *server) ScanPoolMetadata(req *gitalypb.ScanPoolMetadataRequest, stream 
 		}
 		poolDiskPath = filepath.ToSlash(poolDiskPath)
 
+		poolUpstreamsMu.Lock()
+		defer poolUpstreamsMu.Unlock()
+
+		if _, ok := poolUpstreams[poolDiskPath]; !ok {
+			members, err := gitlabClient.ObjectPoolMembers(ctx, strings.TrimSuffix(poolDiskPath, ".git"), storageName, true)
+			if err != nil {
+				return fmt.Errorf("query Rails: %w", err)
+			}
+
+			poolUpstreams[poolDiskPath] = gitlab.ObjectPoolMember{}
+
+			// There should only be one upstream. If there's no upstream, we don't error here
+			// in order to reveal the issue back to the user.
+			if len(members) == 1 && members[0].Public {
+				poolUpstreams[poolDiskPath] = members[0]
+			}
+		}
+
+		var isUpstream bool
+		if member, ok := poolUpstreams[poolDiskPath]; ok {
+			if member.RelativePath == relPath {
+				isUpstream = true
+			}
+		}
+
 		return stream.Send(&gitalypb.ScanPoolMetadataResponse{
 			RelativePath: relPath,
 			PoolDiskPath: poolDiskPath,
+			IsUpstream:   isUpstream,
 		})
 	}
-
-	if err := walk.FindRepositories(ctx, s.locator, storageName, sendPoolMember); err != nil {
-		return structerr.NewInternal("%w", err)
-	}
-
-	return nil
 }

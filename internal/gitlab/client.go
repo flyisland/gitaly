@@ -34,6 +34,17 @@ type PostReceiveMessage struct {
 	Type    string `json:"type"`
 }
 
+// ObjectPoolMember represents a member repository of an object pool as returned by the
+// /internal/gitaly/object_pool_members API.
+type ObjectPoolMember struct {
+	// RelativePath is the relative path of the member repository (including the .git extension).
+	RelativePath string `json:"relative_path"`
+	// Public is whether the member repository is public.
+	Public bool `json:"public"`
+	// IsUpstream is whether the member repository is the source repository of the object pool.
+	IsUpstream bool `json:"is_upstream"`
+}
+
 // CheckInfo represents the response of GitLabs `check` API endpoint
 type CheckInfo struct {
 	// Version of the GitLab Rails component
@@ -58,4 +69,7 @@ type Client interface {
 	PreReceive(ctx context.Context, glRepository string) (bool, error)
 	// PostReceive queries the gitlab internal api /post_receive to decrease the reference counter
 	PostReceive(ctx context.Context, glRepository, glID, changes string, clientContext []byte, pushOptions ...string) (bool, []PostReceiveMessage, error)
+	// ObjectPoolMembers queries the GitLab internal API /gitaly/object_pool_members to list
+	// member repositories of an object pool.
+	ObjectPoolMembers(ctx context.Context, diskPath, storage string, upstreamOnly bool) ([]ObjectPoolMember, error)
 }

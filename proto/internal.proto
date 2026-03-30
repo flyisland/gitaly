@@ -64,7 +64,7 @@ message WalkReposResponse {
   google.protobuf.Timestamp modification_time = 2;
 }
 
-// ScanPoolMetadataRequest initiates a scan of a storage for repository-to-pool relationships 
+// ScanPoolMetadataRequest initiates a scan of a storage for repository-to-pool relationships
 // by reading alternates files. It contains the name of the storage to scan.
 message ScanPoolMetadataRequest {
   // storage_name is the name of the storage to scan.
@@ -77,6 +77,8 @@ message ScanPoolMetadataResponse {
   string relative_path = 1;
   // pool_disk_path is the disk path of the object pool the repository is linked to.
   string pool_disk_path = 2;
+  // is_upstream indicates if this repository is the upstream/source repository for the pool.
+  bool is_upstream = 3;
 }
 
 // StorePoolMetadataRequest contains a single repository-to-pool relationship to store.

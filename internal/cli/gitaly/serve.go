@@ -820,6 +820,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			MigrationStateManager:  migration.NewStateManager(&migrations),
 			ArchiveCache:           archiveStreamCache,
 			PoolMetadataStore:      poolMetadataStore,
+			GitlabClient:           gitlabClient,
 		})
 		b.RegisterStarter(starter.New(c, srv, logger))
 	}

@@ -178,7 +178,9 @@ type ScanPoolMetadataResponse struct {
 	// relative_path is the relative path of the repository.
 	RelativePath string `protobuf:"bytes,1,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
 	// pool_disk_path is the disk path of the object pool the repository is linked to.
-	PoolDiskPath  string `protobuf:"bytes,2,opt,name=pool_disk_path,json=poolDiskPath,proto3" json:"pool_disk_path,omitempty"`
+	PoolDiskPath string `protobuf:"bytes,2,opt,name=pool_disk_path,json=poolDiskPath,proto3" json:"pool_disk_path,omitempty"`
+	// is_upstream indicates if this repository is the upstream/source repository for the pool.
+	IsUpstream    bool `protobuf:"varint,3,opt,name=is_upstream,json=isUpstream,proto3" json:"is_upstream,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -225,6 +227,13 @@ func (x *ScanPoolMetadataResponse) GetPoolDiskPath() string {
 		return x.PoolDiskPath
 	}
 	return ""
+}
+
+func (x *ScanPoolMetadataResponse) GetIsUpstream() bool {
+	if x != nil {
+		return x.IsUpstream
+	}
+	return false
 }
 
 // StorePoolMetadataRequest contains a single repository-to-pool relationship to store.
@@ -441,10 +450,12 @@ const file_internal_proto_rawDesc = "" +
 	"\rrelative_path\x18\x01 \x01(\tR\frelativePath\x12G\n" +
 	"\x11modification_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10modificationTime\"B\n" +
 	"\x17ScanPoolMetadataRequest\x12'\n" +
-	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\"e\n" +
+	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\"\x86\x01\n" +
 	"\x18ScanPoolMetadataResponse\x12#\n" +
 	"\rrelative_path\x18\x01 \x01(\tR\frelativePath\x12$\n" +
-	"\x0epool_disk_path\x18\x02 \x01(\tR\fpoolDiskPath\"\xaf\x01\n" +
+	"\x0epool_disk_path\x18\x02 \x01(\tR\fpoolDiskPath\x12\x1f\n" +
+	"\vis_upstream\x18\x03 \x01(\bR\n" +
+	"isUpstream\"\xaf\x01\n" +
 	"\x18StorePoolMetadataRequest\x12'\n" +
 	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\x12#\n" +
 	"\rrelative_path\x18\x02 \x01(\tR\frelativePath\x12$\n" +
