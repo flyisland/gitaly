@@ -18,7 +18,7 @@ import (
 type mockPoolStore struct {
 	relational.PoolStore
 	forEachPoolByStorageFunc func(ctx context.Context, storageName string, fn func(*relational.PoolMetadata) error) error
-	storePoolDataFunc        func(ctx context.Context, poolsByDiskPath map[string]*relational.PoolMetadata) error
+	storePoolDataFunc        func(ctx context.Context, storageName string, poolsByDiskPath map[string]*relational.PoolMetadata) error
 }
 
 func (m *mockPoolStore) ForEachPoolByStorage(ctx context.Context, storageName string, fn func(*relational.PoolMetadata) error) error {
@@ -28,9 +28,9 @@ func (m *mockPoolStore) ForEachPoolByStorage(ctx context.Context, storageName st
 	return nil
 }
 
-func (m *mockPoolStore) StorePoolData(ctx context.Context, poolsByDiskPath map[string]*relational.PoolMetadata) error {
+func (m *mockPoolStore) StorePoolData(ctx context.Context, storageName string, poolsByDiskPath map[string]*relational.PoolMetadata) error {
 	if m.storePoolDataFunc != nil {
-		return m.storePoolDataFunc(ctx, poolsByDiskPath)
+		return m.storePoolDataFunc(ctx, storageName, poolsByDiskPath)
 	}
 	return nil
 }

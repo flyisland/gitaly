@@ -29,6 +29,9 @@ func (s *server) StorePoolMetadata(stream gitalypb.InternalGitaly_StorePoolMetad
 
 		if storageName == "" {
 			storageName = req.GetStorageName()
+			if storageName == "" {
+				return structerr.NewInvalidArgument("storage_name is required")
+			}
 		}
 
 		relPath := req.GetRelativePath()
@@ -52,7 +55,7 @@ func (s *server) StorePoolMetadata(stream gitalypb.InternalGitaly_StorePoolMetad
 	}
 
 	if len(poolsByDiskPath) > 0 {
-		if err := s.poolStore.StorePoolData(stream.Context(), poolsByDiskPath); err != nil {
+		if err := s.poolStore.StorePoolData(stream.Context(), storageName, poolsByDiskPath); err != nil {
 			return structerr.NewInternal("store pool data: %w", err)
 		}
 	}

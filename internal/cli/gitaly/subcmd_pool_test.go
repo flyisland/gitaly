@@ -24,14 +24,15 @@ func TestPoolSQLStore(t *testing.T) {
 
 	poolsByDiskPath := map[string]*relational.PoolMetadata{
 		"pools/pool": {
-			DiskPath:  "pools/pool",
-			Members:   []string{"group/project1.git", "group/project2.git"},
-			Upstream:  "group/project1.git",
-			UpdatedAt: time.Now(),
+			DiskPath:    "pools/pool",
+			StorageNode: "default",
+			Members:     []string{"group/project1.git", "group/project2.git"},
+			Upstream:    "group/project1.git",
+			UpdatedAt:   time.Now(),
 		},
 	}
 
-	err = db.StorePoolData(ctx, poolsByDiskPath)
+	err = db.StorePoolData(ctx, "default", poolsByDiskPath)
 	require.NoError(t, err)
 
 	pool, err := db.GetPoolByDiskPath(ctx, "pools/pool")

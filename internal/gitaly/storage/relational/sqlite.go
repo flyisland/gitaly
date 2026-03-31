@@ -56,8 +56,9 @@ func (s *SQLitePoolStore) Close() error {
 	return s.db.Close()
 }
 
-// StorePoolData stores the given pool metadata in the database.
-func (s *SQLitePoolStore) StorePoolData(ctx context.Context, poolsByDiskPath map[string]*PoolMetadata) (returnErr error) {
+// StorePoolData stores the given pool metadata in the database, replacing all
+// existing data for the specified storage.
+func (s *SQLitePoolStore) StorePoolData(ctx context.Context, storageName string, poolsByDiskPath map[string]*PoolMetadata) (returnErr error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -68,12 +69,16 @@ func (s *SQLitePoolStore) StorePoolData(ctx context.Context, poolsByDiskPath map
 		}
 	}()
 
+	if _, err := tx.ExecContext(ctx, `DELETE FROM pool_members WHERE pool_disk_path IN (SELECT disk_path FROM pools WHERE storage = ?)`, storageName); err != nil {
+		return fmt.Errorf("delete pool members: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM pools WHERE storage = ?`, storageName); err != nil {
+		return fmt.Errorf("delete pools: %w", err)
+	}
+
 	poolStmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO pools (disk_path, storage, last_scanned)
 		VALUES (?, ?, ?)
-		ON CONFLICT(disk_path) DO UPDATE SET
-			storage = excluded.storage,
-			last_scanned = excluded.last_scanned
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare pool statement: %w", err)
@@ -83,9 +88,6 @@ func (s *SQLitePoolStore) StorePoolData(ctx context.Context, poolsByDiskPath map
 	memberStmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO pool_members (member_disk_path, pool_disk_path, is_upstream)
 		VALUES (?, ?, ?)
-		ON CONFLICT(member_disk_path) DO UPDATE SET 
-			pool_disk_path = excluded.pool_disk_path,
-			is_upstream = excluded.is_upstream
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare member statement: %w", err)
@@ -93,7 +95,7 @@ func (s *SQLitePoolStore) StorePoolData(ctx context.Context, poolsByDiskPath map
 	defer func() { returnErr = errors.Join(returnErr, memberStmt.Close()) }()
 
 	for diskPath, pool := range poolsByDiskPath {
-		_, err := poolStmt.ExecContext(ctx, diskPath, pool.StorageNode, pool.UpdatedAt)
+		_, err := poolStmt.ExecContext(ctx, diskPath, storageName, pool.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("insert pool %s: %w", diskPath, err)
 		}
