@@ -96,6 +96,18 @@ type CgroupStats struct {
 type Stats struct {
 	// ParentStats stores the statistics of the parent cgroup.
 	ParentStats CgroupStats
+	// isEmpty  is an internal field used to identify if the Stats are from an enabled
+	// cgroup manager, or from a NoopManager. When set to true, all Stats values should
+	// be discarded (all values should be zero/empty values anyway) because it means the
+	// cgroup manager is not running. This is currently only used from the NoopManager.
+	isEmpty bool
+}
+
+// IsEmpty returns true if the Stats fields are all set to
+// zero/empty values. This is most likely because they are
+// returned from the NoopManager.
+func (s Stats) IsEmpty() bool {
+	return s.isEmpty
 }
 
 // AddCommandOption is an option that can be passed to AddCommand.

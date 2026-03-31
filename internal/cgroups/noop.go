@@ -15,7 +15,7 @@ func (cg *NoopManager) Ready() bool {
 
 //nolint:revive // This is unintentionally missing documentation.
 func (cg *NoopManager) Stats() (Stats, error) {
-	return Stats{}, nil
+	return Stats{isEmpty: true}, nil
 }
 
 //nolint:revive // This is unintentionally missing documentation.
