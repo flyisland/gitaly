@@ -16,7 +16,6 @@ func libp2pMuxConfig(logger log.Logger, cfg Configuration) *libp2pyamux.Config {
 	yamuxCfg.EnableKeepAlive = false
 	yamuxCfg.AcceptBacklog = cfg.AcceptBacklog
 	yamuxCfg.MaxStreamWindowSize = cfg.MaximumStreamWindowSizeBytes
-	yamuxCfg.ConnectionWriteTimeout = cfg.StreamCloseTimeout
 
 	return yamuxCfg
 }
