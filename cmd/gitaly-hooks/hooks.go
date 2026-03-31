@@ -371,6 +371,11 @@ func referenceTransactionHook(ctx context.Context, payload gitcmd.HooksPayload, 
 
 	var state gitalypb.ReferenceTransactionHookRequest_State
 	switch args[0] {
+	case "preparing":
+		// state = gitalypb.ReferenceTransactionHookRequest_PREPARING
+		// Skip invoking the RPC for the "preparing" phase as the server-side handler
+		// is currently a no-op for this state.
+		return nil
 	case "prepared":
 		state = gitalypb.ReferenceTransactionHookRequest_PREPARED
 	case "committed":

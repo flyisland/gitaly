@@ -40,7 +40,7 @@ type ExecConfig struct {
 // Exec runs a git command and returns the standard output, or fails.
 func Exec(tb testing.TB, cfg config.Cfg, args ...string) []byte {
 	tb.Helper()
-	
+
 	return ExecOpts(tb, cfg, ExecConfig{}, args...)
 }
 
