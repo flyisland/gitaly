@@ -101,6 +101,12 @@ type Stats struct {
 	// be discarded (all values should be zero/empty values anyway) because it means the
 	// cgroup manager is not running. This is currently only used from the NoopManager.
 	isEmpty bool
+
+	// version holds the group version for this Stats instance.
+	// 0: Noop (not set)
+	// 1: v1
+	// 2: v2
+	version uint8
 }
 
 // IsEmpty returns true if the Stats fields are all set to
@@ -108,6 +114,16 @@ type Stats struct {
 // returned from the NoopManager.
 func (s Stats) IsEmpty() bool {
 	return s.isEmpty
+}
+
+// CgroupV1 returns true of the cgroup version is 1
+func (s Stats) CgroupV1() bool {
+	return !s.IsEmpty() && s.version == 1
+}
+
+// CgroupV2 returns true of the cgroup version is 2
+func (s Stats) CgroupV2() bool {
+	return !s.IsEmpty() && s.version == 2
 }
 
 // AddCommandOption is an option that can be passed to AddCommand.

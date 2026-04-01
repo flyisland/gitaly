@@ -80,13 +80,14 @@ type randomizer interface {
 
 // CGroupManager is a manager class that implements specific methods related to cgroups
 type CGroupManager struct {
-	cfg     cgroupscfg.Config
-	pid     int
-	enabled bool
-	repoRes *specs.LinuxResources
-	status  *cgroupStatus
-	handler cgroupHandler
-	rand    randomizer
+	cfg           cgroupscfg.Config
+	pid           int
+	enabled       bool
+	cgroupVersion uint8
+	repoRes       *specs.LinuxResources
+	status        *cgroupStatus
+	handler       cgroupHandler
+	rand          randomizer
 }
 
 func newCgroupManager(cfg cgroupscfg.Config, logger log.Logger, pid int) *CGroupManager {
@@ -95,10 +96,14 @@ func newCgroupManager(cfg cgroupscfg.Config, logger log.Logger, pid int) *CGroup
 
 func newCgroupManagerWithMode(cfg cgroupscfg.Config, logger log.Logger, pid int, mode cgrps.CGMode) *CGroupManager {
 	var handler cgroupHandler
+
+	var cgroupVersion uint8
 	switch mode {
 	case cgrps.Legacy, cgrps.Hybrid:
+		cgroupVersion = 1
 		handler = newV1Handler(cfg, logger, pid)
 	case cgrps.Unified:
+		cgroupVersion = 2
 		handler = newV2Handler(cfg, logger, pid)
 		logger.Warn("Gitaly now includes experimental support for CgroupV2. Please proceed with caution and use this experimental feature at your own risk")
 	default:
@@ -107,12 +112,13 @@ func newCgroupManagerWithMode(cfg cgroupscfg.Config, logger log.Logger, pid int,
 	}
 
 	return &CGroupManager{
-		cfg:     cfg,
-		pid:     pid,
-		handler: handler,
-		repoRes: configRepositoryResources(cfg),
-		status:  newCgroupStatus(cfg, handler.repoPath),
-		rand:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		cfg:           cfg,
+		pid:           pid,
+		cgroupVersion: cgroupVersion,
+		handler:       handler,
+		repoRes:       configRepositoryResources(cfg),
+		status:        newCgroupStatus(cfg, handler.repoPath),
+		rand:          rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 

@@ -70,48 +70,51 @@ func (mm *monitorMetrics) Collect(ch chan<- prometheus.Metric) {
 
 	// Block for Cgroups metrics
 	{
-		metrics := mm.cgroups
-		setPsi := func(path string, m *prometheus.GaugeVec, psi cgroups.PSIMetrics, some, full bool) {
-			if some {
-				m.WithLabelValues(path, "some", "avg10").Set(psi.Some.Avg10)
-				m.WithLabelValues(path, "some", "avg60").Set(psi.Some.Avg60)
-				m.WithLabelValues(path, "some", "avg300").Set(psi.Some.Avg300)
+		// Currently all custom metrics emitted for cgroups are only available
+		// when cgroup V2 is enabled.
+		if stats.CGroup.CgroupV2() {
+			metrics := mm.cgroups
+			setPsi := func(path string, m *prometheus.GaugeVec, psi cgroups.PSIMetrics, some, full bool) {
+				if some {
+					m.WithLabelValues(path, "some", "avg10").Set(psi.Some.Avg10)
+					m.WithLabelValues(path, "some", "avg60").Set(psi.Some.Avg60)
+					m.WithLabelValues(path, "some", "avg300").Set(psi.Some.Avg300)
+				}
+				if full {
+					m.WithLabelValues(path, "full", "avg10").Set(psi.Full.Avg10)
+					m.WithLabelValues(path, "full", "avg60").Set(psi.Full.Avg60)
+					m.WithLabelValues(path, "full", "avg300").Set(psi.Full.Avg300)
+				}
 			}
-			if full {
-				m.WithLabelValues(path, "full", "avg10").Set(psi.Full.Avg10)
-				m.WithLabelValues(path, "full", "avg60").Set(psi.Full.Avg60)
-				m.WithLabelValues(path, "full", "avg300").Set(psi.Full.Avg300)
-			}
+			cgs := stats.CGroup.ParentStats
 
+			// The Linux kernel does not emit `full` values for CPU. `full` reports
+			// when ALL non-idle tasks are stalled waiting for CPU time. This makes
+			// sense for memory and I/O, where all non-idle tasks can be stalled
+			// waiting for memory (i.e.: paging) or I/O. But for CPU, this is near
+			// impossible, as the CPU must be doing some work. As such, the kernel
+			// does not report the `full` metric for CPU. We must make sure we
+			// don't report it, as we would be reporting a bunch of zeroes.
+			setPsi(cgs.Path, metrics.psiCPUPressureAvg, cgs.CPUPSI, true, false)
+			setPsi(cgs.Path, metrics.psiMemoryPressureAvg, cgs.MemoryPSI, true, true)
+			setPsi(cgs.Path, metrics.psiDiskIOPressureAvg, cgs.IOPSI, true, true)
+
+			ch <- prometheus.MustNewConstMetric(
+				metrics.memoryEventsHigh,
+				prometheus.CounterValue,
+				float64(cgs.MemoryHighEvents),
+				cgs.Path)
+
+			ch <- prometheus.MustNewConstMetric(
+				metrics.memoryEventsMax,
+				prometheus.CounterValue,
+				float64(cgs.MemoryMaxEvents),
+				cgs.Path)
+
+			mm.cgroups.psiCPUPressureAvg.Collect(ch)
+			mm.cgroups.psiMemoryPressureAvg.Collect(ch)
+			mm.cgroups.psiDiskIOPressureAvg.Collect(ch)
 		}
-		cgs := stats.CGroup.ParentStats
-
-		// The Linux kernel does not emit `full` values for CPU. `full` reports
-		// when ALL non-idle tasks are stalled waiting for CPU time. This makes
-		// sense for memory and I/O, where all non-idle tasks can be stalled
-		// waiting for memory (i.e.: paging) or I/O. But for CPU, this is near
-		// impossible, as the CPU must be doing some work. As such, the kernel
-		// does not report the `full` metric for CPU. We must make sure we
-		// don't report it, as we would be reporting a bunch of zeroes.
-		setPsi(cgs.Path, metrics.psiCPUPressureAvg, cgs.CPUPSI, true, false)
-		setPsi(cgs.Path, metrics.psiMemoryPressureAvg, cgs.MemoryPSI, true, true)
-		setPsi(cgs.Path, metrics.psiDiskIOPressureAvg, cgs.IOPSI, true, true)
-
-		ch <- prometheus.MustNewConstMetric(
-			metrics.memoryEventsHigh,
-			prometheus.CounterValue,
-			float64(cgs.MemoryHighEvents),
-			cgs.Path)
-
-		ch <- prometheus.MustNewConstMetric(
-			metrics.memoryEventsMax,
-			prometheus.CounterValue,
-			float64(cgs.MemoryMaxEvents),
-			cgs.Path)
-
-		mm.cgroups.psiCPUPressureAvg.Collect(ch)
-		mm.cgroups.psiMemoryPressureAvg.Collect(ch)
-		mm.cgroups.psiDiskIOPressureAvg.Collect(ch)
 	}
 }
 
