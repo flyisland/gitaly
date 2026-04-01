@@ -142,7 +142,9 @@ func (cmd *restoreSubcommand) run(ctx context.Context, logger log.Logger, stdin 
 			// No backup_ids/ markers found. Leave cmd.backupID empty so that
 			// each per-repo restore falls back to their own latest files.
 		case err != nil:
-			return fmt.Errorf("read latest backup ID: %w", err)
+			// This is not critical due to same reason above, but here we should
+			// emit a warning to the user about the failure.
+			logger.WithError(err).Warn("read latest backup ID failed, will fallback to individual repository lookups")
 		default:
 			cmd.backupID = backupID
 		}
