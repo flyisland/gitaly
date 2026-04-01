@@ -56,7 +56,7 @@ func (s *server) sshUploadPack(ctx context.Context, req *gitalypb.SSHUploadPackW
 			s.logger.WithError(errIgnore).DebugContext(ctx, "failed parsing packfile negotiation")
 			return
 		}
-		stats.UpdateMetrics(s.packfileNegotiationMetrics)
+		stats.UpdateMetrics(s.packfileNegotiationMetrics, s.packfileNegotiationDeepenMetrics)
 		stats.UpdateLogFields(ctx)
 	}()
 

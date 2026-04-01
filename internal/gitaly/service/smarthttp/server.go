@@ -18,19 +18,20 @@ import (
 
 type server struct {
 	gitalypb.UnimplementedSmartHTTPServiceServer
-	logger                     log.Logger
-	cfg                        config.Cfg
-	locator                    storage.Locator
-	packfileNegotiationMetrics *prometheus.CounterVec
-	infoRefCache               infoRefCache
-	txManager                  transaction.Manager
-	txRegistry                 *storagemgr.TransactionRegistry
-	hookManager                hook.Manager
-	updater                    *updateref.UpdaterWithHooks
-	backupLocator              backup.Locator
-	backupSink                 *backup.Sink
-	localRepoFactory           localrepo.Factory
-	bundleURIManager           *bundleuri.GenerationManager
+	logger                           log.Logger
+	cfg                              config.Cfg
+	locator                          storage.Locator
+	packfileNegotiationMetrics       *prometheus.CounterVec
+	packfileNegotiationDeepenMetrics prometheus.Histogram
+	infoRefCache                     infoRefCache
+	txManager                        transaction.Manager
+	txRegistry                       *storagemgr.TransactionRegistry
+	hookManager                      hook.Manager
+	updater                          *updateref.UpdaterWithHooks
+	backupLocator                    backup.Locator
+	backupSink                       *backup.Sink
+	localRepoFactory                 localrepo.Factory
+	bundleURIManager                 *bundleuri.GenerationManager
 }
 
 // NewServer creates a new instance of a grpc SmartHTTPServer
@@ -47,11 +48,12 @@ func NewServer(deps *service.Dependencies, serverOpts ...ServerOpt) gitalypb.Sma
 			prometheus.CounterOpts{},
 			[]string{"git_negotiation_feature"},
 		),
-		infoRefCache:     newInfoRefCache(deps.GetLogger(), deps.GetDiskCache()),
-		backupLocator:    deps.GetBackupLocator(),
-		backupSink:       deps.GetBackupSink(),
-		localRepoFactory: deps.GetRepositoryFactory(),
-		bundleURIManager: deps.GetBundleURIManager(),
+		packfileNegotiationDeepenMetrics: prometheus.NewHistogram(prometheus.HistogramOpts{}),
+		infoRefCache:                     newInfoRefCache(deps.GetLogger(), deps.GetDiskCache()),
+		backupLocator:                    deps.GetBackupLocator(),
+		backupSink:                       deps.GetBackupSink(),
+		localRepoFactory:                 deps.GetRepositoryFactory(),
+		bundleURIManager:                 deps.GetBundleURIManager(),
 	}
 
 	for _, serverOpt := range serverOpts {
@@ -68,6 +70,13 @@ type ServerOpt func(s *server)
 func WithPackfileNegotiationMetrics(c *prometheus.CounterVec) ServerOpt {
 	return func(s *server) {
 		s.packfileNegotiationMetrics = c
+	}
+}
+
+// WithPackfileNegotiationDeepenMetrics overrides the default histogram metric.
+func WithPackfileNegotiationDeepenMetrics(h prometheus.Histogram) ServerOpt {
+	return func(s *server) {
+		s.packfileNegotiationDeepenMetrics = h
 	}
 }
 
