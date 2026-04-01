@@ -445,6 +445,53 @@ func TestInstance_Stats(t *testing.T) {
 			expectedStats: ByteCountPerLanguage{},
 		},
 		{
+			desc: "linguist-language with alias resolves to canonical name",
+			setup: func(t *testing.T) (*gitalypb.Repository, string, git.ObjectID) {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				commitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "main.c", Mode: "100644", Content: strings.Repeat("a", 100)},
+					gittest.TreeEntry{Path: "network.msg", Mode: "100644", Content: strings.Repeat("a", 200)},
+					gittest.TreeEntry{
+						Path: ".gitattributes",
+						Mode: "100644",
+						Content: "*.msg linguist-language=omnetpp-msg\n" +
+							"*.msg linguist-detectable\n",
+					},
+				))
+
+				return repoProto, repoPath, commitID
+			},
+			expectedStats: ByteCountPerLanguage{
+				"C":           100,
+				"OMNeT++ MSG": 200,
+			},
+		},
+		{
+			desc: "linguist-language with canonical name",
+			setup: func(t *testing.T) (*gitalypb.Repository, string, git.ObjectID) {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+					SkipCreationViaService: true,
+				})
+
+				commitID := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "script.foo", Mode: "100644", Content: "puts 'hello'"},
+					gittest.TreeEntry{
+						Path:    ".gitattributes",
+						Mode:    "100644",
+						Content: "*.foo linguist-language=Ruby",
+					},
+				))
+
+				return repoProto, repoPath, commitID
+			},
+			expectedStats: ByteCountPerLanguage{
+				"Ruby": 12,
+			},
+		},
+		{
 			desc: "corrupted cache",
 			setup: func(t *testing.T) (*gitalypb.Repository, string, git.ObjectID) {
 				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{

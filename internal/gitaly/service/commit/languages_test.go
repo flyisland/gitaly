@@ -2,6 +2,7 @@ package commit
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -158,6 +159,33 @@ func TestCommitLanguages(t *testing.T) {
 							{Name: "Java", Color: "#b07219", Share: 79.67145538330078, Bytes: uint64(len(javaContent)), LanguageId: 181},
 							{Name: "C", Color: "#555555", Share: 16.221765518188477, Bytes: uint64(len(cContent)), LanguageId: 41},
 							{Name: "Ruby", Color: "#701516", Share: 4.106776237487793, Bytes: uint64(len(rubyContent)), LanguageId: 326},
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "linguist-language alias resolved to canonical name",
+			setup: func(t *testing.T) setupData {
+				repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
+
+				commit := gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch(git.DefaultBranch), gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "network.msg", Mode: "100644", Content: strings.Repeat("a", 200)},
+					gittest.TreeEntry{
+						Path:    ".gitattributes",
+						Mode:    "100644",
+						Content: "*.msg linguist-language=omnetpp-msg\n*.msg linguist-detectable\n",
+					},
+				))
+
+				return setupData{
+					request: &gitalypb.CommitLanguagesRequest{
+						Repository: repo,
+						Revision:   []byte(commit),
+					},
+					expectedResponse: &gitalypb.CommitLanguagesResponse{
+						Languages: []*gitalypb.CommitLanguagesResponse_Language{
+							{Name: "OMNeT++ MSG", Color: "#a0e0a0", Share: 100, Bytes: 200, LanguageId: 664100008},
 						},
 					},
 				}
