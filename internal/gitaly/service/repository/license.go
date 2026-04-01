@@ -114,13 +114,25 @@ func findLicense(ctx context.Context, repo *localrepo.Repo, commitID git.ObjectI
 	}
 
 	sort.Slice(bestMatches, func(i, j int) bool {
-		// Because there could be multiple matches with the same confidence, we need
-		// to make sure the function is consistent and returns the same license on
-		// each invocation. That is why we sort by the short name as well.
-		if bestMatches[i].Confidence == bestMatches[j].Confidence {
-			return trimDeprecatedPrefix(bestMatches[i].shortName) < trimDeprecatedPrefix(bestMatches[j].shortName)
+		iCanonical := isCanonicalLicenseFile(bestMatches[i].File)
+		jCanonical := isCanonicalLicenseFile(bestMatches[j].File)
+
+		// When one match comes from a canonical license file and the other
+		// from a variant (e.g., LICENSE-3RD-PARTY.md), prefer the canonical
+		// file. This prevents third-party notice files from overriding the
+		// actual project license even when they score higher confidence.
+		if iCanonical != jCanonical {
+			return iCanonical
 		}
-		return bestMatches[i].Confidence > bestMatches[j].Confidence
+
+		// Among matches of the same canonical/variant status, sort by
+		// confidence descending.
+		if bestMatches[i].Confidence != bestMatches[j].Confidence {
+			return bestMatches[i].Confidence > bestMatches[j].Confidence
+		}
+
+		// Tiebreaker: alphabetical by short name for deterministic results.
+		return trimDeprecatedPrefix(bestMatches[i].shortName) < trimDeprecatedPrefix(bestMatches[j].shortName)
 	})
 
 	// We also don't want to return the prefix back to the caller if it exists.
@@ -163,6 +175,20 @@ func trimDeprecatedPrefix(name string) string {
 }
 
 var readmeRegexp = regexp.MustCompile(`(readme|guidelines)(\.md|\.rst|\.html|\.txt)?$`)
+
+// canonicalLicenseFileRe matches canonical license filenames (LICENSE, LICENCE,
+// COPYING, UNLICENSE) with no suffix or a common doc extension. Used during
+// result sorting to prioritize matches from canonical license files over
+// variant files like LICENSE-MIT or LICENSE-3RD-PARTY.md.
+var canonicalLicenseFileRe = regexp.MustCompile(
+	`(?i)^((un)?licen[sc]e|copying)(\.md|\.txt|\.html|\.rst)?$`)
+
+// isCanonicalLicenseFile reports whether the given filename matches a canonical
+// license file pattern (LICENSE, COPYING, UNLICENSE, etc. with optional standard
+// extensions), as opposed to variant files like LICENSE-MIT or LICENSE-3RD-PARTY.md.
+func isCanonicalLicenseFile(name string) bool {
+	return canonicalLicenseFileRe.MatchString(name)
+}
 
 type gitFiler struct {
 	ctx          context.Context

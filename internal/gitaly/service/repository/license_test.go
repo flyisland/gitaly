@@ -36,6 +36,31 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`
+
+	unlicense = `This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <https://unlicense.org/>`
 )
 
 func TestFindLicense_successful(t *testing.T) {
@@ -228,6 +253,74 @@ func TestFindLicense_successful(t *testing.T) {
 			},
 			expectedLicense: &gitalypb.FindLicenseResponse{},
 		},
+		{
+			// Regression test for https://gitlab.com/gitlab-org/gitlab/-/work_items/428226
+			desc: "canonical LICENSE takes precedence over LICENSE-3RD-PARTY.md variant",
+			setup: func(t *testing.T, repoPath string) {
+				thirdPartyContent := testhelper.MustReadFile(t, "testdata/LICENSE-3RD-PARTY.md")
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Mode: "100644", Path: "LICENSE", Content: mitLicense},
+						gittest.TreeEntry{Mode: "100644", Path: "LICENSE-3RD-PARTY.md", Content: string(thirdPartyContent)},
+					))
+			},
+			expectedLicense: &gitalypb.FindLicenseResponse{
+				LicenseShortName: "mit",
+				LicenseUrl:       "https://opensource.org/licenses/MIT",
+				LicenseName:      "MIT License",
+				LicensePath:      "LICENSE",
+			},
+		},
+		{
+			desc: "canonical COPYING takes precedence over COPYING-MIT variant",
+			setup: func(t *testing.T, repoPath string) {
+				thirdPartyContent := testhelper.MustReadFile(t, "testdata/LICENSE-3RD-PARTY.md")
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Mode: "100644", Path: "COPYING", Content: mitLicense},
+						gittest.TreeEntry{Mode: "100644", Path: "COPYING-MIT", Content: string(thirdPartyContent)},
+					))
+			},
+			expectedLicense: &gitalypb.FindLicenseResponse{
+				LicenseShortName: "mit",
+				LicenseUrl:       "https://opensource.org/licenses/MIT",
+				LicenseName:      "MIT License",
+				LicensePath:      "COPYING",
+			},
+		},
+		{
+			desc: "canonical UNLICENSE takes precedence over UNLICENSE-custom variant",
+			setup: func(t *testing.T, repoPath string) {
+				thirdPartyContent := testhelper.MustReadFile(t, "testdata/LICENSE-3RD-PARTY.md")
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Mode: "100644", Path: "UNLICENSE", Content: unlicense},
+						gittest.TreeEntry{Mode: "100644", Path: "UNLICENSE-custom", Content: string(thirdPartyContent)},
+					))
+			},
+			expectedLicense: &gitalypb.FindLicenseResponse{
+				LicenseShortName: "unlicense",
+				LicenseUrl:       "https://unlicense.org/",
+				LicenseName:      "The Unlicense",
+				LicensePath:      "UNLICENSE",
+			},
+		},
+		{
+			desc: "LICENSE-3RD-PARTY.md alone is still detected when no canonical file exists",
+			setup: func(t *testing.T, repoPath string) {
+				thirdPartyContent := testhelper.MustReadFile(t, "testdata/LICENSE-3RD-PARTY.md")
+				gittest.WriteCommit(t, cfg, repoPath, gittest.WithBranch("main"),
+					gittest.WithTreeEntries(
+						gittest.TreeEntry{Mode: "100644", Path: "LICENSE-3RD-PARTY.md", Content: string(thirdPartyContent)},
+					))
+			},
+			expectedLicense: &gitalypb.FindLicenseResponse{
+				LicenseShortName: "apache-2.0",
+				LicenseUrl:       "https://www.apache.org/licenses/LICENSE-2.0",
+				LicenseName:      "Apache License 2.0",
+				LicensePath:      "LICENSE-3RD-PARTY.md",
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			repo, repoPath := gittest.CreateRepository(t, ctx, cfg)
@@ -284,6 +377,55 @@ func TestFindLicense_validate(t *testing.T) {
 	cfg.SocketPath = serverSocketPath
 	_, err := client.FindLicense(ctx, &gitalypb.FindLicenseRequest{Repository: nil})
 	testhelper.RequireGrpcError(t, structerr.NewInvalidArgument("%w", storage.ErrRepositoryNotSet), err)
+}
+
+func TestIsCanonicalLicenseFile(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		expected bool
+	}{
+		// Canonical license filenames should return true.
+		{name: "LICENSE", expected: true},
+		{name: "LICENSE.md", expected: true},
+		{name: "LICENSE.txt", expected: true},
+		{name: "LICENSE.html", expected: true},
+		{name: "LICENSE.rst", expected: true},
+		{name: "LICENCE", expected: true},
+		{name: "LICENCE.md", expected: true},
+		{name: "LICENCE.txt", expected: true},
+		{name: "COPYING", expected: true},
+		{name: "COPYING.md", expected: true},
+		{name: "COPYING.txt", expected: true},
+		{name: "UNLICENSE", expected: true},
+		{name: "UNLICENSE.md", expected: true},
+		{name: "Unlicense", expected: true},
+		{name: "license", expected: true},
+		{name: "licence.txt", expected: true},
+		{name: "copying.rst", expected: true},
+
+		// Variant license filenames should return false.
+		{name: "LICENSE-MIT", expected: false},
+		{name: "LICENSE-MIT.md", expected: false},
+		{name: "LICENSE-3RD-PARTY.md", expected: false},
+		{name: "LICENSE_APACHE", expected: false},
+		{name: "LICENSE_MIT.txt", expected: false},
+		{name: "LICENCE-MIT", expected: false},
+		{name: "LICENCE_APACHE", expected: false},
+		{name: "COPYING-MIT", expected: false},
+		{name: "COPYING_EXTRA", expected: false},
+		{name: "UNLICENSE-custom", expected: false},
+
+		// Non-license filenames should return false.
+		{name: "README.md", expected: false},
+		{name: "NOTICE", expected: false},
+		{name: "main.go", expected: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, isCanonicalLicenseFile(tc.name))
+		})
+	}
 }
 
 func BenchmarkFindLicense(b *testing.B) {
