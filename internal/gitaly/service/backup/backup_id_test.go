@@ -45,7 +45,7 @@ func TestWriteBackupID(t *testing.T) {
 				_, client := setupBackupService(t)
 				return client
 			},
-			expectedErr: structerr.NewFailedPrecondition("backup repository: server-side backups are not configured"),
+			expectedErr: structerr.NewFailedPrecondition("write backup ID: server-side backups are not configured"),
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestReadLatestBackupID(t *testing.T) {
 				_, client := setupBackupService(t)
 				return client
 			},
-			expectedErr: structerr.NewFailedPrecondition("backup repository: server-side backups are not configured"),
+			expectedErr: structerr.NewFailedPrecondition("read latest backup ID: server-side backups are not configured"),
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
