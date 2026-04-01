@@ -1243,6 +1243,11 @@ func testFetchRemoteProactiveAuth(t *testing.T, ctx context.Context) {
 			remoteURLFormat:    "http://127.0.0.1:%d/%s",
 			urlWithCredentials: false,
 		},
+		{
+			desc:               "username only in URL",
+			remoteURLFormat:    "http://user@127.0.0.1:%d/%s",
+			urlWithCredentials: false,
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()

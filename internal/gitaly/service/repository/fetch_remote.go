@@ -263,11 +263,14 @@ func buildCommandOpts(ctx context.Context, opts *localrepo.FetchOpts, req *gital
 	config = append(config, gitcmd.ConfigPair{Key: "remote.inmemory.url", Value: remoteURL})
 
 	if featureflag.FetchRemoteProactiveAuth.IsEnabled(ctx) {
-		if u, err := url.Parse(remoteURL); err == nil && u.User != nil && u.User.Username() != "" {
-			config = append(config, gitcmd.ConfigPair{
-				Key:   "http.proactiveAuth",
-				Value: "basic",
-			})
+		if u, err := url.Parse(remoteURL); err == nil && u.User != nil {
+			password, _ := u.User.Password()
+			if u.User.Username() != "" && password != "" {
+				config = append(config, gitcmd.ConfigPair{
+					Key:   "http.proactiveAuth",
+					Value: "basic",
+				})
+			}
 		}
 	}
 
