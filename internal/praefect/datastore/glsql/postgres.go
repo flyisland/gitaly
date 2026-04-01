@@ -160,11 +160,11 @@ type Notification struct {
 
 // ListenHandler contains a set of methods that would be called on corresponding notifications received.
 type ListenHandler interface {
-	// Notification would be triggered once a new notification received.
-	Notification(Notification)
+	// Notified would be triggered once a new notification received.
+	Notified(Notification)
 	// Disconnect would be triggered once a connection to remote service is lost.
 	// Passed in error will never be nil and will contain cause of the disconnection.
-	Disconnect(error)
+	Disconnected(error)
 	// Connected would be triggered once a connection to remote service is established.
 	Connected()
 }

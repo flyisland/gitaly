@@ -67,11 +67,11 @@ func (l *Listener) Listen(ctx context.Context, handler glsql.ListenHandler, chan
 	for {
 		nf, err := conn.WaitForNotification(ctx)
 		if err != nil {
-			handler.Disconnect(err)
+			handler.Disconnected(err)
 			return fmt.Errorf("wait for notification: %w", err)
 		}
 
-		handler.Notification(glsql.Notification{
+		handler.Notified(glsql.Notification{
 			Channel: nf.Channel,
 			Payload: nf.Payload,
 		})
@@ -97,9 +97,9 @@ func (mh metricsHandlerMiddleware) Connected() {
 	mh.ListenHandler.Connected()
 }
 
-func (mh metricsHandlerMiddleware) Disconnect(err error) {
+func (mh metricsHandlerMiddleware) Disconnected(err error) {
 	mh.counter.WithLabelValues("disconnected").Inc()
-	mh.ListenHandler.Disconnect(err)
+	mh.ListenHandler.Disconnected(err)
 }
 
 // ResilientListener allows listen for notifications resiliently.

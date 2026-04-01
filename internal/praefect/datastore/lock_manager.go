@@ -63,9 +63,9 @@ type lockReleaseDispatcher struct {
 	readyOnce sync.Once
 }
 
-// Notification signals all goroutines waiting on the released lock_id by closing their channels,
+// Notified signals all goroutines waiting on the released lock_id by closing their channels,
 // then removes them from the waiters map.
-func (d *lockReleaseDispatcher) Notification(n glsql.Notification) {
+func (d *lockReleaseDispatcher) Notified(n glsql.Notification) {
 	lockID := LockID(n.Payload)
 	d.mu.Lock()
 	chs := d.waiters[lockID]
@@ -101,9 +101,9 @@ func (d *lockReleaseDispatcher) RegisterForLockRelease(lock LockID) (<-chan stru
 	}
 }
 
-// Disconnect is a no-op; waiters are woken on reconnect in Connected.
-func (d *lockReleaseDispatcher) Disconnect(error) {
-	// Disconnect is a no-op. Waiters are woken up in Connected() once the
+// Disconnected is a no-op; waiters are woken on reconnect in Connected.
+func (d *lockReleaseDispatcher) Disconnected(error) {
+	// Disconnected is a no-op. Waiters are woken up in Connected() once the
 	// listener reconnects, at which point they retry and re-register if needed.
 }
 

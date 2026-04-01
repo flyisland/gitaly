@@ -515,13 +515,13 @@ type mockListenHandler struct {
 	OnConnected    func()
 }
 
-func (mlh mockListenHandler) Notification(n glsql.Notification) {
+func (mlh mockListenHandler) Notified(n glsql.Notification) {
 	if mlh.OnNotification != nil {
 		mlh.OnNotification(n)
 	}
 }
 
-func (mlh mockListenHandler) Disconnect(err error) {
+func (mlh mockListenHandler) Disconnected(err error) {
 	if mlh.OnDisconnect != nil {
 		mlh.OnDisconnect(err)
 	}
