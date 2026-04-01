@@ -257,3 +257,11 @@ func (li *ListIterator) Path() string {
 	}
 	return li.obj.Key
 }
+
+// ModTime is the modification time of the current object.
+func (li *ListIterator) ModTime() time.Time {
+	if li.obj == nil {
+		return time.Time{}
+	}
+	return li.obj.ModTime
+}

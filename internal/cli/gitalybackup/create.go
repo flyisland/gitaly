@@ -122,7 +122,7 @@ func (cmd *createSubcommand) run(ctx context.Context, logger log.Logger, stdin i
 		_ = pool.Close()
 	}()
 
-	var manager backup.Strategy
+	var manager backup.Operator
 	if cmd.serverSide {
 		if cmd.backupPath != "" {
 			return fmt.Errorf("create: path cannot be used with server-side backups")
@@ -135,8 +135,7 @@ func (cmd *createSubcommand) run(ctx context.Context, logger log.Logger, stdin i
 			return fmt.Errorf("create: resolve sink: %w", err)
 		}
 
-		locator := backup.ResolveLocator(sink)
-		manager = backup.NewManager(sink, logger, locator, pool)
+		manager = backup.NewManager(sink, logger, backup.ResolveLocator(sink), pool)
 	}
 
 	var opts []backup.PipelineOption
@@ -146,6 +145,15 @@ func (cmd *createSubcommand) run(ctx context.Context, logger log.Logger, stdin i
 	pipeline, err := backup.NewPipeline(logger, opts...)
 	if err != nil {
 		return fmt.Errorf("create pipeline: %w", err)
+	}
+
+	var latestBackupID string
+	// ErrDoesntExist is ignored because we have a fallback logic for empty latestBackupID
+	if cmd.incremental {
+		latestBackupID, err = manager.ReadLatestBackupID(ctx)
+		if err != nil && !errors.Is(err, backup.ErrDoesntExist) {
+			return fmt.Errorf("read latest backup ID: %w", err)
+		}
 	}
 
 	decoder := json.NewDecoder(stdin)
@@ -167,11 +175,23 @@ func (cmd *createSubcommand) run(ctx context.Context, logger log.Logger, stdin i
 			VanityRepository: &repo,
 			Incremental:      cmd.incremental,
 			BackupID:         cmd.backupID,
+			LatestBackupID:   latestBackupID,
 		}))
 	}
 
-	if _, err := pipeline.Done(); err != nil {
-		return fmt.Errorf("create: %w", err)
+	processedRepos, pipelineErr := pipeline.Done()
+
+	// Write the backup ID marker even on partial failure so that repos that were
+	// successfully backed up remain discoverable for restore.
+	if len(processedRepos) > 0 {
+		if err := manager.WriteBackupID(ctx, cmd.backupID); err != nil {
+			return fmt.Errorf("write backup ID: %w", err)
+		}
 	}
+
+	if pipelineErr != nil {
+		return fmt.Errorf("create: %w", pipelineErr)
+	}
+
 	return nil
 }

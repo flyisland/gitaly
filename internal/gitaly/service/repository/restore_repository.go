@@ -36,6 +36,7 @@ func (s *server) RestoreRepository(ctx context.Context, in *gitalypb.RestoreRepo
 		VanityRepository: in.GetVanityRepository(),
 		AlwaysCreate:     in.GetAlwaysCreate(),
 		BackupID:         in.GetBackupId(),
+		UseLatest:        in.GetUseLatest(),
 	})
 	switch {
 	case errors.Is(err, backup.ErrSkipped):

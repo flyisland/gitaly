@@ -4561,9 +4561,12 @@ type BackupRepositoryRequest struct {
 	BackupId string `protobuf:"bytes,3,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
 	// incremental controls whether an incremental backup should be performed. An incremental
 	// backup will attempt to locate a previous backup of this repository to base itself off.
-	Incremental   bool `protobuf:"varint,4,opt,name=incremental,proto3" json:"incremental,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Incremental bool `protobuf:"varint,4,opt,name=incremental,proto3" json:"incremental,omitempty"`
+	// latest_backup_id is populated when incremental is true to indicate which backup the
+	// newly created incremental backup should be based on.
+	LatestBackupId string `protobuf:"bytes,5,opt,name=latest_backup_id,json=latestBackupId,proto3" json:"latest_backup_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *BackupRepositoryRequest) Reset() {
@@ -4624,6 +4627,13 @@ func (x *BackupRepositoryRequest) GetIncremental() bool {
 	return false
 }
 
+func (x *BackupRepositoryRequest) GetLatestBackupId() string {
+	if x != nil {
+		return x.LatestBackupId
+	}
+	return ""
+}
+
 // BackupRepositoryResponse is a response for the BackupRepository RPC.
 type BackupRepositoryResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -4673,7 +4683,10 @@ type RestoreRepositoryRequest struct {
 	BackupId string `protobuf:"bytes,3,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
 	// always_create will force the repository to exist even if no bundle is
 	// found. See https://gitlab.com/gitlab-org/gitlab/-/issues/357044
-	AlwaysCreate  bool `protobuf:"varint,4,opt,name=always_create,json=alwaysCreate,proto3" json:"always_create,omitempty"`
+	AlwaysCreate bool `protobuf:"varint,4,opt,name=always_create,json=alwaysCreate,proto3" json:"always_create,omitempty"`
+	// use_latest indicates if latest backup should be used if backup_id is not
+	// provided.
+	UseLatest     bool `protobuf:"varint,5,opt,name=use_latest,json=useLatest,proto3" json:"use_latest,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4732,6 +4745,13 @@ func (x *RestoreRepositoryRequest) GetBackupId() string {
 func (x *RestoreRepositoryRequest) GetAlwaysCreate() bool {
 	if x != nil {
 		return x.AlwaysCreate
+	}
+	return false
+}
+
+func (x *RestoreRepositoryRequest) GetUseLatest() bool {
+	if x != nil {
+		return x.UseLatest
 	}
 	return false
 }
@@ -6226,23 +6246,26 @@ const file_repository_proto_rawDesc = "" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
 	"repository\"!\n" +
-	"\x1fPruneUnreachableObjectsResponse\"\xd3\x01\n" +
+	"\x1fPruneUnreachableObjectsResponse\"\xfd\x01\n" +
 	"\x17BackupRepositoryRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
 	"repository\x12?\n" +
 	"\x11vanity_repository\x18\x02 \x01(\v2\x12.gitaly.RepositoryR\x10vanityRepository\x12\x1b\n" +
 	"\tbackup_id\x18\x03 \x01(\tR\bbackupId\x12 \n" +
-	"\vincremental\x18\x04 \x01(\bR\vincremental\"*\n" +
+	"\vincremental\x18\x04 \x01(\bR\vincremental\x12(\n" +
+	"\x10latest_backup_id\x18\x05 \x01(\tR\x0elatestBackupId\"*\n" +
 	"\x18BackupRepositoryResponse\x1a\x0e\n" +
-	"\fSkippedError\"\xd7\x01\n" +
+	"\fSkippedError\"\xf6\x01\n" +
 	"\x18RestoreRepositoryRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
 	"repository\x12?\n" +
 	"\x11vanity_repository\x18\x02 \x01(\v2\x12.gitaly.RepositoryR\x10vanityRepository\x12\x1b\n" +
 	"\tbackup_id\x18\x03 \x01(\tR\bbackupId\x12#\n" +
-	"\ralways_create\x18\x04 \x01(\bR\falwaysCreate\"+\n" +
+	"\ralways_create\x18\x04 \x01(\bR\falwaysCreate\x12\x1d\n" +
+	"\n" +
+	"use_latest\x18\x05 \x01(\bR\tuseLatest\"+\n" +
 	"\x19RestoreRepositoryResponse\x1a\x0e\n" +
 	"\fSkippedError\"\xa6\x01\n" +
 	"\x18GetFileAttributesRequest\x128\n" +

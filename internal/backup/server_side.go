@@ -14,7 +14,8 @@ import (
 
 // ServerSideAdapter allows calling the server-side backup RPCs `BackupRepository`
 // and `RestoreRepository` through `backup.Strategy` such that server-side
-// backups can be used with `backup.Pipeline`.
+// backups can be used with `backup.Pipeline`. It also implements
+// `backup.IDHandler` via dedicated RPCs.
 type ServerSideAdapter struct {
 	pool *client.Pool
 }
@@ -41,6 +42,7 @@ func (ss ServerSideAdapter) Create(ctx context.Context, req *CreateRequest) erro
 		Repository:       req.Repository,
 		VanityRepository: req.VanityRepository,
 		BackupId:         req.BackupID,
+		LatestBackupId:   req.LatestBackupID,
 		Incremental:      req.Incremental,
 	})
 	if err != nil {
@@ -77,6 +79,7 @@ func (ss ServerSideAdapter) Restore(ctx context.Context, req *RestoreRequest) er
 		VanityRepository: req.VanityRepository,
 		AlwaysCreate:     req.AlwaysCreate,
 		BackupId:         req.BackupID,
+		UseLatest:        req.UseLatest,
 	})
 	if err != nil {
 		st := status.Convert(err)
@@ -93,6 +96,73 @@ func (ss ServerSideAdapter) Restore(ctx context.Context, req *RestoreRequest) er
 	return nil
 }
 
+// WriteBackupID calls the WriteBackupID RPC. It picks any Gitaly server from
+// the context's injected server map — all servers share the same backup sink
+// so the choice is arbitrary.
+func (ss ServerSideAdapter) WriteBackupID(ctx context.Context, backupID string) error {
+	storageName, server, err := anyServerFromContext(ctx)
+	if err != nil {
+		return fmt.Errorf("server-side write backup id: %w", err)
+	}
+
+	client, err := ss.newBackupClient(ctx, server)
+	if err != nil {
+		return fmt.Errorf("server-side write backup id: %w", err)
+	}
+
+	_, err = client.WriteBackupID(ctx, &gitalypb.WriteBackupIDRequest{
+		StorageName: storageName,
+		BackupId:    backupID,
+	})
+	if err != nil {
+		return structerr.New("server-side write backup id: %w", err)
+	}
+
+	return nil
+}
+
+// ReadLatestBackupID calls the ReadLatestBackupID RPC. It picks any Gitaly
+// server from the context's injected server map.
+func (ss ServerSideAdapter) ReadLatestBackupID(ctx context.Context) (string, error) {
+	storageName, server, err := anyServerFromContext(ctx)
+	if err != nil {
+		return "", fmt.Errorf("server-side read latest backup id: %w", err)
+	}
+
+	client, err := ss.newBackupClient(ctx, server)
+	if err != nil {
+		return "", fmt.Errorf("server-side read latest backup id: %w", err)
+	}
+
+	response, err := client.ReadLatestBackupID(ctx, &gitalypb.ReadLatestBackupIDRequest{
+		StorageName: storageName,
+	})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return "", ErrDoesntExist
+		}
+		return "", structerr.New("server-side read latest backup id: %w", err)
+	}
+
+	return response.GetBackupId(), nil
+}
+
+// anyServerFromContext extracts any Gitaly server from the context's injected
+// server map. Since WriteBackupID and ReadLatestBackupID operate on the shared
+// backup sink, any server in the deployment can handle them.
+func anyServerFromContext(ctx context.Context) (storageName string, server storage.ServerInfo, err error) {
+	servers, err := storage.ExtractGitalyServers(ctx)
+	if err != nil {
+		return "", storage.ServerInfo{}, fmt.Errorf("extract gitaly servers: %w", err)
+	}
+
+	for name, srv := range servers {
+		return name, srv, nil
+	}
+
+	return "", storage.ServerInfo{}, fmt.Errorf("no gitaly servers found in context")
+}
+
 func (ss ServerSideAdapter) newRepoClient(ctx context.Context, server storage.ServerInfo) (gitalypb.RepositoryServiceClient, error) {
 	conn, err := ss.pool.Dial(ctx, server.Address, server.Token)
 	if err != nil {
@@ -100,4 +170,13 @@ func (ss ServerSideAdapter) newRepoClient(ctx context.Context, server storage.Se
 	}
 
 	return gitalypb.NewRepositoryServiceClient(conn), nil
+}
+
+func (ss ServerSideAdapter) newBackupClient(ctx context.Context, server storage.ServerInfo) (gitalypb.BackupServiceClient, error) {
+	conn, err := ss.pool.Dial(ctx, server.Address, server.Token)
+	if err != nil {
+		return nil, err
+	}
+
+	return gitalypb.NewBackupServiceClient(conn), nil
 }

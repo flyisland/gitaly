@@ -12,6 +12,8 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service/setup"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/metadata"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testserver"
@@ -101,11 +103,18 @@ func TestCreateSubcommand(t *testing.T) {
 				}))
 			}
 
+			// Partial failure scenario
 			require.NoError(t, encoder.Encode(map[string]string{
 				"address":       "invalid",
 				"token":         "invalid",
 				"relative_path": "invalid",
 			}))
+
+			// server-side WriteBackupID resolves the Gitaly server from the
+			// context, so GITALY_SERVERS must be available.
+			injectCtx, err := storage.InjectGitalyServers(ctx, cfg.Storages[0].Name, cfg.SocketPath, cfg.Auth.Token)
+			require.NoError(t, err)
+			t.Setenv("GITALY_SERVERS", metadata.GetValue(metadata.OutgoingToIncoming(injectCtx), "gitaly-servers"))
 
 			args := append([]string{"create"}, tc.Flags(path)...)
 
@@ -113,6 +122,10 @@ func TestCreateSubcommand(t *testing.T) {
 			require.Empty(t, stderr)
 			require.Contains(t, stdout, tc.ExpectedErrMessage)
 			require.Equal(t, 1, exitCode)
+
+			// The marker is written regardless of partial pipeline failures so
+			// that successfully backed-up repos remain discoverable for restore.
+			require.FileExists(t, filepath.Join(path, "backup_ids", "the-new-backup"))
 
 			for _, repo := range repos {
 				bundlePath := filepath.Join(path, repo.GetStorageName(), repo.GetRelativePath(), "the-new-backup", "001.bundle")

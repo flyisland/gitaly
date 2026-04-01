@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package gitaly;
+
+import "lint.proto";
+
+option go_package = "gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb";
+
+// BackupService provides RPCs for managing backup run metadata.
+service BackupService {
+
+  // WriteBackupID writes a backup ID marker to object-storage so that the
+  // latest completed backup run can be discovered later.
+  rpc WriteBackupID(WriteBackupIDRequest) returns (WriteBackupIDResponse) {
+    option (op_type) = {
+      op:          ACCESSOR
+      scope_level: STORAGE
+    };
+  }
+
+  // ReadLatestBackupID returns the ID of the most recently completed backup
+  // run by iterating the backup_ids/ prefix in object-storage.
+  rpc ReadLatestBackupID(ReadLatestBackupIDRequest) returns (ReadLatestBackupIDResponse) {
+    option (op_type) = {
+      op:          ACCESSOR
+      scope_level: STORAGE
+    };
+  }
+
+}
+
+// WriteBackupIDRequest is a request for the WriteBackupID RPC.
+message WriteBackupIDRequest {
+  // storage_name is the name of the storage to route this request to.
+  string storage_name = 1 [(storage)=true];
+  // backup_id is the label used to identify backups.
+  string backup_id = 2;
+}
+
+// WriteBackupIDResponse is a response for the WriteBackupID RPC.
+message WriteBackupIDResponse {
+}
+
+// ReadLatestBackupIDRequest is a request for the ReadLatestBackupID RPC.
+message ReadLatestBackupIDRequest {
+  // storage_name is the name of the storage to route this request to.
+  string storage_name = 1 [(storage)=true];
+}
+
+// ReadLatestBackupIDResponse is a response for the ReadLatestBackupID RPC.
+message ReadLatestBackupIDResponse {
+  // backup_id is the label used to identify backups.
+  string backup_id = 1;
+}

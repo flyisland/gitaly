@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -26,6 +28,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+const backupIDPrefix = "backup_ids/"
 
 var (
 	// ErrSkipped means the repository was skipped because there was nothing to backup
@@ -85,7 +89,7 @@ type Locator interface {
 
 	// BeginIncremental returns the backup with the last element of Steps being
 	// the tentative step needed to create an incremental backup.
-	BeginIncremental(ctx context.Context, repo storage.Repository, backupID string) (*Backup, error)
+	BeginIncremental(ctx context.Context, repo storage.Repository, currentBackupID, latestBackupID string) (*Backup, error)
 
 	// Commit persists the backup so that it can be looked up by FindLatest. It
 	// is expected that the last element of Steps will be the newly created
@@ -140,9 +144,20 @@ func ResolveLocator(sink *Sink) Locator {
 	return NewManifestLocator(sink)
 }
 
+// IDManager handles run-level backup ID operations against a backup sink.
+// It is safe to use independently of Manager.
+type IDManager struct {
+	sink *Sink
+}
+
+// NewIDManager creates a BackupIDManager for the given sink.
+func NewIDManager(sink *Sink) *IDManager {
+	return &IDManager{sink: sink}
+}
+
 // Manager manages process of the creating/restoring backups.
 type Manager struct {
-	sink    *Sink
+	IDManager
 	locator Locator
 	logger  log.Logger
 
@@ -154,8 +169,8 @@ type Manager struct {
 // NewManager creates and returns initialized *Manager instance.
 func NewManager(sink *Sink, logger log.Logger, locator Locator, pool *client.Pool) *Manager {
 	return &Manager{
-		sink:    sink,
-		locator: locator,
+		IDManager: IDManager{sink: sink},
+		locator:   locator,
 		repositoryFactory: func(ctx context.Context, repo *gitalypb.Repository, server storage.ServerInfo) (Repository, error) {
 			if err := setContextServerInfo(ctx, &server, repo.GetStorageName()); err != nil {
 				return nil, err
@@ -185,8 +200,8 @@ func NewManagerLocal(
 	migrationStateManager migration.StateManager,
 ) *Manager {
 	return &Manager{
-		sink:    sink,
-		locator: locator,
+		IDManager: IDManager{sink: sink},
+		locator:   locator,
 		repositoryFactory: func(ctx context.Context, repo *gitalypb.Repository, server storage.ServerInfo) (Repository, error) {
 			localRepo := localrepo.New(logger, storageLocator, gitCmdFactory, catfileCache, repo)
 
@@ -258,8 +273,7 @@ func (mgr *Manager) Create(ctx context.Context, req *CreateRequest) error {
 
 	var backup *Backup
 	if req.Incremental {
-		var err error
-		backup, err = mgr.locator.BeginIncremental(ctx, req.VanityRepository, req.BackupID)
+		backup, err = mgr.locator.BeginIncremental(ctx, req.VanityRepository, req.BackupID, req.LatestBackupID)
 		if err != nil {
 			return fmt.Errorf("manager: %w", err)
 		}
@@ -324,22 +338,20 @@ func (mgr *Manager) Restore(ctx context.Context, req *RestoreRequest) error {
 	}
 
 	var backup *Backup
-	if req.BackupID == "" {
-		backup, err = mgr.locator.FindLatest(ctx, req.VanityRepository)
-		switch {
-		case errors.Is(err, ErrDoesntExist):
-			return removeRepository(ctx, repo, err)
-		case err != nil:
-			return fmt.Errorf("manager: %w", err)
-		}
-	} else {
+	if req.BackupID != "" {
 		backup, err = mgr.locator.Find(ctx, req.VanityRepository, req.BackupID)
-		switch {
-		case errors.Is(err, ErrDoesntExist):
-			return fmt.Errorf("manager: %w: %w", ErrDoesntExist, err)
-		case err != nil:
-			return fmt.Errorf("manager: %w", err)
+	}
+	// Fall back to per-repo latest when no backup ID was provided (e.g.
+	// backup_ids/ folder not yet populated after upgrade) or when the
+	// specific backup ID doesn't exist for this repo (partial backup run).
+	if req.BackupID == "" || (errors.Is(err, ErrDoesntExist) && req.UseLatest) {
+		backup, err = mgr.locator.FindLatest(ctx, req.VanityRepository)
+		if errors.Is(err, ErrDoesntExist) {
+			return removeRepository(ctx, repo, err)
 		}
+	}
+	if err != nil {
+		return fmt.Errorf("manager: %w", err)
 	}
 
 	if len(backup.Steps) == 0 {
@@ -377,6 +389,50 @@ func (mgr *Manager) Restore(ctx context.Context, req *RestoreRequest) error {
 	// we can just restore the most recent archive.
 	latestStep := backup.Steps[len(backup.Steps)-1]
 	return mgr.restoreCustomHooks(ctx, repo, latestStep.CustomHooksPath)
+}
+
+// WriteBackupID writes the given backup id to the backup sink.
+func (mgr *IDManager) WriteBackupID(ctx context.Context, backupID string) error {
+	key := backupIDPrefix + backupID
+	w, err := mgr.sink.GetWriter(ctx, key)
+	if err != nil {
+		return fmt.Errorf("write backup marker: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("write backup marker: close: %w", err)
+	}
+
+	return nil
+}
+
+// ReadLatestBackupID returns the backup ID of the most recent completed backup run.
+// This iterates through backup_ids/ path on the object storage and finds the latest
+// entry according to the object's modification time.
+func (mgr *IDManager) ReadLatestBackupID(ctx context.Context) (string, error) {
+	iter := mgr.sink.List(backupIDPrefix)
+
+	var latestKey string
+	var latestModTime time.Time
+	for iter.Next(ctx) {
+		modTime := iter.ModTime()
+		// Use modification time as primary sort key, with lexicographic
+		// tiebreaker when timestamps are equal (e.g. rapid writes on
+		// filesystems with coarse time resolution).
+		if latestKey == "" || modTime.After(latestModTime) || (modTime.Equal(latestModTime) && iter.Path() > latestKey) {
+			latestKey = iter.Path()
+			latestModTime = modTime
+		}
+	}
+
+	if err := iter.Err(); err != nil {
+		return "", fmt.Errorf("find latest backup ID: %w", err)
+	}
+
+	if latestKey == "" {
+		return "", ErrDoesntExist
+	}
+
+	return path.Base(latestKey), nil
 }
 
 func (mgr *Manager) restoreFromRefs(ctx context.Context, repo Repository, backup *Backup) error {
