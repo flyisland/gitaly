@@ -77,6 +77,15 @@ func (f fileInstance) isGenerated(content []byte) bool {
 
 func (f fileInstance) getLanguage(content []byte) string {
 	if lang, ok := f.attrs.StateFor(linguistLanguage); ok {
+		// The linguist-language attribute may specify a language alias
+		// (e.g., "omnetpp-msg" instead of "OMNeT++ MSG"). Resolve it to
+		// the canonical name so that downstream consumers like
+		// GetLanguageID() and GetLanguageType() work correctly.
+		if canonical, ok := enry.GetLanguageByAlias(lang); ok {
+			return canonical
+		}
+		// If the alias is not recognized, return the raw value to
+		// preserve user intent and surface misconfiguration.
 		return lang
 	}
 
