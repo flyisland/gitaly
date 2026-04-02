@@ -18,6 +18,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/burdenmonitor"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/command/commandcounter"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/requestinfohandler"
@@ -496,6 +497,8 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 
 	logPid = cmd.Process.Pid
 
+	burdenmonitor.NotifyCommandStarted(ctx, cmd.Process.Pid, command.startTime)
+
 	return command, nil
 }
 
@@ -590,6 +593,13 @@ func (c *Command) wait() {
 	}
 
 	inFlightCommandGauge.WithLabelValues(c.metricsService, c.metricsMethod, c.metricsCmd, c.metricsSubCmd).Dec()
+
+	burdenmonitor.NotifyCommandCompleted(
+		c.context,
+		c.cmd.ProcessState.Pid(),
+		c.cmd.ProcessState.UserTime(),
+		c.cmd.ProcessState.SystemTime(),
+	)
 
 	c.logProcessComplete()
 
