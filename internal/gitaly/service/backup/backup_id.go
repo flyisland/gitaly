@@ -12,7 +12,7 @@ import (
 // WriteBackupID writes a backup ID marker to the configured backup sink.
 func (s *server) WriteBackupID(ctx context.Context, in *gitalypb.WriteBackupIDRequest) (*gitalypb.WriteBackupIDResponse, error) {
 	if s.backupSink == nil {
-		return nil, structerr.NewFailedPrecondition("backup repository: server-side backups are not configured")
+		return nil, structerr.NewFailedPrecondition("write backup ID: server-side backups are not configured")
 	}
 
 	if in.GetBackupId() == "" {
@@ -31,7 +31,7 @@ func (s *server) WriteBackupID(ctx context.Context, in *gitalypb.WriteBackupIDRe
 // ReadLatestBackupID returns the ID of the most recently completed backup run.
 func (s *server) ReadLatestBackupID(ctx context.Context, in *gitalypb.ReadLatestBackupIDRequest) (*gitalypb.ReadLatestBackupIDResponse, error) {
 	if s.backupSink == nil {
-		return nil, structerr.NewFailedPrecondition("backup repository: server-side backups are not configured")
+		return nil, structerr.NewFailedPrecondition("read latest backup ID: server-side backups are not configured")
 	}
 
 	manager := backup.NewIDManager(s.backupSink)

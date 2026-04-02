@@ -148,11 +148,16 @@ func (cmd *createSubcommand) run(ctx context.Context, logger log.Logger, stdin i
 	}
 
 	var latestBackupID string
-	// ErrDoesntExist is ignored because we have a fallback logic for empty latestBackupID
 	if cmd.incremental {
 		latestBackupID, err = manager.ReadLatestBackupID(ctx)
-		if err != nil && !errors.Is(err, backup.ErrDoesntExist) {
-			return fmt.Errorf("read latest backup ID: %w", err)
+		switch {
+		case errors.Is(err, backup.ErrDoesntExist):
+			// No backup_ids/ markers found. Leave LatestBackupID empty so that
+			// each per-repo incremental create falls back to their own latest files.
+		case err != nil:
+			// This is not critical due to same reason above, but here we should
+			// emit a warning to the user about the failure.
+			logger.WithError(err).Warn("read latest backup ID failed, will fallback to individual repository lookups")
 		}
 	}
 
