@@ -54,8 +54,10 @@ func (bm *BurdenMonitor) pollAllEntries() {
 
 	byCPU := bm.EntriesSortedBy(SortByCPU)
 	byMemory := bm.EntriesSortedBy(SortByMemory)
-	bm.logger.WithField("top_10_by_cpu", byCPU[:min(10, len(byCPU))])
-	bm.logger.WithField("top_10_by_memory", byMemory[:min(10, len(byMemory))])
+	bm.logger.WithFields(log.Fields{
+		"top_10_by_cpu":    byCPU[:min(10, len(byCPU))],
+		"top_10_by_memory": byMemory[:min(10, len(byMemory))],
+	}).Info("burden monitor stats")
 }
 
 func (bm *BurdenMonitor) pollEntryCommands(entry *RPCEntry) {
