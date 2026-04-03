@@ -150,7 +150,6 @@ type Cfg struct {
 	AdaptiveLimiting       AdaptiveLimiting    `json:"adaptive_limiting,omitempty" toml:"adaptive_limiting,omitempty"`
 	Raft                   Raft                `json:"raft,omitempty"              toml:"raft,omitempty"`
 	Offloading             Offloading          `json:"offloading,omitempty"        toml:"offloading,omitempty"`
-	UseLibp2pYamux         bool                `json:"use_libp2p_yamux,omitempty"  toml:"use_libp2p_yamux,omitempty"` // WARNING: This config is temporary and experimental. It should never be relied upon.
 	PoolMetadata           PoolMetadataConfig  `json:"pool_metadata,omitempty"     toml:"pool_metadata,omitempty"`
 }
 
@@ -1280,12 +1279,6 @@ func (cfg *Cfg) Storage(storageName string) (Storage, bool) {
 		}
 	}
 	return Storage{}, false
-}
-
-// UseLibP2P returns true if libp2p yamux should be used instead of hashicorp yamux.
-// This can be enabled via the UseLibp2pYamux config field or the GITALY_USE_LIBP2P_YAMUX env var.
-func (cfg *Cfg) UseLibP2P() bool {
-	return cfg.UseLibp2pYamux || os.Getenv("GITALY_USE_LIBP2P_YAMUX") == "true"
 }
 
 // InternalSocketDir returns the location of the internal socket directory.

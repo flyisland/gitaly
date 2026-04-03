@@ -4,9 +4,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus/ctxlogrus"
 	libp2pyamux "github.com/libp2p/go-yamux/v5"
-	"github.com/sirupsen/logrus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
@@ -25,9 +23,6 @@ type libp2pSession struct {
 }
 
 func (s *libp2pSession) Open(ctx context.Context) (net.Conn, error) {
-	ctxlogrus.AddFields(ctx, logrus.Fields{
-		"yaumux_library": "libp2p",
-	})
 	return s.Session.Open(ctx)
 }
 

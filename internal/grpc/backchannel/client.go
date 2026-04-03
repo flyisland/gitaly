@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	hashicorpyamux "github.com/hashicorp/yamux"
+	libp2pyamux "github.com/libp2p/go-yamux/v5"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc/credentials"
 )
@@ -32,19 +32,18 @@ type Configuration struct {
 	// AcceptBacklog sets the maximum number of stream openings in-flight before further openings
 	// block.
 	AcceptBacklog int
-	// StreamCloseTimeout is the maximum time that a stream will allowed to
-	// be in a half-closed state when `Close` is called before forcibly
-	// closing the connection.
-	StreamCloseTimeout time.Duration
+	// ConnectionWriteTimeout is the maximum time a connection write will wait
+	// before failing and the connection being closed.
+	ConnectionWriteTimeout time.Duration
 }
 
 // DefaultConfiguration returns the default configuration.
 func DefaultConfiguration() Configuration {
-	defaults := hashicorpyamux.DefaultConfig()
+	defaults := libp2pyamux.DefaultConfig()
 	return Configuration{
 		MaximumStreamWindowSizeBytes: defaults.MaxStreamWindowSize,
 		AcceptBacklog:                defaults.AcceptBacklog,
-		StreamCloseTimeout:           defaults.StreamCloseTimeout,
+		ConnectionWriteTimeout:       defaults.ConnectionWriteTimeout,
 	}
 }
 
@@ -160,9 +159,9 @@ func (ch clientHandshake) Clone() credentials.TransportCredentials {
 }
 
 func newClientMuxSession(conn net.Conn, logger log.Logger, cfg Configuration) (MuxSession, error) {
-	session, err := hashicorpyamux.Client(conn, hashicorpMuxConfig(logger, cfg))
+	session, err := libp2pyamux.Client(conn, libp2pMuxConfig(logger, cfg), nil)
 	if err != nil {
 		return nil, err
 	}
-	return &hashicorpSession{session}, nil
+	return &libp2pSession{session}, nil
 }

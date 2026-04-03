@@ -26,8 +26,8 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/hashicorp/yamux v0.1.2-0.20220728231024-8f49b6f63f18
 	github.com/jackc/pgx/v5 v5.8.0
+	github.com/libp2p/go-yamux/v5 v5.1.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-sqlite3 v1.14.34
 	github.com/miekg/dns v1.1.72
@@ -66,8 +66,6 @@ require (
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 )
-
-require github.com/libp2p/go-yamux/v5 v5.1.0
 
 require (
 	cel.dev/expr v0.25.1 // indirect
