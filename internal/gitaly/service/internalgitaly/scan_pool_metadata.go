@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/walk"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
@@ -35,6 +36,7 @@ func (s *server) ScanPoolMetadata(req *gitalypb.ScanPoolMetadataRequest, stream 
 
 func processPoolMemberFunc(ctx context.Context, storagePath, storageName string, gitlabClient gitlab.Client, stream gitalypb.InternalGitaly_ScanPoolMetadataServer) func(relPath string, _ fs.FileInfo) error {
 	poolUpstreams := make(map[string]gitlab.ObjectPoolMember)
+	invalidPools := make(map[string]bool)
 	var poolUpstreamsMu sync.Mutex
 
 	return func(relPath string, fi fs.FileInfo) error {
@@ -66,7 +68,16 @@ func processPoolMemberFunc(ctx context.Context, storagePath, storageName string,
 		poolUpstreamsMu.Lock()
 		defer poolUpstreamsMu.Unlock()
 
+		if invalidPools[poolDiskPath] {
+			return nil
+		}
+
 		if _, ok := poolUpstreams[poolDiskPath]; !ok {
+			if err := storage.ValidateGitDirectory(poolRepoPath); err != nil {
+				invalidPools[poolDiskPath] = true
+				return nil
+			}
+
 			members, err := gitlabClient.ObjectPoolMembers(ctx, strings.TrimSuffix(poolDiskPath, ".git"), storageName, true)
 			if err != nil {
 				return fmt.Errorf("query Rails for pool %q (repo %q): %w", poolDiskPath, relPath, err)
