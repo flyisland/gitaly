@@ -703,8 +703,11 @@ func TestFetchInternalRemote_successful(t *testing.T) {
 		},
 	)
 
-	// We use the reference-transaction hook for the default branch updates.
-	require.Equal(t, 4, referenceTransactionHookCalled)
+	// referenceTransactionHookCalled is 4 (2 calls × 2 phases) on regular CI, which does not
+	// yet include upstream commit ae55b12bb3 ("preparing" phase). On nightly builds it is 6
+	// (2 calls × 3 phases). Once GIT_VERSION_PREV is bumped past ae55b12bb3, this can be
+	// updated to expect 6 only.
+	require.Contains(t, []int{4, 6}, referenceTransactionHookCalled)
 }
 
 func TestFetchInternalRemote_failure(t *testing.T) {

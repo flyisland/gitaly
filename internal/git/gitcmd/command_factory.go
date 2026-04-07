@@ -695,6 +695,13 @@ func (cf *ExecCommandFactory) GlobalConfiguration(ctx context.Context) ([]Config
 		// with an accompanying bitmap. As this is a recent addition to Git this feature is not enabled by
 		// default yet, but needs to be opted in with a configuration.
 		{Key: "pack.allowPackReuse", Value: "multi"},
+
+		// Force MIDX v1 during the transition period where GIT_VERSION_PREV writes
+		// version 1 while GIT_VERSION_MASTER and nightly builds write version 2
+		// (upstream 105a22cf69, "Merge branch 'tb/incremental-midx-part-3.2'", 2026-03-25).
+		// Once GIT_VERSION_PREV is bumped past that commit, this config can be removed
+		// and the test updated to expect version 2.
+		{Key: "midx.version", Value: "1"},
 	}
 
 	if cf.cfg.Transactions.Enabled {

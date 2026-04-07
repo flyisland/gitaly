@@ -95,6 +95,10 @@ func (m *GitLabHookManager) ReferenceTransactionHook(ctx context.Context, state 
 				return fmt.Errorf("update references: %w", err)
 			}
 		}
+	case ReferenceTransactionPreparing:
+		// Placeholder for the "preparing" state introduced in upstream commit
+		// ae55b12bb3 (Merge branch 'ej/ref-transaction-hook-preparing', 2026-03-27).
+		fallthrough
 	default:
 		return nil
 	}

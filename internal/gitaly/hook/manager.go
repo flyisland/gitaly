@@ -28,6 +28,8 @@ const (
 	// ReferenceTransactionAborted indicates the transaction was aborted, no changes were
 	// performed and the reference locks have been released.
 	ReferenceTransactionAborted
+	// ReferenceTransactionPreparing indicates all reference updates are ready to be locked
+	ReferenceTransactionPreparing
 )
 
 // Manager is an interface providing the ability to execute Git hooks.
