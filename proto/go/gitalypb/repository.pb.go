@@ -1659,7 +1659,10 @@ func (x *FetchSourceBranchResponse) GetResult() bool {
 type FsckRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// repository is the repository that shall be checked for consistency.
-	Repository    *Repository `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
+	Repository *Repository `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
+	// repo_only when set to true, it runs `fsck` with `--no-full`,
+	// which can be used to avoid checking the object pool of a repository.
+	RepoOnly      bool `protobuf:"varint,2,opt,name=repo_only,json=repoOnly,proto3" json:"repo_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1699,6 +1702,13 @@ func (x *FsckRequest) GetRepository() *Repository {
 		return x.Repository
 	}
 	return nil
+}
+
+func (x *FsckRequest) GetRepoOnly() bool {
+	if x != nil {
+		return x.RepoOnly
+	}
+	return false
 }
 
 // FsckResponse is a response for the Fsck RPC.
@@ -6024,11 +6034,12 @@ const file_repository_proto_rawDesc = "" +
 	"target_ref\x18\x04 \x01(\fR\ttargetRef\x125\n" +
 	"\x17expected_target_old_oid\x18\x05 \x01(\tR\x14expectedTargetOldOid\"3\n" +
 	"\x19FetchSourceBranchResponse\x12\x16\n" +
-	"\x06result\x18\x01 \x01(\bR\x06result\"G\n" +
+	"\x06result\x18\x01 \x01(\bR\x06result\"d\n" +
 	"\vFsckRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
-	"repository\"$\n" +
+	"repository\x12\x1b\n" +
+	"\trepo_only\x18\x02 \x01(\bR\brepoOnly\"$\n" +
 	"\fFsckResponse\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\fR\x05error\"\xaf\x01\n" +
 	"\x0fWriteRefRequest\x128\n" +
