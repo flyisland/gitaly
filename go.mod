@@ -29,7 +29,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/libp2p/go-yamux/v5 v5.1.0
 	github.com/mattn/go-isatty v0.0.20
-	github.com/mattn/go-sqlite3 v1.14.34
+	github.com/mattn/go-sqlite3 v1.14.37
 	github.com/miekg/dns v1.1.72
 	github.com/olekukonko/tablewriter v1.1.4
 	github.com/opencontainers/runtime-spec v1.3.0
