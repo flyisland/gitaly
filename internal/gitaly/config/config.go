@@ -668,7 +668,7 @@ type PSIResourceConfig struct {
 	// as an error.
 	CriticalThreshold float64 `json:"critical_threshold" toml:"critical_threshold"`
 	// SustainDurationSeconds is how long pressure must remain above the backoff threshold
-	// before it is considered "sustained". 0 uses the default (60 seconds).
+	// before it is considered "sustained". 0 uses the default (30 seconds).
 	SustainDurationSeconds int `json:"sustain_duration_seconds" toml:"sustain_duration_seconds"`
 	// FastFallRatio controls the "not recovering" condition. If the current avg10 drops below
 	// this ratio of the previous poll's avg10, pressure is considered to be falling rapidly
@@ -678,9 +678,9 @@ type PSIResourceConfig struct {
 
 const (
 	// Default memory pressure thresholds
-	defaultMemoryPressureWarningThreshold  = 5.0
-	defaultMemoryPressureBackoffThreshold  = 10.0
-	defaultMemoryPressureCriticalThreshold = 25.0
+	defaultMemoryPressureWarningThreshold  = 10.0
+	defaultMemoryPressureBackoffThreshold  = 20.0
+	defaultMemoryPressureCriticalThreshold = 40.0
 
 	// Default I/O pressure thresholds
 	defaultIOPressureWarningThreshold  = 10.0
@@ -688,12 +688,14 @@ const (
 	defaultIOPressureCriticalThreshold = 40.0
 
 	// Default CPU pressure thresholds
-	defaultCPUPressureWarningThreshold  = 10.0
+	defaultCPUPressureWarningThreshold  = 20.0
 	defaultCPUPressureBackoffThreshold  = 25.0
 	defaultCPUPressureCriticalThreshold = 50.0
 
-	// Default sustain duration in seconds. This is the duration of time for which pressure must remain above the backoff threshold.
-	defaultSustainDurationSeconds = 60
+	// Default sustain duration in seconds. 30s is intentionally shorter than avg60's 60s window:
+	// by the time avg60 crosses a threshold, ~60s of pressure has already occurred. Adding another
+	// 60s would mean reacting to ~2 minutes of sustained pressure, which is too slow.
+	defaultSustainDurationSeconds = 30
 
 	// Default fast fall ratio for pressure recovery. This is the ratio of the previous poll's avg10 to the current avg10.
 	// If the current avg10 drops below this ratio of the previous poll's avg10, pressure is considered to be falling rapidly
