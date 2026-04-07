@@ -127,7 +127,7 @@ func TestCachingStorageProvider_GetSyncedNodes(t *testing.T) {
 
 		// invalid payload disables caching
 		notification := glsql.Notification{Channel: "notification_channel_1", Payload: `_`}
-		cache.Notification(notification)
+		cache.Notified(notification)
 		expErr := json.Unmarshal([]byte(notification.Payload), new(struct{}))
 
 		// second access omits cached data as caching should be disabled
@@ -189,7 +189,7 @@ func TestCachingStorageProvider_GetSyncedNodes(t *testing.T) {
 		require.Equal(t, "replica-path-2", replicaPath)
 
 		// notification evicts entries for '/repo/path/2' from the cache
-		cache.Notification(glsql.Notification{Payload: `
+		cache.Notified(glsql.Notification{Payload: `
 			[
 				{"virtual_storage": "bad", "relative_paths": ["/repo/path/1"]},
 				{"virtual_storage": "vs", "relative_paths": ["/repo/path/2"]}
@@ -234,7 +234,7 @@ func TestCachingStorageProvider_GetSyncedNodes(t *testing.T) {
 		require.Equal(t, "replica-path", replicaPath)
 
 		// disconnection disables cache
-		cache.Disconnect(assert.AnError)
+		cache.Disconnected(assert.AnError)
 
 		// second access retrieve data and doesn't populate the cache
 		replicaPath, storages2, err := cache.GetConsistentStorages(ctx, "vs", "/repo/path")
@@ -280,9 +280,9 @@ func TestCachingStorageProvider_GetSyncedNodes(t *testing.T) {
 					assert.NoError(t, err)
 				}
 			case 4:
-				f = func() { cache.Notification(nf1) }
+				f = func() { cache.Notified(nf1) }
 			case 5:
-				f = func() { cache.Notification(nf2) }
+				f = func() { cache.Notified(nf2) }
 			}
 			operations = append(operations, f)
 		}

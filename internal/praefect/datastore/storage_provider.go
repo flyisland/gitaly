@@ -84,8 +84,8 @@ type notificationEntry struct {
 	RelativePaths  []string `json:"relative_paths"`
 }
 
-// Notification handles notifications by invalidating cache entries of updated repositories.
-func (c *CachingConsistentStoragesGetter) Notification(n glsql.Notification) {
+// Notified handles notifications by invalidating cache entries of updated repositories.
+func (c *CachingConsistentStoragesGetter) Notified(n glsql.Notification) {
 	var changes []notificationEntry
 	if err := json.NewDecoder(strings.NewReader(n.Payload)).Decode(&changes); err != nil {
 		c.disableCaching() // as we can't update cache properly we should disable it
@@ -111,8 +111,8 @@ func (c *CachingConsistentStoragesGetter) Connected() {
 	c.enableCaching() // (re-)enable cache usage
 }
 
-// Disconnect disables the caching when connection to Postgres has been lost.
-func (c *CachingConsistentStoragesGetter) Disconnect(error) {
+// Disconnected disables the caching when connection to Postgres has been lost.
+func (c *CachingConsistentStoragesGetter) Disconnected(error) {
 	// disable cache usage as it could be outdated
 	c.disableCaching()
 }
