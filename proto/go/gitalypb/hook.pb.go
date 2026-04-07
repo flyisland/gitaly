@@ -31,6 +31,8 @@ const (
 	ReferenceTransactionHookRequest_COMMITTED ReferenceTransactionHookRequest_State = 1 // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
 	// ABORTED ...
 	ReferenceTransactionHookRequest_ABORTED ReferenceTransactionHookRequest_State = 2 // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
+	// PREPARING ...
+	ReferenceTransactionHookRequest_PREPARING ReferenceTransactionHookRequest_State = 3 // protolint:disable:this ENUM_FIELD_NAMES_PREFIX
 )
 
 // Enum value maps for ReferenceTransactionHookRequest_State.
@@ -39,11 +41,13 @@ var (
 		0: "PREPARED",
 		1: "COMMITTED",
 		2: "ABORTED",
+		3: "PREPARING",
 	}
 	ReferenceTransactionHookRequest_State_value = map[string]int32{
 		"PREPARED":  0,
 		"COMMITTED": 1,
 		"ABORTED":   2,
+		"PREPARING": 3,
 	}
 )
 
@@ -942,18 +946,19 @@ const file_hook_proto_rawDesc = "" +
 	"\x06stdout\x18\x01 \x01(\fR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x02 \x01(\fR\x06stderr\x123\n" +
 	"\vexit_status\x18\x03 \x01(\v2\x12.gitaly.ExitStatusR\n" +
-	"exitStatus\"\x9e\x02\n" +
+	"exitStatus\"\xad\x02\n" +
 	"\x1fReferenceTransactionHookRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
 	"repository\x123\n" +
 	"\x15environment_variables\x18\x02 \x03(\tR\x14environmentVariables\x12\x14\n" +
 	"\x05stdin\x18\x03 \x01(\fR\x05stdin\x12C\n" +
-	"\x05state\x18\x04 \x01(\x0e2-.gitaly.ReferenceTransactionHookRequest.StateR\x05state\"1\n" +
+	"\x05state\x18\x04 \x01(\x0e2-.gitaly.ReferenceTransactionHookRequest.StateR\x05state\"@\n" +
 	"\x05State\x12\f\n" +
 	"\bPREPARED\x10\x00\x12\r\n" +
 	"\tCOMMITTED\x10\x01\x12\v\n" +
-	"\aABORTED\x10\x02\"\x87\x01\n" +
+	"\aABORTED\x10\x02\x12\r\n" +
+	"\tPREPARING\x10\x03\"\x87\x01\n" +
 	" ReferenceTransactionHookResponse\x12\x16\n" +
 	"\x06stdout\x18\x01 \x01(\fR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x02 \x01(\fR\x06stderr\x123\n" +

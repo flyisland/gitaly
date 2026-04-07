@@ -604,6 +604,7 @@ func TestExecCommandFactory_config(t *testing.T) {
 		"core.usereplacerefs=false",
 		"core.bigfilethreshold=50m",
 		"pack.allowpackreuse=multi",
+		"midx.version=1",
 	}
 
 	if testhelper.IsWALEnabled() {

@@ -250,7 +250,8 @@ func TestRepo_SetDefaultBranch_errors(t *testing.T) {
 
 		var sErr structerr.Error
 		require.ErrorAs(t, err, &sErr)
-		require.Equal(t, "error executing git hook\nfatal: ref updates aborted by hook\n", sErr.Metadata()["stderr"])
+		require.Regexp(t, `error executing git hook\nfatal: .*aborted by .*hook\n`,
+			sErr.Metadata()["stderr"])
 	})
 }
 
