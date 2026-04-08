@@ -790,6 +790,9 @@ message FetchSourceBranchResponse {
 message FsckRequest {
   // repository is the repository that shall be checked for consistency.
   Repository repository = 1 [(target_repository)=true];
+  // repo_only when set to true, it runs `fsck` with `--no-full`,
+  // which can be used to avoid checking the object pool of a repository.
+  bool repo_only = 2;
 }
 
 // FsckResponse is a response for the Fsck RPC.
