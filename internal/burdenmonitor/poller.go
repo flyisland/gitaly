@@ -7,7 +7,10 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
-const defaultPollInterval = 2 * time.Second
+const (
+	defaultPollInterval = 2 * time.Second
+	defaultLogInterval  = 5 * time.Minute
+)
 
 type processStats struct {
 	UserTime   time.Duration
@@ -28,6 +31,8 @@ func (bm *BurdenMonitor) StartPollerWithInterval(ctx context.Context, interval t
 func (bm *BurdenMonitor) pollLoop(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	logTicker := time.NewTicker(defaultLogInterval)
+	defer logTicker.Stop()
 
 	for {
 		ticker.Reset(interval)
@@ -36,6 +41,8 @@ func (bm *BurdenMonitor) pollLoop(ctx context.Context, interval time.Duration) {
 			return
 		case <-ticker.C:
 			bm.pollAllEntries()
+		case <-logTicker.C:
+			bm.logStats()
 		}
 	}
 }
@@ -51,7 +58,9 @@ func (bm *BurdenMonitor) pollAllEntries() {
 	for _, entry := range entries {
 		bm.pollEntryCommands(entry)
 	}
+}
 
+func (bm *BurdenMonitor) logStats() {
 	byCPU := bm.EntriesSortedBy(SortByCPU)
 	byMemory := bm.EntriesSortedBy(SortByMemory)
 	bm.logger.WithFields(log.Fields{
