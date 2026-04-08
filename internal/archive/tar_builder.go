@@ -222,6 +222,63 @@ func (t *TarBuilder) FileIfExist(rel string) error {
 	return t.File(rel, false)
 }
 
+// FileWithEdit reads a file, applies an edit function to its contents, and writes
+// the modified content to the archive. The edit function receives the original file
+// content and returns the modified content to be archived.
+//
+// If `mustExist` is set, an error is returned if the file doesn't exist.
+// Otherwise, the error is hidden.
+func (t *TarBuilder) FileWithEdit(rel string, mustExist bool, edit func([]byte) ([]byte, error)) error {
+	if t.err != nil {
+		return t.err
+	}
+
+	filename := t.join(rel)
+
+	fi, err := os.Lstat(filename)
+	if err != nil {
+		if os.IsNotExist(err) && !mustExist {
+			return nil
+		}
+
+		return t.setErr(err)
+	}
+
+	if !fi.Mode().IsRegular() {
+		return t.setErr(fmt.Errorf("unsupported mode for %v: %v", rel, fi.Mode()))
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return t.setErr(err)
+	}
+
+	data, err = edit(data)
+	if err != nil {
+		return t.setErr(err)
+	}
+
+	hdr := &tar.Header{
+		Name:    rel,
+		Mode:    int64(fi.Mode().Perm()) | int64(TarFileMode),
+		Size:    int64(len(data)),
+		ModTime: fi.ModTime(),
+	}
+	if hdr.Mode&int64(permission.OwnerExecute) != 0 {
+		hdr.Mode |= int64(ExecuteMode)
+	}
+
+	if err := t.tarWriter.WriteHeader(hdr); err != nil {
+		return t.setErr(err)
+	}
+
+	if _, err := t.tarWriter.Write(data); err != nil {
+		return t.setErr(err)
+	}
+
+	return nil
+}
+
 // VirtualFileWithContents creates an entry at relPath with contents from the given file.
 // This can be used to build a virtual directory structure inside the tar archive.
 func (t *TarBuilder) VirtualFileWithContents(relPath string, contents *os.File) error {

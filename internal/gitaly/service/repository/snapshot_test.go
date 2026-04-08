@@ -155,14 +155,16 @@ func TestGetSnapshot(t *testing.T) {
 						ParseContent: ignoreContent,
 					}
 					if testhelper.IsWALEnabled() {
-						// Only HEAD is included in snapshots
-						// when snapshot filter is enabled in transaction manager.
+						// shallow isn't included when snapshot
+						// filter is enabled in transaction manager.
 						return testhelper.DirectoryState{
-							"HEAD": info,
+							"HEAD":   info,
+							"config": info,
 						}
 					}
 					return testhelper.DirectoryState{
 						"HEAD":    info,
+						"config":  info,
 						"shallow": info,
 					}
 				}()
@@ -231,6 +233,10 @@ func TestGetSnapshot(t *testing.T) {
 						Mode:         archive.TarFileMode,
 						ParseContent: ignoreContent,
 					},
+					"config": {
+						Mode:         archive.TarFileMode,
+						ParseContent: ignoreContent,
+					},
 				}
 
 				for _, ref := range gittest.FilesOrReftables(
@@ -295,6 +301,10 @@ func TestGetSnapshot(t *testing.T) {
 
 				expected := testhelper.DirectoryState{
 					"HEAD": {
+						Mode:         archive.TarFileMode,
+						ParseContent: ignoreContent,
+					},
+					"config": {
 						Mode:         archive.TarFileMode,
 						ParseContent: ignoreContent,
 					},

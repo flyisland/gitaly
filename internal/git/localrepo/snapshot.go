@@ -1,6 +1,7 @@
 package localrepo
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -50,7 +51,6 @@ func (repo *Repo) CreateSnapshot(ctx context.Context, out io.Writer) error {
 	//
 	//   * branches - legacy, not replicated by git fetch
 	//   * commondir - may differ between sites
-	//   * config - may contain credentials, and cannot be managed by client
 	//   * custom-hooks - GitLab-specific, no supported in Geo, may differ between sites
 	//   * hooks - symlink, may differ between sites
 	//   * {shared,}index[.*] - not found in bare repositories
@@ -64,6 +64,8 @@ func (repo *Repo) CreateSnapshot(ctx context.Context, out io.Writer) error {
 	// References
 	_ = builder.FileIfExist("HEAD")
 	_ = builder.FileIfExist("packed-refs")
+	// Only include core.repositoryFormatVersion and extensions.* from the config file
+	_ = builder.FileWithEdit("config", false, filterGitConfig)
 	_ = builder.RecursiveDirIfExist("refs")
 	_ = builder.RecursiveDirIfExist("reftable")
 	_ = builder.RecursiveDirIfExist("branches")
@@ -84,6 +86,48 @@ func (repo *Repo) CreateSnapshot(ctx context.Context, out io.Writer) error {
 	}
 
 	return nil
+}
+
+// filterGitConfig filters the config file to only include
+// core.repositoryFormatVersion and extensions.* sections. These are the
+// entries which indicate the object format (SHA-1 vs SHA-256) and any other
+// custom attributes.
+func filterGitConfig(data []byte) ([]byte, error) {
+	var result [][]byte
+	var currentSection string
+
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		trimmed := bytes.TrimSpace(line)
+
+		// Look for [section] headers
+		if len(trimmed) > 0 && trimmed[0] == '[' {
+			end := bytes.IndexByte(trimmed, ']')
+			if end != -1 {
+				currentSection = string(bytes.ToLower(trimmed[1:end]))
+				// Treat [extensions "foo"] like [extensions]
+				if space := bytes.IndexByte(trimmed[1:end], ' '); space != -1 {
+					currentSection = string(bytes.ToLower(trimmed[1 : 1+space]))
+				}
+			}
+		}
+
+		switch currentSection {
+		case "core":
+			// Only include repositoryformatversion from [core].
+			if bytes.HasPrefix(trimmed, []byte("[")) || bytes.Contains(bytes.ToLower(trimmed), []byte("repositoryformatversion")) {
+				result = append(result, line)
+			}
+		case "extensions":
+			// Include the entire [extensions] section.
+			result = append(result, line)
+		}
+	}
+
+	if len(result) == 0 {
+		return nil, nil
+	}
+
+	return append(bytes.Join(result, []byte("\n")), '\n'), nil
 }
 
 func (repo *Repo) addAlternateFiles(ctx context.Context, builder *archive.TarBuilder, storageRoot, repoPath string) error {
