@@ -3,8 +3,6 @@ package cgroups
 import (
 	"io"
 	"os/exec"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // NoopManager is a cgroups manager that does nothing
@@ -17,7 +15,10 @@ func (cg *NoopManager) Ready() bool {
 
 //nolint:revive // This is unintentionally missing documentation.
 func (cg *NoopManager) Stats() (Stats, error) {
-	return Stats{}, nil
+	return Stats{
+		isEmpty: true,
+		version: 0,
+	}, nil
 }
 
 //nolint:revive // This is unintentionally missing documentation.
@@ -39,12 +40,6 @@ func (cg *NoopManager) SupportsCloneIntoCgroup() bool {
 func (cg *NoopManager) CloneIntoCgroup(*exec.Cmd, ...AddCommandOption) (string, io.Closer, error) {
 	return "", io.NopCloser(nil), nil
 }
-
-// Describe does nothing
-func (cg *NoopManager) Describe(ch chan<- *prometheus.Desc) {}
-
-// Collect does nothing
-func (cg *NoopManager) Collect(ch chan<- prometheus.Metric) {}
 
 // MockManager does nothing except returns the cgroup key
 type MockManager struct {

@@ -19,7 +19,6 @@ import (
 
 	cgrps "github.com/containerd/cgroups/v3"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/prometheus/client_golang/prometheus"
 	cgroupscfg "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
@@ -31,10 +30,9 @@ type cgroupHandler interface {
 	setupParent(parentResources *specs.LinuxResources) error
 	createCgroup(repoResources *specs.LinuxResources, cgroupPath string) error
 	addToCgroup(pid int, cgroupPath string) error
-	collect(repoPath string, ch chan<- prometheus.Metric)
 	currentProcessCgroup() string
 	repoPath(groupID int) string
-	stats() (Stats, error)
+	stats(path string) (CgroupStats, error)
 	supportsCloneIntoCgroup() bool
 }
 
@@ -82,13 +80,14 @@ type randomizer interface {
 
 // CGroupManager is a manager class that implements specific methods related to cgroups
 type CGroupManager struct {
-	cfg     cgroupscfg.Config
-	pid     int
-	enabled bool
-	repoRes *specs.LinuxResources
-	status  *cgroupStatus
-	handler cgroupHandler
-	rand    randomizer
+	cfg           cgroupscfg.Config
+	pid           int
+	enabled       bool
+	cgroupVersion uint8
+	repoRes       *specs.LinuxResources
+	status        *cgroupStatus
+	handler       cgroupHandler
+	rand          randomizer
 }
 
 func newCgroupManager(cfg cgroupscfg.Config, logger log.Logger, pid int) *CGroupManager {
@@ -97,10 +96,14 @@ func newCgroupManager(cfg cgroupscfg.Config, logger log.Logger, pid int) *CGroup
 
 func newCgroupManagerWithMode(cfg cgroupscfg.Config, logger log.Logger, pid int, mode cgrps.CGMode) *CGroupManager {
 	var handler cgroupHandler
+
+	var cgroupVersion uint8
 	switch mode {
 	case cgrps.Legacy, cgrps.Hybrid:
+		cgroupVersion = 1
 		handler = newV1Handler(cfg, logger, pid)
 	case cgrps.Unified:
+		cgroupVersion = 2
 		handler = newV2Handler(cfg, logger, pid)
 		logger.Warn("Gitaly now includes experimental support for CgroupV2. Please proceed with caution and use this experimental feature at your own risk")
 	default:
@@ -109,12 +112,13 @@ func newCgroupManagerWithMode(cfg cgroupscfg.Config, logger log.Logger, pid int,
 	}
 
 	return &CGroupManager{
-		cfg:     cfg,
-		pid:     pid,
-		handler: handler,
-		repoRes: configRepositoryResources(cfg),
-		status:  newCgroupStatus(cfg, handler.repoPath),
-		rand:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		cfg:           cfg,
+		pid:           pid,
+		cgroupVersion: cgroupVersion,
+		handler:       handler,
+		repoRes:       configRepositoryResources(cfg),
+		status:        newCgroupStatus(cfg, handler.repoPath),
+		rand:          rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -231,33 +235,17 @@ func (cgm *CGroupManager) calcGroupID(rand randomizer, key string, count uint, a
 	return (groupID + uint(rand.Intn(int(allocationCount)))) % count
 }
 
-// Describe is used to generate description information for each CGroupManager prometheus metric
-func (cgm *CGroupManager) Describe(ch chan<- *prometheus.Desc) {
-	prometheus.DescribeByCollect(cgm, ch)
-}
-
-// Collect is used to collect the current values of all CGroupManager prometheus metrics
-func (cgm *CGroupManager) Collect(ch chan<- prometheus.Metric) {
-	if !cgm.cfg.MetricsEnabled {
-		return
-	}
-
-	for i := 0; i < int(cgm.cfg.Repositories.Count); i++ {
-		repoPath := cgm.handler.repoPath(i)
-
-		cgLock := cgm.status.getLock(repoPath)
-		if !cgLock.isCreated() {
-			continue
-		}
-
-		cgm.handler.collect(repoPath, ch)
-	}
-}
-
 // Stats returns cgroup accounting statistics collected by reading
 // cgroupfs files.
 func (cgm *CGroupManager) Stats() (Stats, error) {
-	return cgm.handler.stats()
+	parentStats, err := cgm.handler.stats(cgm.currentProcessCgroup())
+	if err != nil {
+		return Stats{}, err
+	}
+
+	return Stats{
+		ParentStats: parentStats,
+	}, nil
 }
 
 func (cgm *CGroupManager) currentProcessCgroup() string {

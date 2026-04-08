@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/cgroups"
 )
 
@@ -36,16 +35,6 @@ func (m *mockCgroupManager) SupportsCloneIntoCgroup() bool {
 }
 
 func (m *mockCgroupManager) CloneIntoCgroup(cmd *exec.Cmd, option ...cgroups.AddCommandOption) (string, io.Closer, error) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (m *mockCgroupManager) Describe(ch chan<- *prometheus.Desc) {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (m *mockCgroupManager) Collect(ch chan<- prometheus.Metric) {
 	// TODO implement me
 	panic("implement me")
 }

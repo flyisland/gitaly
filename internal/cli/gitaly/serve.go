@@ -57,6 +57,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/env"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter/watchers"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/loadmonitor"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/offloading"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/streamcache"
@@ -231,6 +232,16 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	}
 
 	cgroupMgr := cgroups.NewManager(cfg.Cgroups, logger, os.Getpid())
+
+	loadMonitor := loadmonitor.NewLoadMonitor(loadmonitor.Config{
+		PollInterval:  time.Second * 10,
+		NotifyTimeout: time.Second * 3,
+	}, logger, cgroupMgr)
+	if err = loadMonitor.Start(ctx); err != nil {
+		return fmt.Errorf("starting load monitor: %w", err)
+	}
+	defer loadMonitor.Stop()
+	prometheus.MustRegister(loadMonitor)
 
 	began := time.Now()
 	if err := cgroupMgr.Setup(); err != nil {

@@ -4,7 +4,6 @@ import (
 	"io"
 	"os/exec"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/dontpanic"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config/cgroups"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
@@ -33,6 +32,8 @@ type PSIMetrics struct {
 // CgroupStats stores the current usage statistics of the resources managed by
 // cgroup manager. They are fetched from the cgroupfs statistic files.
 type CgroupStats struct {
+	// Path is the path to the cgroup
+	Path string
 	// CPUThrottledCount is much the CPU was throttled, this field is fetched from the `nr_throttled` field of
 	// `cpu.stat` file.
 	CPUThrottledCount uint64
@@ -93,10 +94,36 @@ type CgroupStats struct {
 
 // Stats stores statistics of all cgroups managed by a manager
 type Stats struct {
-	// ParentStats stores the statistics of the parent cgroup. There should be
-	// an array of per-repository cgroups, but we haven't used that information
-	// yet.
+	// ParentStats stores the statistics of the parent cgroup.
 	ParentStats CgroupStats
+	// isEmpty  is an internal field used to identify if the Stats are from an enabled
+	// cgroup manager, or from a NoopManager. When set to true, all Stats values should
+	// be discarded (all values should be zero/empty values anyway) because it means the
+	// cgroup manager is not running. This is currently only used from the NoopManager.
+	isEmpty bool
+
+	// version holds the group version for this Stats instance.
+	// 0: Noop (not set)
+	// 1: v1
+	// 2: v2
+	version uint8
+}
+
+// IsEmpty returns true if the Stats fields are all set to
+// zero/empty values. This is most likely because they are
+// returned from the NoopManager.
+func (s Stats) IsEmpty() bool {
+	return s.isEmpty
+}
+
+// CgroupV1 returns true of the cgroup version is 1
+func (s Stats) CgroupV1() bool {
+	return !s.IsEmpty() && s.version == 1
+}
+
+// CgroupV2 returns true of the cgroup version is 2
+func (s Stats) CgroupV2() bool {
+	return !s.IsEmpty() && s.version == 2
 }
 
 // AddCommandOption is an option that can be passed to AddCommand.
@@ -133,8 +160,6 @@ type Manager interface {
 	// cgroupfs files. Those statistics are generic for both Cgroup V1
 	// and Cgroup V2.
 	Stats() (Stats, error)
-	Describe(ch chan<- *prometheus.Desc)
-	Collect(ch chan<- prometheus.Metric)
 }
 
 // NewManager returns the appropriate Cgroups manager

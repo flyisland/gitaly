@@ -29,7 +29,7 @@ var defaultConditionTrue = Condition{
 
 func Test_defaultMonitor_Start(t *testing.T) {
 	cgroupManager := &mockCgroupManager{}
-	monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager).(*defaultMonitor)
+	monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -48,7 +48,7 @@ func Test_defaultMonitor_Stop(t *testing.T) {
 
 	t.Run("calling stop should close all consumers", func(t *testing.T) {
 		cgroupManager := &mockCgroupManager{}
-		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager).(*defaultMonitor)
+		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -66,7 +66,7 @@ func Test_defaultMonitor_Stop(t *testing.T) {
 
 	t.Run("stop can be called after context cancellation", func(t *testing.T) {
 		cgroupManager := &mockCgroupManager{}
-		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager).(*defaultMonitor)
+		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -93,7 +93,7 @@ func Test_defaultMonitor_NotifyOn(t *testing.T) {
 		ticker := helper.NewManualTicker()
 		cgroupManager := &mockCgroupManager{}
 
-		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager).(*defaultMonitor)
+		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager)
 		monitor.pollTicker = ticker
 
 		// Start the manager
@@ -117,7 +117,7 @@ func Test_defaultMonitor_NotifyOn(t *testing.T) {
 		ticker := helper.NewManualTicker()
 		cgroupManager := &mockCgroupManager{}
 
-		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager).(*defaultMonitor)
+		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager)
 		monitor.pollTicker = ticker
 
 		// Start the manager
@@ -135,7 +135,7 @@ func Test_defaultMonitor_NotifyOn(t *testing.T) {
 		ticker := helper.NewManualTicker()
 		cgroupManager := &mockCgroupManager{}
 
-		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager).(*defaultMonitor)
+		monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager)
 		monitor.pollTicker = ticker
 
 		// Don't start the manager
@@ -153,7 +153,7 @@ func Test_defaultMonitor_poll(t *testing.T) {
 	ticker := helper.NewManualTicker()
 	cgroupManager := &mockCgroupManager{}
 
-	monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager).(*defaultMonitor)
+	monitor := NewLoadMonitor(Config{}, testhelper.NewLogger(t), cgroupManager)
 	monitor.pollTicker = ticker
 
 	require.NoError(t, monitor.Start(ctx))
@@ -263,7 +263,7 @@ func Test_defaultMonitor_notify(t *testing.T) {
 				PollInterval:  time.Millisecond * 100,
 				NotifyTimeout: time.Millisecond * 50,
 			}
-			monitor := NewLoadMonitor(cfg, testhelper.NewLogger(t), cgroupManager).(*defaultMonitor)
+			monitor := NewLoadMonitor(cfg, testhelper.NewLogger(t), cgroupManager)
 			monitor.pollTicker = ticker
 
 			// Set the stats on the state
