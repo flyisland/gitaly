@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/walk"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
@@ -35,6 +36,7 @@ func (s *server) ScanPoolMetadata(req *gitalypb.ScanPoolMetadataRequest, stream 
 
 func processPoolMemberFunc(ctx context.Context, storagePath, storageName string, gitlabClient gitlab.Client, stream gitalypb.InternalGitaly_ScanPoolMetadataServer) func(relPath string, _ fs.FileInfo) error {
 	poolUpstreams := make(map[string]gitlab.ObjectPoolMember)
+	invalidPools := make(map[string]bool)
 	var poolUpstreamsMu sync.Mutex
 
 	return func(relPath string, fi fs.FileInfo) error {
@@ -42,7 +44,7 @@ func processPoolMemberFunc(ctx context.Context, storagePath, storageName string,
 
 		altInfo, err := stats.AlternatesInfoForRepository(repoPath)
 		if err != nil {
-			return nil
+			return fmt.Errorf("read alternates for %q: %w", relPath, err)
 		}
 
 		if !altInfo.Exists || len(altInfo.ObjectDirectories) == 0 {
@@ -59,17 +61,26 @@ func processPoolMemberFunc(ctx context.Context, storagePath, storageName string,
 
 		poolDiskPath, err := filepath.Rel(storagePath, poolRepoPath)
 		if err != nil {
-			return nil
+			return fmt.Errorf("compute relative path for pool %q (repo %q): %w", poolRepoPath, relPath, err)
 		}
 		poolDiskPath = filepath.ToSlash(poolDiskPath)
 
 		poolUpstreamsMu.Lock()
 		defer poolUpstreamsMu.Unlock()
 
+		if invalidPools[poolDiskPath] {
+			return nil
+		}
+
 		if _, ok := poolUpstreams[poolDiskPath]; !ok {
+			if err := storage.ValidateGitDirectory(poolRepoPath); err != nil {
+				invalidPools[poolDiskPath] = true
+				return nil
+			}
+
 			members, err := gitlabClient.ObjectPoolMembers(ctx, strings.TrimSuffix(poolDiskPath, ".git"), storageName, true)
 			if err != nil {
-				return fmt.Errorf("query Rails: %w", err)
+				return fmt.Errorf("query Rails for pool %q (repo %q): %w", poolDiskPath, relPath, err)
 			}
 
 			poolUpstreams[poolDiskPath] = gitlab.ObjectPoolMember{}
@@ -88,10 +99,14 @@ func processPoolMemberFunc(ctx context.Context, storagePath, storageName string,
 			}
 		}
 
-		return stream.Send(&gitalypb.ScanPoolMetadataResponse{
+		if err := stream.Send(&gitalypb.ScanPoolMetadataResponse{
 			RelativePath: relPath,
 			PoolDiskPath: poolDiskPath,
 			IsUpstream:   isUpstream,
-		})
+		}); err != nil {
+			return fmt.Errorf("send response for repo %q: %w", relPath, err)
+		}
+
+		return nil
 	}
 }

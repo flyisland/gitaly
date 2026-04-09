@@ -111,6 +111,18 @@ func TestScanPoolMetadata(t *testing.T) {
 		poolDiskPath := "@pools/aa/bb/test-pool.git"
 		poolPath := filepath.Join(storageRoot, poolDiskPath)
 		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "objects"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "refs"), mode.Directory))
+		require.NoError(t, os.WriteFile(filepath.Join(poolPath, "HEAD"), []byte("ref: refs/heads/main\n"), mode.File))
+
+		// add some empty directories to ensure that the presence of other directories
+		// in the same parent directory doesn't cause issues with computing the pool disk path.
+		emptyDirs := []string{
+			filepath.Join(storageRoot, "@pools/aa/cc"),
+			filepath.Join(storageRoot, "@pools/aa/cd"),
+		}
+		for _, dir := range emptyDirs {
+			require.NoError(t, os.MkdirAll(dir, mode.Directory))
+		}
 
 		_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
@@ -140,6 +152,8 @@ func TestScanPoolMetadata(t *testing.T) {
 		poolDiskPath := "@pools/aa/bb/test-pool-2.git"
 		poolPath := filepath.Join(storageRoot, poolDiskPath)
 		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "objects"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "refs"), mode.Directory))
+		require.NoError(t, os.WriteFile(filepath.Join(poolPath, "HEAD"), []byte("ref: refs/heads/main\n"), mode.File))
 
 		_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
@@ -169,6 +183,8 @@ func TestScanPoolMetadata(t *testing.T) {
 		poolDiskPath := "@pools/aa/bb/test-pool-3.git"
 		poolPath := filepath.Join(storageRoot, poolDiskPath)
 		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "objects"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "refs"), mode.Directory))
+		require.NoError(t, os.WriteFile(filepath.Join(poolPath, "HEAD"), []byte("ref: refs/heads/main\n"), mode.File))
 
 		_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
@@ -198,6 +214,8 @@ func TestScanPoolMetadata(t *testing.T) {
 		poolDiskPath := "@pools/aa/bb/test-pool-no-upstream.git"
 		poolPath := filepath.Join(storageRoot, poolDiskPath)
 		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "objects"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "refs"), mode.Directory))
+		require.NoError(t, os.WriteFile(filepath.Join(poolPath, "HEAD"), []byte("ref: refs/heads/main\n"), mode.File))
 
 		for _, relPath := range []string{
 			"no-upstream-member-1.git",
@@ -232,6 +250,8 @@ func TestScanPoolMetadata(t *testing.T) {
 		poolDiskPath := "@pools/aa/bb/test-pool-private-upstream.git"
 		poolPath := filepath.Join(storageRoot, poolDiskPath)
 		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "objects"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "refs"), mode.Directory))
+		require.NoError(t, os.WriteFile(filepath.Join(poolPath, "HEAD"), []byte("ref: refs/heads/main\n"), mode.File))
 
 		for _, relPath := range []string{
 			"no-upstream-member-1.git",
@@ -260,5 +280,54 @@ func TestScanPoolMetadata(t *testing.T) {
 		}
 
 		require.EqualValues(t, 1, privateUpstreamCalls.Load())
+	})
+
+	t.Run("repository with invalid pool is skipped", func(t *testing.T) {
+		poolDiskPath := "@pools/cc/dd/invalid-pool.git"
+		poolPath := filepath.Join(storageRoot, poolDiskPath)
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "objects"), mode.Directory))
+
+		_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+			RelativePath:           "repo-with-invalid-pool.git",
+		})
+
+		alternatesFile := filepath.Join(repoPath, "objects", "info", "alternates")
+		alternatesContent := filepath.Join(storageRoot, poolDiskPath, "objects")
+		require.NoError(t, os.WriteFile(alternatesFile, []byte(alternatesContent), mode.File))
+
+		stream, err := client.ScanPoolMetadata(ctx, &gitalypb.ScanPoolMetadataRequest{
+			StorageName: storageName,
+		})
+		require.NoError(t, err)
+
+		require.Empty(t, consumeServerStream(t, stream))
+	})
+
+	t.Run("multiple repositories with same invalid pool are all skipped", func(t *testing.T) {
+		poolDiskPath := "@pools/ee/ff/shared-invalid-pool.git"
+		poolPath := filepath.Join(storageRoot, poolDiskPath)
+		require.NoError(t, os.MkdirAll(poolPath, mode.Directory))
+
+		for _, relPath := range []string{
+			"repo-invalid-1.git",
+			"repo-invalid-2.git",
+			"repo-invalid-3.git",
+		} {
+			_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
+				SkipCreationViaService: true,
+				RelativePath:           relPath,
+			})
+			alternatesFile := filepath.Join(repoPath, "objects", "info", "alternates")
+			alternatesContent := filepath.Join(storageRoot, poolDiskPath, "objects")
+			require.NoError(t, os.WriteFile(alternatesFile, []byte(alternatesContent), mode.File))
+		}
+
+		stream, err := client.ScanPoolMetadata(ctx, &gitalypb.ScanPoolMetadataRequest{
+			StorageName: storageName,
+		})
+		require.NoError(t, err)
+
+		require.Empty(t, consumeServerStream(t, stream))
 	})
 }
