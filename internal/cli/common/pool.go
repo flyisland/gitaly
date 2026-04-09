@@ -1,4 +1,4 @@
-//nolint:revive
+// revive:disable:var-naming
 package common
 
 import (
@@ -69,6 +69,60 @@ func StorePoolMetadata(ctx context.Context, client gitalypb.InternalGitalyClient
 	}
 
 	return nil
+}
+
+// listPoolUpstreamsBatchSize is the maximum number of pool disk paths to send in a single
+// ListPoolUpstreams request message.
+const listPoolUpstreamsBatchSize = 10_000
+
+// ListPoolUpstreams calls the ListPoolUpstreams RPC to query the Rails ObjectPoolMembers API for
+// each given pool disk path and returns a map of pool disk path to upstream relative path. Note
+// that these paths should be translated if the RPC is being called against a Gitaly node within a
+// Praefect cluster, as the paths will be replica paths.
+func ListPoolUpstreams(ctx context.Context, client gitalypb.InternalGitalyClient, storageName string, poolDiskPaths []string) (map[string]string, error) {
+	stream, err := client.ListPoolUpstreams(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list pool upstreams: %w", err)
+	}
+
+	for i := 0; i < len(poolDiskPaths); i += listPoolUpstreamsBatchSize {
+		end := i + listPoolUpstreamsBatchSize
+		if end > len(poolDiskPaths) {
+			end = len(poolDiskPaths)
+		}
+
+		req := &gitalypb.ListPoolUpstreamsRequest{
+			PoolDiskPaths: poolDiskPaths[i:end],
+		}
+		if i == 0 {
+			req.StorageName = storageName
+		}
+
+		if err := stream.Send(req); err != nil {
+			return nil, fmt.Errorf("send: %w", err)
+		}
+	}
+
+	if err := stream.CloseSend(); err != nil {
+		return nil, fmt.Errorf("close send: %w", err)
+	}
+
+	upstreams := make(map[string]string)
+	for {
+		resp, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("receive: %w", err)
+		}
+
+		for k, v := range resp.GetUpstreams() {
+			upstreams[k] = v
+		}
+	}
+
+	return upstreams, nil
 }
 
 // ListPoolMetadata calls the ListPoolMetadata RPC to list all pools from the metadata database.
