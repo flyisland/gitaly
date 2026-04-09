@@ -1,15 +1,27 @@
 package praefect
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	glcli "gitlab.com/gitlab-org/gitaly/v18/internal/cli"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/cli/common"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
+	gitalycfg "gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/service/setup"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/relational"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitlab"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testcfg"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testdb"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper/testserver"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
-	"google.golang.org/grpc"
 )
 
 func TestGetPrimaries(t *testing.T) {
@@ -21,12 +33,12 @@ func TestGetPrimaries(t *testing.T) {
 	// Two virtual storages; only "default" should be queried.
 	// gitaly-3 exists in "default" but holds no primaries.
 	db.MustExec(t, `
-		INSERT INTO repositories (repository_id, virtual_storage, relative_path, "primary")
+		INSERT INTO repositories (repository_id, virtual_storage, relative_path, replica_path, "primary")
 		VALUES
-			(1, 'default', 'repo-a', 'gitaly-1'),
-			(2, 'default', 'repo-b', 'gitaly-2'),
-			(3, 'default', 'repo-c', 'gitaly-1'),
-			(4, 'other',   'repo-d', 'gitaly-4')
+			(1, 'default', 'repo-a', 'replica-a', 'gitaly-1'),
+			(2, 'default', 'repo-b', 'replica-b', 'gitaly-2'),
+			(3, 'default', 'repo-c', 'replica-c', 'gitaly-1'),
+			(4, 'other',   'repo-d', 'replica-d', 'gitaly-4')
 	`)
 
 	primaries, err := getPrimaries(ctx, db.DB, "default")
@@ -122,238 +134,259 @@ func TestFindNode(t *testing.T) {
 	})
 }
 
-type mockInternalGitalyServer struct {
-	gitalypb.UnimplementedInternalGitalyServer
-	scanResponsesByStorage map[string][]*gitalypb.ScanPoolMetadataResponse
-	storedByStorage        map[string][]*gitalypb.StorePoolMetadataRequest
-}
-
-func (s *mockInternalGitalyServer) ScanPoolMetadata(
-	req *gitalypb.ScanPoolMetadataRequest,
-	stream grpc.ServerStreamingServer[gitalypb.ScanPoolMetadataResponse],
-) error {
-	for _, resp := range s.scanResponsesByStorage[req.GetStorageName()] {
-		if err := stream.Send(resp); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *mockInternalGitalyServer) StorePoolMetadata(
-	stream grpc.ClientStreamingServer[gitalypb.StorePoolMetadataRequest, gitalypb.StorePoolMetadataResponse],
-) error {
-	for {
-		req, err := stream.Recv()
-		if err != nil {
-			break
-		}
-		if s.storedByStorage == nil {
-			s.storedByStorage = make(map[string][]*gitalypb.StorePoolMetadataRequest)
-		}
-		s.storedByStorage[req.GetStorageName()] = append(s.storedByStorage[req.GetStorageName()], req)
-	}
-	return stream.SendAndClose(&gitalypb.StorePoolMetadataResponse{})
-}
-
-func registerInternalGitalyServer(impl *mockInternalGitalyServer) svcRegistrar {
-	return func(srv *grpc.Server) {
-		gitalypb.RegisterInternalGitalyServer(srv, impl)
-	}
-}
-
-func TestScanPrimaries(t *testing.T) {
+// TestPoolAction exercises the full `praefect pool` command end-to-end.
+func TestPoolAction(t *testing.T) {
 	t.Parallel()
 
-	ctx := testhelper.Context(t)
-	db := testdb.New(t)
-
-	fakeSrv := &mockInternalGitalyServer{
-		scanResponsesByStorage: map[string][]*gitalypb.ScanPoolMetadataResponse{
-			"gitaly-1": {
-				{RelativePath: "@cluster/repositories/aa/bb/1", PoolDiskPath: "@cluster/pools/cc/dd/4"},
-			},
-			"gitaly-2": {
-				{RelativePath: "@cluster/repositories/11/22/2", PoolDiskPath: "@cluster/pools/cc/dd/4"},
-			},
-		},
-	}
-	ln, clean := listenAndServe(t, []svcRegistrar{registerInternalGitalyServer(fakeSrv)})
-	defer clean()
-
-	addr := "unix://" + ln.Addr().String()
-	conf := config.Config{
-		VirtualStorages: []*config.VirtualStorage{
-			{
-				Name: "default",
-				Nodes: []*config.Node{
-					{Storage: "gitaly-1", Address: addr},
-					{Storage: "gitaly-2", Address: addr},
-				},
-			},
-		},
+	type gitalyNode struct {
+		storageName string
+		cfg         gitalycfg.Cfg
+		addr        string
 	}
 
-	db.MustExec(t, `
-		INSERT INTO repositories (repository_id, virtual_storage, relative_path, "primary")
+	// newStore creates a SQLite pool store that is cleaned up when the test ends.
+	newStore := func(t *testing.T) relational.PoolStore {
+		t.Helper()
+		store, err := relational.NewSQLitePoolStore(filepath.Join(t.TempDir(), "pools.db"))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = store.Close() })
+		return store
+	}
+
+	// mockRailsClientForPools returns a mock client to handle ObjectPoolMembers requests.
+	mockRailsClientForPools := func(t *testing.T, poolRelPaths ...string) gitlab.Client {
+		accepted := make(map[string]struct{}, len(poolRelPaths))
+		for _, p := range poolRelPaths {
+			accepted[p] = struct{}{}
+		}
+		return gitlab.NewMockClientWithObjectPoolMembers(t,
+			gitlab.MockAllowed, gitlab.MockPreReceive, gitlab.MockPostReceive,
+			func(_ context.Context, diskPath, storage string, _ bool) ([]gitlab.ObjectPoolMember, error) {
+				if storage != "default" {
+					return nil, fmt.Errorf("expected virtual storage 'default', got %q", storage)
+				}
+
+				if _, ok := accepted[diskPath]; !ok {
+					return nil, fmt.Errorf("unexpected pool path %q", diskPath)
+				}
+				return []gitlab.ObjectPoolMember{{
+					Public:     true,
+					IsUpstream: true,
+				}}, nil
+			},
+		)
+	}
+
+	// startGitalyNode builds a Gitaly config and starts a server for the given storage name.
+	startGitalyNode := func(t *testing.T, storageName string) gitalyNode {
+		t.Helper()
+		cfg := testcfg.Build(t, testcfg.WithStorages(storageName))
+		addr := testserver.RunGitalyServer(t, cfg, setup.RegisterAll,
+			testserver.WithPoolMetadataStore(newStore(t)),
+			testserver.WithGitLabClient(mockRailsClientForPools(t, "@pools/cc/dd/pool-a", "@pools/ee/ff/pool-b")),
+			testserver.WithDisablePraefect(),
+		)
+		return gitalyNode{storageName: storageName, cfg: cfg, addr: addr}
+	}
+
+	// createPool creates a pool repository on a Gitaly node and returns its filesystem path.
+	createPool := func(t *testing.T, ctx context.Context, node gitalyNode, diskPath string) string {
+		t.Helper()
+		_, poolRepoPath := gittest.CreateRepository(t, ctx, node.cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+			RelativePath:           diskPath,
+		})
+		return poolRepoPath
+	}
+
+	// linkMemberToPool creates a member repository and writes an alternates file pointing to the pool.
+	linkMemberToPool := func(t *testing.T, ctx context.Context, node gitalyNode, memberDiskPath, poolRepoPath string) {
+		t.Helper()
+		_, memberRepoPath := gittest.CreateRepository(t, ctx, node.cfg, gittest.CreateRepositoryConfig{
+			SkipCreationViaService: true,
+			RelativePath:           memberDiskPath,
+		})
+		require.NoError(t, os.MkdirAll(filepath.Join(memberRepoPath, "objects", "info"), mode.Directory))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(memberRepoPath, "objects", "info", "alternates"),
+			[]byte(filepath.Join(poolRepoPath, "objects")),
+			mode.File,
+		))
+	}
+
+	// populateNode creates two pools, one with a single member and one with two members.
+	populateNode := func(t *testing.T, ctx context.Context, node gitalyNode) {
+		t.Helper()
+		poolAPath := createPool(t, ctx, node, "@cluster/pools/cc/dd/4")
+		linkMemberToPool(t, ctx, node, "@cluster/repositories/aa/bb/1", poolAPath)
+		poolBPath := createPool(t, ctx, node, "@cluster/pools/ee/ff/5")
+		linkMemberToPool(t, ctx, node, "@cluster/repositories/11/22/2", poolBPath)
+		linkMemberToPool(t, ctx, node, "@cluster/repositories/33/44/3", poolBPath)
+	}
+
+	// listPools queries a Gitaly node for pool metadata and returns the pool disk paths.
+	listPools := func(t *testing.T, ctx context.Context, node gitalyNode) []string {
+		t.Helper()
+		conn, err := glcli.Dial(ctx, node.addr, "", defaultDialTimeout)
+		require.NoError(t, err)
+		defer conn.Close()
+		pools, err := common.ListPoolMetadata(ctx, gitalypb.NewInternalGitalyClient(conn), node.storageName)
+		require.NoError(t, err)
+		return pools
+	}
+
+	// The set of pool paths that should be stored on each node.
+	expectedPools := []string{"@pools/cc/dd/pool-a.git", "@pools/ee/ff/pool-b.git"}
+
+	// Default pools and member repositories.
+	defaultDBFixture := `
+		INSERT INTO repositories (repository_id, virtual_storage, relative_path, replica_path, "primary")
 		VALUES
-			(1, 'default', 'repo-a', 'gitaly-1'),
-			(2, 'default', 'repo-b', 'gitaly-2')
-	`)
+			(1, 'default', '@hashed/aa/bb/aabbcc.git', '@cluster/repositories/aa/bb/1', 'gitaly-1'),
+			(2, 'default', '@hashed/11/22/112233.git', '@cluster/repositories/11/22/2', 'gitaly-1'),
+			(3, 'default', '@hashed/33/44/334455.git', '@cluster/repositories/33/44/3', 'gitaly-1'),
+			(4, 'default', '@pools/cc/dd/pool-a.git',  '@cluster/pools/cc/dd/4',        'gitaly-1'),
+			(5, 'default', '@pools/ee/ff/pool-b.git',  '@cluster/pools/ee/ff/5',        'gitaly-1')
+	`
 
-	members, err := scanPrimaries(ctx, db.DB, conf, "default")
-	require.NoError(t, err)
-	require.ElementsMatch(t, []common.PoolMember{
-		{MemberDiskPath: "@cluster/repositories/aa/bb/1", PoolDiskPath: "@cluster/pools/cc/dd/4"},
-		{MemberDiskPath: "@cluster/repositories/11/22/2", PoolDiskPath: "@cluster/pools/cc/dd/4"},
-	}, members)
-}
+	t.Run("stores pool metadata on all nodes", func(t *testing.T) {
+		t.Parallel()
 
-func TestScanPrimaries_deduplication(t *testing.T) {
-	t.Parallel()
+		ctx := testhelper.Context(t)
+		g1 := startGitalyNode(t, "gitaly-1")
+		g2 := startGitalyNode(t, "gitaly-2")
 
-	ctx := testhelper.Context(t)
-	db := testdb.New(t)
+		// gitaly-1 is the sole primary; gitaly-2 holds no primaries but still stores metadata.
+		populateNode(t, ctx, g1)
 
-	// gitaly-1 and gitaly-2 are both primaries for different repositories, and happen to both store
-	// @cluster/repositories/aa/bb/1.
-	fakeSrv := &mockInternalGitalyServer{
-		scanResponsesByStorage: map[string][]*gitalypb.ScanPoolMetadataResponse{
-			"gitaly-1": {
-				{RelativePath: "@cluster/repositories/aa/bb/1", PoolDiskPath: "@cluster/pools/cc/dd/4"},
-			},
-			"gitaly-2": {
-				{RelativePath: "@cluster/repositories/aa/bb/1", PoolDiskPath: "@cluster/pools/cc/dd/4"},
-			},
-		},
-	}
-	ln, clean := listenAndServe(t, []svcRegistrar{registerInternalGitalyServer(fakeSrv)})
-	defer clean()
+		db := testdb.New(t)
+		db.MustExec(t, defaultDBFixture)
 
-	addr := "unix://" + ln.Addr().String()
-	conf := config.Config{
-		VirtualStorages: []*config.VirtualStorage{
-			{
+		conf := config.Config{
+			ListenAddr: "localhost:0",
+			DB:         testdb.GetConfig(t, db.Name),
+			VirtualStorages: []*config.VirtualStorage{{
 				Name: "default",
 				Nodes: []*config.Node{
-					{Storage: "gitaly-1", Address: addr},
-					{Storage: "gitaly-2", Address: addr},
+					{Storage: g1.storageName, Address: g1.addr},
+					{Storage: g2.storageName, Address: g2.addr},
+				},
+			}},
+		}
+
+		stdout, stderr, exitCode := runApp(t, ctx, []string{"-config", writeConfigToFile(t, conf), "pool"})
+		require.Equal(t, 0, exitCode)
+		require.Empty(t, stderr)
+		require.Contains(t, stdout, `found 3 unique pool members in virtual storage "default"`)
+		require.Contains(t, stdout, `stored pool metadata for virtual storage "default" on 2 nodes`)
+
+		require.ElementsMatch(t, expectedPools, listPools(t, ctx, g1))
+		require.ElementsMatch(t, expectedPools, listPools(t, ctx, g2))
+	})
+
+	t.Run("deduplicates pool members retrieved from multiple primaries", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		g1 := startGitalyNode(t, "gitaly-1")
+		g2 := startGitalyNode(t, "gitaly-2")
+
+		// Both nodes hold the same repos; deduplication must yield exactly 3 unique members.
+		populateNode(t, ctx, g1)
+		populateNode(t, ctx, g2)
+
+		db := testdb.New(t)
+		db.MustExec(t, defaultDBFixture)
+		// The extra row makes gitaly-2 a primary so it is scanned as well.
+		db.MustExec(t, `
+			INSERT INTO repositories (repository_id, virtual_storage, relative_path, replica_path, "primary")
+			VALUES (6, 'default', 'other-repo.git', 'other-replica', 'gitaly-2')
+		`)
+
+		conf := config.Config{
+			ListenAddr: "localhost:0",
+			DB:         testdb.GetConfig(t, db.Name),
+			VirtualStorages: []*config.VirtualStorage{{
+				Name: "default",
+				Nodes: []*config.Node{
+					{Storage: g1.storageName, Address: g1.addr},
+					{Storage: g2.storageName, Address: g2.addr},
+				},
+			}},
+		}
+
+		stdout, _, exitCode := runApp(t, ctx, []string{"-config", writeConfigToFile(t, conf), "pool"})
+		require.Equal(t, 0, exitCode)
+
+		require.Contains(t, stdout, `found 3 unique pool members in virtual storage "default"`)
+
+		require.ElementsMatch(t, expectedPools, listPools(t, ctx, g1))
+		require.ElementsMatch(t, expectedPools, listPools(t, ctx, g2))
+	})
+
+	t.Run("skips virtual storages with no pool members", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testhelper.Context(t)
+		g1 := startGitalyNode(t, "gitaly-1")
+		g2 := startGitalyNode(t, "gitaly-2")
+
+		populateNode(t, ctx, g1)
+
+		db := testdb.New(t)
+		// Only "default" has repositories; "other" has no DB entries at all.
+		db.MustExec(t, defaultDBFixture)
+
+		conf := config.Config{
+			ListenAddr: "localhost:0",
+			DB:         testdb.GetConfig(t, db.Name),
+			VirtualStorages: []*config.VirtualStorage{
+				{
+					Name: "default",
+					Nodes: []*config.Node{
+						{Storage: g1.storageName, Address: g1.addr},
+						{Storage: g2.storageName, Address: g2.addr},
+					},
+				},
+				{
+					// "other" has no DB entries, so its node is never dialed even though it is unreachable.
+					Name: "other",
+					Nodes: []*config.Node{
+						{Storage: "gitaly-3", Address: "tcp://127.0.0.1:1"},
+					},
 				},
 			},
-		},
-	}
+		}
 
-	db.MustExec(t, `
-		INSERT INTO repositories (repository_id, virtual_storage, relative_path, "primary")
-		VALUES
-			(1, 'default', 'repo-a', 'gitaly-1'),
-			(2, 'default', 'repo-b', 'gitaly-2')
-	`)
+		stdout, _, exitCode := runApp(t, ctx, []string{"-config", writeConfigToFile(t, conf), "pool"})
+		require.Equal(t, 0, exitCode, "unreachable 'other' node must never be dialed")
+		require.Contains(t, stdout, `stored pool metadata for virtual storage "default" on 2 nodes`)
+		require.Contains(t, stdout, `no pool members found on virtual storage "other", nothing to store`)
+	})
 
-	members, err := scanPrimaries(ctx, db.DB, conf, "default")
-	require.NoError(t, err)
+	t.Run("fails when a primary node is unreachable", func(t *testing.T) {
+		t.Parallel()
 
-	require.EqualValues(t,
-		[]common.PoolMember{{MemberDiskPath: "@cluster/repositories/aa/bb/1", PoolDiskPath: "@cluster/pools/cc/dd/4"}},
-		members,
-		"results are deduplicated")
-}
+		ctx := testhelper.Context(t)
 
-func TestStoreOnAllNodes(t *testing.T) {
-	t.Parallel()
+		db := testdb.New(t)
+		db.MustExec(t, `
+			INSERT INTO repositories (repository_id, virtual_storage, relative_path, replica_path, "primary")
+			VALUES (1, 'default', 'repo.git', '@cluster/repositories/aa/bb/1', 'gitaly-bad')
+		`)
 
-	ctx := testhelper.Context(t)
-
-	fakeSrv := &mockInternalGitalyServer{}
-	ln, clean := listenAndServe(t, []svcRegistrar{registerInternalGitalyServer(fakeSrv)})
-	defer clean()
-
-	addr := "unix://" + ln.Addr().String()
-	conf := config.Config{
-		VirtualStorages: []*config.VirtualStorage{
-			{
+		conf := config.Config{
+			ListenAddr: "localhost:0",
+			DB:         testdb.GetConfig(t, db.Name),
+			VirtualStorages: []*config.VirtualStorage{{
 				Name: "default",
 				Nodes: []*config.Node{
-					{Storage: "gitaly-1", Address: addr},
-					{Storage: "gitaly-2", Address: addr},
-				},
-			},
-		},
-	}
-
-	require.NoError(t, storeOnAllNodes(ctx, conf, "default", []common.PoolMember{
-		{MemberDiskPath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
-	}))
-
-	testhelper.ProtoEqual(t, []*gitalypb.StorePoolMetadataRequest{
-		{StorageName: "gitaly-1", RelativePath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
-	}, fakeSrv.storedByStorage["gitaly-1"])
-	testhelper.ProtoEqual(t, []*gitalypb.StorePoolMetadataRequest{
-		{StorageName: "gitaly-2", RelativePath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
-	}, fakeSrv.storedByStorage["gitaly-2"])
-}
-
-func TestStoreOnAllNodes_skipsDifferentVirtualStorage(t *testing.T) {
-	t.Parallel()
-
-	ctx := testhelper.Context(t)
-
-	fakeSrv := &mockInternalGitalyServer{}
-	ln, clean := listenAndServe(t, []svcRegistrar{registerInternalGitalyServer(fakeSrv)})
-	defer clean()
-
-	addr := "unix://" + ln.Addr().String()
-	conf := config.Config{
-		VirtualStorages: []*config.VirtualStorage{
-			{
-				Name:  "default",
-				Nodes: []*config.Node{{Storage: "gitaly-1", Address: addr}},
-			},
-			{
-				Name:  "other",
-				Nodes: []*config.Node{{Storage: "gitaly-3", Address: addr}},
-			},
-		},
-	}
-
-	require.NoError(t, storeOnAllNodes(ctx, conf, "default", []common.PoolMember{
-		{MemberDiskPath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
-	}))
-
-	require.Contains(t, fakeSrv.storedByStorage, "gitaly-1")
-	require.NotContains(t, fakeSrv.storedByStorage, "gitaly-3")
-}
-
-func TestStoreOnAllNodes_failsOnError(t *testing.T) {
-	t.Parallel()
-
-	ctx := testhelper.Context(t)
-
-	fakeSrv := &mockInternalGitalyServer{}
-	ln, clean := listenAndServe(t, []svcRegistrar{registerInternalGitalyServer(fakeSrv)})
-	defer clean()
-
-	addr := "unix://" + ln.Addr().String()
-	conf := config.Config{
-		VirtualStorages: []*config.VirtualStorage{
-			{
-				Name: "default",
-				Nodes: []*config.Node{
-					// This node is unreachable; it comes first so the whole operation fails.
 					{Storage: "gitaly-bad", Address: "tcp://127.0.0.1:1"},
-					// This node would be reachable, but should never be reached.
-					{Storage: "gitaly-good", Address: addr},
 				},
-			},
-		},
-	}
+			}},
+		}
 
-	members := []common.PoolMember{
-		{MemberDiskPath: "@hashed/aa/bb/aabbcc.git", PoolDiskPath: "@pools/cc/dd/pool-source.git"},
-	}
-
-	err := storeOnAllNodes(ctx, conf, "default", members)
-	require.Error(t, err, "should report the dial failure")
-
-	require.Empty(t, fakeSrv.storedByStorage, "subsequent nodes must not be stored after failure")
+		_, _, exitCode := runApp(t, ctx, []string{"-config", writeConfigToFile(t, conf), "pool"})
+		require.NotEqual(t, 0, exitCode)
+	})
 }

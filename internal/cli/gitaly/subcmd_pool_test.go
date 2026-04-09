@@ -111,6 +111,8 @@ func TestScanStorage(t *testing.T) {
 		poolDiskPath := "@pools/aa/bb/pool-a.git"
 		poolPath := filepath.Join(storageRoot, poolDiskPath)
 		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "objects"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "refs"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "HEAD"), mode.File))
 
 		for _, relPath := range []string{"upstream-repo.git", "fork-repo.git"} {
 			_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
@@ -228,6 +230,8 @@ func TestScanStorage(t *testing.T) {
 		poolDiskPath := "@pools/aa/bb/private-pool.git"
 		poolPath := filepath.Join(storageRoot, poolDiskPath)
 		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "objects"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "refs"), mode.Directory))
+		require.NoError(t, os.MkdirAll(filepath.Join(poolPath, "HEAD"), mode.File))
 
 		_, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
 			SkipCreationViaService: true,
