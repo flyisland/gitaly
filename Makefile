@@ -58,6 +58,10 @@ GOTESTSUM                   := ${TOOLS_DIR}/gotestsum
 GOCOVER_COBERTURA           := ${TOOLS_DIR}/gocover-cobertura
 DELVE                       := ${TOOLS_DIR}/dlv
 GOVULNCHECK                 := ${TOOLS_DIR}/govulncheck
+VALIDATE_LOG_FIELDS         := ${TOOLS_DIR}/validate-log-fields
+
+# Labkit validate-log-fields version
+LABKIT_VALIDATE_VERSION     := v2.0.0-20260331132242-b6ef9bf35f1d
 
 # Go toolchain options
 ## Ensure that newer toolchains aren't downloaded and used automatically. See the discussion
@@ -527,6 +531,14 @@ lint-docs-fix:
 ## That folder has its own go.mod file. Hence linter must run the context of that folder.
 lint-gitaly-linters: ${GOLANGCI_LINT} ${TOOLS_DIR}/gitaly-linters.so
 	${Q}cd ${SOURCE_DIR}/tools/golangci-lint/gitaly && ${GOLANGCI_LINT} run --config ${GOLANGCI_LINT_CONFIG} .
+
+.PHONY: validate-log-fields
+## Validate logging fields using labkit's validate-log-fields tool.
+validate-log-fields: ${VALIDATE_LOG_FIELDS}
+	${Q}${VALIDATE_LOG_FIELDS} .
+
+${VALIDATE_LOG_FIELDS}:
+	${Q}GOBIN=${TOOLS_DIR} go install gitlab.com/gitlab-org/labkit/v2/cmd/validate-log-fields@${LABKIT_VALIDATE_VERSION}
 
 .PHONY: format
 ## Run Go formatter and adjust imports.

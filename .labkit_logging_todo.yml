@@ -1,0 +1,51 @@
+# LabKit Logging Field Standardization TODO
+# AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
+#
+# This file tracks deprecated logging fields that need to be migrated to
+# standard fields defined in gitlab.com/gitlab-org/labkit/v2/fields.
+# Each offense represents a file using a deprecated field name.
+#
+# How to fix:
+#   Replace the string literal with the constant from the fields package.
+#   e.g. log.WithField("source_ip", ...) → log.WithField(fields.RemoteIP, ...)
+#
+# Adding offenses when an immediate fix is not possible:
+#   go get gitlab.com/gitlab-org/labkit/v2/cmd/validate-log-fields
+#   go run gitlab.com/gitlab-org/labkit/v2/cmd/validate-log-fields -update-todo
+#   go mod tidy
+#
+# Regenerate entire TODO:
+#   Delete this file, then run the command above.
+
+---
+offenses:
+    - callsite: internal/burdenmonitor/poller.go
+      deprecated_field: error
+      standard_field: fields.ErrorMessage
+    - callsite: internal/cli/gitaly/serve.go
+      deprecated_field: duration_ms
+      standard_field: fields.DurationS
+    - callsite: internal/gitaly/service/repository/snapshot.go
+      deprecated_field: error
+      standard_field: fields.ErrorMessage
+    - callsite: internal/gitaly/storage/storagemgr/partition/migration/manager.go
+      deprecated_field: duration
+      standard_field: fields.DurationS
+    - callsite: internal/gitlab/client/gitlabnet.go
+      deprecated_field: duration_ms
+      standard_field: fields.DurationS
+    - callsite: internal/grpc/middleware/panichandler/panic_handler.go
+      deprecated_field: error
+      standard_field: fields.ErrorMessage
+    - callsite: internal/praefect/datastore/collector_test.go
+      deprecated_field: error
+      standard_field: fields.ErrorMessage
+    - callsite: internal/praefect/datastore/storage_provider_test.go
+      deprecated_field: error
+      standard_field: fields.ErrorMessage
+    - callsite: internal/praefect/nodes/health_manager.go
+      deprecated_field: error
+      standard_field: fields.ErrorMessage
+    - callsite: internal/praefect/verifier.go
+      deprecated_field: error
+      standard_field: fields.ErrorMessage
