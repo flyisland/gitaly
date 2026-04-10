@@ -16,6 +16,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
@@ -291,40 +292,38 @@ func TestCreate(t *testing.T) {
 			requireError: equalError(fmt.Errorf("locking repository: %w", errors.New("file already locked"))),
 		},
 		func() setup {
-			hash := voting.NewVoteHash()
+			var votingRepo *localrepo.Repo
 
 			return setup{
 				desc:          "vote is deterministic",
 				transactional: true,
 				setup: func(t *testing.T, repo *gitalypb.Repository, repoPath string) {
-					txManager.VoteFn = func(_ context.Context, _ txinfo.Transaction, vote voting.Vote, _ voting.Phase) error {
-						expectedVote, err := hash.Vote()
+					txManager.VoteFn = func(ctx context.Context, _ txinfo.Transaction, vote voting.Vote, phase voting.Phase) error {
+						// Only run on prepared phase when the temporary repo still exists
+						if phase != voting.Prepared {
+							return nil
+						}
+
+						hash := voting.NewVoteHash()
+
+						err := VoteRepository(ctx, &hash, votingRepo)
 						require.NoError(t, err)
 
+						expectedVote, err := hash.Vote()
+						require.NoError(t, err)
 						require.Equal(t, expectedVote, vote)
+
 						return nil
 					}
 				},
 				seed: func(t *testing.T, repo *gitalypb.Repository, repoPath string) error {
-					// Objects should both be ignored. They may contain indeterministic data
-					// that's different across replicas and would thus cause us to not reach quorum.
-					require.NoError(t, os.WriteFile(filepath.Join(repoPath, "objects", "object"), []byte("object"), mode.File))
-
-					gittest.BackendSpecificRepoHash(t, ctx, cfg, hash, repoPath)
-
+					// Capture the repo path we'll vote on to use in txmanager.VoteFn
+					votingRepo = localrepo.NewTestRepo(t, cfg, repo)
 					return nil
 				},
 				verify: func(t *testing.T, _ *gitalypb.Repository, tempRepoPath string, _ *gitalypb.Repository, realRepoPath string) {
 					require.NoDirExists(t, tempRepoPath)
 					require.DirExists(t, realRepoPath)
-
-					// Even though a subset of data wasn't voted on, it should still be
-					// part of the final repository.
-					for expectedPath, expectedContents := range map[string]string{
-						filepath.Join(realRepoPath, "objects", "object"): "object",
-					} {
-						require.Equal(t, expectedContents, string(testhelper.MustReadFile(t, expectedPath)))
-					}
 
 					requireFullRepackTimestampExists(t, realRepoPath, true)
 				},

@@ -243,12 +243,10 @@ func (s *server) createFromSnapshot(
 			return fmt.Errorf("extracting snapshot: %w", err)
 		}
 
-		// The archive extracted above does not contain the configuration file. If SHA256 is used, this
-		// would lead to an invalid repository as the object format configuration is not present. This
-		// leads to failures with transactions as we need to pack the object directory after the repository
-		// is created. Sync the config here to ensure the correct object format is configured before
-		// returning. We write it directly to disk without voting as the voting is handled by the voting
-		// round of the repository creation. We also don't want to record the config creating operation
+		// Sync the full config from the source, overwriting the partial config included in the
+		// snapshot (which only contains repositoryformatversion and extensions.*). We write it
+		// directly to disk without voting as the voting is handled by the voting round of the
+		// repository creation. We also don't want to record the config creating operation
 		// separately as it is already recorded by `repoutil.Create` when it records the entire repository.
 		//
 		// We only run this with transactions as the file update is not atomic without transactions.

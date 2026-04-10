@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -150,66 +149,13 @@ func Create(
 
 	newRepo := localrepo.New(logger, locator, gitCmdFactory, catfileCache, newRepoProto)
 
-	refBackend, err := newRepo.ReferenceBackend(ctx)
-	if err != nil {
-		return fmt.Errorf("detecting reference backend: %w", err)
-	}
-
 	// In order to guarantee that the repository is going to be the same across all
-	// Gitalies in case we're behind Praefect, we walk the repository and hash all of
-	// its files.
+	// Gitalies in case we're behind Praefect, we vote on the logical state of the
+	// repository.
 	voteHash := voting.NewVoteHash()
-	if err := filepath.WalkDir(newRepoDir.Path(), func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
 
-		switch path {
-		// The way packfiles are generated may not be deterministic, so we skip over the
-		// object database.
-		case filepath.Join(newRepoDir.Path(), "objects"):
-			return fs.SkipDir
-		// FETCH_HEAD refers to the remote we're fetching from. This URL may not be
-		// deterministic, e.g. when fetching from a temporary file like we do in
-		// CreateRepositoryFromBundle.
-		case filepath.Join(newRepoDir.Path(), "FETCH_HEAD"):
-			return nil
-		case filepath.Join(newRepoDir.Path(), "refs"):
-			if refBackend == git.ReferenceBackendReftables {
-				return fs.SkipDir
-			}
-		// Reftables creates files with random suffix, which can be different from node
-		// to node. So we instead capture the ref information directly.
-		//
-		// TODO: Ideally we want to also use the same ideology for the files backend too
-		// https://gitlab.com/gitlab-org/gitaly/-/issues/6050
-		case filepath.Join(newRepoDir.Path(), "reftable"):
-			if refBackend == git.ReferenceBackendReftables {
-				if err := writeRefs(ctx, voteHash, newRepo); err != nil {
-					return err
-				}
-				return fs.SkipDir
-			}
-		}
-
-		// We do not care about directories.
-		if entry.IsDir() {
-			return nil
-		}
-
-		file, err := os.Open(path)
-		if err != nil {
-			return fmt.Errorf("opening %q: %w", entry.Name(), err)
-		}
-		defer file.Close()
-
-		if _, err := io.Copy(voteHash, file); err != nil {
-			return fmt.Errorf("hashing %q: %w", entry.Name(), err)
-		}
-
-		return nil
-	}); err != nil {
-		return fmt.Errorf("walking repository: %w", err)
+	if err := VoteRepository(ctx, &voteHash, newRepo); err != nil {
+		return err
 	}
 
 	vote, err := voteHash.Vote()
@@ -331,6 +277,53 @@ func Create(
 	return nil
 }
 
+// VoteRepository calculates a vote of a repository based on its logical state.
+// We skip the object database for the sake of scalability, and accept
+// references as a suitable measure of repository state.
+func VoteRepository(ctx context.Context, voteHash *voting.VoteHash, repo *localrepo.Repo) error {
+	if err := voteGitConfig(ctx, voteHash, repo); err != nil {
+		return fmt.Errorf("vote on git config: %w", err)
+	}
+
+	if err := voteReferences(ctx, voteHash, repo); err != nil {
+		return fmt.Errorf("vote on references: %w", err)
+	}
+
+	return nil
+}
+
+func voteGitConfig(ctx context.Context, voteHash *voting.VoteHash, repo *localrepo.Repo) error {
+	config, err := repo.GetConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("get git config: %w", err)
+	}
+
+	_, _ = voteHash.Write(config)
+
+	return nil
+}
+
+func voteReferences(ctx context.Context, voteHash *voting.VoteHash, repo *localrepo.Repo) error {
+	stderr := &bytes.Buffer{}
+
+	cmd, err := repo.Exec(ctx, gitcmd.Command{
+		Name: "for-each-ref",
+		Flags: []gitcmd.Option{
+			gitcmd.Flag{Name: "--format=%(refname) %(objectname) %(symref)"},
+			gitcmd.Flag{Name: "--include-root-refs"},
+		},
+	}, gitcmd.WithStdout(voteHash), gitcmd.WithStderr(stderr))
+	if err != nil {
+		return fmt.Errorf("spawning for-each-ref: %w", err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("running for-each-ref: %w, stderr: %q", err, stderr.String())
+	}
+
+	return nil
+}
+
 // performFullRepack performs a full repack and drops all unreachable objects.
 func performFullRepack(ctx context.Context, repo *localrepo.Repo) (returnedErr error) {
 	defer trace.StartRegion(ctx, "packObjects").End()
@@ -346,35 +339,6 @@ func performFullRepack(ctx context.Context, repo *localrepo.Repo) (returnedErr e
 		gitcmd.Flag{Name: "-d"},
 	); err != nil {
 		return fmt.Errorf("perform repack: %w", err)
-	}
-
-	return nil
-}
-
-func writeRefs(
-	ctx context.Context,
-	w io.Writer,
-	repo gitcmd.RepositoryExecutor,
-) error {
-	stderr := &bytes.Buffer{}
-
-	// This doesn't consider dangling symrefs. This needs to be fixed in Git:
-	// https://gitlab.com/gitlab-org/git/-/issues/309
-	cmd, err := repo.Exec(ctx, gitcmd.Command{
-		Name: "for-each-ref",
-		Flags: []gitcmd.Option{
-			gitcmd.Flag{Name: "--format=%(refname) %(objectname) %(symref)"},
-			// This is currently broken as it also prints special refs:
-			// https://gitlab.com/gitlab-org/git/-/issues/303
-			gitcmd.Flag{Name: "--include-root-refs"},
-		},
-	}, gitcmd.WithStdout(w), gitcmd.WithStderr(stderr))
-	if err != nil {
-		return fmt.Errorf("spawning show-ref: %w", err)
-	}
-
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("running show-ref: %w, stderr: %q", err, stderr.String())
 	}
 
 	return nil
