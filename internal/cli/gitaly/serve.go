@@ -2,7 +2,6 @@ package gitaly
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -920,11 +919,12 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 
 	waitErr := b.Wait(gracefulStopTicker, gitalyServerFactory.GracefulStop)
 
-	// Only call Stop() if we didn't timeout or force shutdown during graceful shutdown.
-	// In both cases, the servers are already forcefully stopped.
-	if waitErr == nil || (!errors.Is(waitErr, bootstrap.ErrGracePeriodExpired) && !errors.Is(waitErr, bootstrap.ErrForceShutdown)) {
-		gitalyServerFactory.Stop()
-	}
+	// Always force-stop servers immediately after Wait returns. If the grace
+	// period expired or a force shutdown was requested, this ensures in-flight
+	// connections are killed before deferred functions run, preventing them
+	// from blocking on operations that will never complete. If GracefulStop
+	// already completed cleanly, this is a no-op.
+	gitalyServerFactory.Stop()
 
 	return waitErr
 }
