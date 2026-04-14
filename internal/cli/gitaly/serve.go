@@ -918,7 +918,9 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	gracefulStopTicker := helper.NewTimerTicker(cfg.GracefulRestartTimeout.Duration())
 	defer gracefulStopTicker.Stop()
 
+	logger.WithField("duration_s", cfg.GracefulRestartTimeout.Duration().String()).Info("Gitaly graceful stop timeout duration")
 	waitErr := b.Wait(gracefulStopTicker, gitalyServerFactory.GracefulStop)
+	logger.WithField("error_message", waitErr).Info("Wait has returned with error")
 
 	// Only call Stop() if we didn't timeout or force shutdown during graceful shutdown.
 	// In both cases, the servers are already forcefully stopped.
