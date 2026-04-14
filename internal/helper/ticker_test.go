@@ -33,6 +33,12 @@ func TestTimerTicker(t *testing.T) {
 	}
 }
 
+func TestTimerTickerStopBeforeReset(t *testing.T) {
+	ticker := NewTimerTicker(10 * time.Millisecond)
+	// Stop before any Reset must not panic.
+	require.NotPanics(t, ticker.Stop)
+}
+
 func TestManualTicker(t *testing.T) {
 	ticker := NewManualTicker()
 

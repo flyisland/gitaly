@@ -11,12 +11,14 @@ type Ticker interface {
 
 // NewTimerTicker returns a Ticker that ticks after the specified interval
 // has passed since the previous Reset call.
+//
+// Requires go 1.23 or later in go.mod: Reset() and Stop() rely on the
+// Go 1.23 guarantee that the timer channel is empty when either method
+// returns, making manual draining unnecessary.
 func NewTimerTicker(interval time.Duration) Ticker {
-	timer := time.NewTimer(0)
-	if !timer.Stop() {
-		<-timer.C
-	}
-	return &timerTicker{timer: timer, interval: interval}
+	t := time.NewTimer(interval)
+	t.Stop()
+	return &timerTicker{timer: t, interval: interval}
 }
 
 type timerTicker struct {
@@ -26,16 +28,7 @@ type timerTicker struct {
 
 func (tt *timerTicker) C() <-chan time.Time { return tt.timer.C }
 
-// Reset resets the timer. If there is a pending tick, then this tick will be drained.
-func (tt *timerTicker) Reset() {
-	if !tt.timer.Stop() {
-		select {
-		case <-tt.timer.C:
-		default:
-		}
-	}
-	tt.timer.Reset(tt.interval)
-}
+func (tt *timerTicker) Reset() { tt.timer.Reset(tt.interval) }
 
 func (tt *timerTicker) Stop() { tt.timer.Stop() }
 
