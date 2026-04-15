@@ -207,6 +207,42 @@ func TestStorePoolDataScopedToStorage(t *testing.T) {
 	require.NotNil(t, poolB, "storage-b pool should be untouched")
 }
 
+func TestDeletePoolMembers(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "pools.db")
+
+	store, err := NewSQLitePoolStore(dbPath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, store)
+
+	err = store.StorePoolData(ctx, "default", map[string]*PoolMetadata{
+		"/path/to/pool1.git": {
+			DiskPath:    "/path/to/pool1.git",
+			StorageNode: "default",
+			Members:     []string{"member1.git", "member2.git", "member3.git"},
+			Upstream:    "member1.git",
+			UpdatedAt:   time.Now(),
+		},
+	})
+	require.NoError(t, err)
+
+	members, err := store.ListPoolMembers(ctx, "/path/to/pool1.git")
+	require.NoError(t, err)
+	require.Len(t, members, 3)
+
+	err = store.DeletePoolMembers(ctx, "/path/to/pool1.git")
+	require.NoError(t, err)
+
+	members, err = store.ListPoolMembers(ctx, "/path/to/pool1.git")
+	require.NoError(t, err)
+	require.Empty(t, members)
+
+	// The pool itself should still exist.
+	pool, err := store.GetPoolByDiskPath(ctx, "/path/to/pool1.git")
+	require.NoError(t, err)
+	require.NotNil(t, pool)
+}
+
 func TestCreatePool(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "pools.db")

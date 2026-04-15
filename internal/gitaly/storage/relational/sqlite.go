@@ -174,6 +174,15 @@ func (s *SQLitePoolStore) ListPoolMembers(ctx context.Context, diskPath string) 
 	return members, rows.Err()
 }
 
+// DeletePoolMembers removes all members from a pool.
+func (s *SQLitePoolStore) DeletePoolMembers(ctx context.Context, diskPath string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM pool_members WHERE pool_disk_path = ?`, diskPath)
+	if err != nil {
+		return fmt.Errorf("delete pool members: %w", err)
+	}
+	return nil
+}
+
 // GetPoolForMember returns the pool disk path for a given member disk path.
 func (s *SQLitePoolStore) GetPoolForMember(ctx context.Context, memberDiskPath string) (string, error) {
 	var diskPath string
