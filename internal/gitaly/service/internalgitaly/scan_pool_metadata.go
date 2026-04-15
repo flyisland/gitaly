@@ -8,7 +8,9 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/stats"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/relational"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/walk"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
@@ -22,7 +24,7 @@ func (s *server) ScanPoolMetadata(req *gitalypb.ScanPoolMetadataRequest, stream 
 		return structerr.NewInvalidArgument("get storage: %w", err)
 	}
 
-	processPoolMember := processPoolMemberFunc(ctx, storagePath, stream)
+	processPoolMember := processPoolMemberFunc(ctx, storagePath, storageName, s.poolStore, s.logger, stream)
 
 	if err := walk.FindRepositories(ctx, s.locator, storageName, processPoolMember); err != nil {
 		return structerr.NewInternal("%w", err)
@@ -31,7 +33,13 @@ func (s *server) ScanPoolMetadata(req *gitalypb.ScanPoolMetadataRequest, stream 
 	return nil
 }
 
-func processPoolMemberFunc(_ context.Context, storagePath string, stream gitalypb.InternalGitaly_ScanPoolMetadataServer) func(relPath string, _ fs.FileInfo) error {
+func processPoolMemberFunc(
+	ctx context.Context,
+	storagePath, storageName string,
+	poolStore relational.PoolStore,
+	logger log.Logger,
+	stream gitalypb.InternalGitaly_ScanPoolMetadataServer,
+) func(relPath string, _ fs.FileInfo) error {
 	invalidPools := make(map[string]bool)
 
 	return func(relPath string, fi fs.FileInfo) error {
@@ -62,11 +70,13 @@ func processPoolMemberFunc(_ context.Context, storagePath string, stream gitalyp
 
 		// We could encounter the same invalid pool multiple times.
 		if invalidPools[poolDiskPath] {
+			recordBrokenPool(ctx, poolStore, logger, storageName, relPath, poolDiskPath)
 			return nil
 		}
 
 		if err := storage.ValidateGitDirectory(poolRepoPath); err != nil {
 			invalidPools[poolDiskPath] = true
+			recordBrokenPool(ctx, poolStore, logger, storageName, relPath, poolDiskPath)
 			return nil
 		}
 
@@ -74,5 +84,19 @@ func processPoolMemberFunc(_ context.Context, storagePath string, stream gitalyp
 			RelativePath: relPath,
 			PoolDiskPath: poolDiskPath,
 		})
+	}
+}
+
+func recordBrokenPool(ctx context.Context, poolStore relational.PoolStore, logger log.Logger, storageName, memberRelPath, poolDiskPath string) {
+	if poolStore == nil {
+		return
+	}
+
+	if err := poolStore.RecordBrokenPool(ctx, storageName, memberRelPath, poolDiskPath); err != nil {
+		logger.WithError(err).WithFields(log.Fields{
+			"storage":     storageName,
+			"pool_member": memberRelPath,
+			"pool":        poolDiskPath,
+		}).Warn("failed to record broken pool")
 	}
 }
