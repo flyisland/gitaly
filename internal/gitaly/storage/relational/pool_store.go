@@ -14,6 +14,13 @@ type PoolMetadata struct {
 	UpdatedAt   time.Time
 }
 
+// BrokenPool represents a pool member that references a pool which does not exist on disk.
+type BrokenPool struct {
+	PoolMember string
+	Storage    string
+	Pool       string
+}
+
 // PoolStore provides storage for object pool metadata.
 type PoolStore interface {
 	StorePoolData(ctx context.Context, storageName string, poolsByDiskPath map[string]*PoolMetadata) error
@@ -29,6 +36,8 @@ type PoolStore interface {
 	DeletePool(ctx context.Context, poolDiskPath string) error
 	AddMember(ctx context.Context, poolDiskPath, memberDiskPath string) error
 	RemoveMember(ctx context.Context, poolDiskPath, memberDiskPath string) error
+
+	RecordBrokenPool(ctx context.Context, storage, poolMember, pool string) error
 
 	Close() error
 }

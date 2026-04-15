@@ -333,3 +333,16 @@ func (s *SQLitePoolStore) RemoveMember(ctx context.Context, diskPath, memberDisk
 	}
 	return nil
 }
+
+// RecordBrokenPool records a pool member that references a pool which does not exist on disk.
+func (s *SQLitePoolStore) RecordBrokenPool(ctx context.Context, storageName, poolMember, pool string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO broken_pools (pool_member, storage, pool)
+		VALUES (?, ?, ?)
+		ON CONFLICT(pool_member, storage) DO UPDATE SET pool = excluded.pool
+	`, poolMember, storageName, pool)
+	if err != nil {
+		return fmt.Errorf("record broken pool: %w", err)
+	}
+	return nil
+}
