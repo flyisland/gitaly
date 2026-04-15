@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	migrate "github.com/rubenv/sql-migrate"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/relational/migrations"
@@ -249,6 +251,47 @@ func (s *SQLitePoolStore) getUpstream(ctx context.Context, diskPath string) (str
 		return "", fmt.Errorf("query upstream: %w", err)
 	}
 	return memberDiskPath, nil
+}
+
+// CreatePool creates a new pool. Returns an error if the pool
+// already exists.
+func (s *SQLitePoolStore) CreatePool(ctx context.Context, diskPath, storageName, upstream string, lastScanned time.Time) (returnErr error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() {
+		if returnErr != nil {
+			returnErr = errors.Join(returnErr, tx.Rollback())
+		}
+	}()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO pools (disk_path, storage, last_scanned)
+		VALUES (?, ?, ?)
+	`, diskPath, storageName, lastScanned)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return fmt.Errorf("pool %q already exists", diskPath)
+		}
+		return fmt.Errorf("create pool: %w", err)
+	}
+
+	if upstream != "" {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO pool_members (member_disk_path, pool_disk_path, is_upstream)
+			VALUES (?, ?, 1)
+		`, upstream, diskPath)
+		if err != nil {
+			return fmt.Errorf("add upstream member: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // DeletePool removes a pool and its members from the store.

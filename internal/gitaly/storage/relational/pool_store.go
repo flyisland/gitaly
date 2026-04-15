@@ -24,6 +24,7 @@ type PoolStore interface {
 	ListPoolMembers(ctx context.Context, poolDiskPath string) ([]string, error)
 	GetPoolForMember(ctx context.Context, memberDiskPath string) (string, error)
 
+	CreatePool(ctx context.Context, poolDiskPath, storageName, upstream string, lastScanned time.Time) error
 	DeletePool(ctx context.Context, poolDiskPath string) error
 	AddMember(ctx context.Context, poolDiskPath, memberDiskPath string) error
 	RemoveMember(ctx context.Context, poolDiskPath, memberDiskPath string) error

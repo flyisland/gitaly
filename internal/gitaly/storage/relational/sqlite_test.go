@@ -206,3 +206,56 @@ func TestStorePoolDataScopedToStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, poolB, "storage-b pool should be untouched")
 }
+
+func TestCreatePool(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "pools.db")
+
+	store, err := NewSQLitePoolStore(dbPath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, store)
+
+	err = store.CreatePool(ctx, "/path/to/pool1.git", "default", "", time.Now())
+	require.NoError(t, err)
+
+	pool, err := store.GetPoolByDiskPath(ctx, "/path/to/pool1.git")
+	require.NoError(t, err)
+	require.NotNil(t, pool)
+	require.Equal(t, "/path/to/pool1.git", pool.DiskPath)
+	require.Equal(t, "default", pool.StorageNode)
+	require.Empty(t, pool.Upstream)
+}
+
+func TestCreatePool_WithUpstream(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "pools.db")
+
+	store, err := NewSQLitePoolStore(dbPath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, store)
+
+	err = store.CreatePool(ctx, "/path/to/pool1.git", "default", "upstream.git", time.Now())
+	require.NoError(t, err)
+
+	pool, err := store.GetPoolByDiskPath(ctx, "/path/to/pool1.git")
+	require.NoError(t, err)
+	require.NotNil(t, pool)
+	require.Equal(t, "upstream.git", pool.Upstream)
+	require.Contains(t, pool.Members, "upstream.git")
+}
+
+func TestCreatePool_AlreadyExists(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "pools.db")
+
+	store, err := NewSQLitePoolStore(dbPath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, store)
+
+	err = store.CreatePool(ctx, "/path/to/pool1.git", "default", "", time.Now())
+	require.NoError(t, err)
+
+	err = store.CreatePool(ctx, "/path/to/pool1.git", "default", "", time.Now())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "already exists")
+}
