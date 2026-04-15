@@ -1,5 +1,18 @@
 # Gitaly changelog
 
+## 18.11.0 (2026-04-15)
+
+### Fixed (4 changes)
+
+- [linguist: Resolve language aliases to canonical names](gitlab-org/gitaly@b3fea142b2e3a5f5d1c062a2b12ae454bec5b1f1) ([merge request](gitlab-org/gitaly!8641))
+- [Repository: Prioritize canonical LICENSE in result sorting](gitlab-org/gitaly@c2b987b4d6be6129b425ef3494dbc185852750a3) ([merge request](gitlab-org/gitaly!8626))
+- [lines: Fix pagination cursor lost at chunk boundary](gitlab-org/gitaly@f9aba1372ba63dd82c9f1505793c509b1ad4de5c) ([merge request](gitlab-org/gitaly!8608))
+- [operations: Return structured access check errors for UserCommitFiles](gitlab-org/gitaly@318c1c859ea418150d43829928e2c1c23521b286) ([merge request](gitlab-org/gitaly!8574))
+
+### Changed (1 change)
+
+- [list_refs: Encode pagination cursor as base64 struct](gitlab-org/gitaly@15072dd951467e248515b721313f82cb00adbb9c) ([merge request](gitlab-org/gitaly!8606))
+
 ## 18.10.3 (2026-04-07)
 
 No changes.
