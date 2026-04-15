@@ -23,13 +23,13 @@ func contextWithRPCEntry(ctx context.Context, entry *RPCEntry) context.Context {
 
 // NotifyCommandStarted registers a new command with the burden monitor if command tracking is enabled.
 // This should be called when a command starts execution.
-func NotifyCommandStarted(ctx context.Context, pid int, startTime time.Time) {
+func NotifyCommandStarted(ctx context.Context, pid int, name string, startTime time.Time) {
 	entry, ok := rpcEntryFromContext(ctx)
 	if !ok {
 		return
 	}
 
-	entry.RegisterCommand(pid, startTime)
+	entry.RegisterCommand(pid, name, startTime)
 }
 
 // NotifyCommandCompleted notifies the burden monitor that a command has completed.

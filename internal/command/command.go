@@ -171,6 +171,17 @@ type Command struct {
 	completionErrorLogFilter func(cmd *Command, stderr string) bool
 }
 
+func (c *Command) commandName() string {
+	name := path.Base(c.cmd.Path)
+	if c.metricsCmd != "" {
+		name = c.metricsCmd
+	}
+	if c.metricsSubCmd != "" {
+		name += " " + c.metricsSubCmd
+	}
+	return name
+}
+
 // New creates a Command from the given executable name and arguments On success, the Command
 // contains a running subprocess. When ctx is canceled the embedded process will be terminated and
 // reaped automatically.
@@ -497,7 +508,7 @@ func New(ctx context.Context, logger log.Logger, nameAndArgs []string, opts ...O
 
 	logPid = cmd.Process.Pid
 
-	burdenmonitor.NotifyCommandStarted(ctx, cmd.Process.Pid, command.startTime)
+	burdenmonitor.NotifyCommandStarted(ctx, cmd.Process.Pid, command.commandName(), command.startTime)
 
 	return command, nil
 }

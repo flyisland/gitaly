@@ -8,6 +8,7 @@ import (
 
 // CommandStats holds resource usage statistics for a spawned command.
 type CommandStats struct {
+	Name      string    `json:"name"`
 	Pid       int       `json:"pid"`
 	StartTime time.Time `json:"start_time"`
 
@@ -88,11 +89,12 @@ func (e *RPCEntry) ActiveCommandCount() int {
 }
 
 // RegisterCommand adds a new command to the RPC entry's tracking.
-func (e *RPCEntry) RegisterCommand(pid int, startTime time.Time) {
+func (e *RPCEntry) RegisterCommand(pid int, name string, startTime time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	e.Commands[pid] = &CommandStats{
+		Name:      name,
 		Pid:       pid,
 		StartTime: startTime,
 	}

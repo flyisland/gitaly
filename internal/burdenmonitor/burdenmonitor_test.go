@@ -88,11 +88,11 @@ func TestBurdenMonitor_EntriesSortedBy(t *testing.T) {
 	_, e3 := bm.RegisterRPC(ctx, "/foo.Service/C")
 
 	// CPU times: e1=100ms, e2=300ms, e3=200ms
-	e1.RegisterCommand(101, time.Now())
+	e1.RegisterCommand(101, "git upload-pack", time.Now())
 	e1.MarkCommandCompleted(101, 60*time.Millisecond, 40*time.Millisecond)
-	e2.RegisterCommand(102, time.Now())
+	e2.RegisterCommand(102, "git pack-objects", time.Now())
 	e2.MarkCommandCompleted(102, 200*time.Millisecond, 100*time.Millisecond)
-	e3.RegisterCommand(103, time.Now())
+	e3.RegisterCommand(103, "git rev-list", time.Now())
 	e3.MarkCommandCompleted(103, 150*time.Millisecond, 50*time.Millisecond)
 
 	t.Run("SortByCPU", func(t *testing.T) {
@@ -136,11 +136,11 @@ func TestBurdenMonitor_SnipeTopN(t *testing.T) {
 	_, e3 := bm.RegisterRPC(ctx, "/foo.Service/C")
 
 	// CPU: e1=50ms, e2=200ms, e3=100ms
-	e1.RegisterCommand(101, time.Now())
+	e1.RegisterCommand(101, "git upload-pack", time.Now())
 	e1.MarkCommandCompleted(101, 30*time.Millisecond, 20*time.Millisecond)
-	e2.RegisterCommand(102, time.Now())
+	e2.RegisterCommand(102, "git pack-objects", time.Now())
 	e2.MarkCommandCompleted(102, 130*time.Millisecond, 70*time.Millisecond)
-	e3.RegisterCommand(103, time.Now())
+	e3.RegisterCommand(103, "git rev-list", time.Now())
 	e3.MarkCommandCompleted(103, 70*time.Millisecond, 30*time.Millisecond)
 
 	count := bm.SnipeTopN(2, SortByCPU)
@@ -176,8 +176,8 @@ func TestRPCEntry_CommandTracking(t *testing.T) {
 	require.Equal(t, time.Duration(0), entry.TotalCPUTime())
 
 	now := time.Now()
-	entry.RegisterCommand(201, now)
-	entry.RegisterCommand(202, now)
+	entry.RegisterCommand(201, "git upload-pack", now)
+	entry.RegisterCommand(202, "git pack-objects", now)
 	require.Equal(t, 2, entry.ActiveCommandCount())
 
 	entry.MarkCommandCompleted(201, 100*time.Millisecond, 50*time.Millisecond)
@@ -295,7 +295,7 @@ func TestNotifyCommandStarted(t *testing.T) {
 
 	t.Run("no entry in context", func(t *testing.T) {
 		// Should be a no-op and not panic.
-		NotifyCommandStarted(testhelper.Context(t), 1234, time.Now())
+		NotifyCommandStarted(testhelper.Context(t), 1234, "git upload-pack", time.Now())
 	})
 
 	t.Run("entry in context", func(t *testing.T) {
@@ -306,7 +306,7 @@ func TestNotifyCommandStarted(t *testing.T) {
 		_, _ = bm.UnaryInterceptor()(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/foo.Service/M"},
 			func(ctx context.Context, req interface{}) (interface{}, error) {
 				entry, _ = rpcEntryFromContext(ctx)
-				NotifyCommandStarted(ctx, 5678, time.Now())
+				NotifyCommandStarted(ctx, 5678, "git pack-objects", time.Now())
 				require.Equal(t, 1, entry.ActiveCommandCount())
 				return nil, nil
 			},
@@ -331,7 +331,7 @@ func TestNotifyCommandCompleted(t *testing.T) {
 		_, _ = bm.UnaryInterceptor()(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/foo.Service/M"},
 			func(ctx context.Context, req interface{}) (interface{}, error) {
 				entry, _ := rpcEntryFromContext(ctx)
-				NotifyCommandStarted(ctx, 5678, time.Now())
+				NotifyCommandStarted(ctx, 5678, "git pack-objects", time.Now())
 				NotifyCommandCompleted(ctx, 5678, 100*time.Millisecond, 50*time.Millisecond)
 
 				require.Equal(t, 0, entry.ActiveCommandCount())
