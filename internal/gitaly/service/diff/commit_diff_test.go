@@ -16,6 +16,62 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
+// BenchmarkCommitDiff compares the performance of the CommitDiff RPC in normal operations, and
+// when a whitespace ignore option is specified by the caller. The left and right commits are set
+// such that a reasonably large number of diffs are computed. This way we ensure setup time is
+// amortised, and we can measure the bulk of time as actual work.
+func BenchmarkCommitDiff(b *testing.B) {
+	ctx := testhelper.Context(b)
+	cfg, client := setupDiffService(b)
+
+	repoProto, _ := gittest.CreateRepository(b, ctx, cfg, gittest.CreateRepositoryConfig{
+		Seed: "benchmark.git",
+	})
+
+	req := &gitalypb.CommitDiffRequest{
+		Repository:    repoProto,
+		LeftCommitId:  "17-10-stable-ee",
+		RightCommitId: "17-11-stable-ee",
+	}
+
+	reqWhitespaceIgnored := &gitalypb.CommitDiffRequest{
+		Repository:        repoProto,
+		LeftCommitId:      "17-10-stable-ee",
+		RightCommitId:     "17-11-stable-ee",
+		WhitespaceChanges: gitalypb.CommitDiffRequest_WHITESPACE_CHANGES_IGNORE_ALL,
+	}
+
+	b.Run("all changes", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			stream, err := client.CommitDiff(ctx, req)
+			require.NoError(b, err)
+
+			for {
+				_, err := stream.Recv()
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				require.NoError(b, err)
+			}
+		}
+	})
+
+	b.Run("whitespace ignored", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			stream, err := client.CommitDiff(ctx, reqWhitespaceIgnored)
+			require.NoError(b, err)
+
+			for {
+				_, err := stream.Recv()
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				require.NoError(b, err)
+			}
+		}
+	})
+}
+
 func TestCommitDiff(t *testing.T) {
 	t.Parallel()
 
@@ -530,8 +586,50 @@ func TestCommitDiff(t *testing.T) {
 							NewMode:      0o100644,
 							FromPath:     []byte("foo"),
 							ToPath:       []byte("foo"),
-							LinesAdded:   0,
-							LinesRemoved: 0,
+							LinesAdded:   1,
+							LinesRemoved: 1,
+						},
+					},
+				}
+			},
+		},
+		{
+			desc: "whitespace_changes: ignore_all with mixture",
+			setup: func() setupData {
+				repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
+				blob1 := gittest.WriteBlob(t, cfg, repoPath, []byte(`  the   first line contains whitespace changes
+the second line contains new words
+the third line is the same
+`))
+				blob2 := gittest.WriteBlob(t, cfg, repoPath, []byte(`the first line contains whitespace changes
+the second line contains new new words
+the third line is the same
+`))
+				commit1 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "foo", Mode: "100644", OID: blob1},
+				))
+				commit2 := gittest.WriteCommit(t, cfg, repoPath, gittest.WithTreeEntries(
+					gittest.TreeEntry{Path: "foo", Mode: "100644", OID: blob2},
+				))
+
+				return setupData{
+					request: &gitalypb.CommitDiffRequest{
+						Repository:        repoProto,
+						LeftCommitId:      commit1.String(),
+						RightCommitId:     commit2.String(),
+						WhitespaceChanges: gitalypb.CommitDiffRequest_WHITESPACE_CHANGES_IGNORE_ALL,
+					},
+					expectedDiff: []*diff.Diff{
+						{
+							FromID:       blob1.String(),
+							ToID:         blob2.String(),
+							OldMode:      0o100644,
+							NewMode:      0o100644,
+							FromPath:     []byte("foo"),
+							ToPath:       []byte("foo"),
+							LinesAdded:   1,
+							LinesRemoved: 1,
+							Patch:        []byte("@@ -1,3 +1,3 @@\n the first line contains whitespace changes\n-the second line contains new words\n+the second line contains new new words\n the third line is the same\n"),
 						},
 					},
 				}
@@ -642,7 +740,7 @@ func TestCommitDiff(t *testing.T) {
 				return
 			}
 
-			assertExactReceivedDiffs(t, stream, tc.setup().expectedDiff)
+			assertExactReceivedDiffs(t, stream, data.expectedDiff)
 		})
 	}
 }
@@ -811,8 +909,8 @@ func TestCommitDiff_ignoreWhitespaceChange(t *testing.T) {
 		FromPath:     []byte("whitespace-change"),
 		ToPath:       []byte("whitespace-change"),
 		Binary:       false,
-		LinesAdded:   0,
-		LinesRemoved: 0,
+		LinesAdded:   1,
+		LinesRemoved: 1,
 	}
 	expectedNormalDiff := &diff.Diff{
 		FromID:       oldContent.String(),

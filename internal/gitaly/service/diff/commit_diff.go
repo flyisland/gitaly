@@ -194,6 +194,25 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 		return structerr.NewInternal("eachDiff: %w", err)
 	}
 
+	// If we have entries in the diffManifest, we need to run git-diff --numstat to populate the LinesAdded and
+	// LinesRemoved fields of the CommitDiff response. Each diff in the manifest is only whitespace, and so we
+	// wouldn't have gotten this information from the previous invocation of git-diff(1).
+	statManifest := make(map[string]diff.NumStat)
+	if len(diffManifest) > 0 {
+		var whitespaceOnlyPaths []string
+		for _, v := range diffManifest {
+			whitespaceOnlyPaths = append(whitespaceOnlyPaths, string(v.GetPath()))
+		}
+
+		// Supply paths to git-diff --numstat to make it a little more efficient.
+		if err := numstat(ctx, repo, leftSha, rightSha, whitespaceOnlyPaths, func(stat diff.NumStat) error {
+			statManifest[string(stat.Path)] = stat
+			return nil
+		}); err != nil {
+			return structerr.NewInternal("numstat: %w", err)
+		}
+	}
+
 	// In order to retain the previous behaviour of git-diff(1), we iterate through the
 	// diffManifest (which now contains only patch metadata for whitespace-only changes),
 	// and send empty patch responses in the same way that eachDiff() above would've done.
@@ -206,6 +225,11 @@ func (s *server) CommitDiff(in *gitalypb.CommitDiffRequest, stream gitalypb.Diff
 			OldMode:    cp.GetOldMode(),
 			NewMode:    cp.GetNewMode(),
 			EndOfPatch: true,
+		}
+
+		if ns, ok := statManifest[string(cp.GetPath())]; ok {
+			response.LinesAdded = ns.Additions
+			response.LinesRemoved = ns.Deletions
 		}
 
 		if err := stream.Send(response); err != nil {
