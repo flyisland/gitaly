@@ -32,8 +32,8 @@ const (
 )
 
 // CgroupPressureWatcher monitors cgroup-level PSI using a 3-condition check:
-// sustained pressure + current at backoff threshold + not recovering. Currently log-only,
-// it does not trigger backoff events. Logs at warning, backoff, and critical severity.
+// sustained pressure + current at backoff threshold + not recovering. Triggers a backoff
+// event when all three conditions are met. Logs at warning, backoff, and critical severity.
 type CgroupPressureWatcher struct {
 	manager  cgroups.Manager
 	logger   log.Logger
@@ -128,8 +128,26 @@ func (w *CgroupPressureWatcher) Poll(_ context.Context) (*limiter.BackoffEvent, 
 	switch severity {
 	case PSISeverityCritical:
 		w.logger.WithFields(fields).Error("Critical PSI pressure detected")
+		// trigger immediate backoff
+		return &limiter.BackoffEvent{
+			WatcherName:   w.Name(),
+			ShouldBackoff: true,
+			Reason:        fmt.Sprintf("critical %s PSI pressure", w.resource),
+			Stats:         fields,
+		}, nil
 	case PSISeverityBackoff:
 		w.logger.WithFields(fields).Warn("PSI pressure at backoff threshold")
+		// At moderate pressure, require all three guards before reducing limits:
+		// sustained (avg60 above threshold for sustain window), avg10 currently elevated,
+		// and not already recovering. This avoids over-throttling on transient spikes.
+		if sustained && aboveThreshold10s && !fallingRapidly {
+			return &limiter.BackoffEvent{
+				WatcherName:   w.Name(),
+				ShouldBackoff: true,
+				Reason:        fmt.Sprintf("sustained %s PSI pressure", w.resource),
+				Stats:         fields,
+			}, nil
+		}
 	case PSISeverityWarning:
 		w.logger.WithFields(fields).Warn("PSI pressure above warning threshold")
 	}
