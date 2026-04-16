@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
@@ -39,11 +39,13 @@ func TestAdaptiveCalculator_alreadyStarted(t *testing.T) {
 func TestAdaptiveCalculator_Start(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		desc             string
-		lastBackoffEvent *BackoffEvent
-		limits           []AdaptiveLimiter
-		mainLoopCount    int
-		expectedLimits   map[string][]int
+		desc                             string
+		lastBackoffEvent                 *BackoffEvent
+		limits                           []AdaptiveLimiter
+		mainLoopCount                    int
+		expectedLimits                   map[string][]int
+		expectedCurrentLimitGaugeValue   map[string]float64
+		expectedBackoffEventCounterValue map[string]float64
 	}{
 		{
 			desc:             "No limits should not cause any issues",
@@ -62,6 +64,12 @@ func TestAdaptiveCalculator_Start(t *testing.T) {
 			expectedLimits: map[string][]int{
 				"testLimit": {25, 26, 27, 28, 29, 30},
 			},
+			expectedCurrentLimitGaugeValue: map[string]float64{
+				"testLimit": 30.0,
+			},
+			expectedBackoffEventCounterValue: map[string]float64{
+				"testLimit": 0.0,
+			},
 		},
 		{
 			desc:          "Multiple limits limit should be calibrated",
@@ -74,6 +82,14 @@ func TestAdaptiveCalculator_Start(t *testing.T) {
 			expectedLimits: map[string][]int{
 				"testLimit":  {25, 12, 13, 14, 15, 16},
 				"testLimit2": {35, 28, 29, 30, 30, 30},
+			},
+			expectedCurrentLimitGaugeValue: map[string]float64{
+				"testLimit":  16.0,
+				"testLimit2": 30.0,
+			},
+			expectedBackoffEventCounterValue: map[string]float64{
+				"testLimit":  0.0,
+				"testLimit2": 0.0,
 			},
 		},
 	}
@@ -129,12 +145,23 @@ func TestAdaptiveCalculator_Start(t *testing.T) {
 				limit := findLimitWithName(tc.limits, name)
 				require.NotNil(t, limit, "not found limit with name %q", name)
 				require.Equal(t, expectedLimits, limit.currents[:tc.mainLoopCount+1])
+
+				// Validate that the metrics holds the correct value for the correct label
+				currentLimitMetricDto := &dto.Metric{}
+				require.NoError(t, calculator.currentLimitVec.WithLabelValues(name).Write(currentLimitMetricDto))
+				require.Equal(t, tc.expectedCurrentLimitGaugeValue[name], currentLimitMetricDto.GetGauge().GetValue())
+
+				backoffEventMetricDto := &dto.Metric{}
+				require.NoError(t, calculator.backoffEventsVec.WithLabelValues(name).Write(backoffEventMetricDto))
+				require.Equal(t, tc.expectedBackoffEventCounterValue[name], backoffEventMetricDto.GetCounter().GetValue())
 			}
 		})
 	}
 }
 
 func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
+	const conditionName = "test"
+
 	tests := []struct {
 		name string
 		// backoffSequence is the sequence to follow to set the
@@ -142,10 +169,11 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 		// increase, multiplicative decrease) should follow this sequence.
 		// Example: nil, nil, {}, nil, {}
 		// Means: increase, increase, decrease, increase, decrease.
-		backoffSequence []*BackoffEvent
-		limits          []AdaptiveLimiter
-		expectedLimits  map[string][]int
-		expectedLogs    []string
+		backoffSequence                  []*BackoffEvent
+		limits                           []AdaptiveLimiter
+		expectedLimits                   map[string][]int
+		expectedLogs                     []string
+		expectedBackoffEventCounterValue int
 	}{
 		{
 			name: "simple monotonic sequence",
@@ -165,6 +193,7 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 				`level=debug msg="Additive increase" limit_rpc=testLimit new_limit=29 previous_limit=28`,
 				`level=debug msg="Additive increase" limit_rpc=testLimit new_limit=30 previous_limit=29`,
 			},
+			expectedBackoffEventCounterValue: 0,
 		},
 		{
 			name: "minimum value should be honoured",
@@ -187,6 +216,7 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 				`level=debug msg="Additive increase" limit_rpc=testLimit new_limit=14 previous_limit=13`,
 				`level=info msg="Multiplicative decrease" condition=test limit_rpc=testLimit new_limit=10 previous_limit=14 reason=test`,
 			},
+			expectedBackoffEventCounterValue: 2,
 		},
 		{
 			name: "maximum value should be honoured",
@@ -207,6 +237,7 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 				`level=debug msg="Additive increase" limit_rpc=testLimit new_limit=100 previous_limit=100`,
 				`level=debug msg="Additive increase" limit_rpc=testLimit new_limit=100 previous_limit=100`,
 			},
+			expectedBackoffEventCounterValue: 0,
 		},
 		{
 			name: "when minimum value is same as initial",
@@ -227,6 +258,7 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 				`level=debug msg="Additive increase" limit_rpc=testLimit new_limit=100 previous_limit=100`,
 				`level=debug msg="Additive increase" limit_rpc=testLimit new_limit=100 previous_limit=100`,
 			},
+			expectedBackoffEventCounterValue: 1,
 		},
 		{
 			name: "a series of backoff events",
@@ -247,6 +279,7 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 				`level=info msg="Multiplicative decrease" condition=test limit_rpc=testLimit new_limit=10 previous_limit=10`,
 				`level=info msg="Multiplicative decrease" condition=test limit_rpc=testLimit new_limit=10 previous_limit=10`,
 			},
+			expectedBackoffEventCounterValue: 5,
 		},
 	}
 	for _, tc := range tests {
@@ -255,11 +288,7 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 			logger := testhelper.NewLogger(t, testhelper.WithLevel(logrus.DebugLevel))
 			hook := testhelper.AddLoggerHook(logger)
 
-			c := &AdaptiveCalculator{
-				limits:          tc.limits,
-				logger:          logger,
-				currentLimitVec: prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"limit"}),
-			}
+			c := NewAdaptiveCalculator(Config{}, logger, &mockLoadMonitor{}, tc.limits)
 
 			// Set limits to initial value
 			for _, limit := range tc.limits {
@@ -271,10 +300,11 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 			// on this event (nil or non-nil).
 			for _, event := range tc.backoffSequence {
 				if event != nil {
-					event.ConditionName = "test"
+					event.ConditionName = conditionName
 					event.Reason = "test"
+					event.ShouldBackoff = true
 				}
-				c.lastBackoffEvent = event
+				c.setLastBackoffEvent(event)
 				c.calibrateLimits(ctx)
 			}
 
@@ -285,6 +315,12 @@ func TestAdaptiveCalculator_calibrateLimits(t *testing.T) {
 				require.Equal(t, expectedLimits, limit.currents[:len(tc.backoffSequence)+1])
 			}
 
+			// Verify the metric holds the right value
+			backoffEventMetricDto := &dto.Metric{}
+			require.NoError(t, c.backoffEventsVec.WithLabelValues(conditionName).Write(backoffEventMetricDto))
+			require.Equal(t, tc.expectedBackoffEventCounterValue, int(backoffEventMetricDto.GetCounter().GetValue()))
+
+			// Verify the log holds the expected logs
 			assertLogs(t, tc.expectedLogs, hook.AllEntries())
 		})
 	}
