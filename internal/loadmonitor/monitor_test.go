@@ -230,6 +230,7 @@ func Test_defaultMonitor_notify(t *testing.T) {
 				ConditionName: "test",
 				Description:   eventDescription,
 				CurrentStats:  defaultCurrentStats,
+				PreviousStats: defaultPreviousStats,
 			},
 			condition: func(ctx context.Context, previous, current Stats, _ time.Duration) (bool, string) {
 				return true, eventDescription

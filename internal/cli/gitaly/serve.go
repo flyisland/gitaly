@@ -55,7 +55,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/env"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/limiter/watchers"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/loadmonitor"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/offloading"
@@ -425,33 +424,13 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 
 	// Enable the adaptive calculator only if there is any limit needed to be adaptive.
 	if len(adaptiveLimits) > 0 {
-		resourceWatchers := []limiter.ResourceWatcher{
-			watchers.NewCgroupCPUWatcher(cgroupMgr, cfg.AdaptiveLimiting.CPUThrottledThreshold),
-			watchers.NewCgroupMemoryWatcher(cgroupMgr, cfg.AdaptiveLimiting.MemoryThreshold),
+		calcCfg := limiter.Config{
+			CalibrationInterval: limiter.DefaultCalibrateFrequency,
+			CPUThreshold:        cfg.AdaptiveLimiting.CPUThrottledThreshold,
+			MemoryThreshold:     cfg.AdaptiveLimiting.MemoryThreshold,
+			PSIConfig:           cfg.AdaptiveLimiting.PSIPressure,
 		}
-
-		for _, entry := range []struct {
-			resource watchers.PressureResource
-			cfg      config.PSIResourceConfig
-		}{
-			{watchers.PressureResourceMemory, cfg.AdaptiveLimiting.PSIPressure.Memory},
-			{watchers.PressureResourceIO, cfg.AdaptiveLimiting.PSIPressure.IO},
-			{watchers.PressureResourceCPU, cfg.AdaptiveLimiting.PSIPressure.CPU},
-		} {
-			if !entry.cfg.Enabled {
-				continue
-			}
-			resourceWatchers = append(resourceWatchers,
-				watchers.NewCgroupPressureWatcher(cgroupMgr, logger, entry.resource, entry.cfg),
-			)
-		}
-
-		adaptiveCalculator := limiter.NewAdaptiveCalculator(
-			limiter.DefaultCalibrateFrequency,
-			logger,
-			adaptiveLimits,
-			resourceWatchers,
-		)
+		adaptiveCalculator := limiter.NewAdaptiveCalculator(calcCfg, logger, loadMonitor, adaptiveLimits)
 		prometheus.MustRegister(adaptiveCalculator)
 
 		stop, err := adaptiveCalculator.Start(ctx)
