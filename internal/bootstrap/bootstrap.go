@@ -225,6 +225,7 @@ func (b *Bootstrap) waitGracePeriod(gracePeriodTicker helper.Ticker, kill <-chan
 		if stopAction != nil {
 			stopAction()
 		}
+		b.logger.Info("wait: stop action completed")
 		close(b.allServersDone)
 	}()
 
@@ -232,10 +233,13 @@ func (b *Bootstrap) waitGracePeriod(gracePeriodTicker helper.Ticker, kill <-chan
 
 	select {
 	case <-gracePeriodTicker.C():
+		b.logger.Info("wait: grace period ticker ticked")
 		return ErrGracePeriodExpired
-	case <-kill:
+	case s := <-kill:
+		b.logger.WithField("signal", s).Info("wait: signal received")
 		return ErrForceShutdown
 	case <-b.allServersDone:
+		b.logger.Info("wait: all servers done")
 		return nil
 	}
 }
