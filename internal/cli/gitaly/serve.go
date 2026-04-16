@@ -743,6 +743,8 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		logger.Info(fmt.Sprintf("pool metadata store configured: %s", cfg.PoolMetadata.DatabasePath))
 	}
 
+	objectPoolStateManager := relational.NewObjectPoolStateManager(poolMetadataStore)
+
 	var bundleURIManager *bundleuri.GenerationManager
 	if cfg.BundleURI.GoCloudURL != "" {
 		bundleURISink, err := bundleuri.NewSink(ctx, cfg.BundleURI.GoCloudURL)
@@ -830,6 +832,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 			ArchiveCache:           archiveStreamCache,
 			PoolMetadataStore:      poolMetadataStore,
 			GitlabClient:           gitlabClient,
+			ObjectPoolStateManager: objectPoolStateManager,
 		})
 		b.RegisterStarter(starter.New(c, srv, logger))
 	}
