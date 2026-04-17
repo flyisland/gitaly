@@ -211,7 +211,7 @@ func server(cfgs []starter.Config, conf config.Config, logger log.Logger, b boot
 			}
 
 			resilientListenerTicker := helper.NewTimerTicker(5 * time.Second)
-			notificationsListener := datastore.NewResilientListener(conf.DB, resilientListenerTicker, logger)
+			notificationsListener := datastore.NewResilientListener(conf.DB, resilientListenerTicker, logger, datastore.PraefectNotificationsReconnectsTotal)
 			go func() {
 				err := notificationsListener.Listen(ctx, storagesCached, datastore.StorageRepositoriesUpdatesChannel, datastore.RepositoriesUpdatesChannel)
 				if err != nil && !errors.Is(err, context.Canceled) {

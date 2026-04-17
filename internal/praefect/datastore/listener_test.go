@@ -193,7 +193,7 @@ func TestResilientListener_Listen(t *testing.T) {
 	lis := NewResilientListener(
 		testdb.GetConfig(t, db.Name),
 		helper.NewCountTicker(1, func() {}),
-		logger,
+		logger, PraefectNotificationsReconnectsTotal,
 	)
 	done := make(chan struct{})
 	go func() {
@@ -216,7 +216,7 @@ func TestResilientListener_Listen(t *testing.T) {
 	require.Equal(t, []string{channel}, entries[0].Data["channels"])
 
 	testhelper.RequirePromMetrics(t, lis, `
-		# HELP gitaly_praefect_notifications_reconnects_total Counts amount of reconnects to listen for notification from PostgreSQL
+		# HELP gitaly_praefect_notifications_reconnects_total Counts reconnects to the storage repository update channels used by the consistent storages read cache
 		# TYPE gitaly_praefect_notifications_reconnects_total counter
 		gitaly_praefect_notifications_reconnects_total{state="connected"} 2
 		gitaly_praefect_notifications_reconnects_total{state="disconnected"} 2

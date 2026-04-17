@@ -18,6 +18,14 @@ import (
 // which notify_on_write_lock_release() sends NOTIFY events.
 const RepositoryReferenceWriteLockReleasesChannel = "repository_reference_write_lock_releases"
 
+var lockReleasingListenerReconnectsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "gitaly_praefect_lock_release_listener_reconnects_total",
+		Help: "Counts amount of reconnects to listen for notification from write lock release channel",
+	},
+	[]string{"state"},
+)
+
 // LockID identifies a repository reference write lock, formatted as "virtualStorage|relativePath".
 type LockID string
 
@@ -133,7 +141,7 @@ func (d *lockReleaseDispatcher) Connected() {
 func NewRepoReferenceWriteLockManager(ctx context.Context, qc glsql.Querier, conf config.DB, logger log.Logger) *RepoReferenceWriteLockManager {
 	resilientListenerTicker := helper.NewTimerTicker(5 * time.Second)
 
-	lockReleasingListener := NewResilientListener(conf, resilientListenerTicker, logger)
+	lockReleasingListener := NewResilientListener(conf, resilientListenerTicker, logger, lockReleasingListenerReconnectsTotal)
 	handler := &lockReleaseDispatcher{
 		waiters: make(map[LockID][]chan struct{}),
 		ready:   make(chan struct{}),
