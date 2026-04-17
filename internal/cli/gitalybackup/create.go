@@ -28,7 +28,6 @@ type createSubcommand struct {
 	backupPath      string
 	parallel        int
 	parallelStorage int
-	layout          string
 	incremental     bool
 	backupID        string
 	serverSide      bool
@@ -38,7 +37,6 @@ func (cmd *createSubcommand) flags(ctx *cli.Command) {
 	cmd.backupPath = ctx.String("path")
 	cmd.parallel = ctx.Int("parallel")
 	cmd.parallelStorage = ctx.Int("parallel-storage")
-	cmd.layout = ctx.String("layout")
 	cmd.incremental = ctx.Bool("incremental")
 	cmd.backupID = ctx.String("id")
 	cmd.serverSide = ctx.Bool("server-side")
@@ -59,11 +57,6 @@ func createFlags() []cli.Flag {
 			Name:  "parallel-storage",
 			Usage: "maximum number of parallel backups per storage. Note: actual parallelism when combined with `-parallel` depends on the order the repositories are received.",
 			Value: 2,
-		},
-		&cli.StringFlag{
-			Name:  "layout",
-			Usage: "how backup files are located. One of manifest, pointer, or legacy.",
-			Value: "manifest",
 		},
 		&cli.BoolFlag{
 			Name:  "incremental",

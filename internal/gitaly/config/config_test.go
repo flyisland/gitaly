@@ -3056,21 +3056,18 @@ func TestBackupConfig_Validate(t *testing.T) {
 				GoCloudURL:     "s3://my-bucket",
 				WALGoCloudURL:  "s3://my-wal-bucket",
 				WALWorkerCount: 4,
-				Layout:         "pointer",
 			},
 		},
 		{
 			name: "valid no wal",
 			backupConfig: BackupConfig{
 				GoCloudURL: "s3://my-bucket",
-				Layout:     "pointer",
 			},
 		},
 		{
 			name: "go_cloud_url invalid",
 			backupConfig: BackupConfig{
 				GoCloudURL: "%invalid%",
-				Layout:     "pointer",
 			},
 			expectedErr: cfgerror.ValidationErrors{
 				cfgerror.NewValidationError(
@@ -3088,7 +3085,6 @@ func TestBackupConfig_Validate(t *testing.T) {
 			backupConfig: BackupConfig{
 				GoCloudURL:    "s3://my-bucket",
 				WALGoCloudURL: "%invalid%",
-				Layout:        "pointer",
 			},
 			expectedErr: cfgerror.ValidationErrors{
 				cfgerror.NewValidationError(
@@ -3098,19 +3094,6 @@ func TestBackupConfig_Validate(t *testing.T) {
 						Err: url.EscapeError("%in"),
 					},
 					"wal_backup_go_cloud_url",
-				),
-			},
-		},
-		{
-			name: "layout missing",
-			backupConfig: BackupConfig{
-				GoCloudURL: "s3://my-bucket",
-				Layout:     "",
-			},
-			expectedErr: cfgerror.ValidationErrors{
-				cfgerror.NewValidationError(
-					cfgerror.ErrBlankOrEmpty,
-					"layout",
 				),
 			},
 		},
@@ -3533,7 +3516,6 @@ func TestLoadDefaults(t *testing.T) {
 		},
 		Backup: BackupConfig{
 			WALWorkerCount: 1,
-			Layout:         "pointer",
 		},
 		Timeout: TimeoutConfig{
 			UploadPackNegotiation:    duration.Duration(10 * time.Minute),
