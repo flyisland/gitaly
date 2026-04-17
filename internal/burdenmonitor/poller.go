@@ -2,6 +2,8 @@ package burdenmonitor
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"time"
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
@@ -63,10 +65,54 @@ func (bm *BurdenMonitor) pollAllEntries() {
 func (bm *BurdenMonitor) logStats() {
 	byCPU := bm.EntriesSortedBy(SortByCPU)
 	byMemory := bm.EntriesSortedBy(SortByMemory)
-	bm.logger.WithFields(log.Fields{
-		"top_10_by_cpu":    byCPU[:min(10, len(byCPU))],
-		"top_10_by_memory": byMemory[:min(10, len(byMemory))],
-	}).Info("burden monitor stats")
+
+	fields := log.Fields{}
+	flattenEntries(fields, "top_cpu", byCPU[:min(10, len(byCPU))])
+	flattenEntries(fields, "top_memory", byMemory[:min(10, len(byMemory))])
+
+	bm.logger.WithFields(fields).Info("burden monitor stats")
+}
+
+func flattenEntries(fields log.Fields, prefix string, entries []*RPCEntry) {
+	for i, entry := range entries {
+		p := fmt.Sprintf("%s_%d", prefix, i+1)
+
+		fields[p+".rpc"] = entry.ServiceName + "/" + entry.MethodName
+		fields[p+".repository"] = entry.Repository
+
+		entry.mu.RLock()
+		defer entry.mu.RUnlock()
+
+		var totalCPU time.Duration
+		var totalMemory int64
+		var activeCommands int
+		cmds := make([]*CommandStats, 0, len(entry.Commands))
+		for _, cmd := range entry.Commands {
+			cmds = append(cmds, cmd)
+			totalCPU += cmd.UserTime + cmd.SystemTime
+			totalMemory += cmd.AnonRSS
+			if !cmd.Completed {
+				activeCommands++
+			}
+		}
+
+		fields[p+".total_cpu_ms"] = totalCPU.Milliseconds()
+		fields[p+".total_memory_bytes"] = totalMemory
+		fields[p+".active_commands"] = activeCommands
+
+		sort.Slice(cmds, func(a, b int) bool {
+			return (cmds[a].UserTime + cmds[a].SystemTime) > (cmds[b].UserTime + cmds[b].SystemTime)
+		})
+
+		for j, cmd := range cmds {
+			cp := fmt.Sprintf("%s.command_%d", p, j+1)
+			fields[cp+".name"] = cmd.Name
+			fields[cp+".pid"] = cmd.Pid
+			fields[cp+".cpu_ms"] = (cmd.UserTime + cmd.SystemTime).Milliseconds()
+			fields[cp+".memory_bytes"] = cmd.AnonRSS
+			fields[cp+".wall_time_ms"] = cmd.WallTime.Milliseconds()
+		}
+	}
 }
 
 func (bm *BurdenMonitor) pollEntryCommands(entry *RPCEntry) {
