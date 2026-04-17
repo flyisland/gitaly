@@ -46,7 +46,7 @@ func TestCreateSubcommand(t *testing.T) {
 				backupSink, err := backup.ResolveSink(ctx, backupRoot)
 				require.NoError(t, err)
 
-				backupLocator := backup.ResolveLocator(backupSink)
+				backupLocator := backup.NewLocator(backupSink)
 
 				return []testserver.GitalyServerOpt{
 					testserver.WithBackupSink(backupSink),
@@ -64,7 +64,7 @@ func TestCreateSubcommand(t *testing.T) {
 				backupSink, err := backup.ResolveSink(ctx, backupRoot)
 				require.NoError(t, err)
 
-				backupLocator := backup.ResolveLocator(backupSink)
+				backupLocator := backup.NewLocator(backupSink)
 
 				return []testserver.GitalyServerOpt{
 					testserver.WithBackupSink(backupSink),

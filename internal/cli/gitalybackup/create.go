@@ -128,7 +128,7 @@ func (cmd *createSubcommand) run(ctx context.Context, logger log.Logger, stdin i
 			return fmt.Errorf("create: resolve sink: %w", err)
 		}
 
-		manager = backup.NewManager(sink, logger, backup.ResolveLocator(sink), pool)
+		manager = backup.NewManager(sink, logger, backup.NewLocator(sink), pool)
 	}
 
 	var opts []backup.PipelineOption

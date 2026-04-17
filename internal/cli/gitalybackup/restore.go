@@ -123,7 +123,7 @@ func (cmd *restoreSubcommand) run(ctx context.Context, logger log.Logger, stdin 
 		if err != nil {
 			return fmt.Errorf("restore: resolve sink: %w", err)
 		}
-		manager = backup.NewManager(sink, logger, backup.ResolveLocator(sink), pool)
+		manager = backup.NewManager(sink, logger, backup.NewLocator(sink), pool)
 	}
 
 	useLatest := false

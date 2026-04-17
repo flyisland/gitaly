@@ -739,7 +739,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		if err != nil {
 			return fmt.Errorf("resolve backup sink: %w", err)
 		}
-		backupLocator = backup.ResolveLocator(backupSink)
+		backupLocator = backup.NewLocator(backupSink)
 	}
 
 	var poolMetadataStore relational.PoolStore

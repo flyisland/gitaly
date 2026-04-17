@@ -233,7 +233,7 @@ func TestRestoreSubcommand_serverSide(t *testing.T) {
 	backupSink, err := backup.ResolveSink(ctx, backupDir)
 	require.NoError(t, err)
 
-	backupLocator := backup.ResolveLocator(backupSink)
+	backupLocator := backup.NewLocator(backupSink)
 
 	cfg := testcfg.Build(t)
 	testcfg.BuildGitalyHooks(t, cfg)
@@ -341,7 +341,7 @@ func TestRestoreSubcommand_serverSide_latestFallback(t *testing.T) {
 	backupSink, err := backup.ResolveSink(ctx, backupDir)
 	require.NoError(t, err)
 
-	backupLocator := backup.ResolveLocator(backupSink)
+	backupLocator := backup.NewLocator(backupSink)
 
 	cfg := testcfg.Build(t)
 	testcfg.BuildGitalyHooks(t, cfg)
