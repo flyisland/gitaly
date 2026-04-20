@@ -516,6 +516,7 @@ semgrep-sast:
     - *cache_go_configuration
 
 gitlab-advanced-sast:
+  timeout: 20 minutes
   needs: []
   stage: analyze
   cache:
