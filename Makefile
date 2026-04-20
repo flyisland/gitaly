@@ -160,9 +160,9 @@ GIT_VERSION ?=
 # Do not modify the format, it's automatically updated by renovate-gitlab-bot. The timestamp
 # is used for version comparison by renovate. If the version needs to be updated, the timestamp
 # should be updated to the timestamp of the commit.
-# renovate: 1775671210000
-GIT_VERSION_MASTER ?= b15384c06f77bc2d34d0d3623a8a58218313a561
-GIT_VERSION_PREV ?= e417bf2996fbd77acabbf354ed9b5adedacf91c9
+# renovate: 1775864855000
+GIT_VERSION_MASTER ?= 8c9303b1ffae5b745d1b0a1f98330cf7944d8db0
+GIT_VERSION_PREV ?= b15384c06f77bc2d34d0d3623a8a58218313a561
 #
 #
 # OVERRIDE_GIT_VERSION allows you to specify a custom semver value to be reported by the
