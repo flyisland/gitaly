@@ -109,6 +109,10 @@ doesn't seem to test a realistic scenario.`)
 						Mode:         archive.TarFileMode,
 						ParseContent: ignoreContent,
 					},
+					"config": {
+						Mode:         archive.TarFileMode,
+						ParseContent: ignoreContent,
+					},
 					"shallow": {
 						Mode:         archive.TarFileMode,
 						ParseContent: ignoreContent,
@@ -159,6 +163,77 @@ doesn't seem to test a realistic scenario.`)
 			},
 		},
 		{
+			desc: "config file only includes repository format entries",
+			setup: func(t *testing.T) setupData {
+				cfg, repo, repoPath := setupRepo(t)
+
+				// Add config entries that should NOT appear in the snapshot.
+				gittest.Exec(t, cfg, "-C", repoPath, "config", "receive.fsckObjects", "true")
+				gittest.Exec(t, cfg, "-C", repoPath, "config", "core.bare", "true")
+				gittest.Exec(t, cfg, "-C", repoPath, "config", "remote.origin.url", "https://example.com/repo.git")
+
+				// Add an extensions entry that SHOULD appear.
+				gittest.Exec(t, cfg, "-C", repoPath, "config", "extensions.noop", "true")
+
+				expected := testhelper.DirectoryState{
+					"HEAD": {
+						Mode:         archive.TarFileMode,
+						ParseContent: ignoreContent,
+					},
+					"config": {
+						Mode: archive.TarFileMode,
+						ParseContent: func(tb testing.TB, path string, content []byte) any {
+							tb.Helper()
+
+							configContent := string(content)
+
+							// Verify the expected entries are present.
+							require.Contains(tb, configContent, "repositoryformatversion")
+							require.Contains(tb, configContent, "[extensions")
+							require.Contains(tb, configContent, "noop = true")
+
+							// In SHA256 mode, objectformat must be present.
+							if gittest.ObjectHashIsSHA256() {
+								require.Contains(tb, configContent, "objectformat = sha256")
+							}
+
+							// In reftable mode, refstorage must be present.
+							if testhelper.IsReftableEnabled() {
+								require.Contains(tb, configContent, "refstorage = reftable")
+							}
+
+							// Verify excluded entries are absent.
+							require.NotContains(tb, configContent, "fsckObjects")
+							require.NotContains(tb, configContent, "bare")
+							require.NotContains(tb, configContent, "remote")
+
+							return nil
+						},
+					},
+				}
+
+				for _, ref := range gittest.FilesOrReftables(
+					[]string{"refs/", "refs/heads/", "refs/tags/"},
+					append([]string{"refs/", "refs/heads", "reftable/", "reftable/tables.list"}, reftableFiles(t, repoPath)...),
+				) {
+					m := archive.TarFileMode
+					ref, isDir := strings.CutSuffix(ref, "/")
+					if isDir {
+						m |= archive.ExecuteMode | fs.ModeDir
+					}
+					expected[ref] = testhelper.DirectoryEntry{
+						Mode:         m,
+						ParseContent: ignoreContent,
+					}
+				}
+
+				return setupData{
+					repo:          repo,
+					expectedState: expected,
+				}
+			},
+		},
+		{
 			desc: "alternate object database does not exist",
 			setup: func(t *testing.T) setupData {
 				_, repo, repoPath := setupRepo(t)
@@ -177,6 +252,10 @@ doesn't seem to test a realistic scenario.`)
 
 				expected := testhelper.DirectoryState{
 					"HEAD": {
+						Mode:         archive.TarFileMode,
+						ParseContent: ignoreContent,
+					},
+					"config": {
 						Mode:         archive.TarFileMode,
 						ParseContent: ignoreContent,
 					},
@@ -260,6 +339,10 @@ doesn't seem to test a realistic scenario.`)
 						Mode:         archive.TarFileMode,
 						ParseContent: ignoreContent,
 					},
+					"config": {
+						Mode:         archive.TarFileMode,
+						ParseContent: ignoreContent,
+					},
 				}
 				expected[fmt.Sprintf("objects/%s/%s", treeID[0:2], treeID[2:])] = testhelper.DirectoryEntry{
 					Mode:         archive.TarFileMode,
@@ -322,6 +405,10 @@ doesn't seem to test a realistic scenario.`)
 
 				expected := testhelper.DirectoryState{
 					"HEAD": {
+						Mode:         archive.TarFileMode,
+						ParseContent: ignoreContent,
+					},
+					"config": {
 						Mode:         archive.TarFileMode,
 						ParseContent: ignoreContent,
 					},

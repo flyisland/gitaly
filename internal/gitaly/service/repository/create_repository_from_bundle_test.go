@@ -11,6 +11,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/localrepo"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/repoutil"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/transaction"
@@ -173,9 +174,7 @@ func TestCreateRepositoryFromBundle_transactional(t *testing.T) {
 	txManager := transaction.NewTrackingManager()
 	cfg, client := setupRepositoryService(t, testserver.WithTransactionManager(txManager))
 
-	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg, gittest.CreateRepositoryConfig{
-		SkipCreationViaService: true,
-	})
+	repoProto, repoPath := gittest.CreateRepository(t, ctx, cfg)
 
 	// Reset the votes casted while creating the test repository.
 	txManager.Reset()
@@ -254,14 +253,17 @@ func TestCreateRepositoryFromBundle_transactional(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.NoError(t, configStream.CloseSend())
+	require.NoError(t, os.Remove(filepath.Join(repoPath, "config")))
 	require.NoError(t, os.WriteFile(filepath.Join(repoPath, "config"), data.Bytes(), mode.File))
 
 	// Compute the vote hash to assert that we really hash exactly the files that we
 	// expect to hash. Furthermore, this is required for cross-platform compatibility given that
 	// the configuration may be different depending on the platform.
 	hash := voting.NewVoteHash()
+	votingRepo := localrepo.NewTestRepo(t, cfg, repoProto)
 
-	gittest.BackendSpecificRepoHash(t, ctx, cfg, hash, repoPath)
+	err = repoutil.VoteRepository(ctx, &hash, votingRepo)
+	require.NoError(t, err)
 
 	filesVote, err := hash.Vote()
 	require.NoError(t, err)
