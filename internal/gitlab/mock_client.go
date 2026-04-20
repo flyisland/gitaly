@@ -31,7 +31,7 @@ type MockClient struct {
 	allowed           func(context.Context, AllowedParams) (bool, string, error)
 	preReceive        func(context.Context, string) (bool, error)
 	postReceive       func(context.Context, string, string, string, []byte, ...string) (bool, []PostReceiveMessage, error)
-	objectPoolMembers func(context.Context, string, string, bool) ([]ObjectPoolMember, error)
+	objectPoolMembers func(context.Context, []string, string, bool) (map[string][]ObjectPoolMember, error)
 }
 
 // NewMockClient returns a new mock client for the internal GitLab API.
@@ -56,7 +56,7 @@ func NewMockClientWithObjectPoolMembers(
 	allowed func(context.Context, AllowedParams) (bool, string, error),
 	preReceive func(context.Context, string) (bool, error),
 	postReceive func(context.Context, string, string, string, []byte, ...string) (bool, []PostReceiveMessage, error),
-	objectPoolMembers func(context.Context, string, string, bool) ([]ObjectPoolMember, error),
+	objectPoolMembers func(context.Context, []string, string, bool) (map[string][]ObjectPoolMember, error),
 ) Client {
 	return &MockClient{
 		tb:                tb,
@@ -96,7 +96,7 @@ func (m *MockClient) PostReceive(ctx context.Context, glRepository, glID, change
 }
 
 // ObjectPoolMembers returns the configured object pool members response.
-func (m *MockClient) ObjectPoolMembers(ctx context.Context, diskPath, storage string, upstreamOnly bool) ([]ObjectPoolMember, error) {
+func (m *MockClient) ObjectPoolMembers(ctx context.Context, diskPaths []string, storage string, upstreamOnly bool) (map[string][]ObjectPoolMember, error) {
 	require.NotNil(m.tb, m.objectPoolMembers, "objectPoolMembers called but not set")
-	return m.objectPoolMembers(ctx, diskPath, storage, upstreamOnly)
+	return m.objectPoolMembers(ctx, diskPaths, storage, upstreamOnly)
 }

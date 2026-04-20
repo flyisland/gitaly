@@ -327,12 +327,15 @@ func (c *HTTPClient) Check(ctx context.Context) (*CheckInfo, error) {
 }
 
 // ObjectPoolMembers queries the GitLab internal API /gitaly/object_pool_members to list
-// member repositories of an object pool.
-func (c *HTTPClient) ObjectPoolMembers(ctx context.Context, diskPath, storage string, upstreamOnly bool) ([]ObjectPoolMember, error) {
+// member repositories for the given pool disk paths. The returned map is keyed by the disk
+// path as passed in; missing pools are returned as empty slices.
+func (c *HTTPClient) ObjectPoolMembers(ctx context.Context, diskPaths []string, storage string, upstreamOnly bool) (map[string][]ObjectPoolMember, error) {
 	ctx = withOriginalRemoteIP(ctx)
 
 	query := url.Values{}
-	query.Set("disk_path", diskPath)
+	for _, diskPath := range diskPaths {
+		query.Add("disk_paths[]", diskPath)
+	}
 	query.Set("storage", storage)
 	if upstreamOnly {
 		query.Set("upstream_only", "true")
@@ -349,7 +352,7 @@ func (c *HTTPClient) ObjectPoolMembers(ctx context.Context, diskPath, storage st
 		return nil, fmt.Errorf("get: %d", resp.StatusCode)
 	}
 
-	var members []ObjectPoolMember
+	members := make(map[string][]ObjectPoolMember)
 	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
 		return nil, fmt.Errorf("decode response body: %w", err)
 	}

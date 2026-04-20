@@ -277,7 +277,7 @@ func (m *postreceiveAPIMock) PostReceive(ctx context.Context, glRepository, glID
 	return m.postreceive(ctx, glRepository, glID, changes, clientCtx, pushOptions...)
 }
 
-func (m *postreceiveAPIMock) ObjectPoolMembers(ctx context.Context, diskPath, storage string, upstreamOnly bool) ([]gitlab.ObjectPoolMember, error) {
+func (m *postreceiveAPIMock) ObjectPoolMembers(ctx context.Context, diskPaths []string, storage string, upstreamOnly bool) (map[string][]gitlab.ObjectPoolMember, error) {
 	return nil, errors.New("unexpected call")
 }
 

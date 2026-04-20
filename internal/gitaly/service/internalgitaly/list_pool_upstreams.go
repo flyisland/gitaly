@@ -9,8 +9,12 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
-// ListPoolUpstreams queries the Rails ObjectPoolMembers API for each given  pool disk path and
-// returns a mapping of pool disk path to upstream repository relative path.
+// objectPoolMembersBatchSize is the maximum number of pool disk paths to send in a single
+// request to the Rails ObjectPoolMembers API. The Rails endpoint enforces a limit of 500.
+const objectPoolMembersBatchSize = 500
+
+// ListPoolUpstreams queries the Rails ObjectPoolMembers API in batches for the given pool disk
+// paths and returns a mapping of pool disk path to upstream repository relative path.
 func (s *server) ListPoolUpstreams(stream gitalypb.InternalGitaly_ListPoolUpstreamsServer) error {
 	ctx := stream.Context()
 
@@ -36,25 +40,38 @@ func (s *server) ListPoolUpstreams(stream gitalypb.InternalGitaly_ListPoolUpstre
 		poolDiskPaths = append(poolDiskPaths, msg.GetPoolDiskPaths()...)
 	}
 
-	// Query Rails for each unique pool disk path and build the upstreams map.
-	seen := make(map[string]struct{}, len(poolDiskPaths))
-	upstreams := make(map[string]string)
-
+	// The Rails API expects pool disk paths without the .git suffix. Deduplicate the trimmed
+	// paths while preserving a mapping back to the original form so the response can be keyed
+	// by the original path.
+	originalByTrimmed := make(map[string]string, len(poolDiskPaths))
+	trimmedPaths := make([]string, 0, len(poolDiskPaths))
 	for _, poolDiskPath := range poolDiskPaths {
-		if _, ok := seen[poolDiskPath]; ok {
+		trimmed := strings.TrimSuffix(poolDiskPath, ".git")
+		if _, ok := originalByTrimmed[trimmed]; ok {
 			continue
 		}
-		seen[poolDiskPath] = struct{}{}
+		originalByTrimmed[trimmed] = poolDiskPath
+		trimmedPaths = append(trimmedPaths, trimmed)
+	}
 
-		members, err := s.gitlabClient.ObjectPoolMembers(ctx, strings.TrimSuffix(poolDiskPath, ".git"), storageName, true)
-		if err != nil {
-			return structerr.NewInternal("query Rails for pool %q: %w", poolDiskPath, err)
+	upstreams := make(map[string]string)
+	for i := 0; i < len(trimmedPaths); i += objectPoolMembersBatchSize {
+		end := i + objectPoolMembersBatchSize
+		if end > len(trimmedPaths) {
+			end = len(trimmedPaths)
 		}
 
-		// There should only be one upstream. If there's no upstream or it's
-		// private, we omit it from the response.
-		if len(members) == 1 && members[0].Public {
-			upstreams[poolDiskPath] = members[0].RelativePath
+		membersByPath, err := s.gitlabClient.ObjectPoolMembers(ctx, trimmedPaths[i:end], storageName, true)
+		if err != nil {
+			return structerr.NewInternal("query Rails: %w", err)
+		}
+
+		for trimmedPath, members := range membersByPath {
+			// There should only be one upstream. If there's no upstream or it's
+			// private, we omit it from the response.
+			if len(members) == 1 && members[0].Public {
+				upstreams[originalByTrimmed[trimmedPath]] = members[0].RelativePath
+			}
 		}
 	}
 
