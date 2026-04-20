@@ -23,6 +23,7 @@ const (
 	InternalGitaly_ScanPoolMetadata_FullMethodName  = "/gitaly.InternalGitaly/ScanPoolMetadata"
 	InternalGitaly_StorePoolMetadata_FullMethodName = "/gitaly.InternalGitaly/StorePoolMetadata"
 	InternalGitaly_ListPoolMetadata_FullMethodName  = "/gitaly.InternalGitaly/ListPoolMetadata"
+	InternalGitaly_ListPoolUpstreams_FullMethodName = "/gitaly.InternalGitaly/ListPoolUpstreams"
 )
 
 // InternalGitalyClient is the client API for InternalGitaly service.
@@ -45,6 +46,10 @@ type InternalGitalyClient interface {
 	StorePoolMetadata(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[StorePoolMetadataRequest, StorePoolMetadataResponse], error)
 	// ListPoolMetadata lists all pools stored in the local pool metadata database.
 	ListPoolMetadata(ctx context.Context, in *ListPoolMetadataRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ListPoolMetadataResponse], error)
+	// ListPoolUpstreams queries the Rails ObjectPoolMembers API for each given
+	// pool disk path and returns a mapping of pool disk path to upstream
+	// repository relative path.
+	ListPoolUpstreams(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ListPoolUpstreamsRequest, ListPoolUpstreamsResponse], error)
 }
 
 type internalGitalyClient struct {
@@ -125,6 +130,19 @@ func (c *internalGitalyClient) ListPoolMetadata(ctx context.Context, in *ListPoo
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type InternalGitaly_ListPoolMetadataClient = grpc.ServerStreamingClient[ListPoolMetadataResponse]
 
+func (c *internalGitalyClient) ListPoolUpstreams(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ListPoolUpstreamsRequest, ListPoolUpstreamsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &InternalGitaly_ServiceDesc.Streams[4], InternalGitaly_ListPoolUpstreams_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ListPoolUpstreamsRequest, ListPoolUpstreamsResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type InternalGitaly_ListPoolUpstreamsClient = grpc.BidiStreamingClient[ListPoolUpstreamsRequest, ListPoolUpstreamsResponse]
+
 // InternalGitalyServer is the server API for InternalGitaly service.
 // All implementations must embed UnimplementedInternalGitalyServer
 // for forward compatibility.
@@ -145,6 +163,10 @@ type InternalGitalyServer interface {
 	StorePoolMetadata(grpc.ClientStreamingServer[StorePoolMetadataRequest, StorePoolMetadataResponse]) error
 	// ListPoolMetadata lists all pools stored in the local pool metadata database.
 	ListPoolMetadata(*ListPoolMetadataRequest, grpc.ServerStreamingServer[ListPoolMetadataResponse]) error
+	// ListPoolUpstreams queries the Rails ObjectPoolMembers API for each given
+	// pool disk path and returns a mapping of pool disk path to upstream
+	// repository relative path.
+	ListPoolUpstreams(grpc.BidiStreamingServer[ListPoolUpstreamsRequest, ListPoolUpstreamsResponse]) error
 	mustEmbedUnimplementedInternalGitalyServer()
 }
 
@@ -166,6 +188,9 @@ func (UnimplementedInternalGitalyServer) StorePoolMetadata(grpc.ClientStreamingS
 }
 func (UnimplementedInternalGitalyServer) ListPoolMetadata(*ListPoolMetadataRequest, grpc.ServerStreamingServer[ListPoolMetadataResponse]) error {
 	return status.Error(codes.Unimplemented, "method ListPoolMetadata not implemented")
+}
+func (UnimplementedInternalGitalyServer) ListPoolUpstreams(grpc.BidiStreamingServer[ListPoolUpstreamsRequest, ListPoolUpstreamsResponse]) error {
+	return status.Error(codes.Unimplemented, "method ListPoolUpstreams not implemented")
 }
 func (UnimplementedInternalGitalyServer) mustEmbedUnimplementedInternalGitalyServer() {}
 func (UnimplementedInternalGitalyServer) testEmbeddedByValue()                        {}
@@ -228,6 +253,13 @@ func _InternalGitaly_ListPoolMetadata_Handler(srv interface{}, stream grpc.Serve
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type InternalGitaly_ListPoolMetadataServer = grpc.ServerStreamingServer[ListPoolMetadataResponse]
 
+func _InternalGitaly_ListPoolUpstreams_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(InternalGitalyServer).ListPoolUpstreams(&grpc.GenericServerStream[ListPoolUpstreamsRequest, ListPoolUpstreamsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type InternalGitaly_ListPoolUpstreamsServer = grpc.BidiStreamingServer[ListPoolUpstreamsRequest, ListPoolUpstreamsResponse]
+
 // InternalGitaly_ServiceDesc is the grpc.ServiceDesc for InternalGitaly service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -255,6 +287,12 @@ var InternalGitaly_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "ListPoolMetadata",
 			Handler:       _InternalGitaly_ListPoolMetadata_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ListPoolUpstreams",
+			Handler:       _InternalGitaly_ListPoolUpstreams_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "internal.proto",

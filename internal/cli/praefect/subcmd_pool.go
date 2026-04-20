@@ -210,9 +210,87 @@ func storeOnAllNodes(ctx context.Context, conf config.Config, virtualStorage str
 func poolAction(ctx context.Context, cmd *cli.Command) error {
 	log.ConfigureCommand()
 
-	_, err := readConfig(cmd.String(configFlagName))
+	cfg, err := readConfig(cmd.String(configFlagName))
 	if err != nil {
 		return err
+	}
+
+	db, closeDB, err := openDB(cfg.DB, cmd.ErrWriter)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer closeDB()
+
+	w := cmd.Writer
+
+	for _, vs := range cfg.VirtualStorages {
+		members, err := scanPrimaries(ctx, db, cfg, vs.Name)
+		if err != nil {
+			return fmt.Errorf("scan primaries for %q: %w", vs.Name, err)
+		}
+
+		fmt.Fprintf(w, "found %d unique pool members in virtual storage %q\n", len(members), vs.Name)
+
+		if len(members) == 0 {
+			fmt.Fprintf(w, "no pool members found on virtual storage %q, nothing to store\n", vs.Name)
+			continue
+		}
+
+		// Translate replica paths to relative paths.
+		replicaPaths := make([]string, 0, len(members)*2)
+		for _, m := range members {
+			replicaPaths = append(replicaPaths, m.MemberDiskPath, m.PoolDiskPath)
+		}
+
+		translations, err := translatePaths(ctx, db, replicaPaths)
+		if err != nil {
+			return fmt.Errorf("translate paths for %q: %w", vs.Name, err)
+		}
+
+		poolPathSet := make(map[string]struct{}, len(members))
+		poolDiskPaths := make([]string, 0, len(members))
+		for i, m := range members {
+			if translated, ok := translations[m.MemberDiskPath]; ok {
+				members[i].MemberDiskPath = translated
+			}
+			if translated, ok := translations[m.PoolDiskPath]; ok {
+				members[i].PoolDiskPath = translated
+			}
+			if _, ok := poolPathSet[members[i].PoolDiskPath]; !ok {
+				poolPathSet[members[i].PoolDiskPath] = struct{}{}
+				poolDiskPaths = append(poolDiskPaths, members[i].PoolDiskPath)
+			}
+		}
+
+		// Query Rails for upstream repositories via ListPoolUpstreams on any node in
+		// the virtual storage.
+		node := vs.Nodes[0]
+		conn, err := glcli.Dial(ctx, node.Address, node.Token, defaultDialTimeout)
+		if err != nil {
+			return fmt.Errorf("dial %s for upstream lookup: %w", node.Storage, err)
+		}
+
+		upstreams, err := common.ListPoolUpstreams(ctx, gitalypb.NewInternalGitalyClient(conn), vs.Name, poolDiskPaths)
+		if closeErr := conn.Close(); closeErr != nil {
+			return fmt.Errorf("close connection to %s: %w", node.Storage, errors.Join(closeErr, err))
+		}
+		if err != nil {
+			return fmt.Errorf("list pool upstreams for %q: %w", vs.Name, err)
+		}
+
+		// Set IsUpstream on members whose translated member path matches the upstream
+		// for their pool.
+		for i, m := range members {
+			if upstream, ok := upstreams[m.PoolDiskPath]; ok && upstream == m.MemberDiskPath {
+				members[i].IsUpstream = true
+			}
+		}
+
+		if err := storeOnAllNodes(ctx, cfg, vs.Name, members); err != nil {
+			return fmt.Errorf("store pool members for %q: %w", vs.Name, err)
+		}
+
+		fmt.Fprintf(w, "stored pool metadata for virtual storage %q on %d nodes\n", vs.Name, len(vs.Nodes))
 	}
 
 	return nil

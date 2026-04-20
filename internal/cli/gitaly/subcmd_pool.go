@@ -128,11 +128,29 @@ func (ps *poolScanner) scanStorage(ctx context.Context, gitalyStorage gitalycfg.
 
 	fmt.Fprintf(ps.out, "found %d pool members\n", len(members))
 
-	for _, member := range members {
-		fmt.Fprintf(ps.out, "pool member: %s -> %s [isUpstream: %t]\n", member.MemberDiskPath, member.PoolDiskPath, member.IsUpstream)
-	}
-
 	if len(members) > 0 {
+		// Collect unique pool disk paths for upstream lookup.
+		poolPathSet := make(map[string]struct{})
+		var poolDiskPaths []string
+		for _, m := range members {
+			if _, ok := poolPathSet[m.PoolDiskPath]; !ok {
+				poolPathSet[m.PoolDiskPath] = struct{}{}
+				poolDiskPaths = append(poolDiskPaths, m.PoolDiskPath)
+			}
+		}
+
+		upstreams, err := common.ListPoolUpstreams(ctx, ps.internalClient, gitalyStorage.Name, poolDiskPaths)
+		if err != nil {
+			return fmt.Errorf("list pool upstreams in %s: %w", gitalyStorage.Name, err)
+		}
+
+		for i, m := range members {
+			if upstream, ok := upstreams[m.PoolDiskPath]; ok && upstream == m.MemberDiskPath {
+				members[i].IsUpstream = true
+			}
+			fmt.Fprintf(ps.out, "pool member: %s -> %s [isUpstream: %t]\n", members[i].MemberDiskPath, members[i].PoolDiskPath, members[i].IsUpstream)
+		}
+
 		if err := common.StorePoolMetadata(ctx, ps.internalClient, gitalyStorage.Name, members); err != nil {
 			return fmt.Errorf("store pool metadata: %w", err)
 		}

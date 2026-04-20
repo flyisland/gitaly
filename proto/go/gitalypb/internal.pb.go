@@ -438,6 +438,111 @@ func (x *ListPoolMetadataResponse) GetPoolDiskPath() string {
 	return ""
 }
 
+// ListPoolUpstreamsRequest contains the storage name and a list of pool disk paths
+// to query for upstream repositories via the Rails ObjectPoolMembers API.
+type ListPoolUpstreamsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// storage_name is the name of the storage (or virtual storage). Set only in the first message
+	// of the stream.
+	StorageName string `protobuf:"bytes,1,opt,name=storage_name,json=storageName,proto3" json:"storage_name,omitempty"`
+	// pool_disk_paths is a list of pool disk paths to look up upstreams for.
+	PoolDiskPaths []string `protobuf:"bytes,2,rep,name=pool_disk_paths,json=poolDiskPaths,proto3" json:"pool_disk_paths,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPoolUpstreamsRequest) Reset() {
+	*x = ListPoolUpstreamsRequest{}
+	mi := &file_internal_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPoolUpstreamsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPoolUpstreamsRequest) ProtoMessage() {}
+
+func (x *ListPoolUpstreamsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPoolUpstreamsRequest.ProtoReflect.Descriptor instead.
+func (*ListPoolUpstreamsRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListPoolUpstreamsRequest) GetStorageName() string {
+	if x != nil {
+		return x.StorageName
+	}
+	return ""
+}
+
+func (x *ListPoolUpstreamsRequest) GetPoolDiskPaths() []string {
+	if x != nil {
+		return x.PoolDiskPaths
+	}
+	return nil
+}
+
+// ListPoolUpstreamsResponse contains a mapping of pool disk paths to their
+// upstream repository relative paths.
+type ListPoolUpstreamsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// upstreams is a map of pool disk path to the upstream repository's relative path.
+	// Pools without a public upstream are omitted from the map.
+	Upstreams     map[string]string `protobuf:"bytes,1,rep,name=upstreams,proto3" json:"upstreams,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPoolUpstreamsResponse) Reset() {
+	*x = ListPoolUpstreamsResponse{}
+	mi := &file_internal_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPoolUpstreamsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPoolUpstreamsResponse) ProtoMessage() {}
+
+func (x *ListPoolUpstreamsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPoolUpstreamsResponse.ProtoReflect.Descriptor instead.
+func (*ListPoolUpstreamsResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListPoolUpstreamsResponse) GetUpstreams() map[string]string {
+	if x != nil {
+		return x.Upstreams
+	}
+	return nil
+}
+
 var File_internal_proto protoreflect.FileDescriptor
 
 const file_internal_proto_rawDesc = "" +
@@ -466,12 +571,21 @@ const file_internal_proto_rawDesc = "" +
 	"\x17ListPoolMetadataRequest\x12'\n" +
 	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\"@\n" +
 	"\x18ListPoolMetadataResponse\x12$\n" +
-	"\x0epool_disk_path\x18\x01 \x01(\tR\fpoolDiskPath2\x8a\x03\n" +
+	"\x0epool_disk_path\x18\x01 \x01(\tR\fpoolDiskPath\"k\n" +
+	"\x18ListPoolUpstreamsRequest\x12'\n" +
+	"\fstorage_name\x18\x01 \x01(\tB\x04\x88\xc6,\x01R\vstorageName\x12&\n" +
+	"\x0fpool_disk_paths\x18\x02 \x03(\tR\rpoolDiskPaths\"\xa9\x01\n" +
+	"\x19ListPoolUpstreamsResponse\x12N\n" +
+	"\tupstreams\x18\x01 \x03(\v20.gitaly.ListPoolUpstreamsResponse.UpstreamsEntryR\tupstreams\x1a<\n" +
+	"\x0eUpstreamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xf2\x03\n" +
 	"\x0eInternalGitaly\x12L\n" +
 	"\tWalkRepos\x12\x18.gitaly.WalkReposRequest\x1a\x19.gitaly.WalkReposResponse\"\b\xfa\x97(\x04\b\x02\x10\x020\x01\x12a\n" +
 	"\x10ScanPoolMetadata\x12\x1f.gitaly.ScanPoolMetadataRequest\x1a .gitaly.ScanPoolMetadataResponse\"\b\xfa\x97(\x04\b\x02\x10\x020\x01\x12d\n" +
 	"\x11StorePoolMetadata\x12 .gitaly.StorePoolMetadataRequest\x1a!.gitaly.StorePoolMetadataResponse\"\b\xfa\x97(\x04\b\x01\x10\x02(\x01\x12a\n" +
-	"\x10ListPoolMetadata\x12\x1f.gitaly.ListPoolMetadataRequest\x1a .gitaly.ListPoolMetadataResponse\"\b\xfa\x97(\x04\b\x02\x10\x020\x01B4Z2gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypbb\x06proto3"
+	"\x10ListPoolMetadata\x12\x1f.gitaly.ListPoolMetadataRequest\x1a .gitaly.ListPoolMetadataResponse\"\b\xfa\x97(\x04\b\x02\x10\x020\x01\x12f\n" +
+	"\x11ListPoolUpstreams\x12 .gitaly.ListPoolUpstreamsRequest\x1a!.gitaly.ListPoolUpstreamsResponse\"\b\xfa\x97(\x04\b\x02\x10\x02(\x010\x01B4Z2gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypbb\x06proto3"
 
 var (
 	file_internal_proto_rawDescOnce sync.Once
@@ -485,7 +599,7 @@ func file_internal_proto_rawDescGZIP() []byte {
 	return file_internal_proto_rawDescData
 }
 
-var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_internal_proto_goTypes = []any{
 	(*WalkReposRequest)(nil),          // 0: gitaly.WalkReposRequest
 	(*WalkReposResponse)(nil),         // 1: gitaly.WalkReposResponse
@@ -495,23 +609,29 @@ var file_internal_proto_goTypes = []any{
 	(*StorePoolMetadataResponse)(nil), // 5: gitaly.StorePoolMetadataResponse
 	(*ListPoolMetadataRequest)(nil),   // 6: gitaly.ListPoolMetadataRequest
 	(*ListPoolMetadataResponse)(nil),  // 7: gitaly.ListPoolMetadataResponse
-	(*timestamppb.Timestamp)(nil),     // 8: google.protobuf.Timestamp
+	(*ListPoolUpstreamsRequest)(nil),  // 8: gitaly.ListPoolUpstreamsRequest
+	(*ListPoolUpstreamsResponse)(nil), // 9: gitaly.ListPoolUpstreamsResponse
+	nil,                               // 10: gitaly.ListPoolUpstreamsResponse.UpstreamsEntry
+	(*timestamppb.Timestamp)(nil),     // 11: google.protobuf.Timestamp
 }
 var file_internal_proto_depIdxs = []int32{
-	8, // 0: gitaly.WalkReposResponse.modification_time:type_name -> google.protobuf.Timestamp
-	0, // 1: gitaly.InternalGitaly.WalkRepos:input_type -> gitaly.WalkReposRequest
-	2, // 2: gitaly.InternalGitaly.ScanPoolMetadata:input_type -> gitaly.ScanPoolMetadataRequest
-	4, // 3: gitaly.InternalGitaly.StorePoolMetadata:input_type -> gitaly.StorePoolMetadataRequest
-	6, // 4: gitaly.InternalGitaly.ListPoolMetadata:input_type -> gitaly.ListPoolMetadataRequest
-	1, // 5: gitaly.InternalGitaly.WalkRepos:output_type -> gitaly.WalkReposResponse
-	3, // 6: gitaly.InternalGitaly.ScanPoolMetadata:output_type -> gitaly.ScanPoolMetadataResponse
-	5, // 7: gitaly.InternalGitaly.StorePoolMetadata:output_type -> gitaly.StorePoolMetadataResponse
-	7, // 8: gitaly.InternalGitaly.ListPoolMetadata:output_type -> gitaly.ListPoolMetadataResponse
-	5, // [5:9] is the sub-list for method output_type
-	1, // [1:5] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	11, // 0: gitaly.WalkReposResponse.modification_time:type_name -> google.protobuf.Timestamp
+	10, // 1: gitaly.ListPoolUpstreamsResponse.upstreams:type_name -> gitaly.ListPoolUpstreamsResponse.UpstreamsEntry
+	0,  // 2: gitaly.InternalGitaly.WalkRepos:input_type -> gitaly.WalkReposRequest
+	2,  // 3: gitaly.InternalGitaly.ScanPoolMetadata:input_type -> gitaly.ScanPoolMetadataRequest
+	4,  // 4: gitaly.InternalGitaly.StorePoolMetadata:input_type -> gitaly.StorePoolMetadataRequest
+	6,  // 5: gitaly.InternalGitaly.ListPoolMetadata:input_type -> gitaly.ListPoolMetadataRequest
+	8,  // 6: gitaly.InternalGitaly.ListPoolUpstreams:input_type -> gitaly.ListPoolUpstreamsRequest
+	1,  // 7: gitaly.InternalGitaly.WalkRepos:output_type -> gitaly.WalkReposResponse
+	3,  // 8: gitaly.InternalGitaly.ScanPoolMetadata:output_type -> gitaly.ScanPoolMetadataResponse
+	5,  // 9: gitaly.InternalGitaly.StorePoolMetadata:output_type -> gitaly.StorePoolMetadataResponse
+	7,  // 10: gitaly.InternalGitaly.ListPoolMetadata:output_type -> gitaly.ListPoolMetadataResponse
+	9,  // 11: gitaly.InternalGitaly.ListPoolUpstreams:output_type -> gitaly.ListPoolUpstreamsResponse
+	7,  // [7:12] is the sub-list for method output_type
+	2,  // [2:7] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_internal_proto_init() }
@@ -526,7 +646,7 @@ func file_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_rawDesc), len(file_internal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

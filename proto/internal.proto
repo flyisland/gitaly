@@ -46,6 +46,16 @@ service InternalGitaly {
       scope_level: STORAGE
     };
   }
+
+  // ListPoolUpstreams queries the Rails ObjectPoolMembers API for each given
+  // pool disk path and returns a mapping of pool disk path to upstream
+  // repository relative path.
+  rpc ListPoolUpstreams (stream ListPoolUpstreamsRequest) returns (stream ListPoolUpstreamsResponse) {
+    option (op_type) = {
+      op:          ACCESSOR
+      scope_level: STORAGE
+    };
+  }
 }
 
 // WalkReposRequest ...
@@ -107,4 +117,22 @@ message ListPoolMetadataRequest {
 message ListPoolMetadataResponse {
   // pool_disk_path is the disk path of the object pool.
   string pool_disk_path = 1;
+}
+
+// ListPoolUpstreamsRequest contains the storage name and a list of pool disk paths
+// to query for upstream repositories via the Rails ObjectPoolMembers API.
+message ListPoolUpstreamsRequest {
+  // storage_name is the name of the storage (or virtual storage). Set only in the first message
+  // of the stream.
+  string storage_name = 1 [(storage)=true];
+  // pool_disk_paths is a list of pool disk paths to look up upstreams for.
+  repeated string pool_disk_paths = 2;
+}
+
+// ListPoolUpstreamsResponse contains a mapping of pool disk paths to their
+// upstream repository relative paths.
+message ListPoolUpstreamsResponse {
+  // upstreams is a map of pool disk path to the upstream repository's relative path.
+  // Pools without a public upstream are omitted from the map.
+  map<string, string> upstreams = 1;
 }
