@@ -21,8 +21,8 @@ type ManifestLocator struct {
 	Loader ManifestLoader
 }
 
-// NewManifestLocator builds a new ManifestLocator.
-func NewManifestLocator(sink *Sink) ManifestLocator {
+// NewLocator builds a new ManifestLocator.
+func NewLocator(sink *Sink) ManifestLocator {
 	return ManifestLocator{
 		Loader: NewManifestLoader(sink),
 	}

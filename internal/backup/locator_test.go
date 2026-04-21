@@ -35,7 +35,7 @@ func TestManifestLocator(t *testing.T) {
 		backupPath := testhelper.TempDir(t)
 		sink, err := ResolveSink(ctx, backupPath)
 		require.NoError(t, err)
-		var l Locator = NewManifestLocator(sink)
+		var l Locator = NewLocator(sink)
 
 		full := l.BeginFull(ctx, repo, backupID)
 		require.NoError(t, l.Commit(ctx, full))
@@ -83,7 +83,7 @@ custom_hooks_path = '%[1]s/%[2]s/%[3]s/001.custom_hooks.tar'
 
 		sink, err := ResolveSink(ctx, backupPath)
 		require.NoError(t, err)
-		var l Locator = NewManifestLocator(sink)
+		var l Locator = NewLocator(sink)
 
 		incremental, err := l.BeginIncremental(ctx, repo, backupID, "")
 		require.NoError(t, err)
@@ -133,7 +133,7 @@ custom_hooks_path = '%[1]s/%[2]s/%[3]s/001.custom_hooks.tar'
 
 		sink, err := ResolveSink(ctx, backupPath)
 		require.NoError(t, err)
-		var l Locator = NewManifestLocator(sink)
+		var l Locator = NewLocator(sink)
 
 		incremental, err := l.BeginIncremental(ctx, repo, backupID, "the-backup-1")
 		require.NoError(t, err)
@@ -232,7 +232,7 @@ custom_hooks_path = 'path/to/002.custom_hooks.tar'
 
 			sink, err := ResolveSink(ctx, backupPath)
 			require.NoError(t, err)
-			l := NewManifestLocator(sink)
+			l := NewLocator(sink)
 
 			backup, err := l.Find(ctx, tc.repo, tc.backupID)
 			require.NoError(t, err)
@@ -309,7 +309,7 @@ custom_hooks_path = 'manifest-path/to/002.custom_hooks.tar'
 
 			sink, err := ResolveSink(ctx, backupPath)
 			require.NoError(t, err)
-			l := NewManifestLocator(sink)
+			l := NewLocator(sink)
 
 			backup, err := l.FindLatest(ctx, tc.repo)
 			require.NoError(t, err)

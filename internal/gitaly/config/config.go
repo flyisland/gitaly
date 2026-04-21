@@ -813,8 +813,6 @@ type BackupConfig struct {
 	WALGoCloudURL string `json:"wal_backup_go_cloud_url,omitempty" toml:"wal_backup_go_cloud_url,omitempty"`
 	// WALWorkerCount controls the number of goroutines used to backup write-ahead log entries.
 	WALWorkerCount uint `json:"wal_backup_worker_count,omitempty" toml:"wal_backup_worker_count,omitempty"`
-	// Layout determines how backup files are located.
-	Layout string `json:"layout,omitempty" toml:"layout,omitempty"`
 	// BufferSize specifies the size of the buffer used when uploading backup parts to object storage.
 	BufferSize int `json:"buffer_size,omitempty" toml:"buffer_size,omitempty"`
 }
@@ -827,8 +825,6 @@ func (bc BackupConfig) Validate() error {
 		if _, err := url.Parse(bc.GoCloudURL); err != nil {
 			errs = errs.Append(err, "go_cloud_url")
 		}
-
-		errs = errs.Append(cfgerror.NotBlank(bc.Layout), "layout")
 	}
 
 	if bc.WALGoCloudURL != "" {
@@ -1152,10 +1148,6 @@ func (cfg *Cfg) Sanitize() error {
 
 	if cfg.Cgroups.Repositories.Count != 0 && cfg.Cgroups.Repositories.MaxCgroupsPerRepo == 0 {
 		cfg.Cgroups.Repositories.MaxCgroupsPerRepo = 1
-	}
-
-	if cfg.Backup.Layout == "" {
-		cfg.Backup.Layout = "pointer"
 	}
 
 	if cfg.Backup.WALWorkerCount == 0 {

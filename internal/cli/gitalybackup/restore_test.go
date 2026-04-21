@@ -109,8 +109,6 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 		strconv.Itoa(runtime.NumCPU()),
 		"--parallel-storage",
 		"2",
-		"--layout",
-		"pointer",
 		"--remove-all-repositories",
 		existingRepo.GetStorageName(),
 	)
@@ -209,8 +207,6 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 		strconv.Itoa(runtime.NumCPU()),
 		"--parallel-storage",
 		"2",
-		"--layout",
-		"pointer",
 		"--remove-all-repositories",
 		existingRepo.GetStorageName(),
 	)
@@ -237,7 +233,7 @@ func TestRestoreSubcommand_serverSide(t *testing.T) {
 	backupSink, err := backup.ResolveSink(ctx, backupDir)
 	require.NoError(t, err)
 
-	backupLocator := backup.ResolveLocator(backupSink)
+	backupLocator := backup.NewLocator(backupSink)
 
 	cfg := testcfg.Build(t)
 	testcfg.BuildGitalyHooks(t, cfg)
@@ -318,8 +314,6 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 		strconv.Itoa(runtime.NumCPU()),
 		"--parallel-storage",
 		"2",
-		"--layout",
-		"pointer",
 		"--remove-all-repositories",
 		existingRepo.GetStorageName(),
 		"--server-side",
@@ -347,7 +341,7 @@ func TestRestoreSubcommand_serverSide_latestFallback(t *testing.T) {
 	backupSink, err := backup.ResolveSink(ctx, backupDir)
 	require.NoError(t, err)
 
-	backupLocator := backup.ResolveLocator(backupSink)
+	backupLocator := backup.NewLocator(backupSink)
 
 	cfg := testcfg.Build(t)
 	testcfg.BuildGitalyHooks(t, cfg)
@@ -421,8 +415,6 @@ custom_hooks_path = '%[2]s/custom_hooks.tar'
 		strconv.Itoa(runtime.NumCPU()),
 		"--parallel-storage",
 		"2",
-		"--layout",
-		"pointer",
 		"--remove-all-repositories",
 		existingRepo.GetStorageName(),
 		"--server-side",

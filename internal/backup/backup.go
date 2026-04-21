@@ -139,11 +139,6 @@ type Repository interface {
 	SetHeadReference(ctx context.Context, target git.ReferenceName) error
 }
 
-// ResolveLocator returns a locator implementation based on a locator identifier.
-func ResolveLocator(sink *Sink) Locator {
-	return NewManifestLocator(sink)
-}
-
 // IDManager handles run-level backup ID operations against a backup sink.
 // It is safe to use independently of Manager.
 type IDManager struct {
