@@ -17,6 +17,10 @@ No changes.
 
 - [list_refs: Encode pagination cursor as base64 struct](gitlab-org/gitaly@15072dd951467e248515b721313f82cb00adbb9c) ([merge request](gitlab-org/gitaly!8606))
 
+## 18.10.4 (2026-04-21)
+
+No changes.
+
 ## 18.10.3 (2026-04-07)
 
 No changes.
