@@ -323,6 +323,7 @@ type gitalyServerDeps struct {
 	MigrationStateManager     migration.StateManager
 	transactionInterceptorsFn func(log.Logger, storage.Node, localrepo.Factory) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor)
 	poolMetadataStore         relational.PoolStore
+	objectPoolStateManager    relational.ObjectPoolStateManager
 }
 
 func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Context, cfg config.Cfg) *service.Dependencies {
@@ -543,6 +544,7 @@ func (gsd *gitalyServerDeps) createDependencies(tb testing.TB, ctx context.Conte
 		MigrationStateManager:  gsd.MigrationStateManager,
 		ArchiveCache:           gsd.archiveCache,
 		PoolMetadataStore:      gsd.poolMetadataStore,
+		ObjectPoolStateManager: gsd.objectPoolStateManager,
 	}
 }
 
@@ -754,6 +756,14 @@ func WithMigrations(migrations *[]migration.Migration) GitalyServerOpt {
 func WithPoolMetadataStore(store relational.PoolStore) GitalyServerOpt {
 	return func(deps gitalyServerDeps) gitalyServerDeps {
 		deps.poolMetadataStore = store
+		return deps
+	}
+}
+
+// WithObjectPoolStateManager sets the relational.ObjectPoolStateManager that will be used for gitaly services initialisation.
+func WithObjectPoolStateManager(mgr relational.ObjectPoolStateManager) GitalyServerOpt {
+	return func(deps gitalyServerDeps) gitalyServerDeps {
+		deps.objectPoolStateManager = mgr
 		return deps
 	}
 }

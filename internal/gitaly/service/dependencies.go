@@ -55,6 +55,7 @@ type Dependencies struct {
 	MigrationStateManager  migration.StateManager
 	ArchiveCache           streamcache.Cache
 	PoolMetadataStore      relational.PoolStore
+	ObjectPoolStateManager relational.ObjectPoolStateManager
 }
 
 // GetLogger returns the logger.
@@ -190,4 +191,9 @@ func (dc *Dependencies) GetArchiveCache() streamcache.Cache {
 // GetPoolMetadataStore returns the pool metadata store
 func (dc *Dependencies) GetPoolMetadataStore() relational.PoolStore {
 	return dc.PoolMetadataStore
+}
+
+// GetObjectPoolStateManager returns the object pool state manager
+func (dc *Dependencies) GetObjectPoolStateManager() relational.ObjectPoolStateManager {
+	return dc.ObjectPoolStateManager
 }

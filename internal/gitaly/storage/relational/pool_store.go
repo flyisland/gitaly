@@ -22,8 +22,10 @@ type PoolStore interface {
 	ForEachPoolByStorage(ctx context.Context, storageName string, fn func(*PoolMetadata) error) error
 
 	ListPoolMembers(ctx context.Context, poolDiskPath string) ([]string, error)
+	DeletePoolMembers(ctx context.Context, poolDiskPath string) error
 	GetPoolForMember(ctx context.Context, memberDiskPath string) (string, error)
 
+	CreatePool(ctx context.Context, poolDiskPath, storageName, upstream string, lastScanned time.Time) error
 	DeletePool(ctx context.Context, poolDiskPath string) error
 	AddMember(ctx context.Context, poolDiskPath, memberDiskPath string) error
 	RemoveMember(ctx context.Context, poolDiskPath, memberDiskPath string) error
