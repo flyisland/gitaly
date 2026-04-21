@@ -41,7 +41,7 @@ sequenceDiagram
   deployment process (7) to the various [environments](https://gitlab.com/gitlab-org/gitlab/-/environments)
   begins. If the pipeline fails, the failure is reported on the [`#g_gitaly`](https://gitlab.slack.com/archives/C3ER3TQBT)
   channel (8), and the Gitaly team is tagged in the MR. Failures require manual intervention (9).
-- Once the deploymnent begins, progress can be tracked in the [`#gitaly_alerts`](https://gitlab.slack.com/archives/C4MU5R2MD)
+- Once the deployment begins, progress can be tracked in the [`#gitaly_alerts`](https://gitlab.slack.com/archives/C4MU5R2MD)
   channel. The bot also updates the `workflow` labels in the MR as deployment progresses through each stage.
 
 The `passing_build_commit` and `success?` [functions](https://gitlab.com/gitlab-org/release-tools/-/blob/28eb8b2b869d6930bcc2c18dde39548147fa6df0/lib/release_tools/passing_build.rb#L44-71)
@@ -62,7 +62,7 @@ The pipeline is unfortunately prone to failure for a variety of reasons:
 
 If the pipeline failure is suspected to be caused by a flaky test, re-running the pipeline is a good first step to
 diagnosing the issue. More often than not, the pipeline will pass in the second run. If the flaky test is within the
-Gitlay codebase itself, consider opening an issue based on the [Flaky Test](https://gitlab.com/gitlab-org/gitaly/-/blob/master/.gitlab/issue_templates/Flaky%20Test.md?ref_type=heads)
+Gitaly codebase itself, consider opening an issue based on the [Flaky Test](https://gitlab.com/gitlab-org/gitaly/-/blob/master/.gitlab/issue_templates/Flaky%20Test.md?ref_type=heads)
 template and quarantining the test if necessary.
 
 ### Broken master
