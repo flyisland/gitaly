@@ -58,7 +58,7 @@ Gitaly supports two backup approaches:
     For a detailed overview, see the [Server-side backup sequence diagram](https://docs.gitlab.com/administration/backup_restore/backup_archive_process/#server-side-backups)
 
     **Note**:
-    Sever-side backups reduce network and disk pressure and could offer higher speed in running backups.
+    Server-side backups reduce network and disk pressure and could offer higher speed in running backups.
 
 ## How to set up for backup
 
