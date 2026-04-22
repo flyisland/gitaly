@@ -68,7 +68,7 @@ gcloud compute instances create "${VM_NAME_RUNNER}" \
 	--maintenance-policy=MIGRATE \
 	--provisioning-model=STANDARD \
 	--scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append \
-	--create-disk=auto-delete=yes,boot=yes,device-name="${VM_NAME_RUNNER}",image=projects/rhel-cloud/global/images/rhel-9-v20240815,mode=rw,size=120,type=projects/"${CLOUDSDK_CORE_PROJECT}"/zones/"${CLOUDSDK_COMPUTE_ZONE}"/diskTypes/pd-ssd \
+	--create-disk=auto-delete=yes,boot=yes,device-name="${VM_NAME_RUNNER}",image=projects/rhel-cloud/global/images/rhel-9-v20260417,mode=rw,size=120,type=projects/"${CLOUDSDK_CORE_PROJECT}"/zones/"${CLOUDSDK_COMPUTE_ZONE}"/diskTypes/pd-ssd \
 	--no-shielded-secure-boot \
 	--shielded-vtpm \
 	--shielded-integrity-monitoring \
@@ -191,7 +191,7 @@ gcloud compute instances create "${VM_NAME_MANAGER}" \
 	--maintenance-policy=MIGRATE \
 	--provisioning-model=STANDARD \
 	--scopes=https://www.googleapis.com/auth/compute,https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append \
-	--create-disk=auto-delete=yes,boot=yes,device-name="${VM_NAME_MANAGER}",image=projects/rhel-cloud/global/images/rhel-9-v20240815,mode=rw,size=20,type=projects/"${CLOUDSDK_CORE_PROJECT}"/zones/"${CLOUDSDK_COMPUTE_ZONE}"/diskTypes/pd-ssd \
+	--create-disk=auto-delete=yes,boot=yes,device-name="${VM_NAME_MANAGER}",image=projects/rhel-cloud/global/images/rhel-9-v20260417,mode=rw,size=20,type=projects/"${CLOUDSDK_CORE_PROJECT}"/zones/"${CLOUDSDK_COMPUTE_ZONE}"/diskTypes/pd-ssd \
 	--no-shielded-secure-boot \
 	--shielded-vtpm \
 	--shielded-integrity-monitoring \
