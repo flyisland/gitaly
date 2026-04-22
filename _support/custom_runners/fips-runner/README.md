@@ -4,6 +4,9 @@ Gitaly maintains its own fleet of FIPS runners due to the lack of a company-wide
 
 ## Configuration
 
+On macOS, ensure `coreutils` is installed by running `brew install coreutils`. The `script-utils.sh` relies on `gdate`
+being available.
+
 Before running any commands, execute `gcloud config set project dev-gitaly-runners-f63af0bf` to ensure `gcloud` targets
 the correct project.
 
