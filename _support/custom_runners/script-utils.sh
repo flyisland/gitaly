@@ -2,6 +2,14 @@
 
 set -e
 
+# macOS's BSD date lacks flags we use (e.g. -ud "$timeout"); Homebrew coreutils
+# installs the GNU version as gdate.
+if [[ "$(uname)" == "Darwin" ]]; then
+  DATE=gdate
+else
+  DATE=date
+fi
+
 # error prints an error message and exits. builds a payload that can be used to create a GitLab release via the API.
 # arguments: [Message...]
 error() {
@@ -49,10 +57,10 @@ retry() {
   command="$2"
 
   tmpout="$(mktemp)"
-  endtime=$(gdate -ud "$timeout" +%s)
+  endtime=$("$DATE" -ud "$timeout" +%s)
   result=0
   echo "Trying until $endtime..."
-  while [[ $(gdate -u +%s) -le $endtime ]]
+  while [[ $("$DATE" -u +%s) -le $endtime ]]
   do
 
     rm -f "$tmpout"
