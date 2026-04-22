@@ -234,7 +234,7 @@ func TestManager_Create(t *testing.T) {
 				require.NoError(t, err)
 				defer testhelper.MustClose(t, sink)
 
-				locator := backup.ResolveLocator(sink)
+				locator := backup.NewLocator(sink)
 
 				fsBackup := managerTC.setup(t, sink, locator)
 				err = fsBackup.Create(ctx, &backup.CreateRequest{
@@ -409,7 +409,7 @@ custom_hooks_path = '%[2]s/001.custom_hooks.tar'
 				require.NoError(t, err)
 				defer testhelper.MustClose(t, sink)
 
-				locator := backup.ResolveLocator(sink)
+				locator := backup.NewLocator(sink)
 
 				fsBackup := managerTC.setup(t, sink, locator)
 				err = fsBackup.Create(ctx, &backup.CreateRequest{
@@ -751,7 +751,7 @@ custom_hooks_path = '%[2]s/%[3]s/002.custom_hooks.tar'
 					require.NoError(t, err)
 					defer testhelper.MustClose(t, sink)
 
-					locator := backup.ResolveLocator(sink)
+					locator := backup.NewLocator(sink)
 
 					logger := testhelper.NewLogger(t)
 
@@ -1052,7 +1052,7 @@ custom_hooks_path = 'custom_hooks.tar'
 					require.NoError(t, err)
 					defer testhelper.MustClose(t, sink)
 
-					locator := backup.ResolveLocator(sink)
+					locator := backup.NewLocator(sink)
 
 					logger := testhelper.NewLogger(t)
 
@@ -1199,7 +1199,7 @@ custom_hooks_path = '%[2]s/%[3]s/001.custom_hooks.tar'
 					require.NoError(t, err)
 					defer testhelper.MustClose(t, sink)
 
-					locator := backup.ResolveLocator(sink)
+					locator := backup.NewLocator(sink)
 					logger := testhelper.NewLogger(t)
 
 					mgr := managerTC.setup(t, sink, locator, logger)
@@ -1255,7 +1255,7 @@ func TestManager_CreateRestore_contextServerInfo(t *testing.T) {
 	require.NoError(t, err)
 	defer testhelper.MustClose(t, sink)
 
-	locator := backup.ResolveLocator(sink)
+	locator := backup.NewLocator(sink)
 	fsBackup := backup.NewManager(sink, testhelper.SharedLogger(t), locator, pool)
 
 	ctx = testhelper.MergeIncomingMetadata(ctx, testcfg.GitalyServersMetadataFromCfg(t, cfg))

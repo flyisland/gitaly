@@ -173,7 +173,7 @@ func TestServerBackupRepository(t *testing.T) {
 			backupSink, err := backup.ResolveSink(ctx, backupRoot)
 			require.NoError(t, err)
 
-			backupLocator := backup.ResolveLocator(backupSink)
+			backupLocator := backup.NewLocator(backupSink)
 
 			vanityRepo := &gitalypb.Repository{
 				StorageName:  "does-not-exist",
@@ -216,7 +216,7 @@ func BenchmarkBackupRepository(b *testing.B) {
 	backupSink, err := backup.ResolveSink(ctx, backupRoot)
 	require.NoError(b, err)
 
-	backupLocator := backup.ResolveLocator(backupSink)
+	backupLocator := backup.NewLocator(backupSink)
 
 	cfg, client := setupRepositoryService(b,
 		testserver.WithBackupSink(backupSink),
