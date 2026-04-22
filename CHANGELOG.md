@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.11.1 (2026-04-21)
+
+No changes.
+
 ## 18.11.0 (2026-04-15)
 
 ### Fixed (4 changes)
@@ -12,6 +16,10 @@
 ### Changed (1 change)
 
 - [list_refs: Encode pagination cursor as base64 struct](gitlab-org/gitaly@15072dd951467e248515b721313f82cb00adbb9c) ([merge request](gitlab-org/gitaly!8606))
+
+## 18.10.4 (2026-04-21)
+
+No changes.
 
 ## 18.10.3 (2026-04-07)
 
@@ -47,6 +55,10 @@ No changes.
 ### Other (1 change)
 
 - [Deprecate CountCommitsRequest revision and all fields](gitlab-org/gitaly@d1f74eaa3a7d3db3f7851c3aa94764598f3c27ee) ([merge request](gitlab-org/gitaly!8509))
+
+## 18.9.6 (2026-04-21)
+
+No changes.
 
 ## 18.9.5 (2026-04-07)
 
