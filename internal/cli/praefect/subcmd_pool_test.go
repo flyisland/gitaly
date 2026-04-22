@@ -161,18 +161,22 @@ func TestPoolAction(t *testing.T) {
 		}
 		return gitlab.NewMockClientWithObjectPoolMembers(t,
 			gitlab.MockAllowed, gitlab.MockPreReceive, gitlab.MockPostReceive,
-			func(_ context.Context, diskPath, storage string, _ bool) ([]gitlab.ObjectPoolMember, error) {
+			func(_ context.Context, diskPaths []string, storage string, _ bool) (map[string][]gitlab.ObjectPoolMember, error) {
 				if storage != "default" {
 					return nil, fmt.Errorf("expected virtual storage 'default', got %q", storage)
 				}
 
-				if _, ok := accepted[diskPath]; !ok {
-					return nil, fmt.Errorf("unexpected pool path %q", diskPath)
+				result := make(map[string][]gitlab.ObjectPoolMember, len(diskPaths))
+				for _, diskPath := range diskPaths {
+					if _, ok := accepted[diskPath]; !ok {
+						return nil, fmt.Errorf("unexpected pool path %q", diskPath)
+					}
+					result[diskPath] = []gitlab.ObjectPoolMember{{
+						Public:     true,
+						IsUpstream: true,
+					}}
 				}
-				return []gitlab.ObjectPoolMember{{
-					Public:     true,
-					IsUpstream: true,
-				}}, nil
+				return result, nil
 			},
 		)
 	}

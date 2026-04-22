@@ -678,38 +678,42 @@ func Test_ObjectPoolMembers(t *testing.T) {
 	testCases := []struct {
 		desc            string
 		handler         func(w http.ResponseWriter, r *http.Request)
-		diskPath        string
+		diskPaths       []string
 		storage         string
 		upstreamOnly    bool
-		expectedMembers []ObjectPoolMember
+		expectedMembers map[string][]ObjectPoolMember
 		shouldError     bool
 	}{
 		{
-			desc:     "successful response with members",
-			diskPath: "@pools/ab/cd/abcdef1234567890",
-			storage:  "default",
+			desc:      "successful response with members",
+			diskPaths: []string{"@pools/ab/cd/abcdef1234567890"},
+			storage:   "default",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
-				require.Equal(t, "@pools/ab/cd/abcdef1234567890", r.URL.Query().Get("disk_path"))
+				require.Equal(t, []string{"@pools/ab/cd/abcdef1234567890"}, r.URL.Query()["disk_paths[]"])
 				require.Equal(t, "default", r.URL.Query().Get("storage"))
 				require.Empty(t, r.URL.Query().Get("upstream_only"))
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, err := w.Write([]byte(`[
-					{"relative_path": "@hashed/ab/cd/abcdef.git", "public": true, "is_upstream": true},
-					{"relative_path": "@hashed/ef/gh/efghij.git", "public": false, "is_upstream": false}
-				]`))
+				_, err := w.Write([]byte(`{
+					"@pools/ab/cd/abcdef1234567890": [
+						{"relative_path": "@hashed/ab/cd/abcdef.git", "public": true, "is_upstream": true},
+						{"relative_path": "@hashed/ef/gh/efghij.git", "public": false, "is_upstream": false}
+					]
+				}`))
 				require.NoError(t, err)
 			},
-			expectedMembers: []ObjectPoolMember{
-				{RelativePath: "@hashed/ab/cd/abcdef.git", Public: true, IsUpstream: true},
-				{RelativePath: "@hashed/ef/gh/efghij.git", Public: false, IsUpstream: false},
+			expectedMembers: map[string][]ObjectPoolMember{
+				"@pools/ab/cd/abcdef1234567890": {
+					{RelativePath: "@hashed/ab/cd/abcdef.git", Public: true, IsUpstream: true},
+					{RelativePath: "@hashed/ef/gh/efghij.git", Public: false, IsUpstream: false},
+				},
 			},
 		},
 		{
 			desc:         "upstream only",
-			diskPath:     "@pools/ab/cd/abcdef1234567890",
+			diskPaths:    []string{"@pools/ab/cd/abcdef1234567890"},
 			storage:      "default",
 			upstreamOnly: true,
 			handler: func(w http.ResponseWriter, r *http.Request) {
@@ -717,34 +721,70 @@ func Test_ObjectPoolMembers(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, err := w.Write([]byte(`[
-					{"relative_path": "@hashed/ab/cd/abcdef.git", "public": true, "is_upstream": true}
-				]`))
+				_, err := w.Write([]byte(`{
+					"@pools/ab/cd/abcdef1234567890": [
+						{"relative_path": "@hashed/ab/cd/abcdef.git", "public": true, "is_upstream": true}
+					]
+				}`))
 				require.NoError(t, err)
 			},
-			expectedMembers: []ObjectPoolMember{
-				{RelativePath: "@hashed/ab/cd/abcdef.git", Public: true, IsUpstream: true},
+			expectedMembers: map[string][]ObjectPoolMember{
+				"@pools/ab/cd/abcdef1234567890": {
+					{RelativePath: "@hashed/ab/cd/abcdef.git", Public: true, IsUpstream: true},
+				},
 			},
 		},
 		{
-			desc:     "empty members",
-			diskPath: "@pools/ab/cd/abcdef1234567890",
-			storage:  "default",
+			desc: "multiple disk paths",
+			diskPaths: []string{
+				"@pools/ab/cd/pool1",
+				"@pools/ef/gh/pool2",
+			},
+			storage: "default",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, []string{
+					"@pools/ab/cd/pool1",
+					"@pools/ef/gh/pool2",
+				}, r.URL.Query()["disk_paths[]"])
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, err := w.Write([]byte(`{
+					"@pools/ab/cd/pool1": [
+						{"relative_path": "repo1.git", "public": true, "is_upstream": true}
+					],
+					"@pools/ef/gh/pool2": []
+				}`))
+				require.NoError(t, err)
+			},
+			expectedMembers: map[string][]ObjectPoolMember{
+				"@pools/ab/cd/pool1": {
+					{RelativePath: "repo1.git", Public: true, IsUpstream: true},
+				},
+				"@pools/ef/gh/pool2": {},
+			},
+		},
+		{
+			desc:      "empty members",
+			diskPaths: []string{"@pools/ab/cd/abcdef1234567890"},
+			storage:   "default",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, err := w.Write([]byte(`[]`))
+				_, err := w.Write([]byte(`{"@pools/ab/cd/abcdef1234567890": []}`))
 				require.NoError(t, err)
 			},
-			expectedMembers: []ObjectPoolMember{},
+			expectedMembers: map[string][]ObjectPoolMember{
+				"@pools/ab/cd/abcdef1234567890": {},
+			},
 		},
 		{
-			desc:     "not found",
-			diskPath: "@pools/ab/cd/nonexistent",
-			storage:  "default",
+			desc:      "server error",
+			diskPaths: []string{"@pools/ab/cd/nonexistent"},
+			storage:   "default",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusNotFound)
+				w.WriteHeader(http.StatusInternalServerError)
 			},
 			shouldError: true,
 		},
@@ -768,7 +808,7 @@ func Test_ObjectPoolMembers(t *testing.T) {
 
 			ctx := testhelper.Context(t)
 
-			members, err := c.ObjectPoolMembers(ctx, tc.diskPath, tc.storage, tc.upstreamOnly)
+			members, err := c.ObjectPoolMembers(ctx, tc.diskPaths, tc.storage, tc.upstreamOnly)
 			if tc.shouldError {
 				require.Error(t, err)
 			} else {
