@@ -168,7 +168,7 @@ used fast forking (<https://gitlab.com/gitlab-org/gitlab/-/issues/24523>), this
 would not be an issue since forked copies would only use a small amount of
 additional data.
 
-To complicate matter even more, read distribution can contribute to
+To complicate matters even more, read distribution can contribute to
 inconsistent behavior when attempting to determine how much storage a user has
 consumed. Since stating a repository's disk space is a read-only operation, it
 is load balanced across all up to date replicas of the repository. If any of
