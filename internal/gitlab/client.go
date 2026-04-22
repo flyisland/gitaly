@@ -70,6 +70,7 @@ type Client interface {
 	// PostReceive queries the gitlab internal api /post_receive to decrease the reference counter
 	PostReceive(ctx context.Context, glRepository, glID, changes string, clientContext []byte, pushOptions ...string) (bool, []PostReceiveMessage, error)
 	// ObjectPoolMembers queries the GitLab internal API /gitaly/object_pool_members to list
-	// member repositories of an object pool.
-	ObjectPoolMembers(ctx context.Context, diskPath, storage string, upstreamOnly bool) ([]ObjectPoolMember, error)
+	// member repositories for the given object pool disk paths. The returned map is keyed by
+	// the disk path as passed in.
+	ObjectPoolMembers(ctx context.Context, diskPaths []string, storage string, upstreamOnly bool) (map[string][]ObjectPoolMember, error)
 }

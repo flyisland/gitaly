@@ -91,17 +91,22 @@ func TestScanStorage(t *testing.T) {
 			testserver.WithPoolMetadataStore(store),
 			testserver.WithGitLabClient(gitlab.NewMockClientWithObjectPoolMembers(t,
 				gitlab.MockAllowed, gitlab.MockPreReceive, gitlab.MockPostReceive,
-				func(_ context.Context, diskPath, storage string, _ bool) ([]gitlab.ObjectPoolMember, error) {
+				func(_ context.Context, diskPaths []string, storage string, _ bool) (map[string][]gitlab.ObjectPoolMember, error) {
 					require.Equal(t, storageName, storage)
 
-					if diskPath == "@pools/aa/bb/pool-a" {
-						return []gitlab.ObjectPoolMember{{
-							RelativePath: "upstream-repo.git",
-							Public:       true,
-							IsUpstream:   true,
-						}}, nil
+					result := make(map[string][]gitlab.ObjectPoolMember, len(diskPaths))
+					for _, diskPath := range diskPaths {
+						if diskPath == "@pools/aa/bb/pool-a" {
+							result[diskPath] = []gitlab.ObjectPoolMember{{
+								RelativePath: "upstream-repo.git",
+								Public:       true,
+								IsUpstream:   true,
+							}}
+						} else {
+							result[diskPath] = []gitlab.ObjectPoolMember{}
+						}
 					}
-					return []gitlab.ObjectPoolMember{}, nil
+					return result, nil
 				},
 			)),
 			testserver.WithDisablePraefect(),
@@ -167,7 +172,7 @@ func TestScanStorage(t *testing.T) {
 			testserver.WithPoolMetadataStore(store),
 			testserver.WithGitLabClient(gitlab.NewMockClientWithObjectPoolMembers(t,
 				gitlab.MockAllowed, gitlab.MockPreReceive, gitlab.MockPostReceive,
-				func(context.Context, string, string, bool) ([]gitlab.ObjectPoolMember, error) {
+				func(context.Context, []string, string, bool) (map[string][]gitlab.ObjectPoolMember, error) {
 					t.Fatal("should not be called when no pool members exist")
 					return nil, nil
 				},
@@ -216,12 +221,16 @@ func TestScanStorage(t *testing.T) {
 			testserver.WithPoolMetadataStore(store),
 			testserver.WithGitLabClient(gitlab.NewMockClientWithObjectPoolMembers(t,
 				gitlab.MockAllowed, gitlab.MockPreReceive, gitlab.MockPostReceive,
-				func(context.Context, string, string, bool) ([]gitlab.ObjectPoolMember, error) {
-					return []gitlab.ObjectPoolMember{{
-						RelativePath: "private-upstream.git",
-						Public:       false,
-						IsUpstream:   true,
-					}}, nil
+				func(_ context.Context, diskPaths []string, _ string, _ bool) (map[string][]gitlab.ObjectPoolMember, error) {
+					result := make(map[string][]gitlab.ObjectPoolMember, len(diskPaths))
+					for _, diskPath := range diskPaths {
+						result[diskPath] = []gitlab.ObjectPoolMember{{
+							RelativePath: "private-upstream.git",
+							Public:       false,
+							IsUpstream:   true,
+						}}
+					}
+					return result, nil
 				},
 			)),
 			testserver.WithDisablePraefect(),

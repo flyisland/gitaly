@@ -33,6 +33,6 @@ func (c stubClient) PostReceive(ctx context.Context, glRepository, glID, changes
 }
 
 // ObjectPoolMembers is a no-op and returns no members.
-func (c stubClient) ObjectPoolMembers(context.Context, string, string, bool) ([]ObjectPoolMember, error) {
+func (c stubClient) ObjectPoolMembers(context.Context, []string, string, bool) (map[string][]ObjectPoolMember, error) {
 	return nil, nil
 }

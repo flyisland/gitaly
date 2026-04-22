@@ -21,7 +21,7 @@ import (
 
 func setupListPoolUpstreamsServer(
 	t *testing.T,
-	objectPoolMembers func(context.Context, string, string, bool) ([]gitlab.ObjectPoolMember, error),
+	objectPoolMembers func(context.Context, []string, string, bool) (map[string][]gitlab.ObjectPoolMember, error),
 ) (gitalypb.InternalGitalyClient, string) {
 	t.Helper()
 
@@ -60,20 +60,23 @@ func TestListPoolUpstreams(t *testing.T) {
 
 		ctx := testhelper.Context(t)
 		client, storageName := setupListPoolUpstreamsServer(t,
-			func(_ context.Context, diskPath, _ string, _ bool) ([]gitlab.ObjectPoolMember, error) {
-				switch diskPath {
-				case "@pools/aa/bb/pool1":
-					return []gitlab.ObjectPoolMember{
-						{RelativePath: "repo1.git", Public: true, IsUpstream: true},
-					}, nil
-				case "@pools/cc/dd/pool2":
-					return []gitlab.ObjectPoolMember{
-						{RelativePath: "repo2.git", Public: true, IsUpstream: true},
-					}, nil
-				default:
-					t.Fatalf("unexpected disk path: %s", diskPath)
-					return nil, nil
+			func(_ context.Context, diskPaths []string, _ string, _ bool) (map[string][]gitlab.ObjectPoolMember, error) {
+				result := make(map[string][]gitlab.ObjectPoolMember, len(diskPaths))
+				for _, diskPath := range diskPaths {
+					switch diskPath {
+					case "@pools/aa/bb/pool1":
+						result[diskPath] = []gitlab.ObjectPoolMember{
+							{RelativePath: "repo1.git", Public: true, IsUpstream: true},
+						}
+					case "@pools/cc/dd/pool2":
+						result[diskPath] = []gitlab.ObjectPoolMember{
+							{RelativePath: "repo2.git", Public: true, IsUpstream: true},
+						}
+					default:
+						t.Fatalf("unexpected disk path: %s", diskPath)
+					}
 				}
+				return result, nil
 			},
 		)
 
@@ -93,10 +96,14 @@ func TestListPoolUpstreams(t *testing.T) {
 
 		ctx := testhelper.Context(t)
 		client, storageName := setupListPoolUpstreamsServer(t,
-			func(_ context.Context, diskPath, _ string, _ bool) ([]gitlab.ObjectPoolMember, error) {
-				return []gitlab.ObjectPoolMember{
-					{RelativePath: "upstream-of-" + diskPath + ".git", Public: true, IsUpstream: true},
-				}, nil
+			func(_ context.Context, diskPaths []string, _ string, _ bool) (map[string][]gitlab.ObjectPoolMember, error) {
+				result := make(map[string][]gitlab.ObjectPoolMember, len(diskPaths))
+				for _, diskPath := range diskPaths {
+					result[diskPath] = []gitlab.ObjectPoolMember{
+						{RelativePath: "upstream-of-" + diskPath + ".git", Public: true, IsUpstream: true},
+					}
+				}
+				return result, nil
 			},
 		)
 
