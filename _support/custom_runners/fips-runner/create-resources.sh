@@ -200,7 +200,7 @@ gcloud compute instances create "${VM_NAME_MANAGER}" \
 	--deletion-protection
 
 echo ">>> Connecting to ${VM_NAME_MANAGER}..."
-retry "1 minute" "gcloud compute ssh ${VM_NAME_MANAGER} --command 'echo Hello world!'"
+retry "5 minutes" "gcloud compute ssh ${VM_NAME_MANAGER} --command 'echo Hello world!'"
 gcloud compute scp "${SCRIPTS_DIR}/manager.template.toml" "${VM_NAME_MANAGER}:/tmp/manager.template.toml"
 
 SSH_COMMAND="
