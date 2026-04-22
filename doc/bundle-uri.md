@@ -5,9 +5,9 @@ A [bundle](https://git-scm.com/docs/gitformat-bundle) is essentially a file that
 metadata, including a set of refs and a (possibly empty) set of necessary commits.
 
 The [bundle URI](https://git-scm.com/docs/bundle-uri) feature is a mechanism by which Git takes advantage of those bundles to reduce the load on the Git
-server during a `git clone` command: assuming a bundle already exist for a repository, the Git server can return the URI
+server during a `git clone` command: assuming a bundle already exists for a repository, the Git server can return the URI
 of the bundle to the client prior to the [negotiation](https://git-scm.com/docs/pack-protocol/2.2.3#_packfile_negotiation)
-process by which a client ask the server for the objects it needs. Thus, the client can download the bundle, process it,
+process by which a client asks the server for the objects it needs. Thus, the client can download the bundle, process it,
 and request from the Git server only the objects it needs that were not in the bundle, which reduces the amount of work
 the Git server has to do to generate packfiles for this client. This feature can drastically reduce the load on a Git
 server, especially when frequent clones are made for a large repository.
@@ -33,7 +33,7 @@ packfile multiple times, Gitaly can detect periods of time when clones are frequ
 for a given repository and automatically generate a bundle to allow further clones to use the bundle.
 
 > [!NOTE]
-> Gitaly generates bundle only for the default branch (`HEAD`).
+> Gitaly generates a bundle only for the default branch (`HEAD`).
 
 ## Enabling bundle URI
 
