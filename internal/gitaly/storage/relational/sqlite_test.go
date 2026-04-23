@@ -145,6 +145,49 @@ func TestIsUpstreamSetCorrectly(t *testing.T) {
 	require.Equal(t, "@hashed/xx/yy/member2.git", upstreamMemberID, "upstream should be member2.git")
 }
 
+func readBrokenPools(t *testing.T, ctx context.Context, store *SQLitePoolStore, storageName string) []BrokenPool {
+	t.Helper()
+
+	rows, err := store.db.QueryContext(ctx, `
+		SELECT pool_member, storage, pool FROM broken_pools WHERE storage = ?
+	`, storageName)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var broken []BrokenPool
+	for rows.Next() {
+		var bp BrokenPool
+		require.NoError(t, rows.Scan(&bp.PoolMember, &bp.Storage, &bp.Pool))
+		broken = append(broken, bp)
+	}
+	require.NoError(t, rows.Err())
+
+	return broken
+}
+
+func TestBrokenPoolsAreScopedToStorage(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "pools.db")
+
+	store, err := NewSQLitePoolStore(dbPath)
+	require.NoError(t, err)
+	defer testhelper.MustClose(t, store)
+
+	err = store.RecordBrokenPool(ctx, "storage-a", "repo-a.git", "@pools/aa/pool.git")
+	require.NoError(t, err)
+
+	err = store.RecordBrokenPool(ctx, "storage-b", "repo-b.git", "@pools/bb/pool.git")
+	require.NoError(t, err)
+
+	brokenA := readBrokenPools(t, ctx, store, "storage-a")
+	require.Len(t, brokenA, 1)
+	require.Equal(t, "repo-a.git", brokenA[0].PoolMember)
+
+	brokenB := readBrokenPools(t, ctx, store, "storage-b")
+	require.Len(t, brokenB, 1)
+	require.Equal(t, "repo-b.git", brokenB[0].PoolMember)
+}
+
 func TestStorePoolDataScopedToStorage(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "pools.db")
