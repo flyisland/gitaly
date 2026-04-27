@@ -2,7 +2,7 @@ module gitlab.com/gitlab-org/gitaly/tools/dlv
 
 go 1.25.0
 
-require github.com/go-delve/delve v1.26.1
+require github.com/go-delve/delve v1.26.2
 
 require (
 	github.com/cilium/ebpf v0.19.0 // indirect
