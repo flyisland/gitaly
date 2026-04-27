@@ -50,12 +50,13 @@ Two complementary data sources that answer different questions.
 
 - Consolidates different watchers we have in Gitaly which helps in
   answering how stressed a system really is. Replaces the individual
-  [`CgroupCPUWatcher`](../internal/limiter/watchers/cgroup_cpu_watcher.go),
-  [`CgroupMemoryWatcher`](../internal/limiter/watchers/cgroup_memory_watcher.go), and
-  [`CgroupPressureWatcher`](../internal/limiter/watchers/cgroup_pressure_watcher.go)
+  `CgroupCPUWatcher`,
+  `CgroupMemoryWatcher`, and
+  `CgroupPressureWatcher`
   that are currently coupled to the
   [`AdaptiveCalculator`](../internal/limiter/adaptive_calculator.go)
-  through the `ResourceWatcher` interface
+  through the `ResourceWatcher` interface. This part is now done. They have been
+  replaced by `Conditions` (see: `/internal/limiter/condition*.go` files)
 - Polls cgroup stats at configurable intervals (CPU throttling, memory
   usage, memory pressure events, PSI counters)
 - Components register their own thresholds and receive notifications only when
@@ -134,18 +135,18 @@ sequenceDiagram
     participant LS as LoadShedder
 
     Client->>CL: gRPC request
-    
+
     alt limit not reached
         CL->>Handler: Admit request
         Handler->>BM: RegisterRPC(ctx, method, repo)
         BM->>BM: Start tracking commands via /proc polling
-        
+
         par Handler processes request
             Handler->>Handler: Spawn git commands
         and LoadMonitor polls
             LM->>LM: Poll cgroup stats
             LM->>LM: Evaluate conditions
-            
+
             alt Healthy
                 LM->>AC: No event
                 AC->>CL: limit += 1
@@ -162,7 +163,7 @@ sequenceDiagram
                 BM-->>Client: RESOURCE_EXHAUSTED (cancel highest-cost)
             end
         end
-        
+
         Handler->>BM: DeregisterRPC()
         Handler-->>Client: Response
     else limit reached
@@ -234,16 +235,16 @@ the gRPC interceptor that consumes it. Once the LoadMonitor becomes the single
 polling point for all cgroup stats, the `PressureAggregator` implementation will
 collect stats from LoadMonitor.
 
-The [`CgroupPressureWatcher`](../internal/limiter/watchers/cgroup_pressure_watcher.go)
+The [`CgroupPressureCondition`](../internal/limiter/condition_psi.go)
 already reads PSI (Pressure Stall Information) data from the kernel for
 memory, IO, and CPU. It classifies severity levels (healthy, warning,
 backoff, critical) and has configurable thresholds.
 
-| Signal | What it measures | Normalization |
-|--------|------------------|---------------|
-| PSI some avg10 (memory, IO, CPU) | % of time tasks were stalled waiting for a resource | `psi_avg10 / critical_threshold` per resource (thresholds already defined in [`CgroupPressureWatcher`](../internal/limiter/watchers/cgroup_pressure_watcher.go)) |
-| Anonymous memory ratio | `TotalAnon / MemoryLimit` -- how close to the memory limit, excluding reclaimable page cache | `anon_ratio / memory_threshold` (threshold already defined in [`CgroupMemoryWatcher`](../internal/limiter/watchers/cgroup_memory_watcher.go), default 0.6) |
-| CPU throttle ratio | `CPUThrottledDuration` delta over observation window | `throttle_ratio / cpu_threshold` (threshold already defined in [`CgroupCPUWatcher`](../internal/limiter/watchers/cgroup_cpu_watcher.go), default 0.5) |
+| Signal | What it measures | Normalization                                                                                                                                   |
+|--------|------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| PSI some avg10 (memory, IO, CPU) | % of time tasks were stalled waiting for a resource | `psi_avg10 / critical_threshold` per resource (thresholds already defined in [`CgroupPressureCondition`](../internal/limiter/condition_psi.go)) |
+| Anonymous memory ratio | `TotalAnon / MemoryLimit` -- how close to the memory limit, excluding reclaimable page cache | `anon_ratio / memory_threshold` (threshold already defined in [`CgroupMemoryCondition`](../internal/limiter/condition_memory.go), default 0.6)  |
+| CPU throttle ratio | `CPUThrottledDuration` delta over observation window | `throttle_ratio / cpu_threshold` (threshold already defined in [`CgroupCpuCondition`](../internal/limiter/condition_cpu.go), default 0.5)       |
 
 The pressure value takes the maximum across all normalized signals:
 

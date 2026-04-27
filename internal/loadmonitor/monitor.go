@@ -35,9 +35,9 @@ type conditionFn func(ctx context.Context, previous, current Stats, interval tim
 // Condition is a type that represent a condition to be evaluated by the LoadMonitor
 // on every poll event.
 type Condition struct {
-	// Description should be a descriptor of the Condition. This is used for logging purposes. It is different
-	// from `name` returned by Fn.
-	Description string
+	// Name is the name of the Condition. This is used to identify a Condition.
+	// Ideally names should be unique across the application.
+	Name string
 
 	// Fn is a function type that takes the previous and current system Stats struct as arguments. A user
 	// can define a function to compare system stats between two polling event and make a decision an event
@@ -70,8 +70,17 @@ type Monitor interface {
 // Event is the struct that is sent in an Event channel when a  condition evaluates to `true`.
 // It contains information about the condition that was violated.
 type Event struct {
-	Name         string
+	// ConditionName is the name of the condition that triggered this event
+	ConditionName string
+	// Description is the string value returned from a Condition.
+	// It contains the reason why this event was fired.
+	Description string
+	// CurrentStats are the current statistics that were evaluated by the Condition
+	// prior to firing this event.
 	CurrentStats Stats
+	// PreviousStats are the previous statistics that were evaluated by the Condition
+	// prior to firing this event.
+	PreviousStats Stats
 }
 
 // consumer is a struct representing a consumer of the Monitor.
@@ -326,11 +335,12 @@ func (m *DefaultMonitor) poll() error {
 	}
 
 	m.state.currentStats.CGroup = cgroupStats
+	m.state.currentStats.pollTime = now
 	m.state.lastPoll = now
 	return nil
 }
 
-// notify calls each consumers in a loop and evaluate their
+// notify calls each consumer in a loop and evaluate their
 // condition. If the condition evaluates to `true`, an Event
 // is sent down the consumer channel. To avoid the case where a
 // consumer does not read properly its channel, which would block
@@ -371,13 +381,13 @@ func (m *DefaultMonitor) notify(ctx context.Context) (timeoutExpired bool) {
 					case <-doneCh:
 					case <-notifyCtx.Done():
 						t := m.cfg.NotifyTimeout.String()
-						d := condition.Description
+						d := condition.Name
 						msg := fmt.Sprintf("LoadMonitor notify timeout (%q) reached! Condition %q did not complete in time.", t, d)
 						m.logger.Warn(msg)
 					}
 				}()
 
-				if ok, name := condition.Fn(notifyCtx, prev, curr, lastPoll); ok {
+				if ok, desc := condition.Fn(notifyCtx, prev, curr, lastPoll); ok {
 					// The shutdown logic closes all consumers channel.
 					// To avoid sending on a closed channel, we hold the
 					// shutdown lock while sending an Event. Shutdown cannot
@@ -386,8 +396,10 @@ func (m *DefaultMonitor) notify(ctx context.Context) (timeoutExpired bool) {
 					if !m.isShuttingDown && notifyCtx.Err() == nil {
 						select {
 						case consumer.out <- Event{
-							Name:         name,
-							CurrentStats: curr,
+							ConditionName: condition.Name,
+							Description:   desc,
+							CurrentStats:  curr,
+							PreviousStats: prev,
 						}:
 						default:
 							// Discard the Event if the channel is full

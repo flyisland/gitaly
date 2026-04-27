@@ -14,14 +14,14 @@ import (
 )
 
 var defaultConditionFalse = Condition{
-	Description: "test_false",
+	Name: "test_false",
 	Fn: func(_ context.Context, previous, current Stats, pollInterval time.Duration) (bool, string) {
 		return false, "test_false"
 	},
 }
 
 var defaultConditionTrue = Condition{
-	Description: "test_true",
+	Name: "test_true",
 	Fn: func(_ context.Context, previous, current Stats, pollInterval time.Duration) (bool, string) {
 		return true, "test_true"
 	},
@@ -195,7 +195,7 @@ func Test_defaultMonitor_poll(t *testing.T) {
 }
 
 func Test_defaultMonitor_notify(t *testing.T) {
-	const eventName = "testEvent"
+	const eventDescription = "testEvent"
 
 	defaultCurrentStats := Stats{
 		CGroup: cgroups.Stats{ParentStats: cgroups.CgroupStats{
@@ -221,24 +221,26 @@ func Test_defaultMonitor_notify(t *testing.T) {
 			condition: func(ctx context.Context, previous, current Stats, _ time.Duration) (bool, string) {
 				require.Equal(t, defaultPreviousStats, previous)
 				require.Equal(t, defaultCurrentStats, current)
-				return false, eventName
+				return false, eventDescription
 			},
 		},
 		{
 			name: "when a condition evaluates to true, an event should be emitted",
 			expectedEvent: Event{
-				Name:         eventName,
-				CurrentStats: defaultCurrentStats,
+				ConditionName: "test",
+				Description:   eventDescription,
+				CurrentStats:  defaultCurrentStats,
+				PreviousStats: defaultPreviousStats,
 			},
 			condition: func(ctx context.Context, previous, current Stats, _ time.Duration) (bool, string) {
-				return true, eventName
+				return true, eventDescription
 			},
 		},
 		{
 			name:          "when a condition evaluates to false, an event should not be emitted",
 			expectedEvent: Event{},
 			condition: func(ctx context.Context, previous, current Stats, _ time.Duration) (bool, string) {
-				return false, eventName
+				return false, eventDescription
 			},
 		},
 		{
@@ -246,7 +248,7 @@ func Test_defaultMonitor_notify(t *testing.T) {
 			expectedEvent: Event{},
 			condition: func(ctx context.Context, previous, current Stats, _ time.Duration) (bool, string) {
 				<-ctx.Done()
-				return true, eventName
+				return true, eventDescription
 			},
 		},
 	}
@@ -275,8 +277,8 @@ func Test_defaultMonitor_notify(t *testing.T) {
 
 			// Register the Condition
 			eventCh, _ := monitor.NotifyOn(Condition{
-				Description: "test",
-				Fn:          tt.condition,
+				Name: "test",
+				Fn:   tt.condition,
 			})
 
 			// Call the notify method to notify all consumers
