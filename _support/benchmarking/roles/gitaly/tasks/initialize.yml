@@ -79,9 +79,18 @@
   async: 900
   poll: 30
 
+- name: Mark repository directories as safe
+  command: git config --global --add safe.directory /mnt/git-repositories/{{ item.name }}
+  loop: "{{ config.repositories }}"
+
 - name: Add additional refs if required
   shell: |
     set -euo pipefail
+
+    if git -C {{ item.name }} rev-parse --verify refs/refs/zzz-1 >/dev/null 2>&1; then
+      echo "Refs already exist for {{ item.name }}, skipping"
+      exit 0
+    fi
 
     COMMIT_SHA="$(git -C {{ item.name }} rev-parse HEAD)"
     BATCH_SIZE=250000
