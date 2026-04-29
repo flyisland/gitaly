@@ -487,6 +487,33 @@ func fetchInternalRemote(
 	repo *localrepo.Repo,
 	remoteRepoProto *gitalypb.Repository,
 ) error {
+	// Create a remote repository to access the remote repo
+	remoteRepo, err := remoterepo.New(ctx, remoteRepoProto, conns)
+	if err != nil {
+		return structerr.NewInternal("%w", err)
+	}
+
+	// This call fetches the name of the default branch (HEAD) in the remote repo, but
+	// does not attempt to resolve the reference.
+	remoteDefaultBranch, err := remoteRepo.HeadReference(ctx)
+	if err != nil {
+		return structerr.NewInternal("getting remote default branch: %w", err)
+	}
+
+	// Now we resolve the `HEAD` revision of the remote repo. If the reference cannot be
+	// resolved, it can mean 2 things:
+	// 1. The repository is an empty repository with no commit yet
+	// 2. HEAD is pointing to a non-existing branch
+	remoteHeadResolved := false
+	if _, err = remoteRepo.ResolveRevision(ctx, remoteDefaultBranch.Revision()); err != nil {
+		if !errors.Is(err, git.ErrReferenceNotFound) {
+			return structerr.NewInternal("error calling the remote repo to resolve HEAD reference: %w", err)
+		}
+	} else {
+		remoteHeadResolved = true
+	}
+
+	// Fetch from the remote repo to sync the local repo
 	var stderr bytes.Buffer
 	if err := repo.FetchInternal(
 		ctx,
@@ -512,28 +539,43 @@ func fetchInternalRemote(
 		if errors.As(err, &localrepo.FetchFailedError{}) {
 			return structerr.New("%w", err).WithMetadata("stderr", stderr.String())
 		}
-
 		return fmt.Errorf("fetch: %w", err)
 	}
 
-	remoteRepo, err := remoterepo.New(ctx, remoteRepoProto, conns)
-	if err != nil {
-		return structerr.NewInternal("%w", err)
+	// If we could not resolve remote repo's HEAD prior to the fetch, it means either the remote
+	// repository is empty or HEAD points to a non-existing branch.
+	// If the repository is empty, there is nothing more to do. We should just wait for commits
+	// to be written before syncing references. So it is safe to return.
+	// If the HEAD points to a non-existing branch, here is not the place to try and fix it
+	// anyway. The primary node should fix it first, so let's return.
+	if !remoteHeadResolved {
+		return nil
 	}
 
-	remoteDefaultBranch, err := remoteRepo.HeadReference(ctx)
+	// Let's try to resolve the default branch of the remote repo
+	// on the local repo, to make sure we fetched it right.
+	_, err = repo.ResolveRevision(ctx, remoteDefaultBranch.Revision())
 	if err != nil {
-		return structerr.NewInternal("getting remote default branch: %w", err)
+		return structerr.NewInternal("remote default branch does not resolve locally after fetch: %w", err)
 	}
 
-	defaultBranch, err := repo.HeadReference(ctx)
+	// We need to synchronize the HEAD reference on the local repo.
+	// First get the default branch on the local repo.
+	localDefaultBranch, err := repo.HeadReference(ctx)
 	if err != nil {
-		return structerr.NewInternal("getting local default branch: %w", err)
+		return structerr.NewInternal("getting HEAD on local repo: %w", err)
 	}
 
-	if defaultBranch != remoteDefaultBranch {
-		if err := repo.SetDefaultBranch(ctx, txManager, remoteDefaultBranch); err != nil {
-			return structerr.NewInternal("setting default branch: %w", err)
+	// We know from above that the default branch on the remote repository resolves
+	// to an OID on the local repository after fetch.
+	// If the local HEAD is the same as the remote default branch, it means the local HEAD
+	// also resolves to the same OID, so we are good.
+	// If they don't match, we know the remote default branch resolves to a valid OID
+	// so it is safe to update the current default branch here with the value of the
+	// remote default branch.
+	if localDefaultBranch != remoteDefaultBranch {
+		if err = repo.SetDefaultBranch(ctx, txManager, remoteDefaultBranch); err != nil {
+			return structerr.NewInternal("setting default branch on local repo: %w", err)
 		}
 	}
 
