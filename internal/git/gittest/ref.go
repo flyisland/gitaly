@@ -3,6 +3,7 @@ package gittest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -18,6 +19,17 @@ import (
 // WriteRef writes a reference into the repository pointing to the given object ID.
 func WriteRef(tb testing.TB, cfg config.Cfg, repoPath string, ref git.ReferenceName, oid git.ObjectID) {
 	Exec(tb, cfg, "-C", repoPath, "update-ref", ref.String(), oid.String())
+}
+
+// CreateBranch creates a new branch in a repository. At creation, the branch will point
+// to the commit OID currently pointed to by HEAD.
+func CreateBranch(tb testing.TB, cfg config.Cfg, repoPath string, branchName git.ReferenceName) {
+	Exec(tb, cfg, "-C", repoPath, "branch", branchName.String())
+}
+
+// SetDefaultBranch sets HEAD to the specified branch name.
+func SetDefaultBranch(tb testing.TB, cfg config.Cfg, repoPath string, branchName git.ReferenceName) {
+	Exec(tb, cfg, "-C", repoPath, "symbolic-ref", "HEAD", fmt.Sprintf("refs/heads/%s", branchName))
 }
 
 // ResolveRevision resolves the revision to an object ID.
