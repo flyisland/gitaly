@@ -15,6 +15,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/grpcstats"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/listenmux"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/cache"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/costhandler"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/customfieldshandler"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/loghandler"
@@ -164,6 +165,7 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 	}
 
 	streamServerInterceptors = append(streamServerInterceptors,
+		costhandler.StreamInterceptor,
 		cache.StreamInvalidator(s.cacheInvalidator, protoregistry.GitalyProtoPreregistered, s.logger),
 		// Panic handler should remain last so that application panics will be
 		// converted to errors and logged
@@ -171,6 +173,7 @@ func (s *GitalyServerFactory) New(external, secure bool, opts ...Option) (*grpc.
 	)
 
 	unaryServerInterceptors = append(unaryServerInterceptors,
+		costhandler.UnaryInterceptor,
 		cache.UnaryInvalidator(s.cacheInvalidator, protoregistry.GitalyProtoPreregistered, s.logger),
 		// Panic handler should remain last so that application panics will be
 		// converted to errors and logged

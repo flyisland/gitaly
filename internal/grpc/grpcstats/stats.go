@@ -7,9 +7,9 @@ import (
 	"google.golang.org/grpc/stats"
 )
 
-// PayloadBytes implements stats.Handler and tracks amount of bytes received and send by gRPC service
+// PayloadBytes implements stats.Handler and tracks amount of bytes received and sent by gRPC service
 // for each method call. The information about statistics is added into the context and can be
-// extracted with payloadBytesStatsFromContext.
+// extracted with PayloadBytesStatsFromContext.
 type PayloadBytes struct{}
 
 type payloadBytesStatsKey struct{}
@@ -57,16 +57,17 @@ func (s *PayloadBytesStats) Fields() log.Fields {
 	}
 }
 
-// FieldsProducer extracts stats info from the context and returns it as a logging fields.
+// FieldsProducer extracts stats info from the context and returns it as logging fields.
 func FieldsProducer(ctx context.Context, _ error) log.Fields {
-	payloadBytesStats := payloadBytesStatsFromContext(ctx)
+	payloadBytesStats := PayloadBytesStatsFromContext(ctx)
 	if payloadBytesStats != nil {
 		return payloadBytesStats.Fields()
 	}
 	return nil
 }
 
-func payloadBytesStatsFromContext(ctx context.Context) *PayloadBytesStats {
+// PayloadBytesStatsFromContext extracts the PayloadBytesStats from the context.
+func PayloadBytesStatsFromContext(ctx context.Context) *PayloadBytesStats {
 	v, ok := ctx.Value(payloadBytesStatsKey{}).(*PayloadBytesStats)
 	if !ok {
 		return nil

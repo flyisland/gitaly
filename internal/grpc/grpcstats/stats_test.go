@@ -107,6 +107,7 @@ func TestPayloadBytes(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, cc.Close()) })
 
 	testClient := grpc_testing.NewTestServiceClient(cc)
+
 	const invocations = 2
 	var wg sync.WaitGroup
 	for i := 0; i < invocations; i++ {
