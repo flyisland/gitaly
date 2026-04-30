@@ -184,6 +184,13 @@ we can both agree on this line though
 				ours:   gittest.DefaultObjectHash.EmptyTreeOID,
 				theirs: gittest.DefaultObjectHash.EmptyTreeOID,
 				path:   "conflict.txt",
+				resolution: Resolution{
+					NewPath: "conflict.txt",
+					OldPath: "conflict.txt",
+					Sections: map[string]string{
+						"dc1c302824bab8da29f7c06fec1c77cf16b975e6_2_2": "origin",
+					},
+				},
 			},
 
 			expectedErr: fmt.Errorf("resolve: parse conflict for %q: %w", "conflict.txt", ErrUnexpectedDelimiter),
@@ -201,6 +208,13 @@ we can both agree on this line though
 				ours:   gittest.DefaultObjectHash.EmptyTreeOID,
 				theirs: gittest.DefaultObjectHash.EmptyTreeOID,
 				path:   "conflict.txt",
+				resolution: Resolution{
+					NewPath: "conflict.txt",
+					OldPath: "conflict.txt",
+					Sections: map[string]string{
+						"dc1c302824bab8da29f7c06fec1c77cf16b975e6_2_2": "origin",
+					},
+				},
 			},
 
 			expectedErr: fmt.Errorf("resolve: parse conflict for %q: %w", "conflict.txt", ErrMissingEndDelimiter),
@@ -219,6 +233,28 @@ we can both agree on this line though
 				},
 			},
 			resolvedContent: []byte("bar\n"),
+		},
+		{
+			name: "Returns resolution.Content early when no sections present even with conflict markers in file",
+			args: args{
+				src: strings.NewReader(fmt.Sprintf(`# this file is very conflicted
+<<<<<<< %s
+we want this line
+=======
+but they want this line
+>>>>>>> %s
+we can both agree on this line though
+`, gittest.DefaultObjectHash.EmptyTreeOID, gittest.DefaultObjectHash.EmptyTreeOID)),
+				ours:   gittest.DefaultObjectHash.EmptyTreeOID,
+				theirs: gittest.DefaultObjectHash.EmptyTreeOID,
+				path:   "conflict.txt",
+				resolution: Resolution{
+					OldPath: "conflict.txt",
+					NewPath: "conflict.txt",
+					Content: "fully resolved content\n",
+				},
+			},
+			resolvedContent: []byte("fully resolved content\n"),
 		},
 		{
 			name: "Conflict file under file limit",

@@ -87,6 +87,27 @@ type Resolution struct {
 // blob. Clients can also use appendNewLine to have an additional new line appended
 // to the end of the resolved buffer.
 func Resolve(src io.Reader, ours, theirs git.ObjectID, path string, resolution Resolution, appendNewLine bool) (io.Reader, error) {
+	// Pre-read the source into memory so we can detect binary files (zero bytes)
+	// and files that exceed the size limit before any delimiter parsing occurs.
+	// We read one byte beyond the limit so we can distinguish "exactly at limit"
+	// from "over limit".
+	srcBytes, err := io.ReadAll(io.LimitReader(src, int64(fileLimit)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(srcBytes) == 0 || len(srcBytes) > fileLimit {
+		return &bytes.Buffer{}, fmt.Errorf("resolve: parse conflict for %q: %w", path, ErrUnmergeableFile)
+	}
+
+	// Content-mode resolutions provide the fully resolved file contents
+	// directly, so there is nothing to parse from src. Return early to avoid
+	// scanning the conflict-marker blob entirely.
+	if len(resolution.Sections) == 0 {
+		var resolvedContent bytes.Buffer
+		resolvedContent.WriteString(resolution.Content)
+		return &resolvedContent, nil
+	}
+
 	var (
 		// conflict markers, git-merge-tree(1) appends the tree OIDs to the markers
 		start  = "<<<<<<< " + ours.String()
@@ -95,10 +116,9 @@ func Resolve(src io.Reader, ours, theirs git.ObjectID, path string, resolution R
 
 		objIndex, oldIndex, newIndex uint = 0, 1, 1
 		currentSection               section
-		bytesRead                    int
 		resolvedContent              bytes.Buffer
 
-		s = bufio.NewScanner(src)
+		s = bufio.NewScanner(bytes.NewReader(srcBytes))
 	)
 
 	// When the paths are different, the conflicts contain the path names.
@@ -111,12 +131,6 @@ func Resolve(src io.Reader, ours, theirs git.ObjectID, path string, resolution R
 	s.Buffer(make([]byte, 4096), fileLimit)
 
 	s.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		defer func() { bytesRead += advance }()
-
-		if bytesRead >= fileLimit {
-			return 0, nil, ErrUnmergeableFile
-		}
-
 		// The remaining function is a modified version of
 		// bufio.ScanLines that does not consume carriage returns
 		if atEOF && len(data) == 0 {
@@ -183,28 +197,11 @@ func Resolve(src io.Reader, ours, theirs git.ObjectID, path string, resolution R
 		}
 	}
 
-	if err := s.Err(); err != nil {
-		if errors.Is(err, bufio.ErrTooLong) {
-			return &resolvedContent, fmt.Errorf("resolve: parse conflict for %q: %w", path, ErrUnmergeableFile)
-		}
-		return &resolvedContent, err
-	}
-
 	if currentSection == sectionOld || currentSection == sectionNew {
 		return &resolvedContent, fmt.Errorf("resolve: parse conflict for %q: %w", path, ErrMissingEndDelimiter)
 	}
 
-	if bytesRead == 0 {
-		return &resolvedContent, fmt.Errorf("resolve: parse conflict for %q: %w", path, ErrUnmergeableFile) // typically a binary file
-	}
-
 	var sectionID string
-
-	if len(resolution.Sections) == 0 {
-		resolvedContent.WriteString(resolution.Content)
-
-		return &resolvedContent, nil
-	}
 
 	resolvedLines := make([]string, 0, len(lines))
 	for _, l := range lines {
