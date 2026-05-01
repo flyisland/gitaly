@@ -17,6 +17,7 @@ Skim/read through these, and use them as references.
 - [Debugging Gitaly](https://handbook.gitlab.com/handbook/engineering/infrastructure-platforms/data-access/gitaly/debug/)
 - [Managing monorepos](https://docs.gitlab.com/user/project/repository/monorepos/)
 - [GCP project layout for Gitaly VMs](https://gitlab.com/gitlab-com/gl-infra/readiness/-/blob/master/library/gitaly-multi-project/README.md)
+- [Gitaly runbooks](https://gitlab.com/gitlab-com/runbooks/-/tree/master/docs/gitaly)
 
 Please help correct, clarify, or otherwise improve any documentation you find lacking (including this template)!
 
@@ -68,6 +69,14 @@ Please edit this section like a workbook, adding not just the answer but also ho
   call](https://docs.gitlab.com/api/repository_files/#get-file-from-repository) that happened in the past day. Which Gitaly calls were invoked downstream?
 - [ ] Pick a `GetBlobs` RPC call in the past day. Who were the upstream callers?
 - [ ] Trace the entire flow when a user clones a repo, over SSH, over HTTP, and through the web editor. What components were involved? On which node is the repo data located?
+
+### Runbooks
+
+- [ ] After a Gitaly node restart, users report elevated "The operation could not be completed. Please try again." errors, with `error_metadata.error_details` showing "cannot lock references". What is the root cause, and what manual fix can you run from the Rails console to recover the affected repositories?
+- [ ] A single Gitaly node's CPU and anonymous memory usage spikes well above its peers, and `top` shows many `git pack-objects` processes that are children of `git-upload-pack`, all working on the same repo. Which script in this repo can you run to safely mitigate the immediate pressure, and which two non-kill remedies are recommended for the affected project?
+- [ ] Gitaly assigns each repository to a cgroup to bound CPU and memory usage. Under `/sys/fs/cgroup/{cpu,memory}/gitaly/gitaly-<pid>/`, what are the child cgroups named, and which Prometheus metric (exported via cadvisor) tells you how much a repo cgroup is being CPU-throttled? Bonus: which log field tells you which cgroup ran the `git` command for a given RPC?
+- [ ] What are the three classic symptoms of Gitaly queuing described in the runbook, and which historical S2 incident (linked from the runbook) is the canonical reference for this failure mode?
+- [ ] Given a `git pack-objects` PID on a Gitaly host, which `/proc/<pid>/...` lookups would you use to find (a) the repository directory it is operating on and (b) the GitLab `correlation_id` for the request? Once you have the repo directory, which `git config` key reveals the GitLab project's full path?
 
 ## Production
 
