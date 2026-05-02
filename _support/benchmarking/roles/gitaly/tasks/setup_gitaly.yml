@@ -54,6 +54,13 @@
       - docbook2x
       - install-info
       - libpcre2-dev
+      - python3-pip
+      - ninja-build
+    state: present
+
+- name: Install meson via pip
+  pip:
+    name: meson
     state: present
 
 - name: Clone Gitaly at specified commit

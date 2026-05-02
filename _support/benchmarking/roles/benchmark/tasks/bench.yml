@@ -89,6 +89,9 @@
     GITALY_PROTO_DIR: "/src/gitaly/proto"
     RUN_NAME: "{{ run_name }}"
     WORKLOAD_DURATION: "{{ workload_duration }}"
+    FETCHER_CONCURRENCY: "{{ (config.fetcher | default({})).concurrency | default('') }}"
+    FETCHER_DURATION: "{{ (config.fetcher | default({})).duration | default('') }}"
+    FETCHER_MODE: "{{ (config.fetcher | default({})).mode | default('') }}"
   async: "{{ workload_wait_duration }}"
   poll: 0
   register: workload_wait

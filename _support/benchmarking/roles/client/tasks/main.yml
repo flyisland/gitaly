@@ -66,6 +66,21 @@
 
 - include_tasks: setup-k6.yml
 
+- name: Build fetcher
+  command:
+    cmd: go build -o /tmp/fetcher ./_support/benchmarking/fetcher/
+    chdir: /src/gitaly
+  environment:
+    PATH: '/usr/local/go/bin:{{ ansible_env.PATH }}'
+  become_user: git
+
+- name: Install fetcher
+  copy:
+    src: /tmp/fetcher
+    dest: /usr/local/bin/fetcher
+    mode: "0755"
+    remote_src: yes
+
 - name: Generate SSH key
   shell: ssh-keygen -q -t ed25519 -f /root/.ssh/id_ed25519 -N ""
   args:
