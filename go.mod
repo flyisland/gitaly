@@ -28,7 +28,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/libp2p/go-yamux/v5 v5.1.0
-	github.com/mattn/go-isatty v0.0.21
+	github.com/mattn/go-isatty v0.0.22
 	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/miekg/dns v1.1.72
 	github.com/olekukonko/tablewriter v1.1.4
