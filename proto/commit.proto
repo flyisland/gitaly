@@ -272,6 +272,11 @@ message ListCommitsRequest {
   // paths allows filtering the results by paths. This field supports glob
   // patterns.
   repeated bytes paths = 15;
+
+  // global_options contains the global options used to modify the behaviour of
+  // Git. For example, this can be used to enable literal pathspec matching
+  // via `literal_pathspecs`.
+  GlobalOptions global_options = 16;
 }
 
 // ListCommitsResponse is a response for the ListCommits RPC. The response will be

@@ -484,6 +484,73 @@ func TestListCommits_verify(t *testing.T) {
 	}
 }
 
+func TestListCommits_globalOptions(t *testing.T) {
+	t.Parallel()
+
+	ctx := testhelper.Context(t)
+	cfg, client := setupCommitService(t, ctx)
+
+	repoProto, _ := gittest.CreateRepository(t, ctx, cfg)
+	repo := localrepo.NewTestRepo(t, cfg, repoProto)
+
+	commitAID, commitA := writeCommit(t, ctx, cfg, repo, gittest.WithTreeEntries(
+		gittest.TreeEntry{Path: "a-foo", Mode: "100644", Content: "a"},
+	))
+	commitBID, commitB := writeCommit(t, ctx, cfg, repo, gittest.WithTreeEntries(
+		gittest.TreeEntry{Path: "a-foo", Mode: "100644", Content: "updated-a"},
+		gittest.TreeEntry{Path: "b-foo", Mode: "100644", Content: "b"},
+	), gittest.WithParents(commitAID))
+
+	for _, tc := range []struct {
+		desc            string
+		request         *gitalypb.ListCommitsRequest
+		expectedCommits []*gitalypb.GitCommit
+	}{
+		{
+			desc: "glob path without literal pathspecs matches files",
+			request: &gitalypb.ListCommitsRequest{
+				Repository: repoProto,
+				Revisions:  []string{commitBID.String()},
+				Paths:      [][]byte{[]byte("a-*")},
+			},
+			expectedCommits: []*gitalypb.GitCommit{commitB, commitA},
+		},
+		{
+			desc: "glob path with literal pathspecs returns no commits",
+			request: &gitalypb.ListCommitsRequest{
+				Repository:    repoProto,
+				Revisions:     []string{commitBID.String()},
+				Paths:         [][]byte{[]byte("a-*")},
+				GlobalOptions: &gitalypb.GlobalOptions{LiteralPathspecs: true},
+			},
+			expectedCommits: nil,
+		},
+		{
+			desc: "exact path with literal pathspecs returns matching commits",
+			request: &gitalypb.ListCommitsRequest{
+				Repository:    repoProto,
+				Revisions:     []string{commitBID.String()},
+				Paths:         [][]byte{[]byte("a-foo")},
+				GlobalOptions: &gitalypb.GlobalOptions{LiteralPathspecs: true},
+			},
+			expectedCommits: []*gitalypb.GitCommit{commitB, commitA},
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			stream, err := client.ListCommits(ctx, tc.request)
+			require.NoError(t, err)
+
+			commits, err := testhelper.ReceiveAndFold(stream.Recv, func(result []*gitalypb.GitCommit, response *gitalypb.ListCommitsResponse) []*gitalypb.GitCommit {
+				return append(result, response.GetCommits()...)
+			})
+			require.NoError(t, err)
+			testhelper.ProtoEqual(t, tc.expectedCommits, commits)
+		})
+	}
+}
+
 // receiveCommitsWithCursor collects all commits from the stream and returns
 // them along with the pagination cursor. The cursor is sent in the last response
 // only when there are more commits beyond the requested limit.

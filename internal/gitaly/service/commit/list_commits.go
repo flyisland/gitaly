@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/catfile"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitcmd"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/git/gitpipe"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper/chunk"
@@ -98,6 +99,10 @@ func (s *server) ListCommits(
 			paths[i] = string(path)
 		}
 		revlistOptions = append(revlistOptions, gitpipe.WithPaths(paths...))
+	}
+
+	if opts := gitcmd.ConvertGlobalOptions(request.GetGlobalOptions()); len(opts) > 0 {
+		revlistOptions = append(revlistOptions, gitpipe.WithCmdOpts(opts...))
 	}
 
 	if len(request.GetCommitMessagePatterns()) > 0 {
