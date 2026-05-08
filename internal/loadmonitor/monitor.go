@@ -14,10 +14,6 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 )
 
-// EventSystemDegraded is the event name emitted when the system is under
-// degraded conditions and load shedding should be triggered.
-const EventSystemDegraded = "SystemDegraded"
-
 const (
 	// defaultPollInterval is the default poll interval to poll resource usage stats
 	defaultPollInterval = time.Second * 10
@@ -85,14 +81,6 @@ type Event struct {
 	// PreviousStats are the previous statistics that were evaluated by the Condition
 	// prior to firing this event.
 	PreviousStats Stats
-}
-
-// NewSystemDegradedEvent constructs a SystemDegraded Event with the given cgroup stats.
-func NewSystemDegradedEvent(stats cgroups.Stats) Event {
-	return Event{
-		Name:         EventSystemDegraded,
-		CurrentStats: Stats{CGroup: stats},
-	}
 }
 
 // consumer is a struct representing a consumer of the Monitor.

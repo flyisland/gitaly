@@ -125,7 +125,7 @@ func TestBurdenMonitor_EntriesSortedBy(t *testing.T) {
 	})
 }
 
-func TestBurdenMonitor_SnipeTopN(t *testing.T) {
+func TestBurdenMonitor_GetTopNEntries(t *testing.T) {
 	t.Parallel()
 
 	bm := New(testhelper.SharedLogger(t))
@@ -143,26 +143,21 @@ func TestBurdenMonitor_SnipeTopN(t *testing.T) {
 	e3.RegisterCommand(103, "git rev-list", time.Now())
 	e3.MarkCommandCompleted(103, 70*time.Millisecond, 30*time.Millisecond)
 
-	count := bm.SnipeTopN(2, SortByCPU)
-	require.Equal(t, 2, count)
-
-	// e2 and e3 (highest CPU) should be cancelled.
-	require.Error(t, e2.Context.Err())
-	require.Error(t, e3.Context.Err())
-	require.NoError(t, e1.Context.Err())
-
-	t.Run("n exceeds entry count", func(t *testing.T) {
-		bm2 := New(testhelper.SharedLogger(t))
-		_, entry := bm2.RegisterRPC(ctx, "/foo.Service/A")
-		count := bm2.SnipeTopN(10, SortByCPU)
-		require.Equal(t, 1, count)
-		require.Error(t, entry.Context.Err())
+	t.Run("returns top N sorted descending", func(t *testing.T) {
+		top := bm.GetTopNEntries(2, SortByCPU)
+		require.Len(t, top, 2)
+		require.Equal(t, e2.ID, top[0].ID)
+		require.Equal(t, e3.ID, top[1].ID)
 	})
 
-	t.Run("empty monitor", func(t *testing.T) {
+	t.Run("n exceeds entry count returns all entries", func(t *testing.T) {
+		top := bm.GetTopNEntries(10, SortByCPU)
+		require.Len(t, top, 3)
+	})
+
+	t.Run("empty monitor returns no entries", func(t *testing.T) {
 		bm2 := New(testhelper.SharedLogger(t))
-		count := bm2.SnipeTopN(5, SortByCPU)
-		require.Equal(t, 0, count)
+		require.Empty(t, bm2.GetTopNEntries(5, SortByCPU))
 	})
 }
 
