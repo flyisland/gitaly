@@ -60,6 +60,7 @@ type revlistConfig struct {
 	skipResult            func(*RevisionResult) bool
 	skip                  uint
 	paths                 []string
+	cmdOpts               []gitcmd.CmdOpt
 }
 
 // RevlistOption is an option for the revlist pipeline step.
@@ -206,6 +207,13 @@ func WithPaths(paths ...string) RevlistOption {
 	}
 }
 
+// WithCmdOpts allows callers to pass additional CmdOpt options to the git-rev-list(1) command.
+func WithCmdOpts(opts ...gitcmd.CmdOpt) RevlistOption {
+	return func(cfg *revlistConfig) {
+		cfg.cmdOpts = append(cfg.cmdOpts, opts...)
+	}
+}
+
 // Revlist runs git-rev-list(1) with objects and object names enabled. The returned channel will
 // contain all object IDs listed by this command. Cancelling the context will cause the pipeline to
 // be cancelled, too.
@@ -318,15 +326,18 @@ func Revlist(
 		}
 
 		var stderr strings.Builder
+		execOpts := append([]gitcmd.CmdOpt{
+			gitcmd.WithStderr(&stderr),
+			gitcmd.WithSetupStdout(),
+			gitcmd.WithStdin(strings.NewReader(strings.Join(revisions, "\n"))),
+		}, cfg.cmdOpts...)
 		revlist, err := repo.Exec(ctx,
 			gitcmd.Command{
 				Name:        "rev-list",
 				Flags:       flags,
 				PostSepArgs: postSepArgs,
 			},
-			gitcmd.WithStderr(&stderr),
-			gitcmd.WithSetupStdout(),
-			gitcmd.WithStdin(strings.NewReader(strings.Join(revisions, "\n"))),
+			execOpts...,
 		)
 		if err != nil {
 			sendRevisionResult(ctx, resultChan, RevisionResult{

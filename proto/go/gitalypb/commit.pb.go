@@ -451,7 +451,11 @@ type ListCommitsRequest struct {
 	Skip uint32 `protobuf:"varint,14,opt,name=skip,proto3" json:"skip,omitempty"`
 	// paths allows filtering the results by paths. This field supports glob
 	// patterns.
-	Paths         [][]byte `protobuf:"bytes,15,rep,name=paths,proto3" json:"paths,omitempty"`
+	Paths [][]byte `protobuf:"bytes,15,rep,name=paths,proto3" json:"paths,omitempty"`
+	// global_options contains the global options used to modify the behaviour of
+	// Git. For example, this can be used to enable literal pathspec matching
+	// via `literal_pathspecs`.
+	GlobalOptions *GlobalOptions `protobuf:"bytes,16,opt,name=global_options,json=globalOptions,proto3" json:"global_options,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -587,6 +591,13 @@ func (x *ListCommitsRequest) GetSkip() uint32 {
 func (x *ListCommitsRequest) GetPaths() [][]byte {
 	if x != nil {
 		return x.Paths
+	}
+	return nil
+}
+
+func (x *ListCommitsRequest) GetGlobalOptions() *GlobalOptions {
+	if x != nil {
+		return x.GlobalOptions
 	}
 	return nil
 }
@@ -4389,7 +4400,7 @@ var File_commit_proto protoreflect.FileDescriptor
 const file_commit_proto_rawDesc = "" +
 	"\n" +
 	"\fcommit.proto\x12\x06gitaly\x1a\ferrors.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\n" +
-	"lint.proto\x1a\fshared.proto\"\x97\x05\n" +
+	"lint.proto\x1a\fshared.proto\"\xd5\x05\n" +
 	"\x12ListCommitsRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
@@ -4410,7 +4421,8 @@ const file_commit_proto_rawDesc = "" +
 	"ignoreCase\x126\n" +
 	"\x17commit_message_patterns\x18\r \x03(\fR\x15commitMessagePatterns\x12\x12\n" +
 	"\x04skip\x18\x0e \x01(\rR\x04skip\x12\x14\n" +
-	"\x05paths\x18\x0f \x03(\fR\x05paths\"%\n" +
+	"\x05paths\x18\x0f \x03(\fR\x05paths\x12<\n" +
+	"\x0eglobal_options\x18\x10 \x01(\v2\x15.gitaly.GlobalOptionsR\rglobalOptions\"%\n" +
 	"\x05Order\x12\b\n" +
 	"\x04NONE\x10\x00\x12\b\n" +
 	"\x04TOPO\x10\x01\x12\b\n" +
@@ -4838,9 +4850,9 @@ var file_commit_proto_goTypes = []any{
 	(*Repository)(nil),                                   // 64: gitaly.Repository
 	(*PaginationParameter)(nil),                          // 65: gitaly.PaginationParameter
 	(*timestamppb.Timestamp)(nil),                        // 66: google.protobuf.Timestamp
-	(*GitCommit)(nil),                                    // 67: gitaly.GitCommit
-	(*PaginationCursor)(nil),                             // 68: gitaly.PaginationCursor
-	(*GlobalOptions)(nil),                                // 69: gitaly.GlobalOptions
+	(*GlobalOptions)(nil),                                // 67: gitaly.GlobalOptions
+	(*GitCommit)(nil),                                    // 68: gitaly.GitCommit
+	(*PaginationCursor)(nil),                             // 69: gitaly.PaginationCursor
 	(*ResolveRevisionError)(nil),                         // 70: gitaly.ResolveRevisionError
 	(*PathError)(nil),                                    // 71: gitaly.PathError
 	(*BadObjectError)(nil),                               // 72: gitaly.BadObjectError
@@ -4855,124 +4867,125 @@ var file_commit_proto_depIdxs = []int32{
 	0,  // 2: gitaly.ListCommitsRequest.order:type_name -> gitaly.ListCommitsRequest.Order
 	66, // 3: gitaly.ListCommitsRequest.after:type_name -> google.protobuf.Timestamp
 	66, // 4: gitaly.ListCommitsRequest.before:type_name -> google.protobuf.Timestamp
-	67, // 5: gitaly.ListCommitsResponse.commits:type_name -> gitaly.GitCommit
-	68, // 6: gitaly.ListCommitsResponse.pagination_cursor:type_name -> gitaly.PaginationCursor
-	64, // 7: gitaly.ListAllCommitsRequest.repository:type_name -> gitaly.Repository
-	65, // 8: gitaly.ListAllCommitsRequest.pagination_params:type_name -> gitaly.PaginationParameter
-	67, // 9: gitaly.ListAllCommitsResponse.commits:type_name -> gitaly.GitCommit
-	64, // 10: gitaly.CommitStatsRequest.repository:type_name -> gitaly.Repository
-	64, // 11: gitaly.CommitIsAncestorRequest.repository:type_name -> gitaly.Repository
-	64, // 12: gitaly.TreeEntryRequest.repository:type_name -> gitaly.Repository
-	1,  // 13: gitaly.TreeEntryResponse.type:type_name -> gitaly.TreeEntryResponse.ObjectType
-	64, // 14: gitaly.CountCommitsRequest.repository:type_name -> gitaly.Repository
-	66, // 15: gitaly.CountCommitsRequest.after:type_name -> google.protobuf.Timestamp
-	66, // 16: gitaly.CountCommitsRequest.before:type_name -> google.protobuf.Timestamp
-	69, // 17: gitaly.CountCommitsRequest.global_options:type_name -> gitaly.GlobalOptions
-	64, // 18: gitaly.CountDivergingCommitsRequest.repository:type_name -> gitaly.Repository
-	2,  // 19: gitaly.TreeEntry.type:type_name -> gitaly.TreeEntry.EntryType
-	64, // 20: gitaly.GetTreeEntriesRequest.repository:type_name -> gitaly.Repository
-	3,  // 21: gitaly.GetTreeEntriesRequest.sort:type_name -> gitaly.GetTreeEntriesRequest.SortBy
-	65, // 22: gitaly.GetTreeEntriesRequest.pagination_params:type_name -> gitaly.PaginationParameter
-	21, // 23: gitaly.GetTreeEntriesResponse.entries:type_name -> gitaly.TreeEntry
-	68, // 24: gitaly.GetTreeEntriesResponse.pagination_cursor:type_name -> gitaly.PaginationCursor
-	70, // 25: gitaly.GetTreeEntriesError.resolve_tree:type_name -> gitaly.ResolveRevisionError
-	71, // 26: gitaly.GetTreeEntriesError.path:type_name -> gitaly.PathError
-	64, // 27: gitaly.ListFilesRequest.repository:type_name -> gitaly.Repository
-	64, // 28: gitaly.FindCommitRequest.repository:type_name -> gitaly.Repository
-	67, // 29: gitaly.FindCommitResponse.commit:type_name -> gitaly.GitCommit
-	64, // 30: gitaly.ListCommitsByOidRequest.repository:type_name -> gitaly.Repository
-	67, // 31: gitaly.ListCommitsByOidResponse.commits:type_name -> gitaly.GitCommit
-	64, // 32: gitaly.ListCommitsByRefNameRequest.repository:type_name -> gitaly.Repository
-	57, // 33: gitaly.ListCommitsByRefNameResponse.commit_refs:type_name -> gitaly.ListCommitsByRefNameResponse.CommitForRef
-	64, // 34: gitaly.FindAllCommitsRequest.repository:type_name -> gitaly.Repository
-	4,  // 35: gitaly.FindAllCommitsRequest.order:type_name -> gitaly.FindAllCommitsRequest.Order
-	67, // 36: gitaly.FindAllCommitsResponse.commits:type_name -> gitaly.GitCommit
-	64, // 37: gitaly.FindCommitsRequest.repository:type_name -> gitaly.Repository
-	66, // 38: gitaly.FindCommitsRequest.after:type_name -> google.protobuf.Timestamp
-	66, // 39: gitaly.FindCommitsRequest.before:type_name -> google.protobuf.Timestamp
-	5,  // 40: gitaly.FindCommitsRequest.order:type_name -> gitaly.FindCommitsRequest.Order
-	69, // 41: gitaly.FindCommitsRequest.global_options:type_name -> gitaly.GlobalOptions
-	67, // 42: gitaly.FindCommitsResponse.commits:type_name -> gitaly.GitCommit
-	72, // 43: gitaly.FindCommitsError.bad_object:type_name -> gitaly.BadObjectError
-	73, // 44: gitaly.FindCommitsError.ambiguous_ref:type_name -> gitaly.AmbiguousReferenceError
-	74, // 45: gitaly.FindCommitsError.invalid_range:type_name -> gitaly.InvalidRevisionRange
-	64, // 46: gitaly.CommitLanguagesRequest.repository:type_name -> gitaly.Repository
-	58, // 47: gitaly.CommitLanguagesResponse.languages:type_name -> gitaly.CommitLanguagesResponse.Language
-	64, // 48: gitaly.RawBlameRequest.repository:type_name -> gitaly.Repository
-	75, // 49: gitaly.RawBlameError.path_not_found:type_name -> gitaly.PathNotFoundError
-	59, // 50: gitaly.RawBlameError.out_of_range:type_name -> gitaly.RawBlameError.OutOfRangeError
-	61, // 51: gitaly.RawBlameError.resolve_ignore_revs:type_name -> gitaly.RawBlameError.ResolveIgnoreRevsError
-	60, // 52: gitaly.RawBlameError.invalid_ignore_revs_format:type_name -> gitaly.RawBlameError.InvalidIgnoreRevsFormatError
-	64, // 53: gitaly.LastCommitForPathRequest.repository:type_name -> gitaly.Repository
-	69, // 54: gitaly.LastCommitForPathRequest.global_options:type_name -> gitaly.GlobalOptions
-	67, // 55: gitaly.LastCommitForPathResponse.commit:type_name -> gitaly.GitCommit
-	64, // 56: gitaly.ListLastCommitsForTreeRequest.repository:type_name -> gitaly.Repository
-	69, // 57: gitaly.ListLastCommitsForTreeRequest.global_options:type_name -> gitaly.GlobalOptions
-	62, // 58: gitaly.ListLastCommitsForTreeResponse.commits:type_name -> gitaly.ListLastCommitsForTreeResponse.CommitForTree
-	64, // 59: gitaly.CommitsByMessageRequest.repository:type_name -> gitaly.Repository
-	69, // 60: gitaly.CommitsByMessageRequest.global_options:type_name -> gitaly.GlobalOptions
-	67, // 61: gitaly.CommitsByMessageResponse.commits:type_name -> gitaly.GitCommit
-	64, // 62: gitaly.FilterShasWithSignaturesRequest.repository:type_name -> gitaly.Repository
-	64, // 63: gitaly.GetCommitSignaturesRequest.repository:type_name -> gitaly.Repository
-	6,  // 64: gitaly.GetCommitSignaturesResponse.signer:type_name -> gitaly.GetCommitSignaturesResponse.Signer
-	76, // 65: gitaly.GetCommitSignaturesResponse.author:type_name -> gitaly.CommitAuthor
-	76, // 66: gitaly.GetCommitSignaturesResponse.committer:type_name -> gitaly.CommitAuthor
-	64, // 67: gitaly.GetCommitMessagesRequest.repository:type_name -> gitaly.Repository
-	64, // 68: gitaly.CheckObjectsExistRequest.repository:type_name -> gitaly.Repository
-	63, // 69: gitaly.CheckObjectsExistResponse.revisions:type_name -> gitaly.CheckObjectsExistResponse.RevisionExistence
-	67, // 70: gitaly.ListCommitsByRefNameResponse.CommitForRef.commit:type_name -> gitaly.GitCommit
-	67, // 71: gitaly.ListLastCommitsForTreeResponse.CommitForTree.commit:type_name -> gitaly.GitCommit
-	7,  // 72: gitaly.CommitService.ListCommits:input_type -> gitaly.ListCommitsRequest
-	9,  // 73: gitaly.CommitService.ListAllCommits:input_type -> gitaly.ListAllCommitsRequest
-	13, // 74: gitaly.CommitService.CommitIsAncestor:input_type -> gitaly.CommitIsAncestorRequest
-	15, // 75: gitaly.CommitService.TreeEntry:input_type -> gitaly.TreeEntryRequest
-	17, // 76: gitaly.CommitService.CountCommits:input_type -> gitaly.CountCommitsRequest
-	19, // 77: gitaly.CommitService.CountDivergingCommits:input_type -> gitaly.CountDivergingCommitsRequest
-	22, // 78: gitaly.CommitService.GetTreeEntries:input_type -> gitaly.GetTreeEntriesRequest
-	25, // 79: gitaly.CommitService.ListFiles:input_type -> gitaly.ListFilesRequest
-	27, // 80: gitaly.CommitService.FindCommit:input_type -> gitaly.FindCommitRequest
-	11, // 81: gitaly.CommitService.CommitStats:input_type -> gitaly.CommitStatsRequest
-	33, // 82: gitaly.CommitService.FindAllCommits:input_type -> gitaly.FindAllCommitsRequest
-	35, // 83: gitaly.CommitService.FindCommits:input_type -> gitaly.FindCommitsRequest
-	38, // 84: gitaly.CommitService.CommitLanguages:input_type -> gitaly.CommitLanguagesRequest
-	40, // 85: gitaly.CommitService.RawBlame:input_type -> gitaly.RawBlameRequest
-	43, // 86: gitaly.CommitService.LastCommitForPath:input_type -> gitaly.LastCommitForPathRequest
-	45, // 87: gitaly.CommitService.ListLastCommitsForTree:input_type -> gitaly.ListLastCommitsForTreeRequest
-	47, // 88: gitaly.CommitService.CommitsByMessage:input_type -> gitaly.CommitsByMessageRequest
-	29, // 89: gitaly.CommitService.ListCommitsByOid:input_type -> gitaly.ListCommitsByOidRequest
-	31, // 90: gitaly.CommitService.ListCommitsByRefName:input_type -> gitaly.ListCommitsByRefNameRequest
-	49, // 91: gitaly.CommitService.FilterShasWithSignatures:input_type -> gitaly.FilterShasWithSignaturesRequest
-	51, // 92: gitaly.CommitService.GetCommitSignatures:input_type -> gitaly.GetCommitSignaturesRequest
-	53, // 93: gitaly.CommitService.GetCommitMessages:input_type -> gitaly.GetCommitMessagesRequest
-	55, // 94: gitaly.CommitService.CheckObjectsExist:input_type -> gitaly.CheckObjectsExistRequest
-	8,  // 95: gitaly.CommitService.ListCommits:output_type -> gitaly.ListCommitsResponse
-	10, // 96: gitaly.CommitService.ListAllCommits:output_type -> gitaly.ListAllCommitsResponse
-	14, // 97: gitaly.CommitService.CommitIsAncestor:output_type -> gitaly.CommitIsAncestorResponse
-	16, // 98: gitaly.CommitService.TreeEntry:output_type -> gitaly.TreeEntryResponse
-	18, // 99: gitaly.CommitService.CountCommits:output_type -> gitaly.CountCommitsResponse
-	20, // 100: gitaly.CommitService.CountDivergingCommits:output_type -> gitaly.CountDivergingCommitsResponse
-	23, // 101: gitaly.CommitService.GetTreeEntries:output_type -> gitaly.GetTreeEntriesResponse
-	26, // 102: gitaly.CommitService.ListFiles:output_type -> gitaly.ListFilesResponse
-	28, // 103: gitaly.CommitService.FindCommit:output_type -> gitaly.FindCommitResponse
-	12, // 104: gitaly.CommitService.CommitStats:output_type -> gitaly.CommitStatsResponse
-	34, // 105: gitaly.CommitService.FindAllCommits:output_type -> gitaly.FindAllCommitsResponse
-	36, // 106: gitaly.CommitService.FindCommits:output_type -> gitaly.FindCommitsResponse
-	39, // 107: gitaly.CommitService.CommitLanguages:output_type -> gitaly.CommitLanguagesResponse
-	41, // 108: gitaly.CommitService.RawBlame:output_type -> gitaly.RawBlameResponse
-	44, // 109: gitaly.CommitService.LastCommitForPath:output_type -> gitaly.LastCommitForPathResponse
-	46, // 110: gitaly.CommitService.ListLastCommitsForTree:output_type -> gitaly.ListLastCommitsForTreeResponse
-	48, // 111: gitaly.CommitService.CommitsByMessage:output_type -> gitaly.CommitsByMessageResponse
-	30, // 112: gitaly.CommitService.ListCommitsByOid:output_type -> gitaly.ListCommitsByOidResponse
-	32, // 113: gitaly.CommitService.ListCommitsByRefName:output_type -> gitaly.ListCommitsByRefNameResponse
-	50, // 114: gitaly.CommitService.FilterShasWithSignatures:output_type -> gitaly.FilterShasWithSignaturesResponse
-	52, // 115: gitaly.CommitService.GetCommitSignatures:output_type -> gitaly.GetCommitSignaturesResponse
-	54, // 116: gitaly.CommitService.GetCommitMessages:output_type -> gitaly.GetCommitMessagesResponse
-	56, // 117: gitaly.CommitService.CheckObjectsExist:output_type -> gitaly.CheckObjectsExistResponse
-	95, // [95:118] is the sub-list for method output_type
-	72, // [72:95] is the sub-list for method input_type
-	72, // [72:72] is the sub-list for extension type_name
-	72, // [72:72] is the sub-list for extension extendee
-	0,  // [0:72] is the sub-list for field type_name
+	67, // 5: gitaly.ListCommitsRequest.global_options:type_name -> gitaly.GlobalOptions
+	68, // 6: gitaly.ListCommitsResponse.commits:type_name -> gitaly.GitCommit
+	69, // 7: gitaly.ListCommitsResponse.pagination_cursor:type_name -> gitaly.PaginationCursor
+	64, // 8: gitaly.ListAllCommitsRequest.repository:type_name -> gitaly.Repository
+	65, // 9: gitaly.ListAllCommitsRequest.pagination_params:type_name -> gitaly.PaginationParameter
+	68, // 10: gitaly.ListAllCommitsResponse.commits:type_name -> gitaly.GitCommit
+	64, // 11: gitaly.CommitStatsRequest.repository:type_name -> gitaly.Repository
+	64, // 12: gitaly.CommitIsAncestorRequest.repository:type_name -> gitaly.Repository
+	64, // 13: gitaly.TreeEntryRequest.repository:type_name -> gitaly.Repository
+	1,  // 14: gitaly.TreeEntryResponse.type:type_name -> gitaly.TreeEntryResponse.ObjectType
+	64, // 15: gitaly.CountCommitsRequest.repository:type_name -> gitaly.Repository
+	66, // 16: gitaly.CountCommitsRequest.after:type_name -> google.protobuf.Timestamp
+	66, // 17: gitaly.CountCommitsRequest.before:type_name -> google.protobuf.Timestamp
+	67, // 18: gitaly.CountCommitsRequest.global_options:type_name -> gitaly.GlobalOptions
+	64, // 19: gitaly.CountDivergingCommitsRequest.repository:type_name -> gitaly.Repository
+	2,  // 20: gitaly.TreeEntry.type:type_name -> gitaly.TreeEntry.EntryType
+	64, // 21: gitaly.GetTreeEntriesRequest.repository:type_name -> gitaly.Repository
+	3,  // 22: gitaly.GetTreeEntriesRequest.sort:type_name -> gitaly.GetTreeEntriesRequest.SortBy
+	65, // 23: gitaly.GetTreeEntriesRequest.pagination_params:type_name -> gitaly.PaginationParameter
+	21, // 24: gitaly.GetTreeEntriesResponse.entries:type_name -> gitaly.TreeEntry
+	69, // 25: gitaly.GetTreeEntriesResponse.pagination_cursor:type_name -> gitaly.PaginationCursor
+	70, // 26: gitaly.GetTreeEntriesError.resolve_tree:type_name -> gitaly.ResolveRevisionError
+	71, // 27: gitaly.GetTreeEntriesError.path:type_name -> gitaly.PathError
+	64, // 28: gitaly.ListFilesRequest.repository:type_name -> gitaly.Repository
+	64, // 29: gitaly.FindCommitRequest.repository:type_name -> gitaly.Repository
+	68, // 30: gitaly.FindCommitResponse.commit:type_name -> gitaly.GitCommit
+	64, // 31: gitaly.ListCommitsByOidRequest.repository:type_name -> gitaly.Repository
+	68, // 32: gitaly.ListCommitsByOidResponse.commits:type_name -> gitaly.GitCommit
+	64, // 33: gitaly.ListCommitsByRefNameRequest.repository:type_name -> gitaly.Repository
+	57, // 34: gitaly.ListCommitsByRefNameResponse.commit_refs:type_name -> gitaly.ListCommitsByRefNameResponse.CommitForRef
+	64, // 35: gitaly.FindAllCommitsRequest.repository:type_name -> gitaly.Repository
+	4,  // 36: gitaly.FindAllCommitsRequest.order:type_name -> gitaly.FindAllCommitsRequest.Order
+	68, // 37: gitaly.FindAllCommitsResponse.commits:type_name -> gitaly.GitCommit
+	64, // 38: gitaly.FindCommitsRequest.repository:type_name -> gitaly.Repository
+	66, // 39: gitaly.FindCommitsRequest.after:type_name -> google.protobuf.Timestamp
+	66, // 40: gitaly.FindCommitsRequest.before:type_name -> google.protobuf.Timestamp
+	5,  // 41: gitaly.FindCommitsRequest.order:type_name -> gitaly.FindCommitsRequest.Order
+	67, // 42: gitaly.FindCommitsRequest.global_options:type_name -> gitaly.GlobalOptions
+	68, // 43: gitaly.FindCommitsResponse.commits:type_name -> gitaly.GitCommit
+	72, // 44: gitaly.FindCommitsError.bad_object:type_name -> gitaly.BadObjectError
+	73, // 45: gitaly.FindCommitsError.ambiguous_ref:type_name -> gitaly.AmbiguousReferenceError
+	74, // 46: gitaly.FindCommitsError.invalid_range:type_name -> gitaly.InvalidRevisionRange
+	64, // 47: gitaly.CommitLanguagesRequest.repository:type_name -> gitaly.Repository
+	58, // 48: gitaly.CommitLanguagesResponse.languages:type_name -> gitaly.CommitLanguagesResponse.Language
+	64, // 49: gitaly.RawBlameRequest.repository:type_name -> gitaly.Repository
+	75, // 50: gitaly.RawBlameError.path_not_found:type_name -> gitaly.PathNotFoundError
+	59, // 51: gitaly.RawBlameError.out_of_range:type_name -> gitaly.RawBlameError.OutOfRangeError
+	61, // 52: gitaly.RawBlameError.resolve_ignore_revs:type_name -> gitaly.RawBlameError.ResolveIgnoreRevsError
+	60, // 53: gitaly.RawBlameError.invalid_ignore_revs_format:type_name -> gitaly.RawBlameError.InvalidIgnoreRevsFormatError
+	64, // 54: gitaly.LastCommitForPathRequest.repository:type_name -> gitaly.Repository
+	67, // 55: gitaly.LastCommitForPathRequest.global_options:type_name -> gitaly.GlobalOptions
+	68, // 56: gitaly.LastCommitForPathResponse.commit:type_name -> gitaly.GitCommit
+	64, // 57: gitaly.ListLastCommitsForTreeRequest.repository:type_name -> gitaly.Repository
+	67, // 58: gitaly.ListLastCommitsForTreeRequest.global_options:type_name -> gitaly.GlobalOptions
+	62, // 59: gitaly.ListLastCommitsForTreeResponse.commits:type_name -> gitaly.ListLastCommitsForTreeResponse.CommitForTree
+	64, // 60: gitaly.CommitsByMessageRequest.repository:type_name -> gitaly.Repository
+	67, // 61: gitaly.CommitsByMessageRequest.global_options:type_name -> gitaly.GlobalOptions
+	68, // 62: gitaly.CommitsByMessageResponse.commits:type_name -> gitaly.GitCommit
+	64, // 63: gitaly.FilterShasWithSignaturesRequest.repository:type_name -> gitaly.Repository
+	64, // 64: gitaly.GetCommitSignaturesRequest.repository:type_name -> gitaly.Repository
+	6,  // 65: gitaly.GetCommitSignaturesResponse.signer:type_name -> gitaly.GetCommitSignaturesResponse.Signer
+	76, // 66: gitaly.GetCommitSignaturesResponse.author:type_name -> gitaly.CommitAuthor
+	76, // 67: gitaly.GetCommitSignaturesResponse.committer:type_name -> gitaly.CommitAuthor
+	64, // 68: gitaly.GetCommitMessagesRequest.repository:type_name -> gitaly.Repository
+	64, // 69: gitaly.CheckObjectsExistRequest.repository:type_name -> gitaly.Repository
+	63, // 70: gitaly.CheckObjectsExistResponse.revisions:type_name -> gitaly.CheckObjectsExistResponse.RevisionExistence
+	68, // 71: gitaly.ListCommitsByRefNameResponse.CommitForRef.commit:type_name -> gitaly.GitCommit
+	68, // 72: gitaly.ListLastCommitsForTreeResponse.CommitForTree.commit:type_name -> gitaly.GitCommit
+	7,  // 73: gitaly.CommitService.ListCommits:input_type -> gitaly.ListCommitsRequest
+	9,  // 74: gitaly.CommitService.ListAllCommits:input_type -> gitaly.ListAllCommitsRequest
+	13, // 75: gitaly.CommitService.CommitIsAncestor:input_type -> gitaly.CommitIsAncestorRequest
+	15, // 76: gitaly.CommitService.TreeEntry:input_type -> gitaly.TreeEntryRequest
+	17, // 77: gitaly.CommitService.CountCommits:input_type -> gitaly.CountCommitsRequest
+	19, // 78: gitaly.CommitService.CountDivergingCommits:input_type -> gitaly.CountDivergingCommitsRequest
+	22, // 79: gitaly.CommitService.GetTreeEntries:input_type -> gitaly.GetTreeEntriesRequest
+	25, // 80: gitaly.CommitService.ListFiles:input_type -> gitaly.ListFilesRequest
+	27, // 81: gitaly.CommitService.FindCommit:input_type -> gitaly.FindCommitRequest
+	11, // 82: gitaly.CommitService.CommitStats:input_type -> gitaly.CommitStatsRequest
+	33, // 83: gitaly.CommitService.FindAllCommits:input_type -> gitaly.FindAllCommitsRequest
+	35, // 84: gitaly.CommitService.FindCommits:input_type -> gitaly.FindCommitsRequest
+	38, // 85: gitaly.CommitService.CommitLanguages:input_type -> gitaly.CommitLanguagesRequest
+	40, // 86: gitaly.CommitService.RawBlame:input_type -> gitaly.RawBlameRequest
+	43, // 87: gitaly.CommitService.LastCommitForPath:input_type -> gitaly.LastCommitForPathRequest
+	45, // 88: gitaly.CommitService.ListLastCommitsForTree:input_type -> gitaly.ListLastCommitsForTreeRequest
+	47, // 89: gitaly.CommitService.CommitsByMessage:input_type -> gitaly.CommitsByMessageRequest
+	29, // 90: gitaly.CommitService.ListCommitsByOid:input_type -> gitaly.ListCommitsByOidRequest
+	31, // 91: gitaly.CommitService.ListCommitsByRefName:input_type -> gitaly.ListCommitsByRefNameRequest
+	49, // 92: gitaly.CommitService.FilterShasWithSignatures:input_type -> gitaly.FilterShasWithSignaturesRequest
+	51, // 93: gitaly.CommitService.GetCommitSignatures:input_type -> gitaly.GetCommitSignaturesRequest
+	53, // 94: gitaly.CommitService.GetCommitMessages:input_type -> gitaly.GetCommitMessagesRequest
+	55, // 95: gitaly.CommitService.CheckObjectsExist:input_type -> gitaly.CheckObjectsExistRequest
+	8,  // 96: gitaly.CommitService.ListCommits:output_type -> gitaly.ListCommitsResponse
+	10, // 97: gitaly.CommitService.ListAllCommits:output_type -> gitaly.ListAllCommitsResponse
+	14, // 98: gitaly.CommitService.CommitIsAncestor:output_type -> gitaly.CommitIsAncestorResponse
+	16, // 99: gitaly.CommitService.TreeEntry:output_type -> gitaly.TreeEntryResponse
+	18, // 100: gitaly.CommitService.CountCommits:output_type -> gitaly.CountCommitsResponse
+	20, // 101: gitaly.CommitService.CountDivergingCommits:output_type -> gitaly.CountDivergingCommitsResponse
+	23, // 102: gitaly.CommitService.GetTreeEntries:output_type -> gitaly.GetTreeEntriesResponse
+	26, // 103: gitaly.CommitService.ListFiles:output_type -> gitaly.ListFilesResponse
+	28, // 104: gitaly.CommitService.FindCommit:output_type -> gitaly.FindCommitResponse
+	12, // 105: gitaly.CommitService.CommitStats:output_type -> gitaly.CommitStatsResponse
+	34, // 106: gitaly.CommitService.FindAllCommits:output_type -> gitaly.FindAllCommitsResponse
+	36, // 107: gitaly.CommitService.FindCommits:output_type -> gitaly.FindCommitsResponse
+	39, // 108: gitaly.CommitService.CommitLanguages:output_type -> gitaly.CommitLanguagesResponse
+	41, // 109: gitaly.CommitService.RawBlame:output_type -> gitaly.RawBlameResponse
+	44, // 110: gitaly.CommitService.LastCommitForPath:output_type -> gitaly.LastCommitForPathResponse
+	46, // 111: gitaly.CommitService.ListLastCommitsForTree:output_type -> gitaly.ListLastCommitsForTreeResponse
+	48, // 112: gitaly.CommitService.CommitsByMessage:output_type -> gitaly.CommitsByMessageResponse
+	30, // 113: gitaly.CommitService.ListCommitsByOid:output_type -> gitaly.ListCommitsByOidResponse
+	32, // 114: gitaly.CommitService.ListCommitsByRefName:output_type -> gitaly.ListCommitsByRefNameResponse
+	50, // 115: gitaly.CommitService.FilterShasWithSignatures:output_type -> gitaly.FilterShasWithSignaturesResponse
+	52, // 116: gitaly.CommitService.GetCommitSignatures:output_type -> gitaly.GetCommitSignaturesResponse
+	54, // 117: gitaly.CommitService.GetCommitMessages:output_type -> gitaly.GetCommitMessagesResponse
+	56, // 118: gitaly.CommitService.CheckObjectsExist:output_type -> gitaly.CheckObjectsExistResponse
+	96, // [96:119] is the sub-list for method output_type
+	73, // [73:96] is the sub-list for method input_type
+	73, // [73:73] is the sub-list for extension type_name
+	73, // [73:73] is the sub-list for extension extendee
+	0,  // [0:73] is the sub-list for field type_name
 }
 
 func init() { file_commit_proto_init() }
