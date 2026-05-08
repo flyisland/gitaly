@@ -96,7 +96,7 @@ func TestBurdenMonitor_EntriesSortedBy(t *testing.T) {
 	e3.MarkCommandCompleted(103, 150*time.Millisecond, 50*time.Millisecond)
 
 	t.Run("SortByCPU", func(t *testing.T) {
-		sorted := bm.EntriesSortedBy(SortByCPU)
+		sorted := bm.entriesSortedBy(SortByCPU)
 		require.Len(t, sorted, 3)
 		assert.Equal(t, e2.ID, sorted[0].ID) // 300ms
 		assert.Equal(t, e3.ID, sorted[1].ID) // 200ms
@@ -106,7 +106,7 @@ func TestBurdenMonitor_EntriesSortedBy(t *testing.T) {
 	t.Run("SortByMemory", func(t *testing.T) {
 		// Memory is populated by the poller reading /proc; values are 0 here.
 		// Just verify all entries are returned.
-		sorted := bm.EntriesSortedBy(SortByMemory)
+		sorted := bm.entriesSortedBy(SortByMemory)
 		require.Len(t, sorted, 3)
 	})
 
@@ -117,7 +117,7 @@ func TestBurdenMonitor_EntriesSortedBy(t *testing.T) {
 		e2.StartTime = now.Add(-1 * time.Second)
 		e3.StartTime = now.Add(-2 * time.Second)
 
-		sorted := bm.EntriesSortedBy(SortByDuration)
+		sorted := bm.entriesSortedBy(SortByDuration)
 		require.Len(t, sorted, 3)
 		assert.Equal(t, e1.ID, sorted[0].ID) // oldest
 		assert.Equal(t, e3.ID, sorted[1].ID)

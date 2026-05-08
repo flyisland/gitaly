@@ -63,8 +63,8 @@ func (bm *BurdenMonitor) pollAllEntries() {
 }
 
 func (bm *BurdenMonitor) logStats() {
-	byCPU := bm.EntriesSortedBy(SortByCPU)
-	byMemory := bm.EntriesSortedBy(SortByMemory)
+	byCPU := bm.entriesSortedBy(SortByCPU)
+	byMemory := bm.entriesSortedBy(SortByMemory)
 
 	fields := log.Fields{}
 	flattenEntries(fields, "top_cpu", byCPU[:min(10, len(byCPU))])

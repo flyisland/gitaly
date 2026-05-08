@@ -128,7 +128,7 @@ func (bm *BurdenMonitor) Entries() []*RPCEntry {
 
 // EntriesSortedBy returns all tracked RPC entries sorted by the specified field.
 // The returned entries are sorted in descending order (highest resource usage first).
-func (bm *BurdenMonitor) EntriesSortedBy(sortBy SortBy) []*RPCEntry {
+func (bm *BurdenMonitor) entriesSortedBy(sortBy SortBy) []*RPCEntry {
 	entries := bm.Entries()
 
 	switch sortBy {
@@ -153,7 +153,7 @@ func (bm *BurdenMonitor) EntriesSortedBy(sortBy SortBy) []*RPCEntry {
 // field, in descending order. If fewer than N entries exist, the returned slice
 // is shorter than N.
 func (bm *BurdenMonitor) GetTopNEntries(n int, sortBy SortBy) []*RPCEntry {
-	entries := bm.EntriesSortedBy(sortBy)
+	entries := bm.entriesSortedBy(sortBy)
 	if len(entries) > n {
 		entries = entries[:n]
 	}
