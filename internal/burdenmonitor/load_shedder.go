@@ -3,6 +3,7 @@ package burdenmonitor
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -13,8 +14,18 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
-// shedTopN is the number of RPCs cancelled per shedding event.
-const shedTopN = 10
+const (
+	// shedTopN is the number of RPCs cancelled per shedding event.
+	shedTopN = 10
+
+	// shedInterval is the interval that must occur between each load shedding event.
+	// It is possible that multiple LoadMonitor event are emitted at once, or very close to
+	// each other, because some events can be co-related (memory pressure can also trigger CPU pressure).
+	// We must make sure we do not shed load to aggressively during a burst of co-related event.
+	// This interval is the interval that must passes after a load shedding event before another
+	// one can occur, event if LoadMonitor events are received during that interval.
+	shedInterval = 15 * time.Second
+)
 
 var rpcsShedTotal = promauto.NewCounterVec(
 	prometheus.CounterOpts{
@@ -40,9 +51,10 @@ type LoadShedderConfig struct {
 // interceptor has registered, which is gated per-RPC by the
 // featureflag.BurdenMonitorTrackCommands feature flag.
 type LoadShedder struct {
-	logger log.Logger
-	bm     *BurdenMonitor
-	events <-chan loadmonitor.Event
+	logger   log.Logger
+	bm       *BurdenMonitor
+	events   <-chan loadmonitor.Event
+	lastShed time.Time
 }
 
 // NewLoadShedder constructs a LoadShedder and registers its critical-threshold
@@ -89,7 +101,12 @@ func (ls *LoadShedder) run(ctx context.Context) {
 			if !ok {
 				return
 			}
-			ls.shed(ctx, event)
+			// If lastShed is empty, it means no shed event took place yet, so we go ahead
+			// Or else, make sure it is past the interval
+			if ls.lastShed.IsZero() || time.Since(ls.lastShed) > shedInterval {
+				ls.shed(ctx, event)
+				ls.lastShed = time.Now()
+			}
 		}
 	}
 }
