@@ -74,7 +74,9 @@ type AdaptiveCalculator struct {
 	// backoffEventsVec is the counter of the total number of backoff events
 	backoffEventsVec *prometheus.CounterVec
 	// mu is used to synchronize access to the calculator state
-	mu sync.Mutex
+	stateMu sync.Mutex
+	// backoffEventMu is a mutex to synchronize access solely to the lastBackoffEvent
+	backoffEventMu sync.Mutex
 	// loadMonitor is the load monitor used to get resource usage events
 	loadMonitor loadmonitor.Monitor
 	// eventCh is a channel returned by the load monitor used to listen on
@@ -86,11 +88,10 @@ type AdaptiveCalculator struct {
 // the correctness of input AdaptiveLimiter and ResourceWatcher.
 func NewAdaptiveCalculator(cfg Config, logger log.Logger, loadMonitor loadmonitor.Monitor, limits []AdaptiveLimiter) *AdaptiveCalculator {
 	return &AdaptiveCalculator{
-		cfg:              cfg,
-		logger:           logger,
-		loadMonitor:      loadMonitor,
-		limits:           limits,
-		lastBackoffEvent: nil,
+		cfg:         cfg,
+		logger:      logger,
+		loadMonitor: loadMonitor,
+		limits:      limits,
 		currentLimitVec: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "gitaly_concurrency_limiting_current_limit",
@@ -111,8 +112,8 @@ func NewAdaptiveCalculator(cfg Config, logger log.Logger, loadMonitor loadmonito
 // Start resets the current limit values and start a goroutine to poll the backoff events. This method exits after the
 // mentioned goroutine starts.
 func (c *AdaptiveCalculator) Start(ctx context.Context) (func(), error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 
 	if c.started {
 		return nil, fmt.Errorf("adaptive calculator: already started")
@@ -222,8 +223,16 @@ func (c *AdaptiveCalculator) waitForEvents(ctx context.Context) {
 
 // calibrateLimits reads the lastBackoffEvent and calibrates the limits accordingly.
 func (c *AdaptiveCalculator) calibrateLimits(ctx context.Context) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// Make a copy of the last backoff event and unlock
+	// the mutex so that we don't block `waitForEvents`
+	// when a new event comes in.
+	var backoffEvent *BackoffEvent
+	c.backoffEventMu.Lock()
+	backoffEvent = c.lastBackoffEvent
+	c.backoffEventMu.Unlock()
+
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 
 	if ctx.Err() != nil {
 		return
@@ -235,7 +244,7 @@ func (c *AdaptiveCalculator) calibrateLimits(ctx context.Context) {
 		var newLimit int
 		logger := c.logger.WithField("limit_rpc", limit.Name())
 
-		if c.lastBackoffEvent == nil {
+		if backoffEvent == nil {
 			// Additive increase, one unit at a time
 			newLimit = limit.Current() + 1
 			if newLimit > setting.Max {
@@ -254,10 +263,10 @@ func (c *AdaptiveCalculator) calibrateLimits(ctx context.Context) {
 			fields := map[string]interface{}{
 				"previous_limit": limit.Current(),
 				"new_limit":      newLimit,
-				"condition":      c.lastBackoffEvent.ConditionName,
-				"reason":         c.lastBackoffEvent.Reason,
+				"condition":      backoffEvent.ConditionName,
+				"reason":         backoffEvent.Reason,
 			}
-			loggingStats := buildBackoffStats(c.cfg, *c.lastBackoffEvent)
+			loggingStats := buildBackoffStats(c.cfg, *backoffEvent)
 			for key, value := range loggingStats {
 				fields[fmt.Sprintf("stats.%s", key)] = value
 			}
@@ -268,10 +277,10 @@ func (c *AdaptiveCalculator) calibrateLimits(ctx context.Context) {
 }
 
 func (c *AdaptiveCalculator) setLastBackoffEvent(event *BackoffEvent) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	c.backoffEventMu.Lock()
 	c.lastBackoffEvent = event
+	c.backoffEventMu.Unlock()
+
 	if event != nil && event.ShouldBackoff {
 		c.backoffEventsVec.WithLabelValues(event.ConditionName).Inc()
 	}

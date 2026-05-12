@@ -133,9 +133,9 @@ func TestAdaptiveCalculator_Start(t *testing.T) {
 
 			// Assert that the last backoff event is reset to nil
 			// after each main loop run.
-			calculator.mu.Lock()
+			calculator.backoffEventMu.Lock()
 			require.Nil(t, calculator.lastBackoffEvent)
-			calculator.mu.Unlock()
+			calculator.backoffEventMu.Unlock()
 
 			// Stop the monitor
 			stop()
