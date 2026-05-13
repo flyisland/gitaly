@@ -1,5 +1,9 @@
 # Gitaly changelog
 
+## 18.11.3 (2026-05-13)
+
+No changes.
+
 ## 18.11.2 (2026-04-28)
 
 No changes.
