@@ -205,7 +205,7 @@ func TestUnaryInterceptor(t *testing.T) {
 	t.Parallel()
 
 	bm := New(testhelper.SharedLogger(t))
-	info := &grpc.UnaryServerInfo{FullMethod: "/foo.Service/Method"}
+	info := &grpc.UnaryServerInfo{FullMethod: "/gitaly.RepositoryService/RepositoryExists"}
 
 	t.Run("feature flag enabled", func(t *testing.T) {
 		ctx := featureflag.IncomingCtxWithFeatureFlag(
@@ -222,8 +222,8 @@ func TestUnaryInterceptor(t *testing.T) {
 
 		entry, ok := rpcEntryFromContext(handlerCtx)
 		require.True(t, ok)
-		require.Equal(t, "foo.Service", entry.ServiceName)
-		require.Equal(t, "Method", entry.MethodName)
+		require.Equal(t, "gitaly.RepositoryService", entry.ServiceName)
+		require.Equal(t, "RepositoryExists", entry.MethodName)
 
 		// Entry is deregistered after the handler returns.
 		require.Empty(t, bm.Entries())
@@ -248,7 +248,7 @@ func TestStreamInterceptor(t *testing.T) {
 	t.Parallel()
 
 	bm := New(testhelper.SharedLogger(t))
-	info := &grpc.StreamServerInfo{FullMethod: "/foo.Service/StreamMethod"}
+	info := &grpc.StreamServerInfo{FullMethod: "/gitaly.RepositoryService/RepositoryExists"}
 
 	t.Run("feature flag enabled", func(t *testing.T) {
 		ctx := featureflag.IncomingCtxWithFeatureFlag(
@@ -266,8 +266,8 @@ func TestStreamInterceptor(t *testing.T) {
 
 		entry, ok := rpcEntryFromContext(handlerStream.Context())
 		require.True(t, ok)
-		require.Equal(t, "foo.Service", entry.ServiceName)
-		require.Equal(t, "StreamMethod", entry.MethodName)
+		require.Equal(t, "gitaly.RepositoryService", entry.ServiceName)
+		require.Equal(t, "RepositoryExists", entry.MethodName)
 
 		require.Empty(t, bm.Entries())
 	})
@@ -291,33 +291,23 @@ func TestStreamInterceptor(t *testing.T) {
 func TestNotifyCommandStarted(t *testing.T) {
 	t.Parallel()
 
-	bm := New(testhelper.SharedLogger(t))
-
 	t.Run("no entry in context", func(t *testing.T) {
 		// Should be a no-op and not panic.
 		NotifyCommandStarted(testhelper.Context(t), 1234, "git upload-pack", time.Now())
 	})
 
 	t.Run("entry in context", func(t *testing.T) {
-		ctx := featureflag.IncomingCtxWithFeatureFlag(
-			testhelper.Context(t), featureflag.BurdenMonitorTrackCommands, true,
-		)
-		var entry *RPCEntry
-		_, _ = bm.UnaryInterceptor()(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/foo.Service/M"},
-			func(ctx context.Context, req interface{}) (interface{}, error) {
-				entry, _ = rpcEntryFromContext(ctx)
-				NotifyCommandStarted(ctx, 5678, "git pack-objects", time.Now())
-				require.Equal(t, 1, entry.ActiveCommandCount())
-				return nil, nil
-			},
-		)
+		entry := &RPCEntry{Commands: make(map[int]*CommandStats)}
+		ctx := contextWithRPCEntry(testhelper.Context(t), entry)
+
+		NotifyCommandStarted(ctx, 5678, "git pack-objects", time.Now())
+
+		require.Equal(t, 1, entry.ActiveCommandCount())
 	})
 }
 
 func TestNotifyCommandCompleted(t *testing.T) {
 	t.Parallel()
-
-	bm := New(testhelper.SharedLogger(t))
 
 	t.Run("no entry in context", func(t *testing.T) {
 		// Should be a no-op and not panic.
@@ -325,19 +315,13 @@ func TestNotifyCommandCompleted(t *testing.T) {
 	})
 
 	t.Run("entry in context", func(t *testing.T) {
-		ctx := featureflag.IncomingCtxWithFeatureFlag(
-			testhelper.Context(t), featureflag.BurdenMonitorTrackCommands, true,
-		)
-		_, _ = bm.UnaryInterceptor()(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/foo.Service/M"},
-			func(ctx context.Context, req interface{}) (interface{}, error) {
-				entry, _ := rpcEntryFromContext(ctx)
-				NotifyCommandStarted(ctx, 5678, "git pack-objects", time.Now())
-				NotifyCommandCompleted(ctx, 5678, 100*time.Millisecond, 50*time.Millisecond)
+		entry := &RPCEntry{Commands: make(map[int]*CommandStats)}
+		ctx := contextWithRPCEntry(testhelper.Context(t), entry)
 
-				require.Equal(t, 0, entry.ActiveCommandCount())
-				require.Equal(t, 150*time.Millisecond, entry.TotalCPUTime())
-				return nil, nil
-			},
-		)
+		NotifyCommandStarted(ctx, 5678, "git pack-objects", time.Now())
+		NotifyCommandCompleted(ctx, 5678, 100*time.Millisecond, 50*time.Millisecond)
+
+		require.Equal(t, 0, entry.ActiveCommandCount())
+		require.Equal(t, 150*time.Millisecond, entry.TotalCPUTime())
 	})
 }

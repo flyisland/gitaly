@@ -6,6 +6,7 @@ import (
 
 	grpcmw "github.com/grpc-ecosystem/go-grpc-middleware"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
 	"google.golang.org/grpc"
 )
 
@@ -47,10 +48,21 @@ func NotifyCommandCompleted(ctx context.Context, pid int, userTime, systemTime t
 func (bm *BurdenMonitor) UnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if featureflag.BurdenMonitorTrackCommands.IsEnabled(ctx) {
-			ctx, entry := bm.RegisterRPC(ctx, info.FullMethod)
+			mi, err := protoregistry.GitalyProtoPreregistered.LookupMethod(info.FullMethod)
+			if err != nil {
+				// log a warning but continue request handling as normal
+				bm.logger.WithError(err).Warn("burden monitor stream interceptor: unable to lookup method info")
+				return handler(ctx, req)
+			}
 
-			defer bm.DeregisterRPC(entry.ID)
-			return handler(ctx, req)
+			// Only track accessor method in the burden monitor
+			if mi.Operation == protoregistry.OpAccessor {
+				ctx, entry := bm.RegisterRPC(ctx, info.FullMethod)
+
+				defer bm.DeregisterRPC(entry.ID)
+				return handler(ctx, req)
+
+			}
 		}
 
 		return handler(ctx, req)
@@ -61,13 +73,23 @@ func (bm *BurdenMonitor) UnaryInterceptor() grpc.UnaryServerInterceptor {
 func (bm *BurdenMonitor) StreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		if featureflag.BurdenMonitorTrackCommands.IsEnabled(stream.Context()) {
-			ctx, entry := bm.RegisterRPC(stream.Context(), info.FullMethod)
-			defer bm.DeregisterRPC(entry.ID)
+			mi, err := protoregistry.GitalyProtoPreregistered.LookupMethod(info.FullMethod)
+			if err != nil {
+				// log a warning but continue request handling as normal
+				bm.logger.WithError(err).Warn("burden monitor stream interceptor: unable to lookup method info")
+				return handler(srv, stream)
+			}
 
-			wrapped := grpcmw.WrapServerStream(stream)
-			wrapped.WrappedContext = ctx
+			// Only track accessor method in the burden monitor
+			if mi.Operation == protoregistry.OpAccessor {
+				ctx, entry := bm.RegisterRPC(stream.Context(), info.FullMethod)
+				defer bm.DeregisterRPC(entry.ID)
 
-			return handler(srv, wrapped)
+				wrapped := grpcmw.WrapServerStream(stream)
+				wrapped.WrappedContext = ctx
+
+				return handler(srv, wrapped)
+			}
 		}
 
 		return handler(srv, stream)
