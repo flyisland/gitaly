@@ -94,6 +94,7 @@ func serveAction(ctx context.Context, cmd *cli.Command) error {
 }
 
 func run(conf config.Config, appName string, logger log.Logger) error {
+	ctx := context.Background()
 	configure(logger, appName, conf)
 
 	tracerCloser := tracing.Initialize(tracing.WithServiceName(appName))
@@ -105,7 +106,7 @@ func run(conf config.Config, appName string, logger log.Logger) error {
 	}
 
 	promreg := prometheus.DefaultRegisterer
-	b, err := bootstrap.New(logger, promauto.With(promreg).NewCounterVec(
+	b, err := bootstrap.NewBootstrap(ctx, logger, promauto.With(promreg).NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gitaly_praefect_connections_total",
 			Help: "Total number of connections to Praefect",
@@ -155,7 +156,7 @@ type dbPromRegistryWrapper interface {
 	prometheus.Gatherer
 }
 
-func server(cfgs []starter.Config, conf config.Config, logger log.Logger, b bootstrap.Listener, promreg prometheus.Registerer, dbPromRegistry dbPromRegistryWrapper) error {
+func server(cfgs []starter.Config, conf config.Config, logger log.Logger, b bootstrap.Bootstrap, promreg prometheus.Registerer, dbPromRegistry dbPromRegistryWrapper) error {
 	nodeLatencyHistogram, err := metrics.RegisterNodeLatency(conf.Prometheus, promreg)
 	if err != nil {
 		return err

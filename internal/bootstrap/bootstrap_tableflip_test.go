@@ -14,10 +14,58 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/gitaly/storage/mode"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/helper"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
-func TestBootstrap_unixListener(t *testing.T) {
+// mockUpgrader mocks the tableflip upgrader so we
+// can test the tableFlipBootstrap with a simpler
+// and more flexible implementation of tableflip.
+type mockUpgrader struct {
+	exitCh    chan struct{}
+	readyCh   chan error
+	hasParent bool
+	stopped   bool
+}
+
+func (m *mockUpgrader) Exit() <-chan struct{} {
+	return m.exitCh
+}
+
+func (m *mockUpgrader) Stop() {
+	m.stopped = true
+}
+
+func (m *mockUpgrader) HasParent() bool {
+	return m.hasParent
+}
+
+func (m *mockUpgrader) Ready() error {
+	return <-m.readyCh
+}
+
+func (m *mockUpgrader) Upgrade() error {
+	// To upgrade, we send a message on the exit channel. Like this, we can assert that the exit
+	// signal has been consumed given that we'd otherwise block forever.
+	m.exitCh <- struct{}{}
+	return nil
+}
+
+type mockListener struct {
+	net.Listener
+	errorCh   chan<- error
+	closed    bool
+	listening bool
+}
+
+func (m *mockListener) Close() error {
+	m.closed = true
+	return nil
+}
+
+type mockListeners map[string]*mockListener
+
+func TestTableFlipBootstrap_unixListener(t *testing.T) {
 	for _, tc := range []struct {
 		desc               string
 		hasParent          bool
@@ -54,6 +102,8 @@ func TestBootstrap_unixListener(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
+			ctx := testhelper.Context(t)
+			logger := testhelper.SharedLogger(t)
 			tempDir := testhelper.TempDir(t)
 			socketPath := filepath.Join(tempDir, "gitaly-test-unix-socket")
 
@@ -70,11 +120,11 @@ func TestBootstrap_unixListener(t *testing.T) {
 				return sentinel, nil
 			}
 
-			upgrader := &mockUpgrader{
+			upg := &mockUpgrader{
 				hasParent: tc.hasParent,
 			}
 
-			b, err := _new(testhelper.SharedLogger(t), upgrader, listen, false, &prometheus.CounterVec{})
+			b, err := newTableFlipBootstrap(ctx, logger, &prometheus.CounterVec{}, upg, listen)
 			require.NoError(t, err)
 
 			if tc.preexistingSocket {
@@ -88,17 +138,22 @@ func TestBootstrap_unixListener(t *testing.T) {
 	}
 }
 
-func TestBootstrap_listenerError(t *testing.T) {
+func TestTableFlipBootstrap_listenerError(t *testing.T) {
 	ctx := testhelper.Context(t)
+	logger := testhelper.SharedLogger(t)
 
-	b, upgrader, listeners := setup(t, ctx)
+	b, upg, listeners := setupTableflipBootstrap(t, ctx, logger)
 
+	// Create a channel here to collect the error emitted
+	// by the Wait() channel.
 	waitCh := make(chan error)
-	go func() { waitCh <- b.Wait(helper.NewManualTicker(), nil) }()
+	go func() {
+		waitCh <- b.Wait(helper.NewManualTicker(), nil)
+	}()
 
 	// Signal readiness, but don't start the upgrade. Like this, we can close the listener in a
 	// raceless manner and wait for the error to propagate.
-	upgrader.readyCh <- nil
+	upg.readyCh <- nil
 
 	// Inject a listener error.
 	listeners["tcp"].errorCh <- assert.AnError
@@ -106,77 +161,115 @@ func TestBootstrap_listenerError(t *testing.T) {
 	require.Equal(t, assert.AnError, <-waitCh)
 }
 
-func TestBootstrap_signal(t *testing.T) {
-	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
-		t.Run(sig.String(), func(t *testing.T) {
-			ctx := testhelper.Context(t)
+func TestTableFlipBootstrap_signal(t *testing.T) {
+	testCases := []struct {
+		sig     os.Signal
+		stopped bool
+	}{
+		{
+			sig:     syscall.SIGTERM,
+			stopped: true,
+		},
+		{
+			sig:     syscall.SIGINT,
+			stopped: true,
+		},
+		{
+			sig:     syscall.SIGHUP,
+			stopped: false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.sig.String(), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(testhelper.Context(t))
+			logger := testhelper.SharedLogger(t)
 
-			b, upgrader, _ := setup(t, ctx)
+			b, upg, _ := setupTableflipBootstrap(t, ctx, logger)
 
 			waitCh := make(chan error)
-			go func() { waitCh <- b.Wait(helper.NewManualTicker(), nil) }()
+			go func() {
+				waitCh <- b.Wait(helper.NewManualTicker(), nil)
+			}()
 
 			// Start the upgrade, but don't unblock `Exit()` such that we'll be blocked
 			// waiting on the parent.
-			upgrader.readyCh <- nil
+			upg.readyCh <- nil
 
 			// We can now kill ourselves. This signal should be retrieved by `Wait()`,
 			// which would then return an error.
 			self, err := os.FindProcess(os.Getpid())
 			require.NoError(t, err)
-			require.NoError(t, self.Signal(sig))
+			require.NoError(t, self.Signal(tc.sig))
 
 			require.NoError(t, <-waitCh)
+			require.Equal(t, tc.stopped, upg.stopped)
+			cancel()
 		})
 	}
 }
 
-func TestBootstrap_gracefulUpgradeStuck(t *testing.T) {
-	ctx, cancel := context.WithCancel(testhelper.Context(t))
+func TestTableFlipBootstrap_gracefulUpgrade(t *testing.T) {
+	ctx := testhelper.Context(t)
+	logger := testhelper.SharedLogger(t)
 
-	b, upgrader, _ := setup(t, ctx)
+	b, upg, _ := setupTableflipBootstrap(t, ctx, logger)
+
+	err := performUpgrade(b, upg, helper.NewManualTicker(), nil, nil)
+	require.NoError(t, err)
+}
+
+func TestTableFlipBootstrap_gracefulUpgradeStuck(t *testing.T) {
+	ctx, cancel := context.WithCancel(testhelper.Context(t))
+	logger := testhelper.SharedLogger(t)
+
+	b, upg, _ := setupTableflipBootstrap(t, ctx, logger)
 
 	gracePeriodTicker := helper.NewManualTicker()
 
 	doneCh := make(chan struct{})
-	err := performUpgrade(t, b, upgrader, gracePeriodTicker, nil, func() {
-		defer close(doneCh)
 
+	stopActionFn := func() {
+		defer close(doneCh)
 		gracePeriodTicker.Tick()
 
 		// We block on context cancellation here, which essentially means that this won't
 		// terminate and thus the graceful upgrade will be stuck.
 		<-ctx.Done()
-	})
+	}
+
+	err := performUpgrade(b, upg, gracePeriodTicker, nil, stopActionFn)
 	require.Equal(t, fmt.Errorf("graceful upgrade: %w", fmt.Errorf("grace period expired")), err)
 
 	cancel()
 	<-doneCh
 }
 
-func TestBootstrap_gracefulTerminationStuck(t *testing.T) {
+func TestTableFlipBootstrap_gracefulTerminationStuck(t *testing.T) {
 	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
 		t.Run(sig.String(), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(testhelper.Context(t))
+			logger := testhelper.SharedLogger(t)
 
-			b, upgrader, _ := setup(t, ctx)
+			b, upg, _ := setupTableflipBootstrap(t, ctx, logger)
 
 			gracePeriodTicker := helper.NewManualTicker()
-			waitCh := make(chan error)
 
+			waitCh := make(chan error)
 			go func() {
-				waitCh <- b.Wait(gracePeriodTicker, func() {
+				stopActionFn := func() {
+					// This will allow the `waitGracePeriod()` to return.
 					gracePeriodTicker.Tick()
 
 					// We block on context cancellation here, which essentially means that this won't
 					// terminate and thus the graceful termination will be stuck.
 					<-ctx.Done()
-				})
+				}
+				waitCh <- b.Wait(gracePeriodTicker, stopActionFn)
 			}()
 
 			// Start the upgrade, but don't unblock `Exit()` such that we'll be blocked
 			// waiting on the parent.
-			upgrader.readyCh <- nil
+			upg.readyCh <- nil
 
 			// We can now kill ourselves. This signal should be retrieved by `Wait()`,
 			// which would then return an error.
@@ -187,46 +280,20 @@ func TestBootstrap_gracefulTerminationStuck(t *testing.T) {
 			require.EqualError(t, fmt.Errorf("received signal %q: wait: grace period expired", sig), (<-waitCh).Error())
 
 			cancel()
-			<-b.allServersDone
 		})
 	}
 }
 
-func TestBootstrap_gracefulUpgradeWithSignals(t *testing.T) {
-	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
-		t.Run(sig.String(), func(t *testing.T) {
-			ctx, cancel := context.WithCancel(testhelper.Context(t))
-
-			b, upgrader, _ := setup(t, ctx)
-
-			doneCh := make(chan struct{})
-			err := performUpgrade(t, b, upgrader, helper.NewManualTicker(), func() {
-				self, err := os.FindProcess(os.Getpid())
-				require.NoError(t, err)
-				require.NoError(t, self.Signal(sig))
-			}, func() {
-				defer close(doneCh)
-				// Block the upgrade indefinitely such that we can be sure that the
-				// signal was processed.
-				<-ctx.Done()
-			})
-			require.Equal(t, fmt.Errorf("graceful upgrade: %w", fmt.Errorf("force shutdown")), err)
-
-			cancel()
-			<-doneCh
-		})
-	}
-}
-
-func TestBootstrap_gracefulUpgradeTimeoutWithListenerError(t *testing.T) {
+func TestTableFlipBootstrap_gracefulUpgradeTimeoutWithListenerError(t *testing.T) {
 	ctx, cancel := context.WithCancel(testhelper.Context(t))
+	logger := testhelper.SharedLogger(t)
 
-	b, upgrader, listeners := setup(t, ctx)
+	b, upg, listeners := setupTableflipBootstrap(t, ctx, logger)
 
 	gracePeriodTicker := helper.NewManualTicker()
 
 	doneCh := make(chan struct{})
-	err := performUpgrade(t, b, upgrader, gracePeriodTicker, nil, func() {
+	err := performUpgrade(b, upg, gracePeriodTicker, nil, func() {
 		defer close(doneCh)
 
 		// We inject an error into the Unix socket to assert that this won't kill the server
@@ -245,47 +312,42 @@ func TestBootstrap_gracefulUpgradeTimeoutWithListenerError(t *testing.T) {
 	<-doneCh
 }
 
-func TestBootstrap_gracefulUpgrade(t *testing.T) {
+func TestTableFlipBootstrap_portReuse(t *testing.T) {
+	_ = os.Setenv(EnvUpgradesEnabled, "true")
 	ctx := testhelper.Context(t)
+	logger := testhelper.SharedLogger(t)
 
-	b, upgrader, _ := setup(t, ctx)
-
-	require.NoError(t, performUpgrade(t, b, upgrader, helper.NewManualTicker(), nil, nil))
-}
-
-func TestBootstrap_portReuse(t *testing.T) {
-	b, err := New(testhelper.SharedLogger(t), &prometheus.CounterVec{})
+	b, err := NewBootstrap(ctx, logger, &prometheus.CounterVec{})
 	require.NoError(t, err)
 
-	l, err := b.listen("tcp", "localhost:")
+	tf, ok := b.(*tableFlipBootstrap)
+	require.True(t, ok)
+
+	l, err := tf.listen("tcp", "localhost:")
 	require.NoError(t, err, "failed to bind")
 
 	addr := l.Addr().String()
 	_, port, err := net.SplitHostPort(addr)
 	require.NoError(t, err)
 
-	l, err = b.listen("tcp", "localhost:"+port)
+	l, err = tf.listen("tcp", "localhost:"+port)
 	require.NoError(t, err, "failed to bind")
 	require.NoError(t, l.Close())
 
-	b.upgrader.Stop()
+	tf.upgrader.Stop()
 }
 
-func performUpgrade(
-	t *testing.T,
-	b *Bootstrap,
-	upgrader *mockUpgrader,
-	gracePeriodTicker helper.Ticker,
-	duringGracePeriodCallback func(),
-	stopAction func(),
-) error {
+// performUpgrade triggers an update on the upgrader by sending a value into the exit channel.
+func performUpgrade(b *tableFlipBootstrap, upg *mockUpgrader, gracePeriodTicker helper.Ticker, duringGracePeriodCallback func(), stopAction func()) error {
 	waitCh := make(chan error)
-	go func() { waitCh <- b.Wait(gracePeriodTicker, stopAction) }()
+	go func() {
+		waitCh <- b.Wait(gracePeriodTicker, stopAction)
+	}()
 
 	// Simulate an upgrade request after entering into the blocking b.Wait() and during the
 	// slowRequest execution
-	upgrader.readyCh <- nil
-	upgrader.exitCh <- struct{}{}
+	upg.readyCh <- nil
+	upg.exitCh <- struct{}{}
 
 	// We know that `exitCh` has been consumed, so we're now in the grace period where we wait
 	// for the old server to exit.
@@ -296,13 +358,13 @@ func performUpgrade(
 	return <-waitCh
 }
 
-func setup(t *testing.T, ctx context.Context) (*Bootstrap, *mockUpgrader, mockListeners) {
+func setupTableflipBootstrap(t *testing.T, ctx context.Context, logger log.Logger) (*tableFlipBootstrap, *mockUpgrader, mockListeners) {
 	u := &mockUpgrader{
 		exitCh:  make(chan struct{}),
 		readyCh: make(chan error),
 	}
 
-	b, err := _new(testhelper.SharedLogger(t), u, net.Listen, false, &prometheus.CounterVec{})
+	b, err := newTableFlipBootstrap(ctx, logger, &prometheus.CounterVec{}, u, net.Listen)
 	require.NoError(t, err)
 
 	listeners := mockListeners{}
@@ -332,44 +394,3 @@ func setup(t *testing.T, ctx context.Context) (*Bootstrap, *mockUpgrader, mockLi
 
 	return b, u, listeners
 }
-
-type mockUpgrader struct {
-	exitCh    chan struct{}
-	readyCh   chan error
-	hasParent bool
-}
-
-func (m *mockUpgrader) Exit() <-chan struct{} {
-	return m.exitCh
-}
-
-func (m *mockUpgrader) Stop() {}
-
-func (m *mockUpgrader) HasParent() bool {
-	return m.hasParent
-}
-
-func (m *mockUpgrader) Ready() error {
-	return <-m.readyCh
-}
-
-func (m *mockUpgrader) Upgrade() error {
-	// To upgrade, we send a message on the exit channel. Like this, we can assert that the exit
-	// signal has been consumed given that we'd otherwise block forever.
-	m.exitCh <- struct{}{}
-	return nil
-}
-
-type mockListener struct {
-	net.Listener
-	errorCh   chan<- error
-	closed    bool
-	listening bool
-}
-
-func (m *mockListener) Close() error {
-	m.closed = true
-	return nil
-}
-
-type mockListeners map[string]*mockListener
