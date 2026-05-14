@@ -671,14 +671,16 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	bm := burdenmonitor.New(logger)
 	bm.StartPoller(ctx)
 
-	loadShedder, err := burdenmonitor.NewLoadShedder(
-		burdenmonitor.LoadShedderConfig{PSI: cfg.AdaptiveLimiting.PSIPressure},
-		logger, loadMonitor, bm,
-	)
-	if err != nil {
-		return fmt.Errorf("creating load shedder: %w", err)
+	if cfg.LoadShedder.Enabled {
+		loadShedder, err := burdenmonitor.NewLoadShedder(
+			burdenmonitor.LoadShedderConfig{PSI: cfg.AdaptiveLimiting.PSIPressure},
+			logger, loadMonitor, bm,
+		)
+		if err != nil {
+			return fmt.Errorf("creating load shedder: %w", err)
+		}
+		loadShedder.Start(ctx)
 	}
-	loadShedder.Start(ctx)
 
 	gitalyServerFactory := server.NewGitalyServerFactory(
 		cfg,

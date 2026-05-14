@@ -54,6 +54,32 @@ max_inactive_partitions = 1
 	require.Equal(t, cfg.Transactions.MaxInactivePartitions, uint(1))
 }
 
+func TestLoadLoadShedder(t *testing.T) {
+	t.Run("defaults to disabled when section is absent", func(t *testing.T) {
+		cfg, err := Load(strings.NewReader(``))
+		require.NoError(t, err)
+		require.False(t, cfg.LoadShedder.Enabled)
+	})
+
+	t.Run("explicit disable", func(t *testing.T) {
+		cfg, err := Load(strings.NewReader(`
+[load_shedder]
+enabled = false
+		`))
+		require.NoError(t, err)
+		require.False(t, cfg.LoadShedder.Enabled)
+	})
+
+	t.Run("explicit enable", func(t *testing.T) {
+		cfg, err := Load(strings.NewReader(`
+[load_shedder]
+enabled = true
+		`))
+		require.NoError(t, err)
+		require.True(t, cfg.LoadShedder.Enabled)
+	})
+}
+
 func TestLoadEmptyConfig(t *testing.T) {
 	cfg, err := Load(strings.NewReader(``))
 	require.NoError(t, err)

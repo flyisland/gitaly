@@ -148,6 +148,7 @@ type Cfg struct {
 	Timeout                TimeoutConfig       `json:"timeout"                     toml:"timeout,omitempty"`
 	Transactions           Transactions        `json:"transactions,omitempty"      toml:"transactions,omitempty"`
 	AdaptiveLimiting       AdaptiveLimiting    `json:"adaptive_limiting,omitempty" toml:"adaptive_limiting,omitempty"`
+	LoadShedder            LoadShedder         `json:"load_shedder,omitempty"      toml:"load_shedder,omitempty"`
 	Raft                   Raft                `json:"raft,omitempty"              toml:"raft,omitempty"`
 	Offloading             Offloading          `json:"offloading,omitempty"        toml:"offloading,omitempty"`
 	PoolMetadata           PoolMetadataConfig  `json:"pool_metadata,omitempty"     toml:"pool_metadata,omitempty"`
@@ -742,6 +743,13 @@ func (c AdaptiveLimiting) Validate() error {
 		Append(cfgerror.Comparable(c.CPUThrottledThreshold).GreaterOrEqual(0), "cpu_throttled_threshold").
 		Append(cfgerror.Comparable(c.MemoryThreshold).GreaterOrEqual(0), "memory_threshold").
 		AsError()
+}
+
+// LoadShedder configures Gitaly's load shedder, which cancels the
+// highest-cost in-flight RPCs when the load monitor reports a critical
+// condition.
+type LoadShedder struct {
+	Enabled bool `json:"enabled,omitempty" toml:"enabled,omitempty"`
 }
 
 // PackObjectsLimiting allows the concurrency of pack objects processes to be limited
