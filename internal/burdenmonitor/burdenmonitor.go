@@ -12,25 +12,14 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/middleware/requestinfohandler"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/grpc/protoregistry"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
-	"gitlab.com/gitlab-org/gitaly/v18/internal/structerr"
-	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"gitlab.com/gitlab-org/labkit/correlation"
 )
 
-var (
-	rpcsShedTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "gitaly_burdenmonitor_rpcs_shed_total",
-			Help: "Total number of RPCs cancelled by the burden monitor",
-		},
-		[]string{"grpc_service", "grpc_method", "reason"},
-	)
-	activeRPCsGauge = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "gitaly_burdenmonitor_active_rpcs",
-			Help: "Number of RPCs currently tracked by the burden monitor",
-		},
-	)
+var activeRPCsGauge = promauto.NewGauge(
+	prometheus.GaugeOpts{
+		Name: "gitaly_burdenmonitor_active_rpcs",
+		Help: "Number of RPCs currently tracked by the burden monitor",
+	},
 )
 
 // SortBy specifies the field to sort RPC entries by.
@@ -59,8 +48,7 @@ func (s SortBy) reason() string {
 // BurdenMonitor tracks active RPCs and their resource consumption.
 // It maintains a registry of all in-flight RPCs and their spawned commands, polling
 // their resource usage periodically. This provides observability into RPC activity
-// similar to how the 'top' command shows process information. The monitor can also
-// cancel resource-intensive RPCs when needed for load management.
+// similar to how the 'top' command shows process information.
 type BurdenMonitor struct {
 	logger log.Logger
 
@@ -139,9 +127,8 @@ func (bm *BurdenMonitor) Entries() []*RPCEntry {
 }
 
 // EntriesSortedBy returns all tracked RPC entries sorted by the specified field.
-// This is used internally for logging and determining which RPCs to cancel.
 // The returned entries are sorted in descending order (highest resource usage first).
-func (bm *BurdenMonitor) EntriesSortedBy(sortBy SortBy) []*RPCEntry {
+func (bm *BurdenMonitor) entriesSortedBy(sortBy SortBy) []*RPCEntry {
 	entries := bm.Entries()
 
 	switch sortBy {
@@ -162,36 +149,13 @@ func (bm *BurdenMonitor) EntriesSortedBy(sortBy SortBy) []*RPCEntry {
 	return entries
 }
 
-func (bm *BurdenMonitor) snipe(entry *RPCEntry, reason string) {
-	err := structerr.NewResourceExhausted(
-		"RPC cancelled by burden monitor: %s", reason).
-		WithDetail(&gitalypb.LimitError{ErrorMessage: reason})
-
-	entry.Cancel(err)
-
-	rpcsShedTotal.WithLabelValues(entry.ServiceName, entry.MethodName, reason).Inc()
-
-	bm.logger.WithFields(log.Fields{
-		"rpc_id":         entry.ID,
-		"correlation_id": entry.CorrelationID,
-		"repository":     entry.Repository,
-		"reason":         reason,
-		"cpu_time_ms":    entry.TotalCPUTime().Milliseconds(),
-		"memory_bytes":   entry.TotalMemory(),
-		"active_cmds":    entry.ActiveCommandCount(),
-	}).WarnContext(entry.Context, "sniped RPC by burden monitor")
-}
-
-// SnipeTopN cancels the top N RPCs sorted by the specified field and returns the count cancelled.
-// This can be called when resource thresholds are exceeded to shed load by cancelling
-// the most resource-intensive RPCs.
-func (bm *BurdenMonitor) SnipeTopN(n int, sortBy SortBy) int {
-	entries := bm.EntriesSortedBy(sortBy)
-
-	count := 0
-	for i := 0; i < n && i < len(entries); i++ {
-		bm.snipe(entries[i], sortBy.reason())
-		count++
+// GetTopNEntries returns the top N tracked RPC entries sorted by the specified
+// field, in descending order. If fewer than N entries exist, the returned slice
+// is shorter than N.
+func (bm *BurdenMonitor) GetTopNEntries(n int, sortBy SortBy) []*RPCEntry {
+	entries := bm.entriesSortedBy(sortBy)
+	if len(entries) > n {
+		entries = entries[:n]
 	}
-	return count
+	return entries
 }
