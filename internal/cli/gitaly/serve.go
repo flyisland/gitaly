@@ -264,7 +264,7 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 	logger.WithField("duration_ms", time.Since(began).Milliseconds()).Info("finished unpacking auxiliary binaries")
 
 	began = time.Now()
-	b, err := bootstrap.NewBootstrap(ctx, logger, promauto.NewCounterVec(
+	b, err := bootstrap.New(logger, promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "gitaly_connections_total",
 			Help: "Total number of connections to Gitaly",
