@@ -146,7 +146,7 @@ func NewClientHandshaker(logger log.Logger, registry *Registry) client.Handshake
 	// server will block for 5 minutes by default before erroring out. This
 	// makes testing difficult and there is no reason to have such a long
 	// timeout in the case of sidechannels. A 1 second timeout is also OK.
-	cfg.ConnectionWriteTimeout = time.Second
+	cfg.StreamCloseTimeout = time.Second
 
 	return backchannel.NewClientHandshaker(
 		logger,

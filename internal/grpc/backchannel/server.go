@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 
+	hashicorpyamux "github.com/hashicorp/yamux"
 	libp2pyamux "github.com/libp2p/go-yamux/v5"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"google.golang.org/grpc"
@@ -71,25 +72,40 @@ func withSessionInfo(authInfo credentials.AuthInfo, id ID, muxSession MuxSession
 
 // ServerHandshaker implements the server side handshake of the multiplexed connection.
 type ServerHandshaker struct {
-	registry *Registry
-	logger   log.Logger
-	dialOpts []grpc.DialOption
+	registry  *Registry
+	logger    log.Logger
+	dialOpts  []grpc.DialOption
+	useLibp2p bool
 }
 
 // Magic is used by listenmux to retrieve the magic string for
 // backchannel connections.
 func (s *ServerHandshaker) Magic() string { return string(magicBytes) }
 
+// ServerHandshakerOption is a functional option for NewServerHandshaker.
+type ServerHandshakerOption func(*ServerHandshaker)
+
+// WithLibp2pYamux configures the server handshaker to use libp2p yamux instead of hashicorp yamux.
+func WithLibp2pYamux() ServerHandshakerOption {
+	return func(s *ServerHandshaker) {
+		s.useLibp2p = true
+	}
+}
+
 // NewServerHandshaker returns a new server side implementation of the backchannel. The provided TransportCredentials
 // are handshaked prior to initializing the multiplexing session. The Registry is used to store the backchannel connections.
 // DialOptions can be used to set custom dial options for the backchannel connections. They must not contain a dialer or
 // transport credentials as those set by the handshaker.
-func NewServerHandshaker(logger log.Logger, reg *Registry, dialOpts []grpc.DialOption) *ServerHandshaker {
-	return &ServerHandshaker{
+func NewServerHandshaker(logger log.Logger, reg *Registry, dialOpts []grpc.DialOption, opts ...ServerHandshakerOption) *ServerHandshaker {
+	s := &ServerHandshaker{
 		registry: reg,
 		logger:   logger,
 		dialOpts: dialOpts,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Handshake establishes a gRPC ClientConn back to the backchannel client
@@ -110,7 +126,7 @@ func (s *ServerHandshaker) Handshake(conn net.Conn, authInfo credentials.AuthInf
 	cfg := DefaultConfiguration()
 	cfg.AcceptBacklog = 1
 	cfg.MaximumStreamWindowSizeBytes = 16 * 1024 * 1024
-	muxSession, err := newServerMuxSession(newInstrumentedConn(conn), s.logger.WithField("component", "backchannel.YamuxServer"), cfg)
+	muxSession, err := newServerMuxSession(newInstrumentedConn(conn), s.logger.WithField("component", "backchannel.YamuxServer"), cfg, s.useLibp2p)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create multiplexing session: %w", err)
 	}
@@ -162,10 +178,18 @@ func (s *ServerHandshaker) Handshake(conn net.Conn, authInfo credentials.AuthInf
 		nil
 }
 
-func newServerMuxSession(conn net.Conn, logger log.Logger, cfg Configuration) (MuxSession, error) {
-	session, err := libp2pyamux.Server(conn, libp2pMuxConfig(logger, cfg), nil)
+func newServerMuxSession(conn net.Conn, logger log.Logger, cfg Configuration, useLibp2p bool) (MuxSession, error) {
+	if useLibp2p {
+		session, err := libp2pyamux.Server(conn, libp2pMuxConfig(logger, cfg), nil)
+		if err != nil {
+			return nil, err
+		}
+		return &libp2pSession{session}, nil
+	}
+
+	session, err := hashicorpyamux.Server(conn, hashicorpMuxConfig(logger, cfg))
 	if err != nil {
 		return nil, err
 	}
-	return &libp2pSession{session}, nil
+	return &hashicorpSession{session}, nil
 }
