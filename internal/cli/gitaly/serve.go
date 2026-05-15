@@ -595,54 +595,57 @@ func run(appCtx *cli.Command, cfg config.Cfg, logger log.Logger) error {
 		for i := range cfg.Storages {
 			storagePaths[i] = cfg.Storages[i].Path
 		}
-
-		if mayHaveWAL, err := storagemgr.MayHavePendingWAL(storagePaths); err != nil {
-			return fmt.Errorf("may have pending WAL: %w", err)
-		} else if mayHaveWAL {
-			dbMgr, err := databasemgr.NewDBManager(
-				ctx,
-				cfg.Storages,
-				keyvalue.NewBadgerStore,
-				helper.NewTimerTickerFactory(time.Minute),
-				logger,
-			)
-			if err != nil {
-				return fmt.Errorf("new db manager: %w", err)
-			}
-			defer dbMgr.Close()
-
-			partitionFactoryOptions := []partition.FactoryOption{
-				partition.WithCmdFactory(gitCmdFactory),
-				partition.WithRepoFactory(localrepoFactory),
-				partition.WithMetrics(partitionMetrics),
-				partition.WithRaftConfig(cfg.Raft),
-			}
-
-			nodeMgr, err := nodeimpl.NewManager(
-				cfg.Storages,
-				storagemgr.NewFactory(
+		// When transactions are disabled, only recover pending transactions
+		// if explicitly required.
+		if cfg.Transactions.RecoverPendingWal {
+			if mayHaveWAL, err := storagemgr.MayHavePendingWAL(storagePaths); err != nil {
+				return fmt.Errorf("may have pending WAL: %w", err)
+			} else if mayHaveWAL {
+				dbMgr, err := databasemgr.NewDBManager(
+					ctx,
+					cfg.Storages,
+					keyvalue.NewBadgerStore,
+					helper.NewTimerTickerFactory(time.Minute),
 					logger,
-					dbMgr,
-					partition.NewFactory(partitionFactoryOptions...),
-					// In recovery mode we don't want to keep inactive partitions active. The cache
-					// however can't be disabled so simply set it to one.
-					1,
-					storageMetrics,
-				),
-			)
-			if err != nil {
-				return fmt.Errorf("new node: %w", err)
-			}
-			defer nodeMgr.Close()
+				)
+				if err != nil {
+					return fmt.Errorf("new db manager: %w", err)
+				}
+				defer dbMgr.Close()
 
-			recoveryMiddleware := storagemgr.NewTransactionRecoveryMiddleware(protoregistry.GitalyProtoPreregistered, nodeMgr)
-			txMiddleware = server.TransactionMiddleware{
-				UnaryInterceptors: []grpc.UnaryServerInterceptor{
-					recoveryMiddleware.UnaryServerInterceptor(),
-				},
-				StreamInterceptors: []grpc.StreamServerInterceptor{
-					recoveryMiddleware.StreamServerInterceptor(),
-				},
+				partitionFactoryOptions := []partition.FactoryOption{
+					partition.WithCmdFactory(gitCmdFactory),
+					partition.WithRepoFactory(localrepoFactory),
+					partition.WithMetrics(partitionMetrics),
+					partition.WithRaftConfig(cfg.Raft),
+				}
+
+				nodeMgr, err := nodeimpl.NewManager(
+					cfg.Storages,
+					storagemgr.NewFactory(
+						logger,
+						dbMgr,
+						partition.NewFactory(partitionFactoryOptions...),
+						// In recovery mode we don't want to keep inactive partitions active. The cache
+						// however can't be disabled so simply set it to one.
+						1,
+						storageMetrics,
+					),
+				)
+				if err != nil {
+					return fmt.Errorf("new node: %w", err)
+				}
+				defer nodeMgr.Close()
+
+				recoveryMiddleware := storagemgr.NewTransactionRecoveryMiddleware(protoregistry.GitalyProtoPreregistered, nodeMgr)
+				txMiddleware = server.TransactionMiddleware{
+					UnaryInterceptors: []grpc.UnaryServerInterceptor{
+						recoveryMiddleware.UnaryServerInterceptor(),
+					},
+					StreamInterceptors: []grpc.StreamServerInterceptor{
+						recoveryMiddleware.StreamServerInterceptor(),
+					},
+				}
 			}
 		}
 

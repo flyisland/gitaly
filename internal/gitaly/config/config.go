@@ -168,6 +168,14 @@ type Transactions struct {
 	// MaxInactivePartitions specifies the maximum number of standby partitions. Defaults to 100 if not set.
 	// It does not depend on whether Transactions is enabled.
 	MaxInactivePartitions uint `json:"max_inactive_partitions,omitempty" toml:"max_inactive_partitions,omitempty"`
+	// RecoverPendingWal is a temporary config. Do not rely on it.
+	// Currently, when running Gitaly with transactions disabled, if a WAL is detected on disk
+	// Gitaly will try to apply the pending WAL entries if any, in order to bring repositories
+	// to their desired state. Now, to enable applying pending WAL entries, this config must be
+	// explicitly set to `true`. This is a change in behavior. Before this config, the default was to
+	// apply the pending WAL entries when transactions were disabled. Now, it must be explicitly enabled.
+	// Default is false.
+	RecoverPendingWal bool `json:"recover_pending_wal,omitempty" toml:"recover_pending_wal,omitempty"`
 }
 
 // TimeoutConfig represents negotiation timeouts for remote Git operations
