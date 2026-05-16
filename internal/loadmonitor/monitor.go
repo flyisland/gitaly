@@ -375,11 +375,18 @@ func (m *DefaultMonitor) notify(ctx context.Context) (timeoutExpired bool) {
 
 				// This is for monitoring purposes. We want to log each Condition
 				// that has not returned when the NotifyTimeout was reached.
+				// We only log when the deadline was actually exceeded, not when
+				// notifyCtx was cancelled by the deferred cancelNotify() in the
+				// parent — otherwise this races with `doneCh` and emits spurious
+				// warnings on fast condition completions.
 				doneCh := make(chan struct{}, 1)
 				go func() {
 					select {
 					case <-doneCh:
 					case <-notifyCtx.Done():
+						if !errors.Is(notifyCtx.Err(), context.DeadlineExceeded) {
+							return
+						}
 						t := m.cfg.NotifyTimeout.String()
 						d := condition.Name
 						msg := fmt.Sprintf("LoadMonitor notify timeout (%q) reached! Condition %q did not complete in time.", t, d)
