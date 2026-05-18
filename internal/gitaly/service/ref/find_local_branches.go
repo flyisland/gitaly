@@ -18,6 +18,20 @@ func (s *server) FindLocalBranches(in *gitalypb.FindLocalBranchesRequest, stream
 	if err := s.locator.ValidateRepository(stream.Context(), in.GetRepository()); err != nil {
 		return structerr.NewInvalidArgument("%w", err)
 	}
+
+	for _, pattern := range in.GetExcludePatterns() {
+		p := string(pattern)
+		if p == "" {
+			return structerr.NewInvalidArgument("empty exclude pattern")
+		}
+		if strings.ContainsRune(p, 0) {
+			return structerr.NewInvalidArgument("exclude pattern contains null byte: %q", p)
+		}
+		if !strings.HasPrefix(p, "refs/heads/") {
+			return structerr.NewInvalidArgument("exclude pattern must start with %q: %q", "refs/heads/", p)
+		}
+	}
+
 	if err := s.findLocalBranches(in, stream); err != nil {
 		return err
 	}
@@ -62,6 +76,10 @@ func (s *server) findLocalBranches(in *gitalypb.FindLocalBranchesRequest, stream
 		// %00 inserts the null character into the output (see for-each-ref docs)
 		gitcmd.Flag{Name: "--format=" + strings.Join(format, "%00")},
 		gitcmd.Flag{Name: "--sort=" + parseSortKey(in.GetSortBy())},
+	}
+
+	for _, pattern := range in.GetExcludePatterns() {
+		opts.excludePatterns = append(opts.excludePatterns, string(pattern))
 	}
 
 	chunker := chunk.New(&branchSender{branches: []*gitalypb.Branch{}, stream: stream})
