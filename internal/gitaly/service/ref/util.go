@@ -203,7 +203,8 @@ type findRefsOpts struct {
 	cmdArgs []gitcmd.Option
 	delim   byte
 	lines.SenderOpts
-	sortBy string
+	sortBy          string
+	excludePatterns []string
 }
 
 // Iterator is an iterator that iterates over a set of references
@@ -272,6 +273,10 @@ func NewBranchIterator(
 
 	if opts.sortBy != "" {
 		options = append(options, gitcmd.Flag{Name: "--sort=" + opts.sortBy})
+	}
+
+	for _, pattern := range opts.excludePatterns {
+		options = append(options, gitcmd.Flag{Name: "--exclude=" + pattern})
 	}
 
 	cmd, err := repo.Exec(ctx, gitcmd.Command{
@@ -428,6 +433,10 @@ func (s *server) findRefs(ctx context.Context, writer lines.Sender, repo gitcmd.
 		options = append(options, gitcmd.Flag{Name: "--format=%(refname)"}) // Default format
 	} else {
 		options = append(options, opts.cmdArgs...)
+	}
+
+	for _, pattern := range opts.excludePatterns {
+		options = append(options, gitcmd.Flag{Name: "--exclude=" + pattern})
 	}
 
 	var stderr strings.Builder

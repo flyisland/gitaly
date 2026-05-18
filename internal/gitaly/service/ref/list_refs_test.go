@@ -394,6 +394,86 @@ func TestServer_ListRefs(t *testing.T) {
 				{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
 			},
 		},
+		{
+			desc: "exclude single branch",
+			request: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/heads/*")},
+				ExcludePatterns: [][]byte{[]byte("refs/heads/main")},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/old"), Target: oldCommitID.String()},
+				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
+			},
+		},
+		{
+			desc: "exclude multiple branches",
+			request: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/heads/*")},
+				ExcludePatterns: [][]byte{[]byte("refs/heads/main"), []byte("refs/heads/old")},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
+			},
+		},
+		{
+			desc: "exclude with glob pattern",
+			request: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/tags/*")},
+				ExcludePatterns: [][]byte{[]byte("refs/tags/old-*")},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/tags/annotated-tag"), Target: annotatedTagOID},
+				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+			},
+		},
+		{
+			desc: "exclude non-existent ref",
+			request: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/heads/*")},
+				ExcludePatterns: [][]byte{[]byte("refs/heads/nonexistent")},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/main"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/old"), Target: oldCommitID.String()},
+				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
+			},
+		},
+		{
+			desc: "exclude with pagination",
+			request: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/tags/*")},
+				ExcludePatterns: [][]byte{[]byte("refs/tags/annotated-tag")},
+				PaginationParams: &gitalypb.PaginationParameter{
+					Limit: 2,
+				},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/tags/lightweight-tag"), Target: newCommitID.String()},
+				{Name: []byte("refs/tags/old-commit-tag"), Target: oldCommitID.String()},
+			},
+		},
+		{
+			desc: "exclude pattern outside scanned namespace",
+			request: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/heads/*")},
+				ExcludePatterns: [][]byte{[]byte("refs/tags/v1")},
+			},
+			expected: []*gitalypb.ListRefsResponse_Reference{
+				{Name: []byte("refs/heads/UPPER"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/main"), Target: newCommitID.String()},
+				{Name: []byte("refs/heads/old"), Target: oldCommitID.String()},
+				{Name: []byte("refs/heads/symbolic"), Target: newCommitID.String()},
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
@@ -599,6 +679,33 @@ func TestListRefs_validate(t *testing.T) {
 				},
 			},
 			expectedErr: status.Error(codes.InvalidArgument, "sorting direction is not supported"),
+		},
+		{
+			desc: "empty exclude pattern",
+			req: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/heads/*")},
+				ExcludePatterns: [][]byte{[]byte("")},
+			},
+			expectedErr: status.Error(codes.InvalidArgument, "empty exclude pattern"),
+		},
+		{
+			desc: "exclude pattern without refs/ prefix",
+			req: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/heads/*")},
+				ExcludePatterns: [][]byte{[]byte("main")},
+			},
+			expectedErr: status.Error(codes.InvalidArgument, `exclude pattern must start with "refs/": "main"`),
+		},
+		{
+			desc: "exclude pattern with null byte",
+			req: &gitalypb.ListRefsRequest{
+				Repository:      repo,
+				Patterns:        [][]byte{[]byte("refs/heads/*")},
+				ExcludePatterns: [][]byte{[]byte("refs/heads/\x00evil")},
+			},
+			expectedErr: status.Error(codes.InvalidArgument, `exclude pattern contains null byte: "refs/heads/\x00evil"`),
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
