@@ -12,7 +12,7 @@ import (
 	"sort"
 	"time"
 
-	libp2pyamux "github.com/libp2p/go-yamux/v5"
+	"github.com/hashicorp/yamux"
 	"github.com/pelletier/go-toml/v2"
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/errors/cfgerror"
@@ -263,7 +263,7 @@ func (cfg Yamux) Validate() error {
 
 // DefaultYamuxConfig returns the default Yamux configuration values.
 func DefaultYamuxConfig() Yamux {
-	defaultCfg := libp2pyamux.DefaultConfig()
+	defaultCfg := yamux.DefaultConfig()
 	return Yamux{
 		MaximumStreamWindowSizeBytes: defaultCfg.MaxStreamWindowSize,
 		AcceptBacklog:                uint(defaultCfg.AcceptBacklog),
