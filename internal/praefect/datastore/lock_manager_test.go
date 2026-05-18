@@ -40,12 +40,12 @@ func TestRepositoryReferenceWriteLock(t *testing.T) {
 		mgr := NewRepoReferenceWriteLockManager(ctx, db, dbConfig, logger)
 		waitForListener(mgr.handler.ready)
 
-		unlock, renew, err := mgr.Lock(ctx, "default", "repo/acquire.git", 1)
+		lock, err := mgr.Lock(ctx, "default", "repo/acquire.git", 1)
 		require.NoError(t, err)
-		require.NotNil(t, unlock)
-		require.NotNil(t, renew)
+		require.NotNil(t, lock.Unlock)
+		require.NotNil(t, lock.Renew)
 
-		require.NoError(t, unlock())
+		require.NoError(t, lock.Unlock())
 	})
 
 	t.Run("callers with same txn id acquires lock successfully", func(t *testing.T) {
@@ -60,11 +60,11 @@ func TestRepositoryReferenceWriteLock(t *testing.T) {
 		for i := 0; i < callerNum; i++ {
 			go func(j int) {
 				defer wg.Done()
-				unlock, renew, err := mgr.Lock(ctx, "default", "acquire-reentrant.git", 1)
+				lock, err := mgr.Lock(ctx, "default", "acquire-reentrant.git", 1)
 				require.NoError(t, err)
-				require.NotNil(t, unlock)
-				require.NotNil(t, renew)
-				unlockCalls[j] = unlock
+				require.NotNil(t, lock.Unlock)
+				require.NotNil(t, lock.Renew)
+				unlockCalls[j] = lock.Unlock
 			}(i)
 		}
 		wg.Wait()
@@ -80,23 +80,23 @@ func TestRepositoryReferenceWriteLock(t *testing.T) {
 
 		storageName := "default"
 		relativePath := "repo/repo/release_and_acquire.git"
-		unlock1, renew1, err1 := mgr.Lock(ctx, storageName, relativePath, 1)
+		lock1, err1 := mgr.Lock(ctx, storageName, relativePath, 1)
 		require.NoError(t, err1)
-		require.NotNil(t, unlock1)
-		require.NotNil(t, renew1)
+		require.NotNil(t, lock1.Unlock)
+		require.NotNil(t, lock1.Renew)
 
 		go func() {
 			// The first caller releases the lock after 1s
 			<-time.After(1 * time.Second)
-			require.NoError(t, unlock1())
+			require.NoError(t, lock1.Unlock())
 		}()
 
 		// The second should block here and eventually have the lock after it is released
-		unlock2, renew2, err2 := mgr.Lock(ctx, storageName, relativePath, 2)
+		lock2, err2 := mgr.Lock(ctx, storageName, relativePath, 2)
 		require.NoError(t, err2)
-		require.NotNil(t, unlock2)
-		require.NotNil(t, renew2)
-		require.NoError(t, unlock2())
+		require.NotNil(t, lock2.Unlock)
+		require.NotNil(t, lock2.Renew)
+		require.NoError(t, lock2.Unlock())
 	})
 
 	t.Run("second txn fails to acquire held lock and receives notification channel", func(t *testing.T) {
@@ -159,7 +159,7 @@ func TestRepositoryReferenceWriteLock(t *testing.T) {
 		mgr := NewRepoReferenceWriteLockManager(ctx, db, dbConfig, logger)
 		waitForListener(mgr.handler.ready)
 
-		_, _, err1 := mgr.Lock(ctx, "default", "repo/expire.git", 1)
+		_, err1 := mgr.Lock(ctx, "default", "repo/expire.git", 1)
 		require.NoError(t, err1)
 
 		// Simulate expiry by back-dating the lock directly in the DB.
@@ -169,9 +169,9 @@ func TestRepositoryReferenceWriteLock(t *testing.T) {
 			WHERE lock_id = 'default|repo/expire.git'`)
 		require.NoError(t, err)
 
-		unlock2, _, err2 := mgr.Lock(ctx, "default", "repo/expire.git", 2)
+		lock2, err2 := mgr.Lock(ctx, "default", "repo/expire.git", 2)
 		require.NoError(t, err2)
-		require.NoError(t, unlock2())
+		require.NoError(t, lock2.Unlock())
 	})
 
 	t.Run("renew extends lock and prevents acquisition by another txn", func(t *testing.T) {
@@ -181,7 +181,7 @@ func TestRepositoryReferenceWriteLock(t *testing.T) {
 
 		res1 := mgr.tryLock(ctx, "default", "repo/renew.git", 1)
 		require.NoError(t, res1.Err)
-		require.NoError(t, res1.Renew())
+		require.NoError(t, res1.Renew(ctx))
 		defer func() {
 			require.NoError(t, res1.Unlock())
 		}()
@@ -223,17 +223,17 @@ func TestRepositoryReferenceWriteLock(t *testing.T) {
 		mgr := NewRepoReferenceWriteLockManager(ctx, db, dbConfig, logger)
 		waitForListener(mgr.handler.ready)
 
-		unlock1, _, err1 := mgr.Lock(ctx, "default", "repo/independent-a.git", 1)
+		lock1, err1 := mgr.Lock(ctx, "default", "repo/independent-a.git", 1)
 		require.NoError(t, err1)
 		defer func() {
-			require.NoError(t, unlock1())
+			require.NoError(t, lock1.Unlock())
 		}()
 
 		// A different repo must be lockable even while the first is held.
-		unlock2, _, err2 := mgr.Lock(ctx, "default", "repo/independent-b.git", 2)
+		lock2, err2 := mgr.Lock(ctx, "default", "repo/independent-b.git", 2)
 		require.NoError(t, err2)
 		defer func() {
-			require.NoError(t, unlock2())
+			require.NoError(t, lock2.Unlock())
 		}()
 	})
 

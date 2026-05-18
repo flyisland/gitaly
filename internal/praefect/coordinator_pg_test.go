@@ -154,7 +154,6 @@ func TestStreamDirectorMutator_Transaction(t *testing.T) {
 	}
 
 	db := testdb.New(t)
-
 	for _, tc := range testcases {
 		t.Run(tc.desc, func(t *testing.T) {
 			db.TruncateAll(t)
@@ -191,7 +190,8 @@ func TestStreamDirectorMutator_Transaction(t *testing.T) {
 			}
 			ctx := testhelper.Context(t)
 
-			txMgr := transactions.NewManager(conf, logger)
+			repoWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, testdb.GetConfig(t, db.Name), logger)
+			txMgr := transactions.NewManager(conf, logger, repoWriteLockMgr)
 
 			tx := db.Begin(t)
 			defer tx.Rollback(t)
@@ -277,7 +277,8 @@ func TestStreamDirectorMutator_Transaction(t *testing.T) {
 
 					for _, subtransaction := range node.subtransactions {
 						vote := voting.VoteFromData([]byte(subtransaction.vote))
-						err := txMgr.VoteTransaction(ctx, transaction.ID, fmt.Sprintf("node-%d", i), vote)
+						err := txMgr.VoteTransaction(ctx, transaction.ID, "someStorage", "my/repo.git",
+							fmt.Sprintf("node-%d", i), gitalypb.VoteTransactionRequest_PREPARING_PHASE, vote)
 						if subtransaction.shouldSucceed {
 							if !assert.NoError(t, err) {
 								break

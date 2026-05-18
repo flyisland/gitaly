@@ -74,10 +74,12 @@ func TestServerFactory(t *testing.T) {
 	repo.StorageName = conf.VirtualStorages[0].Name // storage must be re-written to virtual to be properly redirected by praefect
 
 	logger := testhelper.SharedLogger(t)
-	queue := datastore.NewPostgresReplicationEventQueue(testdb.New(t))
+	db := testdb.New(t)
+	queue := datastore.NewPostgresReplicationEventQueue(db)
 
 	rs := datastore.MockRepositoryStore{}
-	txMgr := transactions.NewManager(conf, logger)
+	repoWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, testdb.GetConfig(t, db.Name), logger)
+	txMgr := transactions.NewManager(conf, logger, repoWriteLockMgr)
 	sidechannelRegistry := sidechannel.NewRegistry()
 	clientHandshaker := backchannel.NewClientHandshaker(logger, NewBackchannelServerFactory(logger, transaction.NewServer(txMgr), sidechannelRegistry), backchannel.DefaultConfiguration())
 	nodeMgr, err := nodes.NewManager(logger, conf, nil, rs, &promtest.MockHistogramVec{}, protoregistry.GitalyProtoPreregistered, nil, clientHandshaker, sidechannelRegistry)

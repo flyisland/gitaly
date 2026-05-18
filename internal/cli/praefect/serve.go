@@ -246,7 +246,13 @@ func server(cfgs []starter.Config, conf config.Config, logger log.Logger, b boot
 		}
 	}
 
-	transactionManager := transactions.NewManager(conf, logger)
+	var repoWriteLockMgr datastore.WriteLockManager = &datastore.NoopWriteLockManager{}
+	if db != nil {
+		dbBasedWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, conf.DB, logger)
+		repoWriteLockMgr = dbBasedWriteLockMgr
+		metricsCollectors = append(metricsCollectors, dbBasedWriteLockMgr)
+	}
+	transactionManager := transactions.NewManager(conf, logger, repoWriteLockMgr)
 	sidechannelRegistry := sidechannel.NewRegistry()
 
 	backchannelCfg := backchannel.DefaultConfiguration()

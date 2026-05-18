@@ -92,7 +92,7 @@ func TestStreamDirectorReadOnlyEnforcement(t *testing.T) {
 			}
 
 			logger := testhelper.NewLogger(t)
-
+			repoWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, testdb.GetConfig(t, db.Name), logger)
 			coordinator := NewCoordinator(
 				logger,
 				datastore.NewPostgresReplicationEventQueue(db),
@@ -105,7 +105,7 @@ func TestStreamDirectorReadOnlyEnforcement(t *testing.T) {
 						}},
 					}, nil
 				}}, rs),
-				transactions.NewManager(conf, logger),
+				transactions.NewManager(conf, logger, repoWriteLockMgr),
 				conf,
 				protoregistry.GitalyProtoPreregistered,
 			)
@@ -165,7 +165,8 @@ func TestStreamDirectorMutator(t *testing.T) {
 
 	db := testdb.New(t)
 	logger := testhelper.SharedLogger(t)
-	txMgr := transactions.NewManager(conf, logger)
+	repoWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, testdb.GetConfig(t, db.Name), logger)
+	txMgr := transactions.NewManager(conf, logger, repoWriteLockMgr)
 
 	nodeSet, err := DialNodes(ctx, conf.VirtualStorages, protoregistry.GitalyProtoPreregistered, nil, nil, nil, logger)
 	require.NoError(t, err)
@@ -488,7 +489,7 @@ func TestStreamDirectorMutator_StopTransaction(t *testing.T) {
 	}
 
 	logger := testhelper.NewLogger(t)
-	txMgr := transactions.NewManager(conf, logger)
+	txMgr := transactions.NewManager(conf, logger, &datastore.NoopWriteLockManager{})
 
 	coordinator := NewCoordinator(
 		logger,
@@ -525,7 +526,8 @@ func TestStreamDirectorMutator_StopTransaction(t *testing.T) {
 		defer wg.Done()
 
 		vote := voting.VoteFromData([]byte("vote"))
-		err := txMgr.VoteTransaction(ctx, transaction.ID, "primary", vote)
+		err := txMgr.VoteTransaction(ctx, transaction.ID, repo.GetStorageName(), repo.GetRelativePath(), "primary",
+			gitalypb.VoteTransactionRequest_PREPARING_PHASE, vote)
 		require.NoError(t, err)
 
 		// Assure that at least one vote was agreed on.
@@ -539,14 +541,16 @@ func TestStreamDirectorMutator_StopTransaction(t *testing.T) {
 		defer wg.Done()
 
 		vote := voting.VoteFromData([]byte("vote"))
-		err := txMgr.VoteTransaction(ctx, transaction.ID, "secondary", vote)
+		err := txMgr.VoteTransaction(ctx, transaction.ID, repo.GetStorageName(), repo.GetRelativePath(), "secondary",
+			gitalypb.VoteTransactionRequest_PREPARING_PHASE, vote)
 		require.NoError(t, err)
 
 		// Assure that at least one vote was agreed on.
 		syncWG.Done()
 		syncWG.Wait()
 
-		err = txMgr.VoteTransaction(ctx, transaction.ID, "secondary", vote)
+		err = txMgr.VoteTransaction(ctx, transaction.ID, repo.GetStorageName(), repo.GetRelativePath(), "secondary",
+			gitalypb.VoteTransactionRequest_PREPARING_PHASE, vote)
 		assert.True(t, errors.Is(err, transactions.ErrTransactionStopped))
 	}()
 
@@ -602,7 +606,7 @@ func TestStreamDirectorMutator_SecondaryErrorHandling(t *testing.T) {
 	}
 
 	logger := testhelper.NewLogger(t)
-	txMgr := transactions.NewManager(conf, logger)
+	txMgr := transactions.NewManager(conf, logger, &datastore.NoopWriteLockManager{})
 
 	coordinator := NewCoordinator(
 		logger,
@@ -636,7 +640,8 @@ func TestStreamDirectorMutator_SecondaryErrorHandling(t *testing.T) {
 		defer wg.Done()
 
 		vote := voting.VoteFromData([]byte("vote"))
-		err := txMgr.VoteTransaction(ctx, transaction.ID, "praefect-internal-1", vote)
+		err := txMgr.VoteTransaction(ctx, transaction.ID, repo.GetStorageName(), repo.GetRelativePath(), "praefect-internal-1",
+			gitalypb.VoteTransactionRequest_PREPARING_PHASE, vote)
 		require.ErrorIs(t, err, transactions.ErrTransactionFailed)
 	}()
 
@@ -748,7 +753,7 @@ func TestStreamDirectorMutator_ReplicateRepository(t *testing.T) {
 				&datastore.MockReplicationEventQueue{},
 				rs,
 				router,
-				transactions.NewManager(conf, logger),
+				transactions.NewManager(conf, logger, &datastore.NoopWriteLockManager{}),
 				conf,
 				protoregistry.GitalyProtoPreregistered,
 			)
@@ -1134,7 +1139,7 @@ func TestStreamDirectorAccessor(t *testing.T) {
 	nodeMgr.Start(0, time.Minute)
 	defer nodeMgr.Stop()
 
-	txMgr := transactions.NewManager(conf, logger)
+	txMgr := transactions.NewManager(conf, logger, &datastore.NoopWriteLockManager{})
 
 	for _, tc := range []struct {
 		desc   string
@@ -1245,7 +1250,7 @@ func TestCoordinatorStreamDirector_distributesReads(t *testing.T) {
 	nodeMgr.Start(0, time.Minute)
 	defer nodeMgr.Stop()
 
-	txMgr := transactions.NewManager(conf, logger)
+	txMgr := transactions.NewManager(conf, logger, &datastore.NoopWriteLockManager{})
 
 	coordinator := NewCoordinator(
 		testhelper.NewLogger(t),
@@ -1626,7 +1631,9 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 			)
 
 			logger := testhelper.NewLogger(t)
-			txMgr := transactions.NewManager(conf, logger)
+			ctx := testhelper.Context(t)
+			repoWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, testdb.GetConfig(t, db.Name), logger)
+			txMgr := transactions.NewManager(conf, logger, repoWriteLockMgr)
 			queueInterceptor := datastore.NewReplicationEventQueueInterceptor(datastore.NewPostgresReplicationEventQueue(tx))
 
 			coordinator := NewCoordinator(
@@ -1645,7 +1652,6 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 			require.NoError(t, err)
 
 			fullMethod := "/gitaly.RepositoryService/CreateRepository"
-			ctx := testhelper.Context(t)
 
 			peeker := &mockPeeker{frame}
 			streamParams, err := coordinator.StreamDirector(correlation.ContextWithCorrelation(ctx, "my-correlation-id"), fullMethod, peeker)
@@ -1669,8 +1675,10 @@ func TestStreamDirector_repo_creation(t *testing.T) {
 			require.Equal(t, rewrittenStorage, rewrittenTargetRepo.GetStorageName(), "stream director should have rewritten the storage name")
 
 			vote := voting.VoteFromData([]byte{})
-			require.NoError(t, txMgr.VoteTransaction(ctx, 1, "praefect-internal-1", vote))
-			require.NoError(t, txMgr.VoteTransaction(ctx, 1, "praefect-internal-2", vote))
+			require.NoError(t, txMgr.VoteTransaction(ctx, 1, rewrittenTargetRepo.GetStorageName(), rewrittenTargetRepo.GetRelativePath(),
+				"praefect-internal-1", gitalypb.VoteTransactionRequest_PREPARING_PHASE, vote))
+			require.NoError(t, txMgr.VoteTransaction(ctx, 1, rewrittenTargetRepo.GetStorageName(), rewrittenTargetRepo.GetRelativePath(),
+				"praefect-internal-2", gitalypb.VoteTransactionRequest_PREPARING_PHASE, vote))
 
 			// this call creates new events in the queue and simulates usual flow of the update operation
 			err = streamParams.RequestFinalizer()
@@ -1897,13 +1905,13 @@ func TestStreamDirector_additional_repo_creation(t *testing.T) {
 				repositoryStore,
 				conf.DefaultReplicationFactors(),
 			)
-
+			repoWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, testdb.GetConfig(t, db.Name), logger)
 			coordinator := NewCoordinator(
 				logger,
 				datastore.NewReplicationEventQueueInterceptor(datastore.NewPostgresReplicationEventQueue(db)),
 				repositoryStore,
 				router,
-				transactions.NewManager(conf, logger),
+				transactions.NewManager(conf, logger, repoWriteLockMgr),
 				conf,
 				protoregistry.GitalyProtoPreregistered,
 			)
@@ -2008,7 +2016,7 @@ func TestAbsentCorrelationID(t *testing.T) {
 	nodeMgr.Start(0, time.Hour)
 	defer nodeMgr.Stop()
 
-	txMgr := transactions.NewManager(conf, logger)
+	txMgr := transactions.NewManager(conf, logger, &datastore.NoopWriteLockManager{})
 	rs := datastore.MockRepositoryStore{}
 
 	coordinator := NewCoordinator(

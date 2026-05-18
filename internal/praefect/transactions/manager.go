@@ -9,9 +9,12 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/featureflag"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/transaction/voting"
+	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 )
 
 //nolint:revive // This is unintentionally missing documentation.
@@ -25,16 +28,19 @@ type Manager struct {
 	lock                  sync.Mutex
 	logger                log.Logger
 	transactions          map[uint64]*transaction
+	repoLocks             sync.Map
 	counterMetric         *prometheus.CounterVec
 	delayMetric           *prometheus.HistogramVec
 	subtransactionsMetric prometheus.Histogram
+	repoWriteLockMgr      datastore.WriteLockManager
 }
 
 // NewManager creates a new transactions Manager.
-func NewManager(cfg config.Config, logger log.Logger) *Manager {
+func NewManager(cfg config.Config, logger log.Logger, repoWriteLockMgr datastore.WriteLockManager) *Manager {
 	return &Manager{
-		logger:       logger.WithField("component", "transactions.Manager"),
-		transactions: make(map[uint64]*transaction),
+		logger:           logger.WithField("component", "transactions.Manager"),
+		transactions:     make(map[uint64]*transaction),
+		repoWriteLockMgr: repoWriteLockMgr,
 		counterMetric: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: "gitaly",
@@ -118,7 +124,9 @@ func (mgr *Manager) cancelTransaction(ctx context.Context, transaction *transact
 	defer mgr.lock.Unlock()
 
 	delete(mgr.transactions, transaction.ID())
-
+	// Release while holding mgr.lock so a concurrent voteTransaction can't
+	// re-acquire the repo lock between delete and cancel.
+	mgr.releaseRepoLock(transaction.ID())
 	transaction.cancel()
 	mgr.subtransactionsMetric.Observe(float64(transaction.CountSubtransactions()))
 
@@ -143,7 +151,9 @@ func (mgr *Manager) cancelTransaction(ctx context.Context, transaction *transact
 	return nil
 }
 
-func (mgr *Manager) voteTransaction(ctx context.Context, transactionID uint64, node string, vote voting.Vote) error {
+func (mgr *Manager) voteTransaction(ctx context.Context, transactionID uint64, storageName, repoRelativePath, node string,
+	phase gitalypb.VoteTransactionRequest_Phase, vote voting.Vote,
+) (returnedErr error) {
 	mgr.lock.Lock()
 	transaction, ok := mgr.transactions[transactionID]
 	mgr.lock.Unlock()
@@ -152,6 +162,13 @@ func (mgr *Manager) voteTransaction(ctx context.Context, transactionID uint64, n
 		return fmt.Errorf("%w: %d", ErrNotFound, transactionID)
 	}
 
+	err := mgr.lockRepoForTransaction(ctx, transactionID, storageName, repoRelativePath, phase)
+	if err != nil {
+		return fmt.Errorf("lock transaction %d: %w", transactionID, err)
+	}
+	defer func() {
+		mgr.unlockRepoForTransaction(ctx, transactionID, returnedErr, phase)
+	}()
 	if err := transaction.vote(ctx, node, vote); err != nil {
 		return err
 	}
@@ -161,7 +178,7 @@ func (mgr *Manager) voteTransaction(ctx context.Context, transactionID uint64, n
 
 // VoteTransaction is called by a client who's casting a vote on a reference
 // transaction. It waits until quorum was reached on the given transaction.
-func (mgr *Manager) VoteTransaction(ctx context.Context, transactionID uint64, node string, vote voting.Vote) error {
+func (mgr *Manager) VoteTransaction(ctx context.Context, transactionID uint64, storageName, repoRelativePath, node string, phase gitalypb.VoteTransactionRequest_Phase, vote voting.Vote) error {
 	start := time.Now()
 	defer func() {
 		delay := time.Since(start)
@@ -172,12 +189,13 @@ func (mgr *Manager) VoteTransaction(ctx context.Context, transactionID uint64, n
 		"transaction.id":    transactionID,
 		"transaction.voter": node,
 		"transaction.hash":  vote.String(),
+		"transaction.phase": phase,
 	})
 
 	mgr.counterMetric.WithLabelValues("started").Inc()
 	logger.DebugContext(ctx, "VoteTransaction")
 
-	if err := mgr.voteTransaction(ctx, transactionID, node, vote); err != nil {
+	if err := mgr.voteTransaction(ctx, transactionID, storageName, repoRelativePath, node, phase, vote); err != nil {
 		var counterLabel string
 
 		if errors.Is(err, ErrTransactionStopped) {
@@ -210,12 +228,16 @@ func (mgr *Manager) VoteTransaction(ctx context.Context, transactionID uint64, n
 func (mgr *Manager) StopTransaction(ctx context.Context, transactionID uint64) error {
 	mgr.lock.Lock()
 	transaction, ok := mgr.transactions[transactionID]
+	if ok {
+		// Release while holding mgr.lock so a concurrent voteTransaction
+		// can't acquire a fresh repo lock between this release and stop.
+		mgr.releaseRepoLock(transactionID)
+	}
 	mgr.lock.Unlock()
 
 	if !ok {
 		return fmt.Errorf("%w: %d", ErrNotFound, transactionID)
 	}
-
 	if err := transaction.stop(); err != nil {
 		return err
 	}
@@ -245,4 +267,81 @@ func (mgr *Manager) CancelTransactionNodeVoter(transactionID uint64, node string
 	}
 
 	return nil
+}
+
+func (mgr *Manager) lockRepoForTransaction(ctx context.Context, transactionID uint64, storageName, repoRelativePath string,
+	phase gitalypb.VoteTransactionRequest_Phase,
+) error {
+	if featureflag.PraefectSerializedWrite.IsDisabled(ctx) {
+		return nil
+	}
+
+	switch phase {
+	case gitalypb.VoteTransactionRequest_PREPARING_PHASE:
+		lock, err := mgr.repoWriteLockMgr.Lock(ctx, storageName, repoRelativePath, transactionID)
+		if err != nil {
+			return fmt.Errorf("try lock: %w", err)
+		}
+		mgr.repoLocks.Store(transactionID, lock)
+
+	case gitalypb.VoteTransactionRequest_PREPARED_PHASE, gitalypb.VoteTransactionRequest_COMMITTED_PHASE:
+		v, ok := mgr.repoLocks.Load(transactionID)
+		if !ok {
+			return fmt.Errorf("lock not found for transaction %d: %w", transactionID, ErrNotFound)
+		}
+		lock := v.(datastore.RepoLock)
+		if err := lock.Renew(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (mgr *Manager) unlockRepoForTransaction(ctx context.Context, transactionID uint64, returnedErr error, phase gitalypb.VoteTransactionRequest_Phase) {
+	if featureflag.PraefectSerializedWrite.IsDisabled(ctx) {
+		return
+	}
+
+	// Decide whether this call releases the write lock. The lock spans all the
+	// phases of one transaction and is only released when either the vote
+	// failed (so callers can't advance to the next phase) or the committed
+	// phase completes. Phases outside the reference transaction hook
+	// lifecycle (e.g. SYNCHRONIZED_PHASE) never acquired a lock.
+	var shouldUnlock bool
+	switch phase {
+	case gitalypb.VoteTransactionRequest_PREPARING_PHASE,
+		gitalypb.VoteTransactionRequest_PREPARED_PHASE:
+		shouldUnlock = returnedErr != nil
+	case gitalypb.VoteTransactionRequest_COMMITTED_PHASE:
+		shouldUnlock = true
+	default:
+		return
+	}
+
+	if !shouldUnlock {
+		return
+	}
+
+	mgr.releaseRepoLockOnPhase(transactionID, phase.String())
+}
+
+func (mgr *Manager) releaseRepoLockOnPhase(transactionID uint64, phase string) {
+	v, ok := mgr.repoLocks.LoadAndDelete(transactionID)
+	if !ok {
+		return
+	}
+	logFields := log.Fields{
+		"transaction_id": transactionID,
+	}
+	if phase != "" {
+		logFields["phase"] = phase
+	}
+	lock := v.(datastore.RepoLock)
+	if err := lock.Unlock(); err != nil {
+		mgr.logger.WithError(err).WithFields(logFields).Error("release repo lock")
+	}
+}
+
+func (mgr *Manager) releaseRepoLock(transactionID uint64) {
+	mgr.releaseRepoLockOnPhase(transactionID, "")
 }
