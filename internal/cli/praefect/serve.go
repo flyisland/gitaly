@@ -211,7 +211,7 @@ func server(cfgs []starter.Config, conf config.Config, logger log.Logger, b boot
 			}
 
 			resilientListenerTicker := helper.NewTimerTicker(5 * time.Second)
-			notificationsListener := datastore.NewResilientListener(conf.DB, resilientListenerTicker, logger)
+			notificationsListener := datastore.NewResilientListener(conf.DB, resilientListenerTicker, logger, datastore.PraefectNotificationsReconnectsTotal)
 			go func() {
 				err := notificationsListener.Listen(ctx, storagesCached, datastore.StorageRepositoriesUpdatesChannel, datastore.RepositoriesUpdatesChannel)
 				if err != nil && !errors.Is(err, context.Canceled) {
@@ -246,7 +246,13 @@ func server(cfgs []starter.Config, conf config.Config, logger log.Logger, b boot
 		}
 	}
 
-	transactionManager := transactions.NewManager(conf, logger)
+	var repoWriteLockMgr datastore.WriteLockManager = &datastore.NoopWriteLockManager{}
+	if db != nil {
+		dbBasedWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, conf.DB, logger)
+		repoWriteLockMgr = dbBasedWriteLockMgr
+		metricsCollectors = append(metricsCollectors, dbBasedWriteLockMgr)
+	}
+	transactionManager := transactions.NewManager(conf, logger, repoWriteLockMgr)
 	sidechannelRegistry := sidechannel.NewRegistry()
 
 	backchannelCfg := backchannel.DefaultConfiguration()

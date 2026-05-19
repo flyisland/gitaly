@@ -2505,7 +2505,7 @@ func TestRepositoryManager_CleanStaleData_unsetConfigurationTransactional(t *tes
 	})
 
 	require.NoError(t, New(cfg.Prometheus, testhelper.SharedLogger(t), txManager, nil).CleanStaleData(ctx, repo, housekeeping.DefaultStaleDataCleanup()))
-	require.Equal(t, 2, len(txManager.Votes()))
+	require.Equal(t, 3, len(txManager.Votes()))
 
 	configKeysBytes := gittest.Exec(t, cfg, "-C", repoPath, "config", "--list", "--local", "--name-only")
 	configKeys := bytes.Split(bytes.TrimSuffix(configKeysBytes, []byte("\n")), []byte("\n"))

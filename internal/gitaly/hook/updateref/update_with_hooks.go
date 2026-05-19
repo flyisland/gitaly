@@ -274,6 +274,10 @@ func (u *UpdaterWithHooks) UpdateReference(
 		return fmt.Errorf("queueing ref update: %w", err)
 	}
 
+	if err := u.hookManager.ReferenceTransactionHook(ctx, hook.ReferenceTransactionPreparing, []string{hooksPayload}, strings.NewReader(changes)); err != nil {
+		return fmt.Errorf("executing pre-locked reference-transaction hook: %w", err)
+	}
+
 	// We need to lock the reference before executing the reference-transaction hook such that
 	// there cannot be any concurrent modification.
 	if err := updater.Prepare(); err != nil {

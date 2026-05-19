@@ -85,6 +85,26 @@ func TestPoolManager_Vote(t *testing.T) {
 			},
 		},
 		{
+			desc: "successful preparing vote",
+			transaction: txinfo.Transaction{
+				BackchannelID: backchannelID,
+				ID:            1,
+				Node:          "node",
+			},
+			vote:  voting.VoteFromData([]byte("foobar")),
+			phase: voting.Preparing,
+			voteFn: func(t *testing.T, request *gitalypb.VoteTransactionRequest) (*gitalypb.VoteTransactionResponse, error) {
+				require.Equal(t, uint64(1), request.GetTransactionId())
+				require.Equal(t, "node", request.GetNode())
+				require.Equal(t, request.GetReferenceUpdatesHash(), voting.VoteFromData([]byte("foobar")).Bytes())
+				require.Equal(t, gitalypb.VoteTransactionRequest_PREPARING_PHASE, request.GetPhase())
+
+				return &gitalypb.VoteTransactionResponse{
+					State: gitalypb.VoteTransactionResponse_COMMIT,
+				}, nil
+			},
+		},
+		{
 			desc: "successful prepared vote",
 			transaction: txinfo.Transaction{
 				BackchannelID: backchannelID,

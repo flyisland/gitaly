@@ -39,6 +39,11 @@ func CommitLockedFile(ctx context.Context, m Manager, writer *safe.LockingFileWr
 
 	var vote voting.Vote
 	if err := RunOnContext(ctx, func(tx txinfo.Transaction) error {
+		preparingVote := voting.VoteFromData([]byte("preparing commit locked file"))
+		if err := m.Vote(ctx, tx, preparingVote, voting.Preparing); err != nil {
+			return fmt.Errorf("preimage vote at preparing phase: %w", err)
+		}
+
 		hasher := voting.NewVoteHash()
 
 		lockedFile, err := os.Open(writer.Path())
@@ -57,7 +62,7 @@ func CommitLockedFile(ctx context.Context, m Manager, writer *safe.LockingFileWr
 		}
 
 		if err := m.Vote(ctx, tx, vote, voting.Prepared); err != nil {
-			return fmt.Errorf("preimage vote: %w", err)
+			return fmt.Errorf("preimage vote at prepared phase: %w", err)
 		}
 
 		return nil
@@ -70,7 +75,7 @@ func CommitLockedFile(ctx context.Context, m Manager, writer *safe.LockingFileWr
 	}
 
 	if err := VoteOnContext(ctx, m, vote, voting.Committed); err != nil {
-		return fmt.Errorf("postimage vote: %w", err)
+		return fmt.Errorf("postimage vote at committed phase: %w", err)
 	}
 
 	return nil

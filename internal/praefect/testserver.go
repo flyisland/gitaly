@@ -17,6 +17,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore/glsql"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/nodes"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/service"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/transactions"
@@ -84,12 +85,12 @@ func WithMockBackends(tb testing.TB, backendRegistrars map[string]func(*grpc.Ser
 	}
 }
 
-func defaultQueue(tb testing.TB) datastore.ReplicationEventQueue {
-	return datastore.NewPostgresReplicationEventQueue(testdb.New(tb))
+func defaultQueue(tb testing.TB, qc glsql.Querier) datastore.ReplicationEventQueue {
+	return datastore.NewPostgresReplicationEventQueue(qc)
 }
 
-func defaultTxMgr(conf config.Config, logger log.Logger) *transactions.Manager {
-	return transactions.NewManager(conf, logger)
+func defaultTxMgr(conf config.Config, logger log.Logger, repoWriteLockMgr datastore.WriteLockManager) *transactions.Manager {
+	return transactions.NewManager(conf, logger, repoWriteLockMgr)
 }
 
 func defaultNodeMgr(tb testing.TB, conf config.Config, rs datastore.RepositoryStore) nodes.Manager {
@@ -191,18 +192,20 @@ func RunPraefectServer(
 	opt BuildOptions,
 ) (*grpc.ClientConn, *grpc.Server, testhelper.Cleanup) {
 	var cleanups []testhelper.Cleanup
-
+	db := testdb.New(tb)
+	ctx, cancel := context.WithCancel(ctx)
 	if opt.WithLogger == nil {
 		opt.WithLogger = testhelper.SharedLogger(tb)
 	}
 	if opt.WithQueue == nil {
-		opt.WithQueue = defaultQueue(tb)
+		opt.WithQueue = defaultQueue(tb, db)
 	}
 	if opt.WithRepoStore == nil {
 		opt.WithRepoStore = defaultRepoStore(conf)
 	}
 	if opt.WithTxMgr == nil {
-		opt.WithTxMgr = defaultTxMgr(conf, opt.WithLogger)
+		repoWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, testdb.GetConfig(tb, db.Name), opt.WithLogger)
+		opt.WithTxMgr = defaultTxMgr(conf, opt.WithLogger, repoWriteLockMgr)
 	}
 	if opt.WithBackends != nil {
 		cleanups = append(cleanups, opt.WithBackends(conf.VirtualStorages)...)
@@ -270,7 +273,6 @@ func RunPraefectServer(
 	listener, port := listenAvailPort(tb)
 
 	errQ := make(chan error)
-	ctx, cancel := context.WithCancel(ctx)
 
 	go func() {
 		errQ <- prf.Serve(listener)
@@ -293,6 +295,7 @@ func RunPraefectServer(
 		cancel()
 		<-replMgrDone
 		require.NoError(tb, <-errQ)
+		require.NoError(tb, db.Close())
 	}
 
 	return cc, prf, cleanup

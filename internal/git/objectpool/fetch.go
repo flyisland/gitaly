@@ -243,6 +243,11 @@ func (o *ObjectPool) pruneReferences(ctx context.Context, origin *localrepo.Repo
 		return fmt.Errorf("computing vote: %w", err)
 	}
 
+	// Cast a preparing vote to acquire a distributed lock
+	if err := transaction.VoteOnContext(ctx, o.txManager, vote, voting.Preparing); err != nil {
+		return fmt.Errorf("casting preparing vote: %w", err)
+	}
+
 	// Prepare references so that they're locked and cannot be written by any concurrent
 	// processes. This also verifies that we can indeed delete the references.
 	if err := updater.Prepare(); err != nil {

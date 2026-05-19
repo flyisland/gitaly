@@ -559,7 +559,15 @@ func TestUserCreateTag_transactional(t *testing.T) {
 				require.NoFileExists(t, hooksOutputPath)
 			}
 
-			require.Equal(t, 5, transactionServer.called)
+			// The expected transactionServer.called count comes from UserCreateTag's call to
+			// updateReferenceWithHooks, which leads to UpdaterWithHooks.UpdateReference().
+			// Each hook calls VoteTransaction the following number of times:
+			//   PreReceiveHook:            1
+			//   UpdateHook:                1
+			//   ReferenceTransactionHook:  3
+			//   PostReceiveHook:           1
+			// Total:                       6
+			require.Equal(t, 6, transactionServer.called)
 			transactionServer.called = 0
 		})
 	}

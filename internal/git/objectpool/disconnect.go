@@ -50,11 +50,16 @@ func Disconnect(ctx context.Context, f storage.FS, repo *localrepo.Repo, logger 
 	if !altInfo.Exists || len(altInfo.ObjectDirectories) == 0 {
 		// When a repository is not linked to any alternates, ensure the repository is consistent
 		// with other replicas.
-		if err := transaction.VoteOnContext(ctx, txManager, voting.VoteFromData([]byte("no alternates")), voting.Committed); err != nil {
+		if err := transaction.VoteOnContext(ctx, txManager, voting.VoteFromData([]byte("no alternates")), voting.Synchronized); err != nil {
 			return fmt.Errorf("vote on missing alternates: %w", err)
 		}
 
 		return nil
+	}
+
+	// Acquire distributed lock
+	if err := transaction.VoteOnContext(ctx, txManager, voting.VoteFromData([]byte("migrate objects")), voting.Preparing); err != nil {
+		return fmt.Errorf("preparatory vote for migrating objects: %w", err)
 	}
 
 	if err := transaction.VoteOnContext(ctx, txManager, voting.VoteFromData([]byte("migrate objects")), voting.Prepared); err != nil {
@@ -205,6 +210,11 @@ func newBackupFile(altFile string) (string, error) {
 // take care to leave a copy of the alternates file, so that it can be
 // manually restored by an administrator if needed.
 func removeAlternatesIfOk(ctx context.Context, repo *localrepo.Repo, altFile, backupFile string, logger log.Logger, txManager transaction.Manager) error {
+	// Acquire distributed lock
+	if err := transaction.VoteOnContext(ctx, txManager, voting.VoteFromData([]byte("disconnect alternate")), voting.Preparing); err != nil {
+		return fmt.Errorf("preparatory vote for disconnecting alternate: %w", err)
+	}
+
 	if err := transaction.VoteOnContext(ctx, txManager, voting.VoteFromData([]byte("disconnect alternate")), voting.Prepared); err != nil {
 		return fmt.Errorf("preparatory vote for disconnecting alternate: %w", err)
 	}

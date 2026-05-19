@@ -87,6 +87,9 @@ func remove(
 		return structerr.NewInternal("statting repository: %w", err)
 	}
 
+	if err := voteOnAction(ctx, txManager, repository, voting.Preparing); err != nil {
+		return structerr.NewInternal("vote on rename: %w", err)
+	}
 	// Lock the repository such that it cannot be created or removed by any concurrent
 	// RPC call.
 	unlock, err := Lock(ctx, logger, locator, repository)
@@ -152,6 +155,8 @@ func voteOnAction(
 	return transaction.RunOnContext(ctx, func(tx txinfo.Transaction) error {
 		var voteStep string
 		switch phase {
+		case voting.Preparing:
+			voteStep = "acquiring distributed lock"
 		case voting.Prepared:
 			voteStep = "pre-remove"
 		case voting.Committed:

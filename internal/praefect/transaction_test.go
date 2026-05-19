@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/transactions"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
@@ -28,7 +29,7 @@ type voter struct {
 
 func runPraefectServerAndTxMgr(tb testing.TB, ctx context.Context) (*grpc.ClientConn, *transactions.Manager, testhelper.Cleanup) {
 	conf := testConfig(1)
-	txMgr := transactions.NewManager(conf, testhelper.SharedLogger(tb))
+	txMgr := transactions.NewManager(conf, testhelper.SharedLogger(tb), &datastore.NoopWriteLockManager{})
 	cc, _, cleanup := RunPraefectServer(tb, ctx, conf, BuildOptions{
 		WithTxMgr:   txMgr,
 		WithNodeMgr: nullNodeMgr{}, // to suppress node address issues
@@ -254,7 +255,7 @@ func TestTransactionWithContextCancellation(t *testing.T) {
 func TestTransactionRegistrationWithInvalidNodesFails(t *testing.T) {
 	ctx := testhelper.Context(t)
 
-	txMgr := transactions.NewManager(config.Config{}, testhelper.NewLogger(t))
+	txMgr := transactions.NewManager(config.Config{}, testhelper.NewLogger(t), &datastore.NoopWriteLockManager{})
 
 	_, _, err := txMgr.RegisterTransaction(ctx, []transactions.Voter{}, 1)
 	require.Equal(t, transactions.ErrMissingNodes, err)
@@ -302,7 +303,7 @@ func TestTransactionRegistrationWithInvalidThresholdFails(t *testing.T) {
 
 	ctx := testhelper.Context(t)
 
-	txMgr := transactions.NewManager(config.Config{}, testhelper.NewLogger(t))
+	txMgr := transactions.NewManager(config.Config{}, testhelper.NewLogger(t), &datastore.NoopWriteLockManager{})
 
 	for _, tc := range tc {
 		t.Run(tc.desc, func(t *testing.T) {

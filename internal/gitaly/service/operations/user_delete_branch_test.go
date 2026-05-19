@@ -483,7 +483,7 @@ func TestUserDeleteBranch_transaction(t *testing.T) {
 		User:       gittest.TestUser,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 5, transactionServer.called)
+	require.Equal(t, 6, transactionServer.called)
 }
 
 func TestUserDeleteBranch_invalidArgument(t *testing.T) {

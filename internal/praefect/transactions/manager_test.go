@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/config"
+	"gitlab.com/gitlab-org/gitaly/v18/internal/praefect/datastore"
 	"gitlab.com/gitlab-org/gitaly/v18/internal/testhelper"
 )
 
@@ -39,7 +40,7 @@ func TestManager_CancelTransactionNodeVoter(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			manager := NewManager(config.Config{}, testhelper.NewLogger(t))
+			manager := NewManager(config.Config{}, testhelper.NewLogger(t), &datastore.NoopWriteLockManager{})
 
 			var id uint64
 			if tc.register {

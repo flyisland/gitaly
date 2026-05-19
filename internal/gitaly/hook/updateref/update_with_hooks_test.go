@@ -178,10 +178,13 @@ func TestUpdaterWithHooks_UpdateReference(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, fmt.Sprintf("%s %s refs/heads/main\n", commitID.String(), gittest.DefaultObjectHash.ZeroOID.String()), string(changes))
 
-				require.Less(t, referenceTransactionCalls, 2)
-				if referenceTransactionCalls == 0 {
+				require.Less(t, referenceTransactionCalls, 3)
+				switch referenceTransactionCalls {
+				case 0:
+					require.Equal(t, state, hook.ReferenceTransactionPreparing)
+				case 1:
 					require.Equal(t, state, hook.ReferenceTransactionPrepared)
-				} else {
+				case 2:
 					require.Equal(t, state, hook.ReferenceTransactionCommitted)
 				}
 				referenceTransactionCalls++

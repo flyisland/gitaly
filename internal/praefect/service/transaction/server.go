@@ -31,8 +31,8 @@ func (s *Server) VoteTransaction(ctx context.Context, in *gitalypb.VoteTransacti
 	if err != nil {
 		return nil, structerr.NewInvalidArgument("invalid reference update hash: %w", err)
 	}
-
-	if err := s.txMgr.VoteTransaction(ctx, in.GetTransactionId(), in.GetNode(), vote); err != nil {
+	if err := s.txMgr.VoteTransaction(ctx, in.GetTransactionId(), in.GetRepository().GetStorageName(),
+		in.GetRepository().GetRelativePath(), in.GetNode(), in.GetPhase(), vote); err != nil {
 		switch {
 		case errors.Is(err, transactions.ErrNotFound):
 			return nil, structerr.NewNotFound("%w", err)

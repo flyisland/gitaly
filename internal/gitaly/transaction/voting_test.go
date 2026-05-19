@@ -158,14 +158,19 @@ func TestCommitLockedFile(t *testing.T) {
 					Primary:       true,
 					BackchannelID: 1234,
 				}, tx)
-				require.Equal(t, voting.VoteFromData([]byte("contents")), vote)
+
 				calls++
 
 				switch calls {
 				case 1:
-					require.Equal(t, voting.Prepared, phase)
+					require.Equal(t, voting.Preparing, phase)
+					require.Equal(t, voting.VoteFromData([]byte("preparing commit locked file")), vote)
 				case 2:
+					require.Equal(t, voting.Prepared, phase)
+					require.Equal(t, voting.VoteFromData([]byte("contents")), vote)
+				case 3:
 					require.Equal(t, voting.Committed, phase)
+					require.Equal(t, voting.VoteFromData([]byte("contents")), vote)
 				default:
 					require.FailNow(t, "unexpected voting phase %q", phase)
 				}
@@ -173,7 +178,7 @@ func TestCommitLockedFile(t *testing.T) {
 				return nil
 			},
 		}, writer))
-		require.Equal(t, 2, calls, "expected two votes")
+		require.Equal(t, 3, calls, "expected three votes")
 
 		require.Equal(t, []byte("contents"), testhelper.MustReadFile(t, file))
 	})
@@ -191,7 +196,7 @@ func TestCommitLockedFile(t *testing.T) {
 				return fmt.Errorf("some error")
 			},
 		}, writer)
-		require.EqualError(t, err, "voting on locked file: preimage vote: some error")
+		require.EqualError(t, err, "voting on locked file: preimage vote at preparing phase: some error")
 
 		require.NoFileExists(t, file)
 	})
@@ -205,10 +210,12 @@ func TestCommitLockedFile(t *testing.T) {
 		require.NoError(t, err)
 
 		err = CommitLockedFile(ctx, &MockManager{
-			VoteFn: func(context.Context, txinfo.Transaction, voting.Vote, voting.Phase) error {
+			VoteFn: func(ctx context.Context, txn txinfo.Transaction, v voting.Vote, phase voting.Phase) error {
 				// This shouldn't typically happen given that the file is locked,
 				// but we concurrently update the file after our first vote.
-				require.NoError(t, os.WriteFile(file, []byte("something"), mode.File))
+				if phase == voting.Prepared {
+					require.NoError(t, os.WriteFile(file, []byte("something"), mode.File))
+				}
 				return nil
 			},
 		}, writer)

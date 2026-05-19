@@ -12,7 +12,10 @@ type Phase int
 const (
 	// UnknownPhase is the default value. It should not be used.
 	UnknownPhase = Phase(iota)
-	// Prepared is the prepratory phase. The data that is about to change is locked for
+	// Preparing is the pre-locking phase. The data that is about to change is not yet locked for
+	// concurrent modification.
+	Preparing
+	// Prepared is the locking phase. The data that is about to change is locked for
 	// concurrent modification, but changes have not yet been written to disk.
 	Prepared
 	// Committed is the committing phase. Data has been committed to disk and will be visible
@@ -28,6 +31,8 @@ func (p Phase) ToProto() gitalypb.VoteTransactionRequest_Phase {
 	switch p {
 	case UnknownPhase:
 		return gitalypb.VoteTransactionRequest_UNKNOWN_PHASE
+	case Preparing:
+		return gitalypb.VoteTransactionRequest_PREPARING_PHASE
 	case Prepared:
 		return gitalypb.VoteTransactionRequest_PREPARED_PHASE
 	case Committed:

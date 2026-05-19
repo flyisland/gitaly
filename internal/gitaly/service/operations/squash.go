@@ -173,6 +173,15 @@ func (s *Server) userSquash(ctx context.Context, req *gitalypb.UserSquashRequest
 		}
 	}
 
+	if err := transaction.VoteOnContext(
+		ctx,
+		s.txManager,
+		voting.VoteFromData([]byte(commitID)),
+		voting.Preparing,
+	); err != nil {
+		return "", structerr.NewAborted("preparing vote on squashed commit: %w", err)
+	}
+
 	// The RPC is badly designed in that it never updates any references, but only creates the
 	// objects and writes them to disk. We still use a quarantine directory to stage the new
 	// objects, vote on them and migrate them into the main directory if quorum was reached so
@@ -184,7 +193,7 @@ func (s *Server) userSquash(ctx context.Context, req *gitalypb.UserSquashRequest
 		voting.VoteFromData([]byte(commitID)),
 		voting.Prepared,
 	); err != nil {
-		return "", structerr.NewAborted("preparatory vote on squashed commit: %w", err)
+		return "", structerr.NewAborted("prepared vote on squashed commit: %w", err)
 	}
 
 	if err := quarantineDir.Migrate(ctx); err != nil {

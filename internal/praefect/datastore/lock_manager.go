@@ -18,8 +18,43 @@ import (
 // which notify_on_write_lock_release() sends NOTIFY events.
 const RepositoryReferenceWriteLockReleasesChannel = "repository_reference_write_lock_releases"
 
+var lockReleasingListenerReconnectsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "gitaly_praefect_lock_release_listener_reconnects_total",
+		Help: "Counts amount of reconnects to listen for notification from write lock release channel",
+	},
+	[]string{"state"},
+)
+
 // LockID identifies a repository reference write lock, formatted as "virtualStorage|relativePath".
 type LockID string
+
+// RepoLock represents an acquired repository write lock. Unlock releases
+// the lock; Renew extends its lease and must be called periodically until
+// Unlock is invoked.
+type RepoLock struct {
+	Unlock func() error
+	Renew  func(context.Context) error
+}
+
+// WriteLockManager serializes write access to a repository by acquiring
+// a per-repository lock at the reference transaction preparing phase.
+type WriteLockManager interface {
+	// Lock acquires the reference write lock in a blocking way
+	Lock(ctx context.Context, virtualStorage, relativePath string, txnID uint64) (RepoLock, error)
+}
+
+// NoopWriteLockManager is a no-op WriteLockManager. It always grants the
+// lock immediately and is used when write serialization is not needed.
+type NoopWriteLockManager struct{}
+
+// Lock always succeeds and returns no-op functions.
+func (r *NoopWriteLockManager) Lock(_ context.Context, _ string, _ string, _ uint64,
+) (RepoLock, error) {
+	noopFn := func() error { return nil }
+	noopFnWithCtx := func(ctx context.Context) error { return nil }
+	return RepoLock{Unlock: noopFn, Renew: noopFnWithCtx}, nil
+}
 
 // RepoReferenceWriteLockManager manages per-repository reference write locks backed by
 // PostgreSQL. It serializes write requests to the same repository by ensuring only one
@@ -133,7 +168,7 @@ func (d *lockReleaseDispatcher) Connected() {
 func NewRepoReferenceWriteLockManager(ctx context.Context, qc glsql.Querier, conf config.DB, logger log.Logger) *RepoReferenceWriteLockManager {
 	resilientListenerTicker := helper.NewTimerTicker(5 * time.Second)
 
-	lockReleasingListener := NewResilientListener(conf, resilientListenerTicker, logger)
+	lockReleasingListener := NewResilientListener(conf, resilientListenerTicker, logger, lockReleasingListenerReconnectsTotal)
 	handler := &lockReleaseDispatcher{
 		waiters: make(map[LockID][]chan struct{}),
 		ready:   make(chan struct{}),
@@ -222,20 +257,20 @@ func (r *RepoReferenceWriteLockManager) Collect(ch chan<- prometheus.Metric) {
 // Lock acquires the write lock for a given virtualStorage, relativePath and txnID,
 // blocking until the lock is acquired or ctx is cancelled.
 func (r *RepoReferenceWriteLockManager) Lock(ctx context.Context, virtualStorage, relativePath string, txnID uint64,
-) (unlock func() error, renew func() error, retErr error) {
+) (RepoLock, error) {
 	for {
 		res := r.tryLock(ctx, virtualStorage, relativePath, txnID)
 		if res.Err != nil {
-			return nil, nil, res.Err
+			return RepoLock{}, res.Err
 		}
 		if res.Acquired {
-			return res.Unlock, res.Renew, nil
+			return RepoLock{Unlock: res.Unlock, Renew: res.Renew}, nil
 		}
 
 		select {
 		case <-ctx.Done():
 			res.Deregister()
-			return nil, nil, fmt.Errorf("wait for lock: %w", ctx.Err())
+			return RepoLock{}, fmt.Errorf("wait for lock: %w", ctx.Err())
 		case <-res.NotificationCh:
 			// wait for the lock to release
 		}
@@ -245,7 +280,7 @@ func (r *RepoReferenceWriteLockManager) Lock(ctx context.Context, virtualStorage
 type tryLockResult struct {
 	Acquired       bool
 	Unlock         func() error
-	Renew          func() error
+	Renew          func(context.Context) error
 	NotificationCh <-chan struct{}
 	Deregister     func()
 	Err            error
@@ -310,8 +345,8 @@ RETURNING lock_id, holder_txn_id, expired_at;`
 		unlockFn := func() error {
 			return r.unlock(virtualStorage, relativePath, txnID)
 		}
-		renewFn := func() error {
-			return r.renew(ctx, virtualStorage, relativePath, txnID)
+		renewFn := func(renewCtx context.Context) error {
+			return r.renew(renewCtx, virtualStorage, relativePath, txnID)
 		}
 		return tryLockResult{
 			Acquired: true,

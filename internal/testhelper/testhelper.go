@@ -341,6 +341,8 @@ func ContextWithoutCancel(opts ...ContextOpt) context.Context {
 	// Enable unauthenticated limiter
 	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.LimitUnauthenticated, true)
 
+	ctx = featureflag.ContextWithFeatureFlag(ctx, featureflag.PraefectSerializedWrite, true)
+
 	for _, opt := range opts {
 		ctx = opt(ctx)
 	}

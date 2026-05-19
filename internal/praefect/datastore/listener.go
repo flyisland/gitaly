@@ -24,6 +24,17 @@ const (
 	RepositoriesUpdatesChannel = "repositories_updates"
 )
 
+// PraefectNotificationsReconnectsTotal counts reconnects to the PostgreSQL
+// storage repository update channels by the consistent storages read cache
+// listener, partitioned by state ("connected"/"disconnected").
+var PraefectNotificationsReconnectsTotal = promclient.NewCounterVec(
+	promclient.CounterOpts{
+		Name: "gitaly_praefect_notifications_reconnects_total",
+		Help: "Counts reconnects to the storage repository update channels used by the consistent storages read cache",
+	},
+	[]string{"state"},
+)
+
 // Listener is designed to listen for PostgreSQL database NOTIFY events.
 // It connects to the database with Listen method and starts to listen for
 // events.
@@ -111,18 +122,12 @@ type ResilientListener struct {
 }
 
 // NewResilientListener returns instance of the *ResilientListener.
-func NewResilientListener(conf config.DB, ticker helper.Ticker, logger log.Logger) *ResilientListener {
+func NewResilientListener(conf config.DB, ticker helper.Ticker, logger log.Logger, reconnectTotal *promclient.CounterVec) *ResilientListener {
 	return &ResilientListener{
-		conf:   conf,
-		ticker: ticker,
-		logger: logger.WithField("component", "resilient_listener"),
-		reconnectTotal: promclient.NewCounterVec(
-			promclient.CounterOpts{
-				Name: "gitaly_praefect_notifications_reconnects_total",
-				Help: "Counts amount of reconnects to listen for notification from PostgreSQL",
-			},
-			[]string{"state"},
-		),
+		conf:           conf,
+		ticker:         ticker,
+		logger:         logger.WithField("component", "resilient_listener"),
+		reconnectTotal: reconnectTotal,
 	}
 }
 

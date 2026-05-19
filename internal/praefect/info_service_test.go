@@ -56,7 +56,7 @@ func TestInfoService_RepositoryReplicas(t *testing.T) {
 	db := testdb.New(t)
 	logger := testhelper.SharedLogger(t)
 	// the only thing used from the config is the grpc_latency_buckets which is not relevant for the test
-	txManager := transactions.NewManager(config.Config{}, logger)
+	txManager := transactions.NewManager(config.Config{}, logger, &datastore.NoopWriteLockManager{})
 	sidechannelRegistry := sidechannel.NewRegistry()
 	nodeSet, err := DialNodes(
 		ctx,

@@ -236,14 +236,14 @@ func testUserRebaseConfirmableTransaction(t *testing.T, ctx context.Context) {
 			desc:                 "primary votes and executes hook",
 			withTransaction:      true,
 			primary:              true,
-			expectedVotes:        5,
+			expectedVotes:        6,
 			expectPreReceiveHook: true,
 		},
 		{
 			desc:                 "secondary votes but does not execute hook",
 			withTransaction:      true,
 			primary:              false,
-			expectedVotes:        5,
+			expectedVotes:        6,
 			expectPreReceiveHook: false,
 		},
 	} {

@@ -128,14 +128,14 @@ func TestDeleteRefs_transaction(t *testing.T) {
 			request: &gitalypb.DeleteRefsRequest{
 				ExceptWithPrefix: [][]byte{[]byte("refs/")},
 			},
-			expectedVotes: 2,
+			expectedVotes: 3,
 		},
 		{
 			desc: "delete all refs",
 			request: &gitalypb.DeleteRefsRequest{
 				ExceptWithPrefix: [][]byte{[]byte("nonexisting/prefix/")},
 			},
-			expectedVotes: 2,
+			expectedVotes: 3,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {

@@ -270,5 +270,5 @@ func TestCreateRepository_transactional(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, gittest.RepositoryExists(t, ctx, gittest.DialService(t, ctx, cfg), repo))
-	require.Equal(t, 2, len(txManager.Votes()), "expected transactional vote")
+	require.Equal(t, 3, len(txManager.Votes()), "expected transactional vote")
 }

@@ -52,8 +52,14 @@ func (m *GitLabHookManager) ReferenceTransactionHook(ctx context.Context, state 
 
 	var phase voting.Phase
 	switch state {
-	// We're voting in prepared state as this is the only stage in Git's reference transaction
-	// which allows us to abort the transaction.
+	// We're voting in preparing state to tell Praefect that the reference changes are ready,
+	// although they are not locked yet. At this stage, we can serialize write transactions by
+	// acquiring a lock for the transaction and releasing it only when the transaction is
+	// committed or aborted. Other transactions must wait for the lock.
+	case ReferenceTransactionPreparing:
+		phase = voting.Preparing
+	// We're voting in prepared state to tell Praefect we've locked the reference changes and
+	// queued them for the transaction. We can abort the transaction if needed.
 	case ReferenceTransactionPrepared:
 		phase = voting.Prepared
 
@@ -95,10 +101,6 @@ func (m *GitLabHookManager) ReferenceTransactionHook(ctx context.Context, state 
 				return fmt.Errorf("update references: %w", err)
 			}
 		}
-	case ReferenceTransactionPreparing:
-		// Placeholder for the "preparing" state introduced in upstream commit
-		// ae55b12bb3 (Merge branch 'ej/ref-transaction-hook-preparing', 2026-03-27).
-		fallthrough
 	default:
 		return nil
 	}

@@ -270,6 +270,7 @@ func TestCreateRepositoryFromBundle_transactional(t *testing.T) {
 
 	require.Equal(t, []transaction.PhasedVote{
 		// Manual votes we compute by walking the repository.
+		createVote(filesVote.String(), voting.Preparing),
 		createVote(filesVote.String(), voting.Prepared),
 		createVote(filesVote.String(), voting.Committed),
 	}, txManager.Votes())

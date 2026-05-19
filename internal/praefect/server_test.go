@@ -58,7 +58,7 @@ import (
 func TestNewBackchannelServerFactory(t *testing.T) {
 	ctx := testhelper.Context(t)
 	logger := testhelper.SharedLogger(t)
-	mgr := transactions.NewManager(config.Config{}, logger)
+	mgr := transactions.NewManager(config.Config{}, logger, &datastore.NoopWriteLockManager{})
 	registry := backchannel.NewRegistry()
 
 	lm := listenmux.New(insecure.NewCredentials())
@@ -676,7 +676,7 @@ func TestRemoveRepository(t *testing.T) {
 	logger := testhelper.SharedLogger(t)
 	queueInterceptor := datastore.NewReplicationEventQueueInterceptor(datastore.NewPostgresReplicationEventQueue(testdb.New(t)))
 	repoStore := defaultRepoStore(praefectCfg)
-	txMgr := defaultTxMgr(praefectCfg, logger)
+	txMgr := defaultTxMgr(praefectCfg, logger, &datastore.NoopWriteLockManager{})
 	nodeMgr, err := nodes.NewManager(testhelper.SharedLogger(t), praefectCfg, nil,
 		repoStore, promtest.NewMockHistogramVec(), protoregistry.GitalyProtoPreregistered,
 		nil, backchannel.NewClientHandshaker(
@@ -786,7 +786,8 @@ func (m *mockSmartHTTP) PostReceivePack(stream gitalypb.SmartHTTPService_PostRec
 	}
 
 	vote := voting.VoteFromData([]byte{})
-	if err := m.txMgr.VoteTransaction(ctx, tx.ID, tx.Node, vote); err != nil {
+	if err := m.txMgr.VoteTransaction(ctx, tx.ID, req.GetRepository().GetStorageName(),
+		req.GetRepository().GetRelativePath(), tx.Node, gitalypb.VoteTransactionRequest_SYNCHRONIZED_PHASE, vote); err != nil {
 		return structerr.NewInternal("%w", err)
 	}
 
@@ -810,7 +811,7 @@ func TestProxyWrites(t *testing.T) {
 	t.Parallel()
 
 	logger := testhelper.SharedLogger(t)
-	txMgr := transactions.NewManager(config.Config{}, logger)
+	txMgr := transactions.NewManager(config.Config{}, logger, &datastore.NoopWriteLockManager{})
 
 	smartHTTP0, smartHTTP1, smartHTTP2 := &mockSmartHTTP{txMgr: txMgr}, &mockSmartHTTP{txMgr: txMgr}, &mockSmartHTTP{txMgr: txMgr}
 
@@ -992,11 +993,12 @@ func TestErrorThreshold(t *testing.T) {
 			ElectionStrategy: "local",
 		},
 	}
+	db := testdb.New(t)
 	ctx := testhelper.Context(t)
 
-	queue := datastore.NewPostgresReplicationEventQueue(testdb.New(t))
+	queue := datastore.NewPostgresReplicationEventQueue(db)
 	logger := testhelper.SharedLogger(t)
-
+	repoWriteLockMgr := datastore.NewRepoReferenceWriteLockManager(ctx, db, testdb.GetConfig(t, db.Name), logger)
 	testCases := []struct {
 		desc     string
 		accessor bool
@@ -1035,7 +1037,7 @@ func TestErrorThreshold(t *testing.T) {
 				queue,
 				rs,
 				NewNodeManagerRouter(nodeMgr, rs),
-				transactions.NewManager(conf, logger),
+				transactions.NewManager(conf, logger, repoWriteLockMgr),
 				conf,
 				protoregistry.GitalyProtoPreregistered,
 			)
