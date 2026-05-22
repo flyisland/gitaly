@@ -14,6 +14,7 @@ import (
 	"gitlab.com/gitlab-org/gitaly/v18/internal/log"
 	"gitlab.com/gitlab-org/gitaly/v18/proto/go/gitalypb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // DialOption is an option that can be passed to Dial and DialContext.
@@ -103,4 +104,12 @@ func WithRetryPolicy(policy *RetryPolicy) DialOption {
 // WithGrpcOptions wraps gRPC dial options as a DialOption.
 func WithGrpcOptions(grpcOpts []grpc.DialOption) DialOption {
 	return client.WithGrpcOptions(grpcOpts)
+}
+
+// WithTransportCredentials sets up the given credentials so that they are used when establishing
+// the connection. By default, non-TLS connections will use insecure credentials whereas TLS
+// connections will use the x509 system certificate pool. This option allows callers to override
+// these defaults.
+func WithTransportCredentials(creds credentials.TransportCredentials) DialOption {
+	return client.WithTransportCredentials(creds)
 }
