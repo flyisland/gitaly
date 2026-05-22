@@ -418,7 +418,7 @@ test:macos:
     - sudo diskutil apfs create $(hdiutil attach -nomount ram://4194304) RAMDisk
     - brew uninstall asdf --force
     - rm -rf $HOME/.asdf
-    - brew install pyenv go@${GO_VERSION} cmake postgresql meson
+    - brew install pyenv go@${GO_VERSION} cmake postgresql meson rust
     - pyenv install 3.13.7
     - pyenv global 3.13.7
     - export PATH="$HOME/.pyenv/versions/3.13.7/bin:$PATH"
