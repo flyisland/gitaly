@@ -3,8 +3,10 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"testing"
 
@@ -288,8 +290,6 @@ func TestPool_Dial_dnsPlusTLS(t *testing.T) {
 }
 
 func TestPool_Dial_dnsPlusTLS_withDNSAuthority(t *testing.T) {
-	t.Setenv(gitalyx509.SSLCertFile, "./testdata/gitaly_snioverride_cert.pem")
-
 	ctx := testhelper.Context(t)
 
 	serverHost, port, cleanup := runTLSServerWithSNIOverride(t, "secret-token", "127.0.0.1:0")
@@ -302,7 +302,28 @@ func TestPool_Dial_dnsPlusTLS_withDNSAuthority(t *testing.T) {
 		return nil
 	}).Start()
 
+	// Build a dedicated cert pool from the SNI override certificate instead of relying on
+	// SSL_CERT_FILE. Go's crypto/x509.SystemCertPool() caches the system root pool using
+	// sync.Once on the first call, so later changes to SSL_CERT_FILE are not picked up on
+	// Linux. This caused this test to fail when run after TestPool_Dial_dnsPlusTLS, which
+	// loaded a different test certificate into the cached pool.
+	caCert, err := os.ReadFile("./testdata/gitaly_snioverride_cert.pem")
+	require.NoError(t, err)
+	caCertPool := x509.NewCertPool()
+	require.True(t, caCertPool.AppendCertsFromPEM(caCert))
+
+	clientTLSCreds := credentials.NewTLS(&tls.Config{
+		RootCAs:    caCertPool,
+		MinVersion: tls.VersionTLS12,
+	})
+
 	pool := NewPoolWithOptions(
+		WithDialer(func(ctx context.Context, address string, dialOptions []grpc.DialOption) (*grpc.ClientConn, error) {
+			return DialContext(ctx, address,
+				WithGrpcOptions(dialOptions),
+				WithTransportCredentials(clientTLSCreds),
+			)
+		}),
 		WithDialOptions(WithGitalyDNSResolver(DefaultDNSResolverBuilderConfig())),
 	)
 	defer testhelper.MustClose(t, pool)
