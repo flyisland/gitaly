@@ -287,7 +287,15 @@ func (mgr *Manager) lockRepoForTransaction(ctx context.Context, transactionID ui
 	case gitalypb.VoteTransactionRequest_PREPARED_PHASE, gitalypb.VoteTransactionRequest_COMMITTED_PHASE:
 		v, ok := mgr.repoLocks.Load(transactionID)
 		if !ok {
-			return fmt.Errorf("lock not found for transaction %d: %w", transactionID, ErrNotFound)
+			// No Preparing was cast for this transaction. This happens when Git itself drives
+			// the reference-transaction hook on a Git build that doesn't emit "preparing"
+			// (i.e. pre-2.54). Skip lock work; serialization is dormant for this path
+			// until GIT_VERSION_PREV is bumped past 60d8c1e9.
+			mgr.logger.WithFields(log.Fields{
+				"transaction.id": transactionID,
+				"phase":          phase.String(),
+			}).DebugContext(ctx, "skipping lock check: no preparing phase recorded")
+			return nil
 		}
 		lock := v.(datastore.RepoLock)
 		if err := lock.Renew(ctx); err != nil {
@@ -331,7 +339,7 @@ func (mgr *Manager) releaseRepoLockOnPhase(transactionID uint64, phase string) {
 		return
 	}
 	logFields := log.Fields{
-		"transaction_id": transactionID,
+		"transaction.id": transactionID,
 	}
 	if phase != "" {
 		logFields["phase"] = phase
