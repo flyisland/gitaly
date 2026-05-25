@@ -76,6 +76,10 @@ No changes.
 
 - [Deprecate CountCommitsRequest revision and all fields](gitlab-org/gitaly@d1f74eaa3a7d3db3f7851c3aa94764598f3c27ee) ([merge request](gitlab-org/gitaly!8509))
 
+## 18.9.8 (2026-05-25)
+
+No changes.
+
 ## 18.9.7 (2026-05-13)
 
 No changes.
