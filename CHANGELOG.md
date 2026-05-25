@@ -121,6 +121,10 @@ No changes.
 
 - [diff: Support unescaping additional special characters](gitlab-org/gitaly@80ae3dbfbb9d1d572949288ea4277ed1b4b1aff6)
 
+## 18.8.10 (2026-05-25)
+
+No changes.
+
 ## 18.8.9 (2026-04-07)
 
 No changes.
