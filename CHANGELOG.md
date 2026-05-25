@@ -167,6 +167,10 @@ No changes.
 
 - [CountCommits: Add support for pseudo-revisions](gitlab-org/gitaly@85828290f8d1830260408e971db3b7b5e975710c) ([merge request](gitlab-org/gitaly!8349))
 
+## 18.7.7 (2026-05-25)
+
+No changes.
+
 ## 18.7.6 (2026-03-10)
 
 No changes.
