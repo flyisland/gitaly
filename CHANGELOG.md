@@ -233,6 +233,10 @@ No changes.
 
 No changes.
 
+## 18.5.6 (2026-05-25)
+
+No changes.
+
 ## 18.5.5 (2026-01-07)
 
 No changes.
