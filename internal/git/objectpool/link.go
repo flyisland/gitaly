@@ -44,7 +44,7 @@ func Link(ctx context.Context, pool, repo *localrepo.Repo, txManager transaction
 	if linked {
 		// When the repository is already linked to the repository, cast a vote to ensure the
 		// repository is consistent with the other replicas.
-		if err := transaction.VoteOnContext(ctx, txManager, voting.VoteFromData([]byte("repository linked")), voting.Committed); err != nil {
+		if err := transaction.VoteOnContext(ctx, txManager, voting.VoteFromData([]byte("repository linked")), voting.Synchronized); err != nil {
 			return fmt.Errorf("vote on linked repository: %w", err)
 		}
 
