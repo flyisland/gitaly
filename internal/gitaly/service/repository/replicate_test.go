@@ -379,7 +379,7 @@ func TestReplicateRepository(t *testing.T) {
 				return setupData{
 					source:        source,
 					target:        target,
-					expectedError: structerr.NewInternal("replicating repository: synchronizing references: fetch internal remote: exit status 128"),
+					expectedError: structerr.NewInternal("replicating repository: synchronizing references: fetch internal remote: getting remote default branch: head reference: exit status 128"),
 				}
 			},
 		},
@@ -419,6 +419,67 @@ func TestReplicateRepository(t *testing.T) {
 					source:          source,
 					target:          target,
 					expectedObjects: []string{treeID.String(), commitID.String()},
+				}
+			},
+		},
+		{
+			desc: "source has different default branch",
+			setup: func(t *testing.T, cfg config.Cfg) setupData {
+				source, sourcePath, target, _ := setupSourceAndTarget(t, cfg, true)
+
+				// Write a file in the repo
+				treeID := gittest.WriteTree(t, cfg, sourcePath, []gittest.TreeEntry{
+					{Content: "content", Path: "a.txt", Mode: "100644"},
+				})
+
+				// Commit on branch main
+				commitID := gittest.WriteCommit(t, cfg, sourcePath,
+					gittest.WithParents(),
+					gittest.WithBranch("main"),
+					gittest.WithTree(treeID),
+					gittest.WithMessage("Initial commit"),
+				)
+
+				// Create a new branch
+				gittest.CreateBranch(t, cfg, sourcePath, "new-branch")
+
+				// Write a file on new branch
+				secondTreeID := gittest.WriteTree(t, cfg, sourcePath, []gittest.TreeEntry{
+					{Content: "new-content", Path: "new-context.txt", Mode: "100644"},
+				})
+
+				// Commit on new branch
+				secondCommitID := gittest.WriteCommit(t, cfg, sourcePath,
+					gittest.WithParents(),
+					gittest.WithBranch("new-branch"),
+					gittest.WithTree(secondTreeID),
+					gittest.WithMessage("Commit on new branch"),
+				)
+
+				// Set default branch to the new branch
+				gittest.SetDefaultBranch(t, cfg, sourcePath, "new-branch")
+
+				return setupData{
+					source:          source,
+					target:          target,
+					expectedObjects: []string{treeID.String(), commitID.String(), secondCommitID.String()},
+				}
+			},
+		},
+		{
+			desc: "source HEAD points to non-existing branch",
+			setup: func(t *testing.T, cfg config.Cfg) setupData {
+				source, sourcePath, target, _ := setupSourceAndTarget(t, cfg, false)
+
+				// Point the source HEAD at a branch that does not exist. This makes
+				// resolving the remote HEAD fail with ErrReferenceNotFound in
+				// fetchInternalRemote, exercising the early-return branch when
+				// remoteHeadResolved is false.
+				gittest.SetDefaultBranch(t, cfg, sourcePath, "does-not-exist")
+
+				return setupData{
+					source: source,
+					target: target,
 				}
 			},
 		},
@@ -662,7 +723,7 @@ func TestFetchInternalRemote_successful(t *testing.T) {
 		SkipCreationViaService: true,
 	})
 	testcfg.BuildGitalyHooks(t, remoteCfg)
-	gittest.WriteCommit(t, remoteCfg, remoteRepoPath, gittest.WithBranch("master"))
+	gittest.WriteCommit(t, remoteCfg, remoteRepoPath, gittest.WithBranch(git.DefaultBranch))
 
 	_, remoteAddr := runRepositoryService(t, remoteCfg, testserver.WithDisablePraefect())
 
@@ -749,7 +810,11 @@ func TestFetchInternalRemote_failure(t *testing.T) {
 		RelativePath: "does-not-exist.git",
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "exit status 128")
+
+	// This error occurs because in `fetchInternalRemote` we first try to create
+	// a remote repository to access the remote repo. But given that no connection
+	// exists for Praefect, the dial phase fails.
+	require.Contains(t, err.Error(), "could not dial source")
 }
 
 // gitalySSHParams contains parameters used to exec 'gitaly-ssh' binary.
