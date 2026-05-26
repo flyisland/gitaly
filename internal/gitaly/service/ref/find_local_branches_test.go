@@ -376,6 +376,217 @@ func testFindLocalBranches(t *testing.T, ctx context.Context) {
 				}
 			},
 		},
+		{
+			desc: "exclude single branch",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				_, commitA := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-b"), gittest.WithMessage("commit b"))
+				_, commitC := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-c"), gittest.WithMessage("commit c"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/heads/branch-b")},
+					},
+					expectedBranches: []*gitalypb.Branch{
+						{Name: []byte("refs/heads/branch-a"), TargetCommit: commitA},
+						{Name: []byte("refs/heads/branch-c"), TargetCommit: commitC},
+					},
+				}
+			},
+		},
+		{
+			desc: "exclude multiple branches",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+				_, commitB := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-b"), gittest.WithMessage("commit b"))
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-c"), gittest.WithMessage("commit c"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/heads/branch-a"), []byte("refs/heads/branch-c")},
+					},
+					expectedBranches: []*gitalypb.Branch{
+						{Name: []byte("refs/heads/branch-b"), TargetCommit: commitB},
+					},
+				}
+			},
+		},
+		{
+			desc: "exclude all branches",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-b"), gittest.WithMessage("commit b"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/heads/branch-a"), []byte("refs/heads/branch-b")},
+					},
+				}
+			},
+		},
+		{
+			desc: "exclude non-existent branch",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				_, commitA := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+				_, commitB := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-b"), gittest.WithMessage("commit b"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/heads/nonexistent")},
+					},
+					expectedBranches: []*gitalypb.Branch{
+						{Name: []byte("refs/heads/branch-a"), TargetCommit: commitA},
+						{Name: []byte("refs/heads/branch-b"), TargetCommit: commitB},
+					},
+				}
+			},
+		},
+		{
+			desc: "exclude with pagination",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				_, commitA := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-b"), gittest.WithMessage("commit b"))
+				_, commitC := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-c"), gittest.WithMessage("commit c"))
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-d"), gittest.WithMessage("commit d"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/heads/branch-b")},
+						PaginationParams: &gitalypb.PaginationParameter{
+							Limit: 2,
+						},
+					},
+					expectedBranches: []*gitalypb.Branch{
+						{Name: []byte("refs/heads/branch-a"), TargetCommit: commitA},
+						{Name: []byte("refs/heads/branch-c"), TargetCommit: commitC},
+					},
+				}
+			},
+		},
+		{
+			desc: "exclude with pagination and page token",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-b"), gittest.WithMessage("commit b"))
+				_, commitC := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-c"), gittest.WithMessage("commit c"))
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-d"), gittest.WithMessage("commit d"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/heads/branch-b")},
+						PaginationParams: &gitalypb.PaginationParameter{
+							Limit:     1,
+							PageToken: "refs/heads/branch-a",
+						},
+					},
+					expectedBranches: []*gitalypb.Branch{
+						{Name: []byte("refs/heads/branch-c"), TargetCommit: commitC},
+					},
+				}
+			},
+		},
+		{
+			desc: "empty exclude pattern",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("")},
+					},
+					expectedErr: structerr.NewInvalidArgument("empty exclude pattern"),
+				}
+			},
+		},
+		{
+			desc: "exclude pattern without refs/heads/ prefix",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("main")},
+					},
+					expectedErr: structerr.NewInvalidArgument(`exclude pattern must start with "refs/heads/": "main"`),
+				}
+			},
+		},
+		{
+			desc: "exclude pattern outside refs/heads/",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/tags/v1")},
+					},
+					expectedErr: structerr.NewInvalidArgument(`exclude pattern must start with "refs/heads/": "refs/tags/v1"`),
+				}
+			},
+		},
+		{
+			desc: "exclude pattern with null byte",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("branch-a"), gittest.WithMessage("commit a"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/heads/\x00evil")},
+					},
+					expectedErr: structerr.NewInvalidArgument("exclude pattern contains null byte: %q", "refs/heads/\x00evil"),
+				}
+			},
+		},
+		{
+			desc: "exclude with glob pattern",
+			setup: func(t *testing.T) setupData {
+				repo, _ := gittest.CreateRepository(t, ctx, cfg)
+
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("feature-1"), gittest.WithMessage("commit 1"))
+				writeCommit(t, ctx, cfg, repo, gittest.WithBranch("feature-2"), gittest.WithMessage("commit 2"))
+				_, commitM := writeCommit(t, ctx, cfg, repo, gittest.WithBranch("main"), gittest.WithMessage("commit m"))
+
+				return setupData{
+					request: &gitalypb.FindLocalBranchesRequest{
+						Repository:      repo,
+						ExcludePatterns: [][]byte{[]byte("refs/heads/feature-*")},
+					},
+					expectedBranches: []*gitalypb.Branch{
+						{Name: []byte("refs/heads/main"), TargetCommit: commitM},
+					},
+				}
+			},
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()

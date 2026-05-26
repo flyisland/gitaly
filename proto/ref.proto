@@ -193,6 +193,12 @@ message FindLocalBranchesRequest {
   // pagination_params controls paging. Refer to PaginationParameter documentation for
   // further info.
   PaginationParameter pagination_params = 3;
+  // exclude_patterns is a list of ref patterns to exclude from results.
+  // Each pattern corresponds to a `--exclude=<pattern>` flag passed to
+  // git-for-each-ref(1). Patterns must begin with "refs/heads/"
+  // (e.g. "refs/heads/branch-name").
+  // Glob patterns are also supported (e.g. "refs/heads/feature-*").
+  repeated bytes exclude_patterns = 4;
 }
 
 // FindLocalBranchesResponse is a response for the FindLocalBranches RPC.

@@ -301,8 +301,14 @@ type FindLocalBranchesRequest struct {
 	// pagination_params controls paging. Refer to PaginationParameter documentation for
 	// further info.
 	PaginationParams *PaginationParameter `protobuf:"bytes,3,opt,name=pagination_params,json=paginationParams,proto3" json:"pagination_params,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// exclude_patterns is a list of ref patterns to exclude from results.
+	// Each pattern corresponds to a `--exclude=<pattern>` flag passed to
+	// git-for-each-ref(1). Patterns must begin with "refs/heads/"
+	// (e.g. "refs/heads/branch-name").
+	// Glob patterns are also supported (e.g. "refs/heads/feature-*").
+	ExcludePatterns [][]byte `protobuf:"bytes,4,rep,name=exclude_patterns,json=excludePatterns,proto3" json:"exclude_patterns,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *FindLocalBranchesRequest) Reset() {
@@ -352,6 +358,13 @@ func (x *FindLocalBranchesRequest) GetSortBy() FindLocalBranchesRequest_SortBy {
 func (x *FindLocalBranchesRequest) GetPaginationParams() *PaginationParameter {
 	if x != nil {
 		return x.PaginationParams
+	}
+	return nil
+}
+
+func (x *FindLocalBranchesRequest) GetExcludePatterns() [][]byte {
+	if x != nil {
+		return x.ExcludePatterns
 	}
 	return nil
 }
@@ -2638,13 +2651,14 @@ const file_ref_proto_rawDesc = "" +
 	"repository\x12\x1b\n" +
 	"\thead_only\x18\x02 \x01(\bR\bheadOnly\"3\n" +
 	"\x1dFindDefaultBranchNameResponse\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\fR\x04name\"\x97\x02\n" +
+	"\x04name\x18\x01 \x01(\fR\x04name\"\xc2\x02\n" +
 	"\x18FindLocalBranchesRequest\x128\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x12.gitaly.RepositoryB\x04\x98\xc6,\x01R\n" +
 	"repository\x12@\n" +
 	"\asort_by\x18\x02 \x01(\x0e2'.gitaly.FindLocalBranchesRequest.SortByR\x06sortBy\x12H\n" +
-	"\x11pagination_params\x18\x03 \x01(\v2\x1b.gitaly.PaginationParameterR\x10paginationParams\"5\n" +
+	"\x11pagination_params\x18\x03 \x01(\v2\x1b.gitaly.PaginationParameterR\x10paginationParams\x12)\n" +
+	"\x10exclude_patterns\x18\x04 \x03(\fR\x0fexcludePatterns\"5\n" +
 	"\x06SortBy\x12\b\n" +
 	"\x04NAME\x10\x00\x12\x0f\n" +
 	"\vUPDATED_ASC\x10\x01\x12\x10\n" +
