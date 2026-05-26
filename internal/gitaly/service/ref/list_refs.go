@@ -66,6 +66,10 @@ func (s *server) ListRefs(in *gitalypb.ListRefsRequest, stream gitalypb.RefServi
 		opts.cmdArgs = append(opts.cmdArgs, gitcmd.Flag{Name: "--ignore-case"})
 	}
 
+	for _, pattern := range in.GetExcludePatterns() {
+		opts.excludePatterns = append(opts.excludePatterns, string(pattern))
+	}
+
 	if err := s.findRefs(ctx, writer, repo, patterns, opts); err != nil {
 		if errors.Is(err, lines.ErrInvalidPageToken) {
 			return structerr.NewInvalidArgument("invalid page token: %w", err)
@@ -91,6 +95,19 @@ func validateListRefsRequest(ctx context.Context, locator storage.Locator, in *g
 
 		if _, found := sortDirectionByEnum[sortBy.GetDirection()]; !found {
 			return errors.New("sorting direction is not supported")
+		}
+	}
+
+	for _, pattern := range in.GetExcludePatterns() {
+		p := string(pattern)
+		if p == "" {
+			return errors.New("empty exclude pattern")
+		}
+		if strings.ContainsRune(p, 0) {
+			return fmt.Errorf("exclude pattern contains null byte: %q", p)
+		}
+		if !strings.HasPrefix(p, "refs/") {
+			return fmt.Errorf("exclude pattern must start with %q: %q", "refs/", p)
 		}
 	}
 
