@@ -204,7 +204,7 @@ func TestLink(t *testing.T) {
 					pool:      pool,
 					txManager: txManager,
 					expectedVotes: []transaction.PhasedVote{
-						{Vote: voting.VoteFromData([]byte("repository linked")), Phase: voting.Committed},
+						{Vote: voting.VoteFromData([]byte("repository linked")), Phase: voting.Synchronized},
 					},
 				}
 			},
