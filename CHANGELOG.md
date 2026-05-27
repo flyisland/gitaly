@@ -1,6 +1,14 @@
 # Gitaly changelog
 
+## 19.0.1 (2026-05-26)
+
+No changes.
+
 ## 19.0.0 (2026-05-21)
+
+No changes.
+
+## 18.11.4 (2026-05-26)
 
 No changes.
 
@@ -28,6 +36,10 @@ No changes.
 ### Changed (1 change)
 
 - [list_refs: Encode pagination cursor as base64 struct](gitlab-org/gitaly@15072dd951467e248515b721313f82cb00adbb9c) ([merge request](gitlab-org/gitaly!8606))
+
+## 18.10.7 (2026-05-26)
+
+No changes.
 
 ## 18.10.6 (2026-05-13)
 
