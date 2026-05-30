@@ -108,3 +108,7 @@ deep into different parts of Gitaly and even Git.
 
 [roadmap]: https://about.gitlab.com/handbook/engineering/development/enablement/systems/gitaly/#roadmap
 [LabKit]: https://gitlab.com/gitlab-org/labkit/
+
+Synced from https://gitlab.com/gitlab-org/gitaly.git
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/flyisland/gitaly)
